@@ -1,0 +1,29 @@
+[package]
+name = "island-rampage"
+version = "0.1.0"
+edition = "2021"
+description = "島嶼狂飆 - 台灣開放世界遊戲 | Taiwan Open World Game"
+license = "MIT"
+authors = ["Neal Chen"]
+keywords = ["game", "taiwan", "open-world", "bevy"]
+
+[dependencies]
+bevy = { version = "0.17", features = ["dynamic_linking", "jpeg"] }  # Bevy 0.17 穩定版
+bevy_rapier3d = "0.32"  # 對應 Bevy 0.17
+rand = "0.9"  # 隨機數生成
+serde = { version = "1.0", features = ["derive"] }  # 序列化（存檔系統）
+serde_json = "1.0"  # JSON 格式存檔
+dirs = "6.0"  # 跨平台目錄路徑
+
+# 開發時的編譯優化（讓遊戲跑得動，但編譯較快）
+[profile.dev]
+opt-level = 1
+
+# 依賴套件用最高優化（Bevy 本身需要優化才能流暢運行）
+[profile.dev.package."*"]
+opt-level = 3
+
+# 發布版本的優化
+[profile.release]
+lto = "thin"
+codegen-units = 1

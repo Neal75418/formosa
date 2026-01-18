@@ -1,0 +1,17 @@
+# Rust 編譯產物
+/target/
+Cargo.lock
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# macOS
+.DS_Store
+
+# 備份檔案
+*.bak
+*.swp
+*~
+

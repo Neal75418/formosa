@@ -1,0 +1,97 @@
+//! 戰鬥系統
+//!
+//! 處理武器、射擊、傷害、死亡等戰鬥相關邏輯。
+
+mod components;
+mod shooting;
+mod damage;
+mod killcam;
+
+pub use components::*;
+pub use shooting::*;
+pub use damage::*;
+pub use killcam::*;
+
+use bevy::prelude::*;
+use crate::ui::UiState;
+
+/// 戰鬥系統插件
+pub struct CombatPlugin;
+
+impl Plugin for CombatPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            // 事件 (Bevy 0.17: Message 類型)
+            .add_message::<DamageEvent>()
+            .add_message::<DeathEvent>()
+            .add_message::<ArmorBreakEvent>()
+            // 資源
+            .init_resource::<CombatState>()
+            .init_resource::<ShootingInput>()
+            .init_resource::<RespawnState>()
+            .init_resource::<RagdollTracker>()
+            .init_resource::<KillCamState>()
+            // 設置系統
+            .add_systems(Startup, setup_combat_visuals)
+            // 武器模型在 PostStartup 生成，確保玩家實體已完全創建
+            .add_systems(PostStartup, spawn_player_weapons)
+            // 更新系統 - 第一組（武器和射擊）
+            .add_systems(Update, (
+                spawn_player_weapons,
+                weapon_visibility_system,
+                weapon_visibility_init_system,
+                shooting_input_system,
+                holding_pose_system,
+                weapon_cooldown_system,
+                reload_system,
+                punch_animation_trigger_system,
+                fire_weapon_system,
+                punch_animation_update_system,
+            ).chain().run_if(|ui: Res<UiState>| !ui.paused))
+            // 更新系統 - 傷害處理（參數過多，無法使用 run_if，改在系統內部檢查暫停）
+            .add_systems(Update, damage_system)
+            .add_systems(Update, death_system)
+            // 更新系統 - 第二組B（受傷反應）
+            .add_systems(Update, (
+                hit_reaction_update_system,           // 受傷反應狀態更新
+                hit_reaction_knockback_system,        // 玩家擊退
+                enemy_hit_reaction_knockback_system,  // 敵人擊退
+                hit_reaction_visual_system,           // 受傷視覺效果
+            ).run_if(|ui: Res<UiState>| !ui.paused))
+            // 更新系統 - 第二組B（死亡與視覺效果）
+            .add_systems(Update, (
+                player_respawn_system,
+                ragdoll_update_system,
+                ragdoll_visual_system,
+                blood_particle_update_system,
+                floating_damage_number_update_system,  // GTA 5 風格浮動傷害數字
+                muzzle_flash_system,
+                bullet_tracer_system,
+                impact_effect_system,
+            ).run_if(|ui: Res<UiState>| !ui.paused))
+            // 更新系統 - 第三組（行人受傷與護甲特效）
+            .add_systems(Update, (
+                pedestrian_hit_reaction_knockback_system,  // 行人受傷擊退
+                armor_break_effect_system,                 // 護甲破碎特效生成
+                armor_spark_update_system,                 // 護甲火花更新
+                armor_shard_update_system,                 // 護甲碎片更新
+            ).run_if(|ui: Res<UiState>| !ui.paused))
+            // Kill Cam 系統（獨立組，需要控制時間縮放）
+            .add_systems(Update, (
+                killcam_update_system,
+                killcam_visual_system,
+            ).chain());
+    }
+}
+
+/// 初始化戰鬥視覺效果資源
+fn setup_combat_visuals(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    commands.insert_resource(CombatVisuals::new(&mut meshes, &mut materials));
+    commands.insert_resource(WeaponVisuals::new(&mut meshes, &mut materials));
+    commands.insert_resource(BloodVisuals::new(&mut meshes, &mut materials));
+    commands.insert_resource(ArmorEffectVisuals::new(&mut meshes, &mut materials));
+}

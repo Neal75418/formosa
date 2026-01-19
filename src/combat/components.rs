@@ -20,6 +20,8 @@ use bevy::prelude::*;
 pub enum WeaponType {
     #[default]
     Fist,       // 拳頭（近戰）
+    Staff,      // 棍棒（近戰）
+    Knife,      // 刀（近戰）
     Pistol,     // 手槍
     SMG,        // 衝鋒槍
     Shotgun,    // 霰彈槍
@@ -31,6 +33,8 @@ impl WeaponType {
     pub fn name(&self) -> &'static str {
         match self {
             WeaponType::Fist => "拳頭",
+            WeaponType::Staff => "棍棒",
+            WeaponType::Knife => "刀",
             WeaponType::Pistol => "手槍",
             WeaponType::SMG => "衝鋒槍",
             WeaponType::Shotgun => "霰彈槍",
@@ -42,6 +46,8 @@ impl WeaponType {
     pub fn icon(&self) -> &'static str {
         match self {
             WeaponType::Fist => "👊",
+            WeaponType::Staff => "🏏",
+            WeaponType::Knife => "🔪",
             WeaponType::Pistol => "🔫",
             WeaponType::SMG => "🔫",
             WeaponType::Shotgun => "🎯",
@@ -53,11 +59,18 @@ impl WeaponType {
     pub fn tracer_style(&self) -> TracerStyle {
         match self {
             WeaponType::Fist => TracerStyle::None,
+            WeaponType::Staff => TracerStyle::None,
+            WeaponType::Knife => TracerStyle::None,
             WeaponType::Pistol => TracerStyle::Pistol,
             WeaponType::SMG => TracerStyle::SMG,
             WeaponType::Shotgun => TracerStyle::Shotgun,
             WeaponType::Rifle => TracerStyle::Rifle,
         }
+    }
+
+    /// 是否為近戰武器
+    pub fn is_melee(&self) -> bool {
+        matches!(self, WeaponType::Fist | WeaponType::Staff | WeaponType::Knife)
     }
 }
 
@@ -209,6 +222,54 @@ impl WeaponStats {
             falloff_start: 0.0,
             falloff_end: 0.0,
             // 拳頭：無後座力
+            recoil_vertical: 0.0,
+            recoil_horizontal: 0.0,
+            recoil_recovery: 0.0,
+        }
+    }
+
+    /// 棍棒（近戰）- 弧形掃擊，可命中多目標
+    pub fn staff() -> Self {
+        Self {
+            weapon_type: WeaponType::Staff,
+            damage: 35.0,     // 高傷害
+            fire_rate: 0.55,  // 較慢的揮動
+            magazine_size: 0, // 無限
+            max_ammo: 0,
+            range: 3.2,       // 較長射程
+            reload_time: 0.0,
+            spread: 60.0,     // 掃擊角度（度）
+            pellet_count: 1,  // 掃擊邏輯在系統中處理
+            bullet_speed: 0.0,
+            is_automatic: false,
+            // 近戰：無距離衰減
+            falloff_start: 0.0,
+            falloff_end: 0.0,
+            // 近戰：無後座力
+            recoil_vertical: 0.0,
+            recoil_horizontal: 0.0,
+            recoil_recovery: 0.0,
+        }
+    }
+
+    /// 刀（近戰）- 快速攻擊，有流血效果
+    pub fn knife() -> Self {
+        Self {
+            weapon_type: WeaponType::Knife,
+            damage: 28.0,     // 中等傷害
+            fire_rate: 0.25,  // 快速揮刀
+            magazine_size: 0, // 無限
+            max_ammo: 0,
+            range: 2.0,       // 短射程
+            reload_time: 0.0,
+            spread: 0.0,      // 單目標
+            pellet_count: 1,
+            bullet_speed: 0.0,
+            is_automatic: false,
+            // 近戰：無距離衰減
+            falloff_start: 0.0,
+            falloff_end: 0.0,
+            // 近戰：無後座力
             recoil_vertical: 0.0,
             recoil_horizontal: 0.0,
             recoil_recovery: 0.0,
@@ -492,6 +553,80 @@ pub struct DeathEvent {
     pub cause: DamageSource,
     pub hit_position: Option<Vec3>,   // 擊中位置（用於計算布娃娃方向）
     pub hit_direction: Option<Vec3>,  // 擊中方向（用於施加衝擊力）
+}
+
+// ============================================================================
+// 流血效果（刀傷）
+// ============================================================================
+
+/// 流血效果常數
+pub const BLEED_DAMAGE_PER_SECOND: f32 = 5.0;
+pub const BLEED_DURATION: f32 = 4.0;
+pub const BLEED_CHANCE: f32 = 0.35; // 35% 機率觸發流血
+
+/// 流血效果組件
+/// 由刀攻擊觸發，持續造成傷害
+#[derive(Component)]
+pub struct BleedEffect {
+    /// 每秒傷害
+    pub damage_per_second: f32,
+    /// 剩餘時間
+    pub remaining_time: f32,
+    /// 攻擊者（用於歸屬擊殺）
+    pub source: Option<Entity>,
+    /// 下次傷害計時器
+    pub tick_timer: f32,
+}
+
+impl Default for BleedEffect {
+    fn default() -> Self {
+        Self {
+            damage_per_second: BLEED_DAMAGE_PER_SECOND,
+            remaining_time: BLEED_DURATION,
+            source: None,
+            tick_timer: 0.0,
+        }
+    }
+}
+
+impl BleedEffect {
+    pub fn new(source: Entity) -> Self {
+        Self {
+            source: Some(source),
+            ..Default::default()
+        }
+    }
+
+    /// 檢查流血是否結束
+    pub fn is_finished(&self) -> bool {
+        self.remaining_time <= 0.0
+    }
+}
+
+// ============================================================================
+// 近戰動畫類型
+// ============================================================================
+
+/// 近戰動畫類型
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum MeleeAnimationType {
+    #[default]
+    Punch,  // 拳頭
+    Swing,  // 棍棒揮擊
+    Slash,  // 刀砍
+    Stab,   // 刀刺
+}
+
+impl MeleeAnimationType {
+    /// 從武器類型推斷動畫類型
+    pub fn from_weapon(weapon_type: WeaponType) -> Self {
+        match weapon_type {
+            WeaponType::Fist => MeleeAnimationType::Punch,
+            WeaponType::Staff => MeleeAnimationType::Swing,
+            WeaponType::Knife => MeleeAnimationType::Slash,
+            _ => MeleeAnimationType::Punch,
+        }
+    }
 }
 
 // ============================================================================
@@ -850,6 +985,10 @@ pub struct CombatState {
     pub last_shot_time: f32,       // 上次射擊時間
     pub hit_marker_timer: f32,     // 命中標記顯示計時器
     pub hit_marker_headshot: bool, // 是否為爆頭（影響顏色）
+    // === 車上射擊相關 ===
+    pub can_fire_in_vehicle: bool,   // 是否可在車上射擊
+    pub vehicle_aim_valid: bool,     // 車上瞄準角度是否有效
+    pub last_hit_time: Option<f32>,  // 上次命中時間
 }
 
 /// 單一彈道風格配置
@@ -1061,6 +1200,8 @@ pub struct WeaponModel {
 /// 武器模型視覺資源（預生成的 mesh 和 material）
 #[derive(Resource)]
 pub struct WeaponVisuals {
+    pub staff: WeaponModelData,
+    pub knife: WeaponModelData,
     pub pistol: WeaponModelData,
     pub smg: WeaponModelData,
     pub shotgun: WeaponModelData,
@@ -1127,6 +1268,66 @@ impl WeaponVisuals {
         });
 
         Self {
+            // ========================================
+            // 棍棒（木製棍棒）
+            // ========================================
+            staff: WeaponModelData {
+                parts: vec![
+                    // 棍身（主體）
+                    WeaponPart {
+                        mesh: meshes.add(Cylinder::new(0.025, 0.9)),
+                        material: wood.clone(),
+                        transform: Transform::from_xyz(0.0, 0.0, 0.0)
+                            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    },
+                    // 握把纏繞
+                    WeaponPart {
+                        mesh: meshes.add(Cylinder::new(0.028, 0.15)),
+                        material: grip_plastic.clone(),
+                        transform: Transform::from_xyz(0.0, 0.0, -0.35)
+                            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    },
+                ],
+                muzzle_offset: Vec3::new(0.0, 0.0, 0.45),
+                hand_offset: Vec3::new(0.0, 0.0, -0.35),
+                hand_rotation: Quat::from_rotation_x(-0.3),
+            },
+
+            // ========================================
+            // 刀（戰術刀）
+            // ========================================
+            knife: WeaponModelData {
+                parts: vec![
+                    // 刀刃
+                    WeaponPart {
+                        mesh: meshes.add(Cuboid::new(0.005, 0.025, 0.18)),
+                        material: barrel_metal.clone(),
+                        transform: Transform::from_xyz(0.0, 0.0, 0.12),
+                    },
+                    // 刀背（較厚）
+                    WeaponPart {
+                        mesh: meshes.add(Cuboid::new(0.008, 0.015, 0.16)),
+                        material: gun_metal.clone(),
+                        transform: Transform::from_xyz(0.0, 0.012, 0.11),
+                    },
+                    // 護手
+                    WeaponPart {
+                        mesh: meshes.add(Cuboid::new(0.04, 0.012, 0.015)),
+                        material: gun_metal.clone(),
+                        transform: Transform::from_xyz(0.0, 0.0, 0.02),
+                    },
+                    // 握把
+                    WeaponPart {
+                        mesh: meshes.add(Cuboid::new(0.022, 0.028, 0.10)),
+                        material: grip_plastic.clone(),
+                        transform: Transform::from_xyz(0.0, 0.0, -0.04),
+                    },
+                ],
+                muzzle_offset: Vec3::new(0.0, 0.0, 0.22),
+                hand_offset: Vec3::new(0.0, 0.02, -0.04),
+                hand_rotation: Quat::from_rotation_x(-0.1),
+            },
+
             // ========================================
             // 手槍（Glock 風格）
             // ========================================
@@ -1316,6 +1517,8 @@ impl WeaponVisuals {
     pub fn get(&self, weapon_type: WeaponType) -> Option<&WeaponModelData> {
         match weapon_type {
             WeaponType::Fist => None,  // 拳頭無模型
+            WeaponType::Staff => Some(&self.staff),
+            WeaponType::Knife => Some(&self.knife),
             WeaponType::Pistol => Some(&self.pistol),
             WeaponType::SMG => Some(&self.smg),
             WeaponType::Shotgun => Some(&self.shotgun),

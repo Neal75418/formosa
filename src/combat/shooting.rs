@@ -14,7 +14,7 @@ fn real_to_f32(r: bevy_rapier3d::prelude::Real) -> f32 {
     r
 }
 
-use super::components::{*, check_headshot, HEADSHOT_MULTIPLIER};
+use super::components::{*, check_headshot, HEADSHOT_MULTIPLIER, BLEED_CHANCE};
 use crate::player::Player;
 use crate::core::{CameraSettings, GameState, RecoilState, CameraShake};
 use crate::ui::NotificationQueue;
@@ -67,19 +67,19 @@ pub fn shooting_input_system(
         return;
     }
 
-    // 檢查當前武器是否為拳頭
-    let is_fist = player_query
+    // 檢查當前武器是否為近戰武器
+    let is_melee = player_query
         .single()
         .ok()
         .and_then(|inv| inv.current_weapon())
-        .map(|w| w.stats.weapon_type == WeaponType::Fist)
+        .map(|w| w.stats.weapon_type.is_melee())
         .unwrap_or(false);
 
     // 射擊：R 鍵（與 UI 提示一致）
     input.fire_pressed = keyboard.just_pressed(KeyCode::KeyR);
     input.fire_held = keyboard.pressed(KeyCode::KeyR);
-    // 拳頭狀態下不啟用瞄準模式（沒有準星）
-    input.aim_pressed = !is_fist && mouse.pressed(MouseButton::Right);
+    // 近戰武器狀態下不啟用瞄準模式（沒有準星）
+    input.aim_pressed = !is_melee && mouse.pressed(MouseButton::Right);
     // 換彈：T 鍵
     input.reload_pressed = keyboard.just_pressed(KeyCode::KeyT);
 
@@ -488,7 +488,7 @@ pub fn fire_weapon_system(
         let direction = (aim_point - muzzle_pos).normalize();
 
         // 根據武器類型發射
-        if weapon.stats.weapon_type == WeaponType::Fist {
+        if weapon.stats.weapon_type.is_melee() {
             fire_melee(
                 &mut commands,
                 player_entity,
@@ -528,6 +528,8 @@ pub fn fire_weapon_system(
                 WeaponType::Shotgun => 0.05,
                 WeaponType::Rifle => 0.025,
                 WeaponType::Fist => 0.0,
+                WeaponType::Staff => 0.0,
+                WeaponType::Knife => 0.0,
             };
             if shake_intensity > 0.0 {
                 camera_shake.trigger(shake_intensity, 0.08);
@@ -547,6 +549,9 @@ pub fn fire_weapon_system(
     }
 }
 
+/// 棍棒掃擊常數
+const STAFF_SWEEP_STEPS: usize = 5;
+
 /// 近戰攻擊
 #[allow(clippy::too_many_arguments)]
 fn fire_melee(
@@ -561,7 +566,110 @@ fn fire_melee(
 ) {
     let filter = QueryFilter::default().exclude_collider(attacker);
 
-    // 近戰範圍檢測
+    match weapon.stats.weapon_type {
+        WeaponType::Staff => {
+            // 棍棒：弧形掃擊，可命中多個目標
+            fire_staff_sweep(
+                commands,
+                attacker,
+                origin,
+                direction,
+                weapon,
+                rapier,
+                damage_events,
+                filter,
+            );
+        }
+        WeaponType::Knife => {
+            // 刀：單目標，有機率觸發流血
+            fire_knife_attack(
+                commands,
+                attacker,
+                origin,
+                direction,
+                weapon,
+                rapier,
+                damage_events,
+                filter,
+            );
+        }
+        _ => {
+            // 拳頭或其他近戰：單目標直線攻擊
+            if let Some((hit_entity, toi)) = rapier.cast_ray(
+                origin,
+                direction,
+                weapon.stats.range as bevy_rapier3d::prelude::Real,
+                true,
+                filter,
+            ) {
+                let hit_pos = origin + direction * real_to_f32(toi);
+                damage_events.write(
+                    DamageEvent::new(hit_entity, weapon.stats.damage, DamageSource::Melee)
+                        .with_attacker(attacker)
+                        .with_position(hit_pos),
+                );
+            }
+        }
+    }
+
+    let _ = damageable_query; // 保留參數以供未來使用
+}
+
+/// 棍棒弧形掃擊攻擊
+fn fire_staff_sweep(
+    _commands: &mut Commands,
+    attacker: Entity,
+    origin: Vec3,
+    direction: Vec3,
+    weapon: &Weapon,
+    rapier: &RapierContext,
+    damage_events: &mut MessageWriter<DamageEvent>,
+    filter: QueryFilter,
+) {
+    let sweep_angle = weapon.stats.spread.to_radians(); // 使用 spread 作為掃擊角度
+    let mut hit_entities: Vec<Entity> = Vec::new();
+
+    // 在弧形範圍內進行多次射線檢測
+    for i in 0..STAFF_SWEEP_STEPS {
+        let t = i as f32 / (STAFF_SWEEP_STEPS - 1) as f32;
+        let angle = -sweep_angle / 2.0 + t * sweep_angle;
+
+        // 繞 Y 軸旋轉方向向量
+        let rotated_dir = Quat::from_rotation_y(angle) * direction;
+
+        if let Some((hit_entity, toi)) = rapier.cast_ray(
+            origin,
+            rotated_dir,
+            weapon.stats.range as bevy_rapier3d::prelude::Real,
+            true,
+            filter,
+        ) {
+            // 避免對同一目標重複造成傷害
+            if !hit_entities.contains(&hit_entity) {
+                hit_entities.push(hit_entity);
+
+                let hit_pos = origin + rotated_dir * real_to_f32(toi);
+                damage_events.write(
+                    DamageEvent::new(hit_entity, weapon.stats.damage, DamageSource::Melee)
+                        .with_attacker(attacker)
+                        .with_position(hit_pos),
+                );
+            }
+        }
+    }
+}
+
+/// 刀攻擊（有流血效果）
+fn fire_knife_attack(
+    commands: &mut Commands,
+    attacker: Entity,
+    origin: Vec3,
+    direction: Vec3,
+    weapon: &Weapon,
+    rapier: &RapierContext,
+    damage_events: &mut MessageWriter<DamageEvent>,
+    filter: QueryFilter,
+) {
     if let Some((hit_entity, toi)) = rapier.cast_ray(
         origin,
         direction,
@@ -570,18 +678,19 @@ fn fire_melee(
         filter,
     ) {
         let hit_pos = origin + direction * real_to_f32(toi);
-        // 對所有命中目標發送傷害事件（讓接收系統自行過濾）
-        // damageable_query 參數保留以供未來使用或移除
-        let _ = damageable_query;
+
+        // 發送傷害事件
         damage_events.write(
             DamageEvent::new(hit_entity, weapon.stats.damage, DamageSource::Melee)
                 .with_attacker(attacker)
                 .with_position(hit_pos),
         );
-    }
 
-    // 近戰視覺效果（可選）
-    let _ = commands;
+        // 機率觸發流血效果
+        if rand::random::<f32>() < BLEED_CHANCE {
+            commands.entity(hit_entity).insert(BleedEffect::new(attacker));
+        }
+    }
 }
 
 /// 發射子彈（使用預設隨機散佈）
@@ -843,7 +952,7 @@ pub fn impact_effect_system(
 // ============================================================================
 
 /// 揮拳動畫觸發系統
-/// 當使用拳頭攻擊時，為右臂添加 PunchAnimation 組件
+/// 當使用近戰武器攻擊時，為右臂添加 PunchAnimation 組件
 pub fn punch_animation_trigger_system(
     mut commands: Commands,
     input: Res<ShootingInput>,
@@ -862,7 +971,7 @@ pub fn punch_animation_trigger_system(
         return;
     }
 
-    // 檢查玩家當前武器是否是拳頭
+    // 檢查玩家當前武器是否是近戰武器
     let Ok((inventory, children)) = player_query.single() else {
         return;
     };
@@ -871,7 +980,7 @@ pub fn punch_animation_trigger_system(
         return;
     };
 
-    if weapon.stats.weapon_type != WeaponType::Fist {
+    if !weapon.stats.weapon_type.is_melee() {
         return;
     }
 
@@ -1054,7 +1163,7 @@ pub fn spawn_player_weapons(
 
         // 為每種武器類型生成模型
         // 使用 ChildOf 直接設定父子關係，可能避免 B0004 警告
-        for weapon_type in [WeaponType::Pistol, WeaponType::SMG, WeaponType::Shotgun, WeaponType::Rifle] {
+        for weapon_type in [WeaponType::Staff, WeaponType::Knife, WeaponType::Pistol, WeaponType::SMG, WeaponType::Shotgun, WeaponType::Rifle] {
             let Some(weapon_data) = visuals.get(weapon_type) else { continue; };
 
             // 先生成武器根實體，使用 ChildOf 設定父實體
@@ -1131,6 +1240,44 @@ pub fn weapon_visibility_init_system(
     }
 }
 
+// ============================================================================
+// 流血傷害系統
+// ============================================================================
+
+/// 流血傷害系統
+/// 處理刀傷導致的持續傷害
+pub fn bleed_damage_system(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut BleedEffect)>,
+    mut damage_events: MessageWriter<DamageEvent>,
+) {
+    let dt = time.delta_secs();
+    const BLEED_TICK_INTERVAL: f32 = 1.0; // 每秒造成一次傷害
+
+    for (entity, mut bleed) in query.iter_mut() {
+        bleed.remaining_time -= dt;
+        bleed.tick_timer += dt;
+
+        // 每秒造成一次傷害
+        if bleed.tick_timer >= BLEED_TICK_INTERVAL {
+            bleed.tick_timer -= BLEED_TICK_INTERVAL;
+
+            // 發送流血傷害事件（使用 Melee 類型以正確歸類）
+            let mut event = DamageEvent::new(entity, bleed.damage_per_second, DamageSource::Melee);
+            if let Some(source) = bleed.source {
+                event = event.with_attacker(source);
+            }
+            damage_events.write(event);
+        }
+
+        // 流血結束，移除組件
+        if bleed.is_finished() {
+            commands.entity(entity).remove::<BleedEffect>();
+        }
+    }
+}
+
 /// 持槍姿勢系統 - 當持有槍械時調整手臂位置
 pub fn holding_pose_system(
     player_query: Query<(&WeaponInventory, &Children), With<Player>>,
@@ -1142,15 +1289,15 @@ pub fn holding_pose_system(
 
     // 使用 ShootingInput 中的 aim_pressed，確保系統順序正確
     let is_aiming = input.aim_pressed;
-    let is_fist = weapon.stats.weapon_type == WeaponType::Fist;
+    let is_melee = weapon.stats.weapon_type.is_melee();
 
     for child in children.iter() {
         let Ok((arm, mut transform)) = arm_query.get_mut(child) else { continue; };
 
         if arm.is_right {
             // 右手臂 - 主要持槍手
-            if is_fist {
-                // 拳頭模式：恢復原位
+            if is_melee {
+                // 近戰武器模式：恢復原位（或使用特定姿勢）
                 transform.translation = arm.rest_position;
                 transform.rotation = arm.rest_rotation;
             } else if is_aiming {

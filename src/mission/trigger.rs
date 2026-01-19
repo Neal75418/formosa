@@ -56,7 +56,7 @@ impl TriggerShape {
             Self::Rectangle { width, height } => {
                 dx.abs() <= width / 2.0 && dz.abs() <= height / 2.0
             }
-            Self::Capsule { radius, height } => {
+            Self::Capsule { radius, height: _ } => {
                 // 簡化為圓柱體檢查
                 dx * dx + dz * dz <= radius * radius
             }

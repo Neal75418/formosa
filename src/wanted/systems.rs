@@ -6,6 +6,7 @@ use bevy_rapier3d::prelude::*;
 use crate::player::Player;
 use crate::ai::AiMovement;
 use crate::combat::{Health, DamageEvent, DamageSource, HitReaction, CombatVisuals, MuzzleFlash, spawn_bullet_tracer, TracerStyle};
+use crate::core::PoliceSpatialHash;
 
 use super::components::*;
 use super::events::*;
@@ -50,6 +51,29 @@ pub fn setup_police_visuals(
         skin_material,
         badge_material,
     });
+}
+
+// ============================================================================
+// 空間哈希系統
+// ============================================================================
+
+/// 更新警察空間哈希（每幀執行，在視野檢測前）
+///
+/// 將場景中所有警察位置插入空間哈希網格，
+/// 供玩家視野檢測和無線電通訊系統使用，將 O(n²) 降為 O(n)。
+pub fn update_police_spatial_hash_system(
+    mut police_hash: ResMut<PoliceSpatialHash>,
+    police_query: Query<(Entity, &Transform), With<PoliceOfficer>>,
+) {
+    // 清空舊資料
+    police_hash.clear();
+
+    // 插入所有警察（批量插入效能更好）
+    police_hash.insert_batch(
+        police_query.iter().map(|(entity, transform)| {
+            (entity, transform.translation)
+        })
+    );
 }
 
 /// 處理犯罪事件，更新通緝等級
@@ -109,12 +133,16 @@ pub fn process_witness_reports(
     }
 }
 
-/// 通緝等級消退系統
+/// 通緝等級消退系統（空間哈希優化版）
+///
+/// 使用 PoliceSpatialHash 只查詢玩家附近的警察，
+/// 將 O(所有警察) 降為 O(附近警察)。
 pub fn wanted_cooldown_system(
     mut wanted: ResMut<WantedLevel>,
     mut level_changed: MessageWriter<WantedLevelChanged>,
     time: Res<Time>,
     player_query: Query<&Transform, With<Player>>,
+    police_hash: Res<PoliceSpatialHash>,
     police_query: Query<(&Transform, &PoliceOfficer)>,
     rapier_context: ReadRapierContext,
 ) {
@@ -128,23 +156,26 @@ pub fn wanted_cooldown_system(
     };
     let player_pos = player_transform.translation;
 
+    // 視野檢測距離
+    const VISION_RANGE: f32 = 40.0;
+
     // 檢查是否被警察看到
     let mut player_visible = false;
 
     if let Ok(rapier) = rapier_context.single() {
-        for (police_transform, officer) in &police_query {
+        // 使用空間哈希查詢玩家附近的警察（O(1) 查詢）
+        for (police_entity, police_pos, _) in police_hash.query_radius(player_pos, VISION_RANGE) {
+            // 取得警察詳細資訊
+            let Ok((police_transform, officer)) = police_query.get(police_entity) else {
+                continue;
+            };
+
             if officer.state == PoliceState::Patrolling {
                 continue;
             }
 
-            let police_pos = police_transform.translation;
-            let to_player = player_pos - police_pos;
+            let to_player = player_pos - police_transform.translation;
             let distance = to_player.length();
-
-            // 檢查距離
-            if distance > 40.0 {
-                continue;
-            }
 
             // 檢查視線
             let direction = to_player.normalize();
@@ -663,14 +694,15 @@ const RADIO_CALL_RANGE: f32 = 100.0;
 /// 無線電呼叫冷卻時間（秒）
 const RADIO_CALL_COOLDOWN: f32 = 5.0;
 
-/// 警察無線電呼叫系統
+/// 警察無線電呼叫系統（空間哈希優化版）
 ///
 /// 當一名警察發現玩家時，會透過無線電通知附近的其他警察，
 /// 讓他們也進入警覺狀態並前往玩家位置。
 ///
-/// 優化版本：僅兩次迭代（原本三次）
+/// 使用 PoliceSpatialHash 將接收者搜索從 O(發送者×所有警察) 優化為 O(發送者×附近警察)。
 pub fn police_radio_call_system(
     mut police_query: Query<(Entity, &Transform, &mut PoliceOfficer)>,
+    police_hash: Res<PoliceSpatialHash>,
     player_query: Query<&Transform, (With<Player>, Without<PoliceOfficer>)>,
     wanted: Res<WantedLevel>,
     time: Res<Time>,
@@ -686,11 +718,10 @@ pub fn police_radio_call_system(
     let player_pos = player_transform.translation;
     let dt = time.delta_secs();
 
-    // 第一階段：收集發送者並同時重置冷卻
-    // 合併原本的第一次和第三次迭代
-    let mut radio_alerts: Vec<Vec3> = Vec::new(); // 發送者位置
+    // 第一階段：收集發送者並更新冷卻
+    let mut radio_alerts: Vec<(Entity, Vec3)> = Vec::new(); // (發送者Entity, 發送者位置)
 
-    for (_entity, transform, mut officer) in &mut police_query {
+    for (entity, transform, mut officer) in &mut police_query {
         // 更新所有警察的無線電冷卻
         if officer.radio_cooldown > 0.0 {
             officer.radio_cooldown -= dt;
@@ -702,7 +733,7 @@ pub fn police_radio_call_system(
             && wanted.player_visible;
 
         if can_send {
-            radio_alerts.push(transform.translation);
+            radio_alerts.push((entity, transform.translation));
             officer.radio_cooldown = RADIO_CALL_COOLDOWN;
             debug!(
                 "🔊 警察在 ({:.1}, {:.1}) 發送無線電呼叫",
@@ -716,27 +747,33 @@ pub fn police_radio_call_system(
         return;
     }
 
-    // 第二階段：處理無線電接收
-    for (_entity, transform, mut officer) in &mut police_query {
-        let police_pos = transform.translation;
+    // 第二階段：使用空間哈希找出每個發送者附近的警察
+    // 收集需要通知的警察 Entity
+    let mut receivers_to_notify: Vec<Entity> = Vec::new();
 
-        // 只處理可以接收無線電的警察
-        let can_receive = officer.state == PoliceState::Patrolling
-            || officer.state == PoliceState::Alerted
-            || officer.state == PoliceState::Searching;
-
-        if !can_receive {
-            continue;
-        }
-
-        for sender_pos in &radio_alerts {
-            // 不要通知自己（發送者）
-            if police_pos.distance(*sender_pos) < 1.0 {
+    for (sender_entity, sender_pos) in &radio_alerts {
+        // 使用空間哈希查詢發送者附近的警察
+        for (receiver_entity, _, _) in police_hash.query_radius(*sender_pos, RADIO_CALL_RANGE) {
+            // 不要通知自己
+            if receiver_entity == *sender_entity {
                 continue;
             }
+            // 避免重複通知
+            if !receivers_to_notify.contains(&receiver_entity) {
+                receivers_to_notify.push(receiver_entity);
+            }
+        }
+    }
 
-            // 檢查是否在無線電範圍內
-            if police_pos.distance(*sender_pos) <= RADIO_CALL_RANGE {
+    // 第三階段：通知接收者
+    for receiver_entity in receivers_to_notify {
+        if let Ok((_, _, mut officer)) = police_query.get_mut(receiver_entity) {
+            // 只處理可以接收無線電的警察
+            let can_receive = officer.state == PoliceState::Patrolling
+                || officer.state == PoliceState::Alerted
+                || officer.state == PoliceState::Searching;
+
+            if can_receive {
                 // 收到無線電通知
                 officer.radio_alerted = true;
                 officer.radio_alert_position = Some(player_pos);
@@ -746,7 +783,6 @@ pub fn police_radio_call_system(
                     officer.state = PoliceState::Alerted;
                     officer.target_player = true;
                 }
-                break; // 收到一次就夠了
             }
         }
     }

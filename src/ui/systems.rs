@@ -10,7 +10,7 @@ use super::{WeatherHudContainer, WeatherIconContainer, WeatherIconElement, Weath
 use super::{WeaponWheel, WeaponWheelBackground, WeaponWheelCenterInfo, WeaponWheelName, WeaponWheelAmmo, WeaponWheelSlot, WeaponWheelIcon, WeaponWheelSelector, WeaponWheelState};
 use super::{StoryMissionHud, StoryMissionTitle, StoryMissionPhaseText, StoryMissionObjectiveList, StoryMissionObjectiveItem, StoryMissionObjectiveCheck, StoryMissionObjectiveText, StoryMissionTimer};
 use crate::core::{GameState, WorldTime, WeatherState, WeatherType};
-use crate::combat::{Enemy, Health, Armor, WeaponInventory, WeaponType};
+use crate::combat::{Enemy, Health, Armor, WeaponInventory};
 use crate::vehicle::{Vehicle, VehicleType};
 use crate::mission::{MissionManager, StoryMissionManager, StoryMissionDatabase, get_current_mission_info};
 use crate::player::Player;
@@ -5204,7 +5204,7 @@ pub fn update_gps_navigation(
     let angle = player_forward_xz.x.atan2(player_forward_xz.z) - to_dest_normalized.x.atan2(to_dest_normalized.z);
 
     // 更新方向箭頭
-    for (mut vis, mut transform, children) in arrow_query.iter_mut() {
+    for (mut vis, mut transform, _children) in arrow_query.iter_mut() {
         *vis = Visibility::Visible;
         transform.rotation = Quat::from_rotation_z(angle);
     }

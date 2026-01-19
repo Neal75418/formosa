@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
 
-use super::{Destructible, DestructibleMaterial, DestructibleVisuals, Debris, DestructionEvent};
+use super::{Destructible, DestructibleMaterial, DestructibleVisuals, Debris, DestructionEvent, DebrisPool};
 use crate::combat::{DamageEvent, Damageable};
 use crate::core::COLLISION_GROUP_STATIC;
 
@@ -15,7 +15,9 @@ pub fn setup_destructible_visuals(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     commands.insert_resource(DestructibleVisuals::new(&mut meshes, &mut materials));
-    info!("💥 可破壞環境系統已初始化");
+    // 初始化碎片物件池（最多 150 個碎片同時存在）
+    commands.insert_resource(DebrisPool::new(150));
+    info!("💥 可破壞環境系統已初始化（含碎片物件池）");
 }
 
 /// 可破壞物件受傷系統
@@ -69,12 +71,14 @@ pub fn destructible_damage_system(
     }
 }
 
-/// 破壞效果系統
+/// 破壞效果系統（使用物件池優化）
 /// 處理破壞事件，生成碎片
 pub fn destruction_effect_system(
     mut commands: Commands,
     mut destruction_events: MessageReader<DestructionEvent>,
     visuals: Option<Res<DestructibleVisuals>>,
+    mut debris_pool: ResMut<DebrisPool>,
+    mut debris_query: Query<(&mut Debris, &mut Transform, &mut Visibility), Without<Destructible>>,
 ) {
     let Some(visuals) = visuals else { return };
     let mut rng = rand::rng();
@@ -84,9 +88,11 @@ pub fn destruction_effect_system(
         let (min_scale, max_scale) = event.material.debris_scale_range();
         let (mesh, material) = visuals.get_debris_visuals(event.material);
 
+        let mut spawned = 0;
+
         // 生成碎片
         for _ in 0..debris_count {
-            // 隨機位置偏移（在原物件範圍內）
+            // 計算碎片參數
             let offset = Vec3::new(
                 rng.random_range(-event.size.x / 2.0..event.size.x / 2.0),
                 rng.random_range(-event.size.y / 2.0..event.size.y / 2.0),
@@ -94,26 +100,21 @@ pub fn destruction_effect_system(
             );
             let spawn_pos = event.position + offset;
 
-            // 碎片速度
             let base_velocity = if let Some(impact_dir) = event.impact_direction {
-                // 碎片沿衝擊方向飛濺
                 impact_dir * rng.random_range(3.0..8.0)
             } else {
                 Vec3::ZERO
             };
 
-            // 加上隨機散射
             let scatter = Vec3::new(
                 rng.random_range(-3.0..3.0),
-                rng.random_range(1.0..5.0),  // 往上飛
+                rng.random_range(1.0..5.0),
                 rng.random_range(-3.0..3.0),
             );
             let velocity = base_velocity + scatter;
 
-            // 隨機縮放
             let scale = rng.random_range(min_scale..max_scale);
 
-            // 隨機旋轉
             let rotation = Quat::from_euler(
                 EulerRot::XYZ,
                 rng.random_range(0.0..std::f32::consts::TAU),
@@ -121,39 +122,84 @@ pub fn destruction_effect_system(
                 rng.random_range(0.0..std::f32::consts::TAU),
             );
 
-            commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                Transform::from_translation(spawn_pos)
-                    .with_rotation(rotation)
-                    .with_scale(Vec3::splat(scale)),
-                Debris::new(event.material, velocity),
-            ));
+            let max_lifetime = event.material.debris_lifetime();
+
+            // 優先從池中取得實體
+            if let Some(pooled_entity) = debris_pool.acquire() {
+                if let Ok((mut debris, mut transform, mut visibility)) = debris_query.get_mut(pooled_entity) {
+                    // 重用池中的碎片
+                    debris.material = event.material;
+                    debris.velocity = velocity;
+                    debris.angular_velocity = Vec3::new(
+                        rng.random_range(-5.0..5.0),
+                        rng.random_range(-5.0..5.0),
+                        rng.random_range(-5.0..5.0),
+                    );
+                    debris.lifetime = 0.0;
+                    debris.max_lifetime = max_lifetime;
+                    debris.has_gravity = true;
+                    debris.bounce_count = 0;
+
+                    transform.translation = spawn_pos;
+                    transform.rotation = rotation;
+                    transform.scale = Vec3::splat(scale);
+
+                    *visibility = Visibility::Visible;
+                    debris_pool.confirm_acquire(pooled_entity);
+                    spawned += 1;
+                    continue;
+                } else {
+                    // 實體無效（可能被外部刪除），不放回池中
+                    warn!("碎片池實體 {:?} 無效，已從池中移除", pooled_entity);
+                }
+            }
+
+            // 池中無可用實體，創建新的（但限制總數）
+            if debris_pool.in_use.len() + debris_pool.available.len() < debris_pool.max_size {
+                let entity = commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(material.clone()),
+                    Transform::from_translation(spawn_pos)
+                        .with_rotation(rotation)
+                        .with_scale(Vec3::splat(scale)),
+                    Debris::new(event.material, velocity),
+                    Visibility::Visible,
+                )).id();
+
+                debris_pool.in_use.push(entity);
+                spawned += 1;
+            }
         }
 
-        // 玻璃破碎時可以添加音效（如果有音效系統）
-        // 這裡可以發送音效事件
+        if spawned < debris_count {
+            warn!("碎片池已滿，只生成了 {}/{} 個碎片", spawned, debris_count);
+        }
     }
 }
 
-/// 碎片更新系統
+/// 碎片更新系統（使用物件池優化）
 /// 處理碎片的物理和生命週期
 pub fn debris_update_system(
-    mut commands: Commands,
     time: Res<Time>,
-    mut debris_query: Query<(Entity, &mut Debris, &mut Transform)>,
+    mut debris_pool: ResMut<DebrisPool>,
+    mut debris_query: Query<(Entity, &mut Debris, &mut Transform, &mut Visibility)>,
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut debris, mut transform) in debris_query.iter_mut() {
+    for (entity, mut debris, mut transform, mut visibility) in debris_query.iter_mut() {
+        // 跳過已隱藏（已歸還池）的碎片
+        if *visibility == Visibility::Hidden {
+            continue;
+        }
+
         // 更新生命時間
         debris.lifetime += dt;
 
-        // 檢查是否過期
+        // 檢查是否過期 - 歸還池而非銷毀
         if debris.lifetime >= debris.max_lifetime {
-            if let Ok(mut entity_commands) = commands.get_entity(entity) {
-                entity_commands.despawn();
-            }
+            *visibility = Visibility::Hidden;
+            transform.translation = Vec3::new(0.0, -1000.0, 0.0);  // 移到地圖外
+            debris_pool.release(entity);
             continue;
         }
 

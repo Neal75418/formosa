@@ -1,5 +1,7 @@
 //! 通緝系統組件定義
 
+#![allow(dead_code)] // Phase 5+ 預留功能
+
 use bevy::prelude::*;
 
 /// 全局通緝等級資源

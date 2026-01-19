@@ -209,7 +209,7 @@ pub fn dialogue_event_handler(
                     info!("對話結束: {}", active.dialogue_id);
                 }
             }
-            DialogueEvent::Completed(dialogue_id) => {
+            DialogueEvent::Completed(_dialogue_id) => {
                 // 由其他系統處理完成回調
             }
         }
@@ -269,7 +269,7 @@ pub fn dialogue_typing_system(
 
 /// 對話輸入處理系統
 pub fn dialogue_input_system(
-    mut dialogue_state: ResMut<DialogueState>,
+    dialogue_state: ResMut<DialogueState>,
     mut story_manager: ResMut<StoryMissionManager>,
     database: Res<DialogueDatabase>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -342,7 +342,7 @@ pub fn dialogue_input_system(
 
 /// 自動前進系統（用於無選項節點）
 pub fn dialogue_auto_advance_system(
-    mut dialogue_state: ResMut<DialogueState>,
+    dialogue_state: ResMut<DialogueState>,
     database: Res<DialogueDatabase>,
     settings: Res<DialogueSettings>,
     time: Res<Time>,

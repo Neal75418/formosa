@@ -2456,6 +2456,16 @@ pub fn spawn_player_character(
     .insert(DodgeState::default())  // 閃避狀態（分開插入避免 tuple 限制）
     .insert(HitReaction::default())  // 受傷反應
     .insert(PlayerInteriorState::default())  // 室內狀態
+    .insert(crate::combat::PlayerCoverState::default())  // 掩體狀態
+    .insert(crate::combat::ExplosiveInventory {  // 爆炸物庫存
+        grenades: 3,
+        molotovs: 2,
+        sticky_bombs: 1,
+        selected: Some(crate::combat::ExplosiveType::Grenade),
+        throw_cooldown: 0.0,
+    })
+    .insert(crate::wanted::PlayerSurrenderState::default())  // 投降狀態
+    .insert(crate::vehicle::PlayerTheftState::default())  // 偷車狀態
     .insert(CollisionGroups::new(
         COLLISION_GROUP_CHARACTER,
         COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,

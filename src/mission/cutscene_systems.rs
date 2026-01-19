@@ -456,7 +456,7 @@ fn cutscene_letterbox_system(
         *current_height = (*current_height - speed * time.delta_secs()).max(target_height);
     }
 
-    for (bar, mut node, mut vis) in &mut letterbox_query {
+    for (_bar, mut node, mut vis) in &mut letterbox_query {
         if *current_height > 0.0 {
             *vis = Visibility::Visible;
             node.height = Val::Px(*current_height);

@@ -4,6 +4,7 @@
 
 // Bevy 系統需要 Res<T> 按值傳遞
 #![allow(clippy::needless_pass_by_value)]
+#![allow(dead_code)] // Phase 5+ 預留功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -1645,7 +1646,7 @@ pub fn squad_coordination_system(
         .collect();
 
     // 處理每個敵人的包抄行為
-    for (entity, transform, mut behavior, mut movement, mut member) in &mut enemy_query {
+    for (_entity, transform, mut behavior, mut movement, mut member) in &mut enemy_query {
         let my_pos = transform.translation;
 
         // 只有在追逐或攻擊狀態時才執行包抄

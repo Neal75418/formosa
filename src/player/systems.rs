@@ -187,11 +187,11 @@ pub fn player_jump(
 /// 上下車（Tab 鍵）- GTA 5 風格動畫版
 pub fn enter_exit_vehicle(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut game_state: ResMut<GameState>,
+    game_state: ResMut<GameState>,
     mut transition: ResMut<VehicleTransitionState>,
-    mut player_query: Query<&mut Transform, (With<Player>, Without<Vehicle>)>,
-    mut vehicle_query: Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
-    mut visibility_query: Query<&mut Visibility, With<Player>>,
+    player_query: Query<&mut Transform, (With<Player>, Without<Vehicle>)>,
+    vehicle_query: Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
+    _visibility_query: Query<&mut Visibility, With<Player>>,
     rapier_context: ReadRapierContext,
 ) {
     // 如果正在動畫中，不處理輸入

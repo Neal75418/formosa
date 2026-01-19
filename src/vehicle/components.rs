@@ -435,6 +435,51 @@ impl DriftSmoke {
     }
 }
 
+/// 氮氣火焰粒子組件
+#[derive(Component)]
+pub struct NitroFlame {
+    /// 粒子速度
+    pub velocity: Vec3,
+    /// 當前生命時間
+    pub lifetime: f32,
+    /// 最大生命時間
+    pub max_lifetime: f32,
+    /// 初始縮放
+    pub initial_scale: f32,
+}
+
+impl NitroFlame {
+    pub fn new(velocity: Vec3) -> Self {
+        Self {
+            velocity,
+            lifetime: 0.0,
+            max_lifetime: 0.15,  // 火焰粒子生命較短
+            initial_scale: 0.2,
+        }
+    }
+
+    /// 計算當前顏色（從藍白漸變到橙紅）
+    pub fn color(&self) -> Color {
+        let progress = self.lifetime / self.max_lifetime;
+        if progress < 0.3 {
+            // 藍白色（核心高溫）
+            Color::srgba(0.8, 0.9, 1.0, 1.0 - progress)
+        } else if progress < 0.6 {
+            // 黃橙色（中間）
+            Color::srgba(1.0, 0.8, 0.3, 1.0 - progress)
+        } else {
+            // 橙紅色（外焰）
+            Color::srgba(1.0, 0.4, 0.1, (1.0 - progress) * 0.5)
+        }
+    }
+
+    /// 計算當前縮放（火焰會逐漸縮小消散）
+    pub fn scale(&self) -> f32 {
+        let progress = self.lifetime / self.max_lifetime;
+        self.initial_scale * (1.0 - progress * 0.5)
+    }
+}
+
 /// 車輛視覺效果資源（預生成的 mesh 和 material）
 #[derive(Resource)]
 pub struct VehicleEffectVisuals {
@@ -446,6 +491,10 @@ pub struct VehicleEffectVisuals {
     pub tire_track_material: Handle<StandardMaterial>,
     /// 輪胎痕跡 mesh (薄平面)
     pub tire_track_mesh: Handle<Mesh>,
+    /// 氮氣火焰 mesh (拉長的球體模擬火焰)
+    pub nitro_flame_mesh: Handle<Mesh>,
+    /// 氮氣火焰材質 (發光藍白色)
+    pub nitro_flame_material: Handle<StandardMaterial>,
 }
 
 impl VehicleEffectVisuals {
@@ -466,6 +515,15 @@ impl VehicleEffectVisuals {
                 ..default()
             }),
             tire_track_mesh: meshes.add(Cuboid::new(0.3, 0.01, 0.5)),  // 薄平面
+            // 氮氣火焰：拉長的球體
+            nitro_flame_mesh: meshes.add(Sphere::new(0.3)),
+            nitro_flame_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.8, 0.9, 1.0, 0.9),  // 藍白色
+                emissive: bevy::color::LinearRgba::rgb(5.0, 6.0, 8.0),  // 強發光
+                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
         }
     }
 }
@@ -639,6 +697,18 @@ impl VehicleHealth {
         if self.percentage() > 0.3 {
             self.is_on_fire = false;
         }
+    }
+
+    /// 套用裝甲改裝（增加最大血量）
+    /// 只應在改裝時呼叫一次，會增加最大血量並按比例恢復當前血量
+    pub fn apply_armor_upgrade(&mut self, multiplier: f32) {
+        let old_max = self.max;
+        let new_max = old_max * multiplier;
+        let health_ratio = self.current / old_max;
+
+        self.max = new_max;
+        self.current = new_max * health_ratio;  // 保持相同的血量比例
+        self.damage_state = VehicleDamageState::from_health_percent(self.percentage());
     }
 
     /// 完全修復

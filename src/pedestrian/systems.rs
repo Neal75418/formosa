@@ -2,6 +2,8 @@
 //!
 //! 處理行人的生成、移動、反應等邏輯。
 
+#![allow(dead_code)] // Phase 5+ 預留功能
+
 use bevy::prelude::*;
 use bevy::ecs::relationship::Relationship;
 use bevy_rapier3d::prelude::*;
@@ -10,7 +12,7 @@ use std::f32::consts::PI;
 
 use crate::ai::{PatrolPath, AiMovement};
 use crate::player::Player;
-use crate::core::COLLISION_GROUP_CHARACTER;
+use crate::core::{COLLISION_GROUP_CHARACTER, VehicleSpatialHash, PedestrianSpatialHash};
 use crate::combat::{CombatState, WeaponInventory, WeaponType, Health, Damageable, HitReaction};
 use crate::vehicle::Vehicle;
 use crate::wanted::{CrimeEvent, WitnessReport};
@@ -404,7 +406,7 @@ pub fn pedestrian_movement_system(
 ) {
     let dt = time.delta_secs();
 
-    for (_ped, state, mut transform, mut patrol, mut movement, mut controller) in ped_query.iter_mut() {
+    for (_ped, state, mut transform, mut patrol, movement, mut controller) in ped_query.iter_mut() {
         // 根據狀態決定速度
         let speed = match state.state {
             PedState::Fleeing => config.flee_speed,
@@ -688,15 +690,61 @@ pub fn pedestrian_walking_animation_system(
 }
 
 // ============================================================================
-// 車輛碰撞系統
+// 車輛空間哈希系統
 // ============================================================================
 
-/// 車輛碰撞偵測系統
+/// 更新車輛空間哈希（每幀執行，在碰撞檢測前）
+///
+/// 將場景中所有車輛位置插入空間哈希網格，
+/// 供行人碰撞檢測和其他系統使用。
+pub fn update_vehicle_spatial_hash_system(
+    mut vehicle_hash: ResMut<VehicleSpatialHash>,
+    vehicle_query: Query<(Entity, &Transform, &Velocity), With<Vehicle>>,
+) {
+    // 清空舊資料
+    vehicle_hash.clear();
+
+    // 插入所有車輛（批量插入效能更好）
+    vehicle_hash.insert_batch(
+        vehicle_query.iter().map(|(entity, transform, _)| {
+            (entity, transform.translation)
+        })
+    );
+}
+
+/// 更新行人空間哈希（每幀執行，在恐慌傳播前）
+///
+/// 將場景中所有行人位置插入空間哈希網格，
+/// 供恐慌波傳播和其他系統使用，將 O(n²) 降為 O(n)。
+pub fn update_pedestrian_spatial_hash_system(
+    mut ped_hash: ResMut<PedestrianSpatialHash>,
+    ped_query: Query<(Entity, &Transform), With<Pedestrian>>,
+) {
+    // 清空舊資料
+    ped_hash.clear();
+
+    // 插入所有行人（批量插入效能更好）
+    ped_hash.insert_batch(
+        ped_query.iter().map(|(entity, transform)| {
+            (entity, transform.translation)
+        })
+    );
+}
+
+// ============================================================================
+// 車輛碰撞系統（使用空間哈希優化）
+// ============================================================================
+
+/// 車輛碰撞偵測系統（O(n) 優化版）
+///
+/// 使用空間哈希將 O(行人×車輛) 降為 O(行人)。
+/// 每個行人只檢查其所在網格及相鄰網格內的車輛。
 pub fn pedestrian_vehicle_collision_system(
     mut commands: Commands,
     time: Res<Time>,
     game_state: Res<crate::core::GameState>,
-    vehicle_query: Query<(Entity, &Transform, &Velocity), With<Vehicle>>,
+    vehicle_hash: Res<VehicleSpatialHash>,
+    vehicle_velocity_query: Query<&Velocity, With<Vehicle>>,
     // Without<HitByVehicle> 過濾已經被撞的行人，防止重複處理
     mut ped_query: Query<
         (Entity, &Transform, &mut PedestrianState, &crate::combat::Health),
@@ -705,20 +753,22 @@ pub fn pedestrian_vehicle_collision_system(
     mut crime_events: MessageWriter<CrimeEvent>,
 ) {
     let current_time = time.elapsed_secs();
-
-    // 使用 GameState 檢查玩家駕駛的車輛
     let player_vehicle = game_state.current_vehicle;
+
+    // 碰撞檢測半徑（略大於實際碰撞距離以確保精確性）
+    const QUERY_RADIUS: f32 = 3.0;
 
     for (ped_entity, ped_transform, mut state, health) in ped_query.iter_mut() {
         let ped_pos = ped_transform.translation;
 
-        for (vehicle_entity, vehicle_transform, velocity) in vehicle_query.iter() {
-            let vehicle_pos = vehicle_transform.translation;
-            let dist_sq = ped_pos.distance_squared(vehicle_pos);
-
-            // 檢查是否在碰撞範圍內（車輛寬度約 2m）- 使用 distance_squared 避免 sqrt
+        // 使用空間哈希查詢附近車輛（O(1) 查詢）
+        for (vehicle_entity, vehicle_pos, dist_sq) in vehicle_hash.query_radius(ped_pos, QUERY_RADIUS) {
+            // 檢查是否在碰撞範圍內
             if dist_sq < VEHICLE_COLLISION_SQ {
-                // 計算車輛速度
+                // 取得車輛速度
+                let Ok(velocity) = vehicle_velocity_query.get(vehicle_entity) else {
+                    continue;
+                };
                 let speed = velocity.linvel.length();
 
                 // 只有在車輛有足夠速度時才算撞擊
@@ -741,7 +791,6 @@ pub fn pedestrian_vehicle_collision_system(
 
                     // === 犯罪事件：如果是玩家駕駛的車輛撞人 ===
                     if Some(vehicle_entity) == player_vehicle {
-                        // 根據速度判斷是否致命
                         let fatal = speed > 15.0 || health.current < speed * 5.0;
                         crime_events.write(CrimeEvent::VehicleHit {
                             victim: ped_entity,
@@ -749,6 +798,9 @@ pub fn pedestrian_vehicle_collision_system(
                             fatal,
                         });
                     }
+
+                    // 已被撞，跳出內層迴圈
+                    break;
                 }
             }
         }
@@ -1301,7 +1353,7 @@ mod witness_constants {
 /// 行人目擊犯罪偵測系統
 /// 當玩家犯罪時，通知範圍內的行人
 pub fn witness_crime_detection_system(
-    time: Res<Time>,
+    _time: Res<Time>,
     mut crime_events: MessageReader<CrimeEvent>,
     player_query: Query<&Transform, With<Player>>,
     mut ped_query: Query<(
@@ -1489,7 +1541,7 @@ pub fn witness_visual_system(
     }
 
     // 為報警中的行人添加圖標
-    for (ped_entity, transform, state, witness) in ped_query.iter() {
+    for (ped_entity, transform, state, _witness) in ped_query.iter() {
         if state.state != PedState::CallingPolice {
             continue;
         }
@@ -1594,11 +1646,14 @@ mod panic_constants {
     pub const ROTATION_SLERP_SPEED: f32 = 8.0;
 }
 
-/// 恐慌波傳播系統
-/// 更新恐慌波半徑，並影響波前緣的行人
+/// 恐慌波傳播系統（空間哈希優化版）
+///
+/// 使用 PedestrianSpatialHash 將 O(行人×波數) 降為 O(波數×附近行人)。
+/// 每個恐慌波只檢查其半徑內的行人，而非所有行人。
 pub fn panic_wave_propagation_system(
     time: Res<Time>,
     mut panic_manager: ResMut<PanicWaveManager>,
+    ped_hash: Res<PedestrianSpatialHash>,
     mut ped_query: Query<(
         &Transform,
         &mut PedestrianState,
@@ -1611,31 +1666,72 @@ pub fn panic_wave_propagation_system(
     // 更新所有恐慌波（擴展半徑、清理過期）
     panic_manager.update(dt);
 
-    // 檢測行人是否被恐慌波影響
-    for (ped_transform, mut ped_state, mut panic_state) in ped_query.iter_mut() {
-        let ped_pos = ped_transform.translation;
+    // 恐慌波前緣寬度（與 components.rs 中的 PANIC_WAVE_FRONT_WIDTH 一致）
+    const WAVE_FRONT_WIDTH: f32 = 2.0;
 
+    // === 階段 1：使用空間哈希找出被恐慌波影響的行人 ===
+    // 收集需要觸發恐慌的 (entity, intensity, source) 資訊
+    let mut panic_triggers: Vec<(Entity, f32, Vec3)> = Vec::new();
+
+    for wave in &panic_manager.active_waves {
+        // 只查詢波前緣範圍內的行人（current_radius - FRONT_WIDTH 到 current_radius）
+        // 為了確保不漏掉，查詢 current_radius 範圍
+        if wave.current_radius < 0.1 {
+            continue; // 波還沒開始傳播
+        }
+
+        // 使用空間哈希查詢該半徑內的所有行人
+        for (entity, _, dist_sq) in ped_hash.query_radius(wave.origin, wave.current_radius) {
+            let dist = dist_sq.sqrt();
+            // 檢查是否在波前緣
+            if dist <= wave.current_radius && dist > wave.current_radius - WAVE_FRONT_WIDTH {
+                // 檢查是否已有更強的恐慌源
+                if let Some(existing) = panic_triggers.iter_mut().find(|(e, _, _)| *e == entity) {
+                    if wave.intensity > existing.1 {
+                        existing.1 = wave.intensity;
+                        existing.2 = wave.origin;
+                    }
+                } else {
+                    panic_triggers.push((entity, wave.intensity, wave.origin));
+                }
+            }
+        }
+    }
+
+    // === 階段 2：處理所有行人（更新計時器） ===
+    for (_, _, mut panic_state) in ped_query.iter_mut() {
         // 更新恐慌狀態的冷卻計時器
         panic_state.update(dt);
+    }
 
-        // 檢查是否在任何恐慌波的前緣（只調用一次！）
-        let panic_hit = panic_manager.check_panic_at(ped_pos);
-
-        if let Some(hit) = &panic_hit {
+    // === 階段 3：應用恐慌觸發 ===
+    for (entity, intensity, source) in panic_triggers {
+        if let Ok((_, mut ped_state, mut panic_state)) = ped_query.get_mut(entity) {
             // 觸發恐慌
-            panic_state.trigger_panic(hit.intensity, hit.source);
+            panic_state.trigger_panic(intensity, source);
 
             // 如果恐慌程度足夠高，開始逃跑
             if panic_state.is_panicked() && ped_state.state != PedState::Fleeing {
                 ped_state.state = PedState::Fleeing;
                 ped_state.fear_level = panic_state.panic_level;
                 ped_state.flee_timer = FLEE_TIMER_BASE + panic_state.panic_level * FLEE_TIMER_PANIC_MULTIPLIER;
-                ped_state.last_threat_pos = Some(hit.source);
+                ped_state.last_threat_pos = Some(source);
             }
         }
+    }
 
-        // 恐慌逐漸消退（如果不在波前緣且正在恐慌）
-        if panic_state.panic_level > 0.0 && panic_hit.is_none() {
+    // === 階段 4：恐慌消退（僅處理正在恐慌的行人） ===
+    for (_ped_transform, mut ped_state, mut panic_state) in ped_query.iter_mut() {
+        // 只處理有恐慌等級的行人
+        if panic_state.panic_level <= 0.0 {
+            continue;
+        }
+
+        // 檢查是否仍在任何波前緣（使用 check_panic_at，但只對恐慌中的行人）
+        let ped_pos = _ped_transform.translation;
+        let still_in_wave = panic_manager.check_panic_at(ped_pos).is_some();
+
+        if !still_in_wave {
             panic_state.calm_down(PANIC_CALM_DOWN_RATE, dt);
 
             // 如果恐慌消退到閾值以下，停止逃跑

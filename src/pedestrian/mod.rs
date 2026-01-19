@@ -10,6 +10,7 @@ pub use systems::*;
 
 use bevy::prelude::*;
 use crate::ui::UiState;
+use crate::core::{VehicleSpatialHash, PedestrianSpatialHash};
 
 /// 行人系統插件
 pub struct PedestrianPlugin;
@@ -22,12 +23,19 @@ impl Plugin for PedestrianPlugin {
             .init_resource::<PedestrianPaths>()
             .init_resource::<GunshotTracker>()
             .init_resource::<PanicWaveManager>()  // 恐慌波管理器
+            .insert_resource(VehicleSpatialHash::new())  // 車輛空間哈希
+            .insert_resource(PedestrianSpatialHash::new())  // 行人空間哈希（恐慌傳播優化）
             // 設置系統
             .add_systems(Startup, (
                 setup_pedestrian_visuals,
                 setup_pedestrian_paths,
                 setup_pathfinding_grid,
             ))
+            // 更新系統 - 空間哈希更新（在碰撞/恐慌傳播前執行）
+            .add_systems(Update, (
+                update_vehicle_spatial_hash_system,
+                update_pedestrian_spatial_hash_system,
+            ).run_if(|ui: Res<UiState>| !ui.paused))
             // 更新系統 - 主要邏輯（暫停時跳過）
             .add_systems(Update, (
                 pedestrian_spawn_system,

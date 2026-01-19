@@ -6,11 +6,20 @@ mod components;
 mod shooting;
 mod damage;
 mod killcam;
+mod cover;
+mod vehicle_shooting;
+mod explosives;
+
+#[cfg(test)]
+mod tests;
 
 pub use components::*;
 pub use shooting::*;
 pub use damage::*;
 pub use killcam::*;
+pub use cover::*;
+pub use vehicle_shooting::*;
+pub use explosives::*;
 
 use bevy::prelude::*;
 use crate::ui::UiState;
@@ -25,6 +34,9 @@ impl Plugin for CombatPlugin {
             .add_message::<DamageEvent>()
             .add_message::<DeathEvent>()
             .add_message::<ArmorBreakEvent>()
+            .add_message::<PlayerCoverEvent>()
+            .add_message::<ExplosionEvent>()
+            .add_message::<ThrowExplosiveEvent>()
             // 資源
             .init_resource::<CombatState>()
             .init_resource::<ShootingInput>()
@@ -33,6 +45,7 @@ impl Plugin for CombatPlugin {
             .init_resource::<KillCamState>()
             // 設置系統
             .add_systems(Startup, setup_combat_visuals)
+            .add_systems(Startup, setup_explosive_visuals)
             // 武器模型在 PostStartup 生成，確保玩家實體已完全創建
             .add_systems(PostStartup, spawn_player_weapons)
             // 更新系統 - 第一組（武器和射擊）
@@ -64,6 +77,7 @@ impl Plugin for CombatPlugin {
                 ragdoll_update_system,
                 ragdoll_visual_system,
                 blood_particle_update_system,
+                bleed_damage_system,                   // 流血持續傷害
                 floating_damage_number_update_system,  // GTA 5 風格浮動傷害數字
                 muzzle_flash_system,
                 bullet_tracer_system,
@@ -80,7 +94,29 @@ impl Plugin for CombatPlugin {
             .add_systems(Update, (
                 killcam_update_system,
                 killcam_visual_system,
-            ).chain());
+            ).chain())
+            // 玩家掩體系統
+            .add_systems(Update, (
+                player_cover_input_system,
+                player_cover_event_system,
+                player_cover_update_system,
+            ).chain().run_if(|ui: Res<UiState>| !ui.paused))
+            // 車上射擊系統
+            .add_systems(Update, (
+                vehicle_shooting_input_system,
+                vehicle_shooting_fire_system,
+            ).chain().run_if(|ui: Res<UiState>| !ui.paused))
+            // 爆炸物系統
+            .add_systems(Update, (
+                explosive_input_system,
+                handle_throw_event_system,
+                explosive_update_system,
+                detonate_sticky_bomb_system,
+                handle_explosion_event_system,
+                explosion_effect_update_system,
+                fire_zone_update_system,
+                throw_preview_render_system,
+            ).run_if(|ui: Res<UiState>| !ui.paused));
     }
 }
 

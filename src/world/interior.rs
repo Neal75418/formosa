@@ -40,7 +40,7 @@ pub fn interior_proximity_system(
     }
 
     // 檢查每個門
-    for (door_entity, door_transform, door) in door_query.iter() {
+    for (_door_entity, door_transform, door) in door_query.iter() {
         let door_pos = door_transform.translation;
         let distance = player_pos.distance(door_pos);
 
@@ -248,7 +248,7 @@ pub fn spawn_convenience_store(
     )).id();
 
     // 建築外觀
-    let building_entity = commands.spawn((
+    let _building_entity = commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(8.0, 4.0, 6.0))),
         MeshMaterial3d(wall_material),
         Transform::from_translation(position + Vec3::Y * 2.0),

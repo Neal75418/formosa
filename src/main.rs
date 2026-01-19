@@ -8,10 +8,12 @@ mod audio;
 mod camera;
 mod combat;
 mod core;
+mod economy;
 mod environment;
 mod mission;
 mod pedestrian;
 mod player;
+mod save;
 mod ui;
 mod vehicle;
 mod wanted;
@@ -59,6 +61,12 @@ fn main() {
         .add_plugins(mission::CutsceneSystemPlugin)
         .add_plugins(mission::StoryMissionPlugin)
 
+        // === 經濟系統插件 ===
+        .add_plugins(economy::EconomyPlugin)
+
+        // === 存檔系統插件 ===
+        .add_plugins(save::SavePlugin)
+
         // === 資源 ===
         .insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.15)))
         .insert_resource(core::GameState::default())
@@ -104,6 +112,14 @@ fn main() {
         // 紅綠燈系統初始化
         .add_systems(Startup, vehicle::setup_traffic_lights)
         .add_systems(Startup, vehicle::spawn_world_traffic_lights.after(vehicle::setup_traffic_lights))
+        // 偷車系統初始化
+        .add_systems(Startup, vehicle::setup_theft_visuals)
+        // 偷車系統 Message
+        .add_message::<vehicle::TheftEvent>()
+        // 車輛改裝系統 Message
+        .add_message::<vehicle::PurchaseModificationEvent>()
+        .add_message::<vehicle::PurchaseNitroEvent>()
+        .add_message::<vehicle::ModificationCompleteEvent>()
         .add_systems(Startup, (
             ui::setup_ui,
             ui::setup_delivery_app,
@@ -116,6 +132,15 @@ fn main() {
             ui::setup_gps_ui,         // GPS 導航 UI
             ui::setup_story_mission_hud, // 劇情任務 HUD
         ).after(setup_chinese_font))
+        // 隨機事件系統初始化
+        .add_systems(Startup, world::setup_random_events)
+        // 隨機事件系統 Message
+        .add_message::<world::RandomEventTriggered>()
+        .add_message::<world::RandomEventCompleted>()
+        // 可破壞環境系統初始化
+        .add_systems(Startup, world::setup_destructible_visuals)
+        // 可破壞環境系統 Message
+        .add_message::<world::EnvironmentDamageEvent>()
         
         // === 更新系統（分組避免 tuple 限制）===
         // 核心和 UI 第一組
@@ -186,12 +211,14 @@ fn main() {
             vehicle::vehicle_movement,
             vehicle::npc_vehicle_ai,
         ).run_if(|ui: Res<ui::UiState>| !ui.paused))
-        // 車輛視覺效果（漂移煙霧、輪胎痕跡）（暫停時跳過）
+        // 車輛視覺效果（漂移煙霧、輪胎痕跡、氮氣火焰）（暫停時跳過）
         .add_systems(Update, (
             vehicle::drift_smoke_spawn_system,
             vehicle::drift_smoke_update_system,
             vehicle::tire_track_spawn_system,
             vehicle::tire_track_update_system,
+            vehicle::nitro_flame_spawn_system,
+            vehicle::nitro_flame_update_system,
         ).run_if(|ui: Res<ui::UiState>| !ui.paused))
         // 車輛損壞系統（暫停時跳過）
         .add_systems(Update, (
@@ -201,6 +228,22 @@ fn main() {
             vehicle::vehicle_explosion_system,
             vehicle::vehicle_damage_particle_update_system,
             vehicle::vehicle_damage_event_system,  // 處理子彈/爆炸傷害
+        ).run_if(|ui: Res<ui::UiState>| !ui.paused))
+        // 偷車系統（暫停時跳過）
+        .add_systems(Update, (
+            vehicle::theft_input_system,
+            vehicle::theft_progress_system,
+            vehicle::vehicle_alarm_system,
+            vehicle::owner_reaction_system,
+            vehicle::glass_shard_update_system,
+            vehicle::hotwire_spark_update_system,
+            vehicle::theft_ui_system,
+        ).run_if(|ui: Res<ui::UiState>| !ui.paused))
+        // 車輛改裝系統（暫停時跳過）
+        .add_systems(Update, (
+            vehicle::purchase_modification_system,
+            vehicle::purchase_nitro_system,
+            vehicle::nitro_boost_system,
         ).run_if(|ui: Res<ui::UiState>| !ui.paused))
         // 紅綠燈系統（不受暫停影響，純視覺）
         .add_systems(Update, vehicle::traffic_light_cycle_system)
@@ -224,6 +267,14 @@ fn main() {
             world::update_fog_effect,            // 霧效果
             ui::update_weather_hud,              // 天氣 HUD 更新
         ))
+        // 隨機事件系統（暫停時跳過）
+        .add_systems(Update, (
+            world::random_event_spawn_system,
+            world::random_event_update_system,
+            world::handle_event_completed_system,
+            world::event_notification_system,
+            world::event_marker_system,
+        ).run_if(|ui: Res<ui::UiState>| !ui.paused))
         // 天氣系統 - 粒子和動態效果（暫停時跳過）
         .add_systems(Update, (
             world::update_weather_transition,    // 天氣過渡
@@ -241,6 +292,14 @@ fn main() {
             world::interior_enter_system,        // 進入/離開室內
             world::interior_hiding_system,       // 室內躲藏效果
             world::door_animation_system,        // 門動畫
+        ).run_if(|ui: Res<ui::UiState>| !ui.paused))
+        // 可破壞環境系統（暫停時跳過）
+        .add_systems(Update, (
+            world::vehicle_destructible_collision_system,  // 車輛碰撞破壞
+            world::combat_destructible_damage_system,      // 戰鬥傷害轉發
+            world::handle_environment_damage_system,       // 環境破壞處理
+            world::debris_update_system,                   // 碎片更新
+            world::destruction_particle_update_system,     // 破壞粒子更新
         ).run_if(|ui: Res<ui::UiState>| !ui.paused))
         // 音效系統 - 背景音樂不受暫停影響
         .add_systems(Update, audio::update_background_music)

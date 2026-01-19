@@ -50,6 +50,16 @@ impl DestructibleMaterial {
             DestructibleMaterial::Plastic => (0.06, 0.18),
         }
     }
+
+    /// 取得碎片生命時間（秒）
+    pub fn debris_lifetime(&self) -> f32 {
+        match self {
+            DestructibleMaterial::Glass => 2.0,
+            DestructibleMaterial::Wood => 3.0,
+            DestructibleMaterial::Metal => 4.0,
+            DestructibleMaterial::Plastic => 2.5,
+        }
+    }
 }
 
 /// 可破壞物件組件
@@ -162,12 +172,7 @@ impl Debris {
                 rand::random::<f32>() * 10.0 - 5.0,
             ),
             lifetime: 0.0,
-            max_lifetime: match material {
-                DestructibleMaterial::Glass => 2.0,
-                DestructibleMaterial::Wood => 3.0,
-                DestructibleMaterial::Metal => 4.0,
-                DestructibleMaterial::Plastic => 2.5,
-            },
+            max_lifetime: material.debris_lifetime(),
             has_gravity: true,
             bounce_count: 0,
         }
@@ -218,6 +223,88 @@ impl DestructionEvent {
     pub fn with_impact_direction(mut self, direction: Vec3) -> Self {
         self.impact_direction = Some(direction);
         self
+    }
+}
+
+// ============================================================================
+// 碎片物件池（效能優化）
+// ============================================================================
+
+/// 碎片物件池
+///
+/// 避免頻繁的 spawn/despawn 造成記憶體分配開銷。
+/// 碎片結束生命週期時歸還池中重用，而非銷毀。
+#[derive(Resource)]
+pub struct DebrisPool {
+    /// 可用的碎片實體（已隱藏）
+    pub available: Vec<Entity>,
+    /// 正在使用的碎片實體
+    pub in_use: Vec<Entity>,
+    /// 池最大大小
+    pub max_size: usize,
+}
+
+impl Default for DebrisPool {
+    fn default() -> Self {
+        Self::new(150)  // 預設最多 150 個碎片
+    }
+}
+
+impl DebrisPool {
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            available: Vec::with_capacity(max_size),
+            in_use: Vec::with_capacity(max_size),
+            max_size,
+        }
+    }
+
+    /// 從池中取得一個碎片實體（僅標記為候選，需呼叫 confirm_acquire 確認）
+    pub fn acquire(&mut self) -> Option<Entity> {
+        self.available.pop()
+    }
+
+    /// 確認取得實體（將實體加入使用中列表）
+    pub fn confirm_acquire(&mut self, entity: Entity) {
+        self.in_use.push(entity);
+    }
+
+    /// 取消取得（將實體退回可用列表）
+    pub fn cancel_acquire(&mut self, entity: Entity) {
+        self.available.push(entity);
+    }
+
+    /// 歸還碎片實體到池中
+    pub fn release(&mut self, entity: Entity) {
+        // 使用 swap_remove 保持 O(1) 移除，搜索仍為 O(n)
+        // 對於 max_size=150 的池，這是可接受的
+        if let Some(idx) = self.in_use.iter().position(|&e| e == entity) {
+            self.in_use.swap_remove(idx);
+            if self.available.len() < self.max_size {
+                self.available.push(entity);
+            }
+        }
+    }
+
+    /// 清理無效實體（當外部系統刪除了池中的實體時使用）
+    pub fn cleanup_invalid(&mut self, is_valid: impl Fn(Entity) -> bool) {
+        self.in_use.retain(|&e| is_valid(e));
+        self.available.retain(|&e| is_valid(e));
+    }
+
+    /// 取得目前使用中的碎片數量
+    pub fn active_count(&self) -> usize {
+        self.in_use.len()
+    }
+
+    /// 取得池中可用的碎片數量
+    pub fn available_count(&self) -> usize {
+        self.available.len()
+    }
+
+    /// 檢查是否可以生成更多碎片
+    pub fn can_spawn(&self) -> bool {
+        !self.available.is_empty() || self.in_use.len() < self.max_size
     }
 }
 

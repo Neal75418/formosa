@@ -1,5 +1,7 @@
 //! 通緝系統事件定義
 
+#![allow(dead_code)] // Phase 5+ 預留功能
+
 use bevy::prelude::*;
 
 /// 犯罪事件

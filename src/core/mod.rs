@@ -6,6 +6,8 @@
 
 mod resources;
 mod events;
+mod spatial_hash;
 
 pub use resources::*;
 pub use events::*;
+pub use spatial_hash::*;

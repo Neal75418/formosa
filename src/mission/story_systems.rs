@@ -478,12 +478,12 @@ fn mission_objective_tracking_system(
             ObjectiveType::SurviveTime(duration) => {
                 active.phase_timer >= *duration
             }
-            ObjectiveType::FollowTarget(target_id, max_distance) => {
+            ObjectiveType::FollowTarget(target_id, _max_distance) => {
                 // 查找目標實體並檢查玩家是否保持在範圍內
                 let mut target_reached_destination = false;
                 for (target_transform, target_entity) in &target_query {
                     if &target_entity.target_id == target_id && target_entity.mission_id == mission_id {
-                        let distance = player_pos.distance(target_transform.translation);
+                        let _distance = player_pos.distance(target_transform.translation);
                         // 如果目標已到達終點（路徑走完），任務完成
                         if !target_entity.waypoints.is_empty()
                             && target_entity.current_waypoint >= target_entity.waypoints.len()

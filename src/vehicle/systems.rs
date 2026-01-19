@@ -1,7 +1,7 @@
 //! 載具系統
 
 use bevy::prelude::*;
-use super::{Vehicle, VehicleType, NpcVehicle, NpcState, DriftSmoke, TireTrack, VehicleEffectVisuals, VehicleEffectTracker, TrafficLight, TrafficLightState, TrafficLightBulb, TrafficLightVisuals};
+use super::{Vehicle, VehicleType, NpcVehicle, NpcState, DriftSmoke, TireTrack, VehicleEffectVisuals, VehicleEffectTracker, TrafficLight, TrafficLightState, TrafficLightBulb, TrafficLightVisuals, VehicleModifications, NitroBoost, NitroFlame};
 use rand::Rng;
 use crate::core::{GameState, WeatherState, WeatherType, COLLISION_GROUP_CHARACTER, COLLISION_GROUP_VEHICLE, COLLISION_GROUP_STATIC};
 use bevy_rapier3d::prelude::*;
@@ -119,14 +119,34 @@ pub fn vehicle_movement(
     time: Res<Time>,
     game_state: Res<GameState>,
     weather: Res<WeatherState>,
-    mut vehicles: Query<(&mut Transform, &mut Vehicle)>,
+    mut vehicles: Query<(&mut Transform, &mut Vehicle, Option<&VehicleModifications>, Option<&NitroBoost>)>,
 ) {
     if !game_state.player_in_vehicle {
         return;
     }
 
     let Some(vehicle_entity) = game_state.current_vehicle else { return; };
-    let Ok((mut transform, mut vehicle)) = vehicles.get_mut(vehicle_entity) else { return; };
+    let Ok((mut transform, mut vehicle, mods, nitro)) = vehicles.get_mut(vehicle_entity) else { return; };
+
+    // 計算改裝倍率（若無改裝組件則使用原廠數值）
+    let (accel_mod, speed_mod, handling_mod, brake_mod, traction_mod) = if let Some(m) = mods {
+        (
+            m.engine.multiplier(),
+            m.transmission.multiplier(),
+            m.suspension.multiplier(),
+            m.brakes.multiplier(),
+            m.tires.multiplier(),
+        )
+    } else {
+        (1.0, 1.0, 1.0, 1.0, 1.0)
+    };
+
+    // 氮氣加速倍率
+    let nitro_mult = if let Some(n) = nitro {
+        if n.is_active { n.boost_multiplier } else { 1.0 }
+    } else {
+        1.0
+    };
 
     let dt = time.delta_secs();
 
@@ -134,14 +154,28 @@ pub fn vehicle_movement(
     let weather_traction = get_weather_traction_factor(&weather);
     let weather_handling = get_weather_handling_factor(&weather);
 
-    // 1. 處理加速/煞車（非線性扭力曲線 + 天氣影響）
-    update_vehicle_speed_with_weather(&keyboard, &mouse_button, &mut vehicle, dt, weather_traction);
+    // 合併改裝與天氣影響（改裝輪胎提升天氣牽引力）
+    let effective_traction = weather_traction * traction_mod;
+    let effective_handling = weather_handling * handling_mod;
 
-    // 2. 處理轉向（速度敏感 + 平滑輸入 + 天氣影響）
-    update_vehicle_turning_with_weather(&keyboard, &mut transform, &mut vehicle, dt, weather_handling);
+    // 1. 處理加速/煞車（非線性扭力曲線 + 天氣影響 + 改裝加成）
+    update_vehicle_speed_with_mods(
+        &keyboard,
+        &mouse_button,
+        &mut vehicle,
+        dt,
+        effective_traction,
+        accel_mod,
+        brake_mod,
+        speed_mod,
+        nitro_mult,
+    );
 
-    // 3. 漂移物理（雨天更容易漂移）
-    update_drift_physics_with_weather(&mut vehicle, &mut transform, dt, weather_traction);
+    // 2. 處理轉向（速度敏感 + 平滑輸入 + 天氣影響 + 改裝加成）
+    update_vehicle_turning_with_weather(&keyboard, &mut transform, &mut vehicle, dt, effective_handling);
+
+    // 3. 漂移物理（雨天更容易漂移 + 改裝輪胎提升抓地力）
+    update_drift_physics_with_weather(&mut vehicle, &mut transform, dt, effective_traction);
 
     // 4. 車身動態（側傾/前後傾）
     update_body_dynamics(&mut transform, &mut vehicle, dt);
@@ -186,24 +220,32 @@ fn get_weather_handling_factor(weather: &WeatherState) -> f32 {
     }
 }
 
-/// 更新車輛速度（含天氣影響）
-fn update_vehicle_speed_with_weather(
+/// 更新車輛速度（含天氣影響 + 改裝加成）
+fn update_vehicle_speed_with_mods(
     keyboard: &ButtonInput<KeyCode>,
     mouse_button: &ButtonInput<MouseButton>,
     vehicle: &mut Vehicle,
     dt: f32,
     traction_factor: f32,
+    accel_mod: f32,
+    brake_mod: f32,
+    speed_mod: f32,
+    nitro_mult: f32,
 ) {
-    let accel_mult = if keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight) { 1.3 } else { 1.0 };
+    // Shift 加速不再觸發氮氣（由 nitro_boost_system 處理）
+    let accel_mult = if nitro_mult > 1.0 { nitro_mult } else { 1.0 };
     let both_mouse = mouse_button.pressed(MouseButton::Left) && mouse_button.pressed(MouseButton::Right);
 
     // 記錄輸入狀態
     vehicle.throttle_input = if keyboard.pressed(KeyCode::KeyW) || both_mouse { 1.0 } else { 0.0 };
     vehicle.brake_input = if keyboard.pressed(KeyCode::KeyS) { 1.0 } else { 0.0 };
 
-    // === 加速處理（非線性曲線 + 天氣影響）===
+    // 計算改裝後的最高速度
+    let effective_max_speed = vehicle.max_speed * speed_mod;
+
+    // === 加速處理（非線性曲線 + 天氣影響 + 改裝加成）===
     if vehicle.throttle_input > 0.0 {
-        let accel_force = calculate_acceleration_force(vehicle);
+        let accel_force = calculate_acceleration_force(vehicle) * accel_mod;
         let effective_accel = accel_force * accel_mult * vehicle.throttle_input * traction_factor;
 
         // 輪胎打滑模擬（Shift 加速起步時 + 雨天更容易打滑）
@@ -219,17 +261,17 @@ fn update_vehicle_speed_with_weather(
         }
     }
 
-    // === 煞車處理（S 鍵 + 天氣影響）===
+    // === 煞車處理（S 鍵 + 天氣影響 + 改裝加成）===
     if vehicle.brake_input > 0.0 && !vehicle.is_handbraking {
         if vehicle.current_speed > 0.5 {
-            // 雨天煞車距離更長
-            let brake_decel = vehicle.brake_force * vehicle.brake_input * traction_factor;
+            // 改裝煞車提升制動力
+            let brake_decel = vehicle.brake_force * brake_mod * vehicle.brake_input * traction_factor;
             vehicle.current_speed -= brake_decel * dt;
             if vehicle.current_speed < 0.0 {
                 vehicle.current_speed = 0.0;
             }
         } else {
-            let reverse_accel = calculate_acceleration_force(vehicle) * 0.5 * traction_factor;
+            let reverse_accel = calculate_acceleration_force(vehicle) * accel_mod * 0.5 * traction_factor;
             vehicle.current_speed -= reverse_accel * dt;
         }
     }
@@ -252,14 +294,14 @@ fn update_vehicle_speed_with_weather(
     // === 自然減速（引擎煞車 + 阻力）===
     let no_input = vehicle.throttle_input == 0.0 && vehicle.brake_input == 0.0 && !vehicle.is_handbraking;
     if no_input {
-        let drag = 1.0 + (vehicle.current_speed.abs() / vehicle.max_speed) * 0.5;
+        let drag = 1.0 + (vehicle.current_speed.abs() / effective_max_speed) * 0.5;
         vehicle.current_speed *= 1.0 - 0.025 * drag;
     }
 
-    // 速度限制
+    // 速度限制（使用改裝後的最高速度）
     vehicle.current_speed = vehicle.current_speed.clamp(
-        -vehicle.max_speed * 0.3,
-        vehicle.max_speed,
+        -effective_max_speed * 0.3,
+        effective_max_speed,
     );
 
     // 極低速歸零
@@ -1397,6 +1439,86 @@ pub fn drift_smoke_update_system(
     }
 }
 
+// ============================================================================
+// 氮氣火焰效果系統
+// ============================================================================
+
+/// 氮氣火焰生成系統
+/// 當車輛使用氮氣加速時，在排氣管後方產生火焰效果
+pub fn nitro_flame_spawn_system(
+    mut commands: Commands,
+    effect_visuals: Option<Res<VehicleEffectVisuals>>,
+    vehicle_query: Query<(&Transform, &VehicleModifications, &NitroBoost), Without<NpcVehicle>>,
+) {
+    let Some(visuals) = effect_visuals else { return };
+
+    for (transform, mods, nitro) in vehicle_query.iter() {
+        // 只有在使用氮氣且有充能時生成火焰
+        if !nitro.is_active || mods.nitro_charge <= 0.0 {
+            continue;
+        }
+
+        // 排氣管位置（車尾）
+        let exhaust_offset = transform.back() * 2.5 + Vec3::new(0.0, 0.3, 0.0);
+        let exhaust_pos = transform.translation + exhaust_offset;
+
+        // 生成多個火焰粒子
+        let mut rng = rand::rng();
+        for _ in 0..3 {
+            // 隨機偏移
+            let offset = Vec3::new(
+                (rng.random::<f32>() - 0.5) * 0.3,
+                (rng.random::<f32>() - 0.5) * 0.2,
+                0.0,
+            );
+
+            // 火焰往後噴射
+            let velocity = transform.back() * (3.0 + rng.random::<f32>() * 2.0)
+                + Vec3::new(
+                    (rng.random::<f32>() - 0.5) * 0.5,
+                    rng.random::<f32>() * 0.3,
+                    (rng.random::<f32>() - 0.5) * 0.5,
+                );
+
+            commands.spawn((
+                Mesh3d(visuals.nitro_flame_mesh.clone()),
+                MeshMaterial3d(visuals.nitro_flame_material.clone()),
+                Transform::from_translation(exhaust_pos + offset)
+                    .with_scale(Vec3::new(0.2, 0.2, 0.4)),  // 拉長形狀
+                NitroFlame::new(velocity),
+            ));
+        }
+    }
+}
+
+/// 氮氣火焰更新系統
+/// 處理火焰粒子的移動、縮放和顏色變化
+pub fn nitro_flame_update_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut flame_query: Query<(Entity, &mut NitroFlame, &mut Transform)>,
+) {
+    let dt = time.delta_secs();
+
+    for (entity, mut flame, mut transform) in flame_query.iter_mut() {
+        // 更新生命時間
+        flame.lifetime += dt;
+
+        // 檢查是否過期
+        if flame.lifetime >= flame.max_lifetime {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        // 更新位置
+        transform.translation += flame.velocity * dt;
+
+        // 更新縮放（逐漸消散）
+        let scale = flame.scale();
+        transform.scale = Vec3::new(scale, scale, scale * 2.0);  // 保持拉長形狀
+    }
+}
+
 /// 輪胎痕跡生成系統
 /// 當車輛漂移或急煞時，在地面留下輪胎痕跡
 pub fn tire_track_spawn_system(
@@ -1514,9 +1636,9 @@ pub fn setup_vehicle_effects(
 
 use super::{
     VehicleHealth, VehicleDamageState, VehicleDamageVisuals,
-    VehicleDamageSmoke, VehicleFire, VehicleExplosion, TireDamage,
+    VehicleDamageSmoke, VehicleFire, VehicleExplosion,
 };
-use crate::combat::{DamageEvent, DamageSource, Health, Enemy, Damageable};
+use crate::combat::{DamageEvent, DamageSource, Enemy};
 use crate::player::Player;
 use crate::pedestrian::Pedestrian;
 use crate::wanted::PoliceOfficer;

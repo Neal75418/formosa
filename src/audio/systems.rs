@@ -246,7 +246,8 @@ pub fn play_weapon_fire_sound(
         WeaponType::SMG => weapon_sounds.smg_fire.clone(),
         WeaponType::Shotgun => weapon_sounds.shotgun_fire.clone(),
         WeaponType::Rifle => weapon_sounds.rifle_fire.clone(),
-        WeaponType::Fist => weapon_sounds.punch_whoosh.clone(),
+        // 近戰武器使用揮擊音效
+        WeaponType::Fist | WeaponType::Staff | WeaponType::Knife => weapon_sounds.punch_whoosh.clone(),
     };
 
     if let Some(handle) = sound_handle {

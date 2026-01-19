@@ -1,5 +1,7 @@
 //! 世界組件
 
+#![allow(dead_code)] // Phase 5+ 預留功能
+
 use bevy::prelude::*;
 use rand::Rng;
 

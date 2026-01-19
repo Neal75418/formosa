@@ -36,6 +36,14 @@ pub struct StoryMissionManager {
     pub unlocked_areas: Vec<AreaId>,
     /// 檢查點資料
     pub checkpoint: Option<CheckpointData>,
+    /// 當前任務表現追蹤
+    #[serde(skip)]
+    pub current_performance: Option<MissionPerformance>,
+    /// 各任務最佳評分
+    pub mission_ratings: HashMap<StoryMissionId, StoryMissionRating>,
+    /// 最近完成的任務結果（用於顯示 UI）
+    #[serde(skip)]
+    pub last_completion_result: Option<MissionCompletionResult>,
 }
 
 impl Default for StoryMissionManager {
@@ -53,6 +61,9 @@ impl Default for StoryMissionManager {
             unlocked_items: Vec::new(),
             unlocked_areas: vec![1], // 初始解鎖第一個區域
             checkpoint: None,
+            current_performance: None,
+            mission_ratings: HashMap::new(),
+            last_completion_result: None,
         }
     }
 }
@@ -109,6 +120,12 @@ impl StoryMissionManager {
         let first_phase = mission.phases.first().ok_or("任務沒有階段")?;
         let active_mission = ActiveStoryMission::new(mission.id, first_phase);
         self.current_mission = Some(active_mission);
+
+        // 開始追蹤表現
+        self.current_performance = Some(MissionPerformance {
+            start_time: self.total_play_time,
+            ..Default::default()
+        });
         self.set_mission_status(mission.id, StoryMissionStatus::InProgress);
 
         Ok(())
@@ -117,12 +134,47 @@ impl StoryMissionManager {
     /// 完成當前任務並返回任務 ID 和需要清理的實體
     pub fn complete_current_mission(&mut self) -> Option<(StoryMissionId, Vec<Entity>)> {
         let active = self.current_mission.take()?;
-        self.set_mission_status(active.mission_id, StoryMissionStatus::Completed);
+        let mission_id = active.mission_id;
+
+        // 完成表現追蹤並計算評分
+        if let Some(mut performance) = self.current_performance.take() {
+            performance.completion_time = self.total_play_time - performance.start_time;
+
+            // 預設目標時間為 5 分鐘，實際應從任務定義取得
+            let target_time = 300.0; // TODO: 從任務資料取得
+            let rating = performance.calculate_rating(target_time);
+
+            // 更新最佳評分
+            let current_best = self.mission_ratings.get(&mission_id).copied().unwrap_or_default();
+            if rating.stars() > current_best.stars() {
+                self.mission_ratings.insert(mission_id, rating);
+            }
+
+            // 計算獎勵
+            let base_reward = 1000; // TODO: 從任務資料取得
+            let final_reward = (base_reward as f32 * rating.bonus_multiplier()) as i32;
+
+            // 儲存完成結果供 UI 顯示
+            self.last_completion_result = Some(MissionCompletionResult {
+                mission_id,
+                mission_name: format!("任務 {:?}", mission_id), // TODO: 從任務資料取得
+                rating,
+                performance,
+                base_reward,
+                final_reward,
+                unlocked_items: Vec::new(),  // TODO: 從任務獎勵取得
+                unlocked_missions: Vec::new(),
+            });
+
+            self.player_money += final_reward;
+        }
+
+        self.set_mission_status(mission_id, StoryMissionStatus::Completed);
         self.completed_count += 1;
-        Some((active.mission_id, active.spawned_entities))
+        Some((mission_id, active.spawned_entities))
     }
 
-    /// 失敗當前任務，返回需要清理的實體
+    /// 失敗當前任務，返回需要清理的實體和是否可重試
     pub fn fail_current_mission(&mut self, reason: FailCondition) -> Vec<Entity> {
         // 先取出任務，避免借用衝突
         let Some(active) = self.current_mission.take() else {
@@ -130,12 +182,52 @@ impl StoryMissionManager {
             return Vec::new();
         };
 
-        // 設置狀態
-        self.set_mission_status(active.mission_id, StoryMissionStatus::Failed);
-        info!("任務失敗: {:?}", reason);
+        let mission_id = active.mission_id;
+
+        // 記錄死亡（如果是玩家死亡）
+        if matches!(reason, FailCondition::PlayerDeath) {
+            if let Some(ref mut perf) = self.current_performance {
+                perf.record_death();
+            }
+        }
+
+        // 如果有檢查點，設為可重試狀態；否則設為失敗
+        if self.checkpoint.is_some() {
+            // 任務保持可用狀態以便重試
+            self.set_mission_status(mission_id, StoryMissionStatus::Available);
+            info!("任務失敗: {:?}，可從檢查點重試", reason);
+        } else {
+            self.set_mission_status(mission_id, StoryMissionStatus::Failed);
+            self.current_performance = None;
+            info!("任務失敗: {:?}", reason);
+        }
 
         // 返回需要清理的實體
         active.spawned_entities
+    }
+
+    /// 從檢查點重試任務
+    pub fn retry_from_checkpoint(&mut self, database: &StoryMissionDatabase) -> Result<Vec3, String> {
+        let checkpoint = self.checkpoint.clone()
+            .ok_or("沒有可用的檢查點")?;
+
+        let mission = database.get(checkpoint.mission_id)
+            .ok_or("找不到任務資料")?;
+
+        // 記錄重試次數
+        self.record_checkpoint_retry();
+
+        // 重新開始任務到檢查點階段
+        if let Some(phase) = mission.get_phase(checkpoint.phase as usize) {
+            let mut active_mission = ActiveStoryMission::new(checkpoint.mission_id, phase);
+            active_mission.current_phase = checkpoint.phase as usize;
+            self.current_mission = Some(active_mission);
+            self.set_mission_status(checkpoint.mission_id, StoryMissionStatus::InProgress);
+
+            Ok(checkpoint.player_position)
+        } else {
+            Err("檢查點階段無效".to_string())
+        }
     }
 
     /// 放棄當前任務，返回需要清理的實體
@@ -146,9 +238,59 @@ impl StoryMissionManager {
 
         // 放棄的任務可以重新嘗試
         self.set_mission_status(active.mission_id, StoryMissionStatus::Available);
+        self.current_performance = None;
 
         // 返回需要清理的實體
         active.spawned_entities
+    }
+
+    // ========================================================================
+    // 表現追蹤
+    // ========================================================================
+
+    /// 記錄玩家死亡
+    pub fn record_player_death(&mut self) {
+        if let Some(ref mut perf) = self.current_performance {
+            perf.record_death();
+        }
+    }
+
+    /// 記錄檢查點重試
+    pub fn record_checkpoint_retry(&mut self) {
+        if let Some(ref mut perf) = self.current_performance {
+            perf.record_retry();
+        }
+    }
+
+    /// 記錄射擊
+    pub fn record_shot(&mut self, hit: bool, headshot: bool) {
+        if let Some(ref mut perf) = self.current_performance {
+            perf.record_shot(hit, headshot);
+        }
+    }
+
+    /// 記錄擊殺
+    pub fn record_kill(&mut self) {
+        if let Some(ref mut perf) = self.current_performance {
+            perf.record_kill();
+        }
+    }
+
+    /// 記錄被發現（隱匿任務）
+    pub fn record_detection(&mut self) {
+        if let Some(ref mut perf) = self.current_performance {
+            perf.record_detection();
+        }
+    }
+
+    /// 取得當前任務最佳評分
+    pub fn get_best_rating(&self, mission_id: StoryMissionId) -> StoryMissionRating {
+        self.mission_ratings.get(&mission_id).copied().unwrap_or_default()
+    }
+
+    /// 清除最近完成結果（UI 已顯示後）
+    pub fn clear_completion_result(&mut self) {
+        self.last_completion_result = None;
     }
 
     // ========================================================================
@@ -168,7 +310,7 @@ impl StoryMissionManager {
             }
             UnlockCondition::ChapterReached(chapter) => self.current_chapter >= *chapter,
             UnlockCondition::MoneyAmount(min) => self.player_money >= *min as i32,
-            UnlockCondition::TimeOfDay(start, end) => {
+            UnlockCondition::TimeOfDay(_start, _end) => {
                 // 需要從外部傳入當前時間
                 // 這裡暫時返回 true
                 true
@@ -472,6 +614,9 @@ impl SaveData {
                 unlocked_items: story_manager.unlocked_items.clone(),
                 unlocked_areas: story_manager.unlocked_areas.clone(),
                 checkpoint: story_manager.checkpoint.clone(),
+                current_performance: None, // 不保存進行中的表現
+                mission_ratings: story_manager.mission_ratings.clone(),
+                last_completion_result: None, // 不保存最近結果
             },
             player_position,
             player_rotation,

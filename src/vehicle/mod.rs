@@ -6,6 +6,10 @@
 
 mod components;
 mod systems;
+mod theft;
+mod modifications;
 
 pub use components::*;
 pub use systems::*;
+pub use theft::*;
+pub use modifications::*;

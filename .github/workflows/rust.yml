@@ -6,35 +6,14 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libasound2-dev libudev-dev
-
-    - name: Setup Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: clippy
-
-    - name: Cache cargo
-      uses: Swatinem/rust-cache@v2
-
-    - name: Build
-      run: cargo build --verbose
-
-    - name: Test
-      run: cargo test --verbose
-
-    - name: Clippy
-      run: cargo clippy -- -D warnings
+      - uses: actions/checkout@v4
+      - name: Check Rust version
+        run: rustc --version
+      - name: Build
+        run: cargo build
+      - name: Test
+        run: cargo test

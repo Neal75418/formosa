@@ -12,6 +12,10 @@
 #![allow(clippy::unnecessary_map_or)]
 #![allow(clippy::wildcard_in_or_patterns)]
 #![allow(clippy::never_loop)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::op_ref)]
+#![allow(clippy::manual_range_contains)]
 
 // === 模組 ===
 mod ai;

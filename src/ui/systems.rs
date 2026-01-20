@@ -4040,12 +4040,12 @@ pub fn setup_damage_indicator(mut commands: Commands) {
     });
 }
 
-/// 更新受傷指示器（根據傷害強度）
+/// 更新受傷指示器（根據傷害強度和方向）
 pub fn update_damage_indicator(
     time: Res<Time>,
     mut damage_state: ResMut<DamageIndicatorState>,
     mut indicator_query: Query<&mut Visibility, With<DamageIndicator>>,
-    mut edge_query: Query<&mut BackgroundColor, With<DamageIndicatorEdge>>,
+    mut edge_query: Query<(&DamageIndicatorEdge, &mut BackgroundColor)>,
 ) {
     // 淡出傷害指示器
     if damage_state.intensity > 0.0 {
@@ -4059,21 +4059,50 @@ pub fn update_damage_indicator(
         *visibility = if should_show { Visibility::Visible } else { Visibility::Hidden };
     }
 
-    // 更新透明度
+    // 更新透明度（根據方向）
     if should_show {
-        let alpha = damage_state.intensity * DAMAGE_INDICATOR_MAX_ALPHA;
-        let color = Color::srgba(0.6, 0.0, 0.0, alpha);
-        for mut bg in edge_query.iter_mut() {
-            *bg = BackgroundColor(color);
+        let base_alpha = damage_state.intensity * DAMAGE_INDICATOR_MAX_ALPHA;
+
+        for (edge, mut bg) in edge_query.iter_mut() {
+            let alpha = if let Some(dir) = damage_state.damage_direction {
+                // 根據傷害方向計算每個邊的強度
+                // dir 是從玩家指向攻擊者的方向（螢幕座標系）
+                let edge_factor = match edge.edge {
+                    DamageEdge::Top => (-dir.y).max(0.0),     // 傷害從上方來 (dir.y < 0)
+                    DamageEdge::Bottom => dir.y.max(0.0),     // 傷害從下方來 (dir.y > 0)
+                    DamageEdge::Left => (-dir.x).max(0.0),    // 傷害從左方來 (dir.x < 0)
+                    DamageEdge::Right => dir.x.max(0.0),      // 傷害從右方來 (dir.x > 0)
+                };
+                // 保留最小 0.15 的基礎強度，加上方向性的額外強度
+                base_alpha * (0.15 + edge_factor * 0.85)
+            } else {
+                // 無方向時，所有邊緣均勻顯示
+                base_alpha
+            };
+            *bg = BackgroundColor(Color::srgba(0.6, 0.0, 0.0, alpha));
         }
     }
 }
 
 /// 觸發受傷指示器（在傷害系統中調用）
-pub fn trigger_damage_indicator(damage_state: &mut DamageIndicatorState, damage_amount: f32) {
+///
+/// # 參數
+/// - `damage_state`: 傷害指示器狀態
+/// - `damage_amount`: 傷害量
+/// - `direction`: 從玩家指向攻擊者的方向（世界座標 XZ 平面）
+pub fn trigger_damage_indicator(
+    damage_state: &mut DamageIndicatorState,
+    damage_amount: f32,
+    direction: Option<Vec2>,
+) {
     // 根據傷害量設置強度（最大 1.0）
     let intensity_boost = (damage_amount / 30.0).min(1.0);
     damage_state.intensity = (damage_state.intensity + intensity_boost).min(1.0);
+
+    // 設置傷害方向（新傷害覆蓋舊方向）
+    if direction.is_some() {
+        damage_state.damage_direction = direction;
+    }
 }
 
 // === GTA 風格動畫常數 ===
@@ -4568,6 +4597,8 @@ pub fn update_weather_hud(
         WeatherType::Cloudy => WeatherIconType::Cloud,
         WeatherType::Rainy => WeatherIconType::Rain,
         WeatherType::Foggy => WeatherIconType::Fog,
+        WeatherType::Stormy => WeatherIconType::Rain,  // 暴風雨用雨天圖示
+        WeatherType::Sandstorm => WeatherIconType::Fog, // 沙塵暴用霧天圖示（TODO: 專用圖示）
     };
 
     // 更新圖示可見性

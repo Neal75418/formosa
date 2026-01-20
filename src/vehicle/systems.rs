@@ -233,6 +233,8 @@ fn get_weather_traction_factor(weather: &WeatherState) -> f32 {
         WeatherType::Cloudy => WEATHER_CLOUDY_TRACTION,
         WeatherType::Rainy => WEATHER_RAINY_TRACTION_BASE + (1.0 - weather.intensity) * WEATHER_RAINY_TRACTION_RANGE,
         WeatherType::Foggy => WEATHER_FOGGY_TRACTION,
+        WeatherType::Stormy => 0.55 + (1.0 - weather.intensity) * 0.15, // 暴風雨：牽引力極差
+        WeatherType::Sandstorm => 0.75 + (1.0 - weather.intensity) * 0.1, // 沙塵暴：輕微影響牽引力
     }
 }
 
@@ -243,6 +245,8 @@ fn get_weather_handling_factor(weather: &WeatherState) -> f32 {
         WeatherType::Cloudy => WEATHER_CLOUDY_TRACTION,
         WeatherType::Rainy => WEATHER_RAINY_HANDLING_BASE + (1.0 - weather.intensity) * WEATHER_RAINY_HANDLING_RANGE,
         WeatherType::Foggy => WEATHER_FOGGY_HANDLING,
+        WeatherType::Stormy => 0.5 + (1.0 - weather.intensity) * 0.2,  // 暴風雨：操控極差
+        WeatherType::Sandstorm => 0.8 + (1.0 - weather.intensity) * 0.1, // 沙塵暴：輕微影響操控
     }
 }
 

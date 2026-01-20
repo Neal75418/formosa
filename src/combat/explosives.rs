@@ -201,6 +201,30 @@ impl ExplosionEffect {
     }
 }
 
+/// 衝擊波效果組件（GTA5 風格的擴散環）
+#[derive(Component)]
+pub struct ShockwaveEffect {
+    /// 最大半徑
+    pub max_radius: f32,
+    /// 生命時間
+    pub lifetime: f32,
+    /// 最大生命時間
+    pub max_lifetime: f32,
+    /// 初始透明度
+    pub initial_alpha: f32,
+}
+
+impl ShockwaveEffect {
+    pub fn new(max_radius: f32) -> Self {
+        Self {
+            max_radius,
+            lifetime: 0.0,
+            max_lifetime: 0.4,  // 快速擴散消失
+            initial_alpha: 0.8,
+        }
+    }
+}
+
 /// 玩家爆炸物庫存
 #[derive(Component, Debug, Default)]
 pub struct ExplosiveInventory {
@@ -361,6 +385,10 @@ pub struct ExplosiveVisuals {
     pub trajectory_mesh: Handle<Mesh>,
     /// 軌跡預覽材質
     pub trajectory_material: Handle<StandardMaterial>,
+    /// 衝擊波 mesh（環形）
+    pub shockwave_mesh: Handle<Mesh>,
+    /// 衝擊波材質
+    pub shockwave_material: Handle<StandardMaterial>,
 }
 
 impl ExplosiveVisuals {
@@ -412,6 +440,16 @@ impl ExplosiveVisuals {
                 base_color: Color::srgba(1.0, 1.0, 1.0, 0.5),
                 unlit: true,
                 alpha_mode: AlphaMode::Blend,
+                ..default()
+            }),
+            // 衝擊波：白色半透明環形
+            shockwave_mesh: meshes.add(Torus::new(0.8, 1.0)),  // 內徑 0.8，外徑 1.0
+            shockwave_material: materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 0.95, 0.9, 0.8),
+                emissive: LinearRgba::new(8.0, 6.0, 4.0, 1.0),
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                cull_mode: None,  // 雙面渲染
                 ..default()
             }),
         }
@@ -801,6 +839,15 @@ pub fn handle_explosion_event_system(
                     Transform::from_translation(position),
                     ExplosionEffect::new(event.radius, event.max_damage, 0.5),
                 ));
+
+                // 生成衝擊波效果（GTA5 風格的擴散環）
+                commands.spawn((
+                    Mesh3d(visuals.shockwave_mesh.clone()),
+                    MeshMaterial3d(visuals.shockwave_material.clone()),
+                    Transform::from_translation(position + Vec3::Y * 0.1)  // 稍微抬高避免地面穿透
+                        .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),  // 水平放置
+                    ShockwaveEffect::new(event.radius * 1.5),  // 衝擊波比爆炸半徑大 50%
+                ));
             }
         }
 
@@ -827,6 +874,38 @@ pub fn explosion_effect_update_system(
             effect.radius * (1.0 - (progress - 0.3) / 0.7)
         };
         transform.scale = Vec3::splat(scale.max(0.01));
+
+        if effect.lifetime >= effect.max_lifetime {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// 衝擊波效果更新系統（GTA5 風格擴散環）
+pub fn shockwave_effect_update_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut effect_query: Query<(Entity, &mut Transform, &MeshMaterial3d<StandardMaterial>, &mut ShockwaveEffect)>,
+) {
+    for (entity, mut transform, material_handle, mut effect) in &mut effect_query {
+        effect.lifetime += time.delta_secs();
+
+        let progress = effect.lifetime / effect.max_lifetime;
+
+        // 線性擴張
+        let scale = effect.max_radius * progress;
+        // 保持環的厚度不變，只擴大半徑
+        transform.scale = Vec3::new(scale.max(0.1), scale.max(0.1), 0.15);
+
+        // 更新透明度（快速淡出）
+        if let Some(material) = materials.get_mut(&material_handle.0) {
+            let alpha = effect.initial_alpha * (1.0 - progress * progress);  // 二次方淡出
+            material.base_color = Color::srgba(1.0, 0.95, 0.9, alpha);
+            // 減弱發光
+            let emissive_strength = 8.0 * (1.0 - progress);
+            material.emissive = LinearRgba::new(emissive_strength, emissive_strength * 0.75, emissive_strength * 0.5, 1.0);
+        }
 
         if effect.lifetime >= effect.max_lifetime {
             commands.entity(entity).despawn();

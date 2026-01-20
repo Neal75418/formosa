@@ -63,6 +63,8 @@ fn get_weather_light_factor(weather: &WeatherState) -> f32 {
         WeatherType::Cloudy => 0.6,
         WeatherType::Rainy => 0.4,
         WeatherType::Foggy => 0.5,
+        WeatherType::Stormy => 0.25,     // 暴風雨極暗
+        WeatherType::Sandstorm => 0.35,  // 沙塵暴遮蔽陽光
     };
 
     if weather.is_transitioning {
@@ -71,6 +73,8 @@ fn get_weather_light_factor(weather: &WeatherState) -> f32 {
             WeatherType::Cloudy => 0.6,
             WeatherType::Rainy => 0.4,
             WeatherType::Foggy => 0.5,
+            WeatherType::Stormy => 0.25,
+            WeatherType::Sandstorm => 0.35,
         };
         // 平滑過渡
         current_factor + (target_factor - current_factor) * weather.transition_progress
@@ -84,9 +88,11 @@ fn adjust_hour_for_weather(hour: f32, weather: &WeatherState) -> f32 {
     // 陰雨天路燈提早開啟（模擬下午變暗）
     let hour_shift = match weather.weather_type {
         WeatherType::Clear => 0.0,
-        WeatherType::Cloudy => 2.0,   // 提早 2 小時
-        WeatherType::Rainy => 3.0,    // 提早 3 小時
-        WeatherType::Foggy => 2.5,    // 提早 2.5 小時
+        WeatherType::Cloudy => 2.0,      // 提早 2 小時
+        WeatherType::Rainy => 3.0,       // 提早 3 小時
+        WeatherType::Foggy => 2.5,       // 提早 2.5 小時
+        WeatherType::Stormy => 4.0,      // 暴風雨更早開燈
+        WeatherType::Sandstorm => 3.5,   // 沙塵暴影響能見度
     };
 
     // 只在白天時段調整
@@ -506,6 +512,8 @@ fn get_weather_color_modifier(weather_type: WeatherType) -> (f32, f32, f32) {
         WeatherType::Cloudy => (0.7, 0.7, 0.75),     // 陰天：整體變灰
         WeatherType::Rainy => (0.5, 0.5, 0.6),       // 雨天：更灰暗
         WeatherType::Foggy => (0.8, 0.8, 0.85),      // 霧天：淡白灰
+        WeatherType::Stormy => (0.35, 0.35, 0.45),   // 暴風雨：深灰藍
+        WeatherType::Sandstorm => (0.7, 0.55, 0.4),  // 沙塵暴：黃褐色調
     }
 }
 
@@ -522,6 +530,8 @@ pub fn update_fog_effect(
         WeatherType::Cloudy => (0.003, Color::srgba(0.6, 0.6, 0.65, 0.5)),
         WeatherType::Rainy => (0.008, Color::srgba(0.4, 0.42, 0.5, 0.7)),
         WeatherType::Foggy => (0.025, Color::srgba(0.75, 0.75, 0.8, 0.9)),
+        WeatherType::Stormy => (0.015, Color::srgba(0.3, 0.32, 0.4, 0.85)),   // 暴風雨：深藍灰霧
+        WeatherType::Sandstorm => (0.04, Color::srgba(0.75, 0.6, 0.4, 0.95)), // 沙塵暴：濃密黃沙
     };
 
     // 考慮過渡
@@ -560,8 +570,8 @@ pub fn spawn_rain_drops(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let should_rain = matches!(weather.weather_type, WeatherType::Rainy)
-        || (weather.is_transitioning && matches!(weather.target_weather, WeatherType::Rainy));
+    let should_rain = weather.weather_type.has_rain()
+        || (weather.is_transitioning && weather.target_weather.has_rain());
 
     // 清理邏輯移至 cleanup_rain 系統，避免重複 despawn
     if !should_rain {
@@ -573,8 +583,9 @@ pub fn spawn_rain_drops(
         return;
     }
 
-    // 生成雨滴系統
-    info!("🌧️ 開始下雨...");
+    // 生成雨滴系統（暴風雨時更大的雨滴）
+    let rain_intensity = if matches!(weather.weather_type, WeatherType::Stormy) { "⛈️ 暴風雨" } else { "🌧️" };
+    info!("{} 開始下雨...", rain_intensity);
 
     // 雨滴材質（半透明藍白色）
     let rain_mat = materials.add(StandardMaterial {
@@ -627,7 +638,7 @@ pub fn update_rain_drops(
     weather: Res<WeatherState>,
     mut rain_query: Query<(&mut Transform, &mut RainDrop)>,
 ) {
-    if !matches!(weather.weather_type, WeatherType::Rainy) {
+    if !weather.weather_type.has_rain() {
         return;
     }
 
@@ -656,8 +667,8 @@ pub fn cleanup_rain(
     rain_system_query: Query<Entity, With<RainSystem>>,
 ) {
     // 只有在天氣不是雨天且不在過渡到雨天時才清理
-    let should_rain = matches!(weather.weather_type, WeatherType::Rainy)
-        || (weather.is_transitioning && matches!(weather.target_weather, WeatherType::Rainy));
+    let should_rain = weather.weather_type.has_rain()
+        || (weather.is_transitioning && weather.target_weather.has_rain());
 
     if !should_rain {
         for entity in rain_system_query.iter() {
@@ -736,8 +747,8 @@ pub fn spawn_rain_puddles(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let should_have_puddles = matches!(weather.weather_type, WeatherType::Rainy)
-        || (weather.is_transitioning && matches!(weather.target_weather, WeatherType::Rainy));
+    let should_have_puddles = weather.weather_type.has_rain()
+        || (weather.is_transitioning && weather.target_weather.has_rain());
 
     // 如果不是雨天，不生成水坑
     if !should_have_puddles {
@@ -862,7 +873,7 @@ pub fn update_rain_puddles(
     mut puddle_query: Query<(Entity, &mut RainPuddle, &mut Transform)>,
     puddle_system_query: Query<Entity, With<PuddleSystem>>,
 ) {
-    let is_raining = matches!(weather.weather_type, WeatherType::Rainy);
+    let is_raining = weather.weather_type.has_rain();
     let dt = time.delta_secs();
 
     for (entity, mut puddle, mut transform) in puddle_query.iter_mut() {
@@ -888,8 +899,8 @@ pub fn update_lightning(
     mut lightning: ResMut<LightningState>,
     mut ambient: ResMut<AmbientLight>,
 ) {
-    // 只在雨天有閃電
-    if !matches!(weather.weather_type, WeatherType::Rainy) {
+    // 只在雨天/暴風雨有閃電
+    if !weather.weather_type.has_rain() {
         lightning.is_flashing = false;
         lightning.flash_intensity = 0.0;
         return;

@@ -114,6 +114,7 @@ impl Plugin for CombatPlugin {
                 detonate_sticky_bomb_system,
                 handle_explosion_event_system,
                 explosion_effect_update_system,
+                shockwave_effect_update_system,
                 fire_zone_update_system,
                 throw_preview_render_system,
             ).run_if(|ui: Res<UiState>| !ui.paused));

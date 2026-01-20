@@ -145,6 +145,8 @@ pub fn ai_perception_system(
         WeatherType::Cloudy => WEATHER_CLOUDY_SIGHT,
         WeatherType::Rainy => WEATHER_RAINY_SIGHT_BASE - weather.intensity * WEATHER_RAINY_SIGHT_DECAY,
         WeatherType::Foggy => WEATHER_FOGGY_SIGHT_BASE - weather.intensity * WEATHER_FOGGY_SIGHT_DECAY,
+        WeatherType::Stormy => 0.5 - weather.intensity * 0.15,   // 暴風雨：視線極差
+        WeatherType::Sandstorm => 0.3 - weather.intensity * 0.1, // 沙塵暴：幾乎看不見
     };
 
     for (enemy_entity, transform, mut perception, mut behavior) in &mut enemy_query {

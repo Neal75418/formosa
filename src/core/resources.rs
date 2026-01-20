@@ -196,10 +196,12 @@ pub const COLLISION_GROUP_PROJECTILE: Group = Group::GROUP_4;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WeatherType {
     #[default]
-    Clear,    // 晴天
-    Cloudy,   // 陰天
-    Rainy,    // 雨天
-    Foggy,    // 霧天
+    Clear,      // 晴天
+    Cloudy,     // 陰天
+    Rainy,      // 雨天
+    Foggy,      // 霧天
+    Stormy,     // 暴風雨（強風+大雨+閃電）
+    Sandstorm,  // 沙塵暴（能見度極低+沙粒效果）
 }
 
 impl WeatherType {
@@ -208,8 +210,10 @@ impl WeatherType {
         match self {
             WeatherType::Clear => WeatherType::Cloudy,
             WeatherType::Cloudy => WeatherType::Rainy,
-            WeatherType::Rainy => WeatherType::Foggy,
-            WeatherType::Foggy => WeatherType::Clear,
+            WeatherType::Rainy => WeatherType::Stormy,
+            WeatherType::Stormy => WeatherType::Foggy,
+            WeatherType::Foggy => WeatherType::Sandstorm,
+            WeatherType::Sandstorm => WeatherType::Clear,
         }
     }
 
@@ -220,7 +224,19 @@ impl WeatherType {
             WeatherType::Cloudy => "陰天",
             WeatherType::Rainy => "雨天",
             WeatherType::Foggy => "霧天",
+            WeatherType::Stormy => "暴風雨",
+            WeatherType::Sandstorm => "沙塵暴",
         }
+    }
+
+    /// 是否為降雨類型
+    pub fn has_rain(&self) -> bool {
+        matches!(self, WeatherType::Rainy | WeatherType::Stormy)
+    }
+
+    /// 是否為惡劣天氣（影響駕駛和視線）
+    pub fn is_severe(&self) -> bool {
+        matches!(self, WeatherType::Stormy | WeatherType::Sandstorm)
     }
 }
 

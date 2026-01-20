@@ -239,7 +239,9 @@ fn trigger_hit_reaction(
 fn handle_player_damage_notification(
     target: Entity,
     damage_dealt: f32,
+    attacker: Option<Entity>,
     player_query: &Query<Entity, With<Player>>,
+    transform_query: &Query<&Transform>,
     notifications: &mut NotificationQueue,
     damage_indicator: &mut DamageIndicatorState,
 ) {
@@ -247,7 +249,46 @@ fn handle_player_damage_notification(
         return;
     }
     notifications.warning(format!("-{:.0} HP", damage_dealt));
-    trigger_damage_indicator(damage_indicator, damage_dealt);
+
+    // 計算傷害方向（從玩家指向攻擊者）
+    let direction = calculate_damage_direction(target, attacker, transform_query);
+    trigger_damage_indicator(damage_indicator, damage_dealt, direction);
+}
+
+/// 計算傷害方向（用於 UI 指示器）
+/// 返回從玩家指向攻擊者的 2D 方向（XZ 平面投影到螢幕座標）
+#[inline]
+fn calculate_damage_direction(
+    target: Entity,
+    attacker: Option<Entity>,
+    transform_query: &Query<&Transform>,
+) -> Option<Vec2> {
+    let attacker_entity = attacker?;
+    let target_transform = transform_query.get(target).ok()?;
+    let attacker_transform = transform_query.get(attacker_entity).ok()?;
+
+    // 世界座標方向（XZ 平面）
+    let world_dir = attacker_transform.translation - target_transform.translation;
+    let world_dir_2d = Vec2::new(world_dir.x, world_dir.z);
+
+    if world_dir_2d.length_squared() < 0.01 {
+        return None;
+    }
+
+    // 轉換為相對於玩家朝向的方向
+    // 玩家 forward 是 -Z，所以要相對於玩家的旋轉來計算
+    let player_forward = target_transform.forward();
+    let player_right = target_transform.right();
+
+    // 投影到玩家的前後左右
+    let forward_component = world_dir.x * player_forward.x + world_dir.z * player_forward.z;
+    let right_component = world_dir.x * player_right.x + world_dir.z * player_right.z;
+
+    // 螢幕座標：X 正向是右，Y 正向是上
+    // forward（前方）= 上，right（右方）= 右
+    let screen_dir = Vec2::new(right_component, -forward_component).normalize_or_zero();
+
+    Some(screen_dir)
 }
 
 /// 處理命中標記和音效
@@ -403,8 +444,16 @@ pub fn damage_system(
         // 觸發受傷反應
         trigger_hit_reaction(&mut hit_reaction, damage_dealt, event.attacker, event.target, event.is_headshot, &transform_query);
 
-        // 玩家受傷通知
-        handle_player_damage_notification(event.target, damage_dealt, &player_query, &mut res.notifications, &mut res.damage_indicator);
+        // 玩家受傷通知（含方向指示器）
+        handle_player_damage_notification(
+            event.target,
+            damage_dealt,
+            event.attacker,
+            &player_query,
+            &transform_query,
+            &mut res.notifications,
+            &mut res.damage_indicator,
+        );
 
         // 玩家攻擊敵人的效果
         handle_player_hit_enemy(event, damage_dealt, player_entity, &enemy_query, &transform_query, &mut res, &mut commands);

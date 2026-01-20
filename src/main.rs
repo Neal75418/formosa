@@ -16,6 +16,8 @@
 #![allow(clippy::derivable_impls)]
 #![allow(clippy::op_ref)]
 #![allow(clippy::manual_range_contains)]
+#![allow(clippy::unnecessary_cast)]
+#![allow(clippy::needless_borrow)]
 
 // === 模組 ===
 mod ai;

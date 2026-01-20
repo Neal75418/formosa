@@ -766,6 +766,7 @@ pub fn handle_explosion_event_system(
     mut commands: Commands,
     mut explosion_events: MessageReader<ExplosionEvent>,
     visuals: Option<Res<ExplosiveVisuals>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut damage_events: MessageWriter<DamageEvent>,
     damageable_query: Query<(Entity, &Transform), With<Damageable>>,
     rapier_context: ReadRapierContext,
@@ -841,9 +842,15 @@ pub fn handle_explosion_event_system(
                 ));
 
                 // 生成衝擊波效果（GTA5 風格的擴散環）
+                // 每個衝擊波需要獨立的材質實例，避免多個衝擊波共享材質導致視覺錯誤
+                let shockwave_material = {
+                    let base_mat = materials.get(&visuals.shockwave_material).cloned();
+                    base_mat.map(|m| materials.add(m)).unwrap_or_else(|| visuals.shockwave_material.clone())
+                };
+
                 commands.spawn((
                     Mesh3d(visuals.shockwave_mesh.clone()),
-                    MeshMaterial3d(visuals.shockwave_material.clone()),
+                    MeshMaterial3d(shockwave_material),
                     Transform::from_translation(position + Vec3::Y * 0.1)  // 稍微抬高避免地面穿透
                         .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),  // 水平放置
                     ShockwaveEffect::new(event.radius * 1.5),  // 衝擊波比爆炸半徑大 50%

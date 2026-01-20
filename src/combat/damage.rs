@@ -271,7 +271,10 @@ fn calculate_damage_direction(
     let world_dir = attacker_transform.translation - target_transform.translation;
     let world_dir_2d = Vec2::new(world_dir.x, world_dir.z);
 
-    if world_dir_2d.length_squared() < 0.01 {
+    // 距離太近時無法判斷方向（避免除以零和不穩定的方向）
+    // 閾值 0.25 = 0.5m 距離的平方，近戰/爆炸時返回 None
+    const MIN_DIRECTION_DISTANCE_SQ: f32 = 0.25;
+    if world_dir_2d.length_squared() < MIN_DIRECTION_DISTANCE_SQ {
         return None;
     }
 

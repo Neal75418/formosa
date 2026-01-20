@@ -27,11 +27,13 @@ jobs:
       - name: Check Rust version
         run: rustc --version && cargo --version
 
+      # Clippy 先跑 - 編譯 + lint 檢查，失敗就提早終止
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      # Clippy 通過後，build 會用 cache 很快
       - name: Build
         run: cargo build --verbose
 
       - name: Test
         run: cargo test --verbose
-
-      - name: Clippy
-        run: cargo clippy -- -D warnings

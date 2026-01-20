@@ -2,6 +2,10 @@
 //!
 //! 一款以台灣為舞台的 3D 開放世界動作冒險遊戲
 
+// Bevy ECS 系統常見的 lint 豁免
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+
 // === 模組 ===
 mod ai;
 mod audio;

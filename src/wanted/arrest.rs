@@ -154,6 +154,18 @@ pub fn setup_arrest_system(mut commands: Commands) {
     commands.init_resource::<ArrestConfig>();
 }
 
+/// 檢查玩家是否可以進行投降操作
+fn can_process_surrender(
+    config: &ArrestConfig,
+    wanted: &WantedLevel,
+    surrender_state: &PlayerSurrenderState,
+) -> bool {
+    config.surrender_enabled
+        && wanted.stars > 0
+        && !surrender_state.being_arrested
+        && surrender_state.post_arrest_immunity <= 0.0
+}
+
 /// 玩家投降輸入系統
 pub fn player_surrender_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -163,47 +175,35 @@ pub fn player_surrender_input_system(
     mut player_query: Query<&mut PlayerSurrenderState, With<Player>>,
     time: Res<Time>,
 ) {
-    if !config.surrender_enabled {
-        return;
-    }
-
-    // 只有在有通緝時才能投降
-    if wanted.stars == 0 {
-        return;
-    }
-
     let Ok(mut surrender_state) = player_query.single_mut() else {
         return;
     };
 
     let dt = time.delta_secs();
 
-    // 更新載具內警告計時器
+    // 更新計時器
     if surrender_state.vehicle_warning_timer > 0.0 {
         surrender_state.vehicle_warning_timer -= dt;
     }
+    if surrender_state.post_arrest_immunity > 0.0 {
+        surrender_state.post_arrest_immunity -= dt;
+    }
 
-    // 在車上不能投降，但顯示提示
+    // 在車上按 Y 顯示警告
     if game_state.player_in_vehicle {
-        if keyboard.just_pressed(KeyCode::KeyY) {
+        if keyboard.just_pressed(KeyCode::KeyY) && wanted.stars > 0 {
             surrender_state.vehicle_warning_timer = VEHICLE_SURRENDER_WARNING_DURATION;
             info!("無法投降：請先下車");
         }
         return;
     }
 
-    // 如果正在被逮捕，不能取消投降
-    if surrender_state.being_arrested {
+    // 檢查是否可以投降
+    if !can_process_surrender(&config, &wanted, &surrender_state) {
         return;
     }
 
-    // 免疫期間不能再次投降
-    if surrender_state.post_arrest_immunity > 0.0 {
-        surrender_state.post_arrest_immunity -= dt;
-        return;
-    }
-
-    // 按住 Y 鍵投降
+    // 處理投降輸入
     if keyboard.pressed(KeyCode::KeyY) {
         surrender_state.is_surrendering = true;
         surrender_state.surrender_hold_timer += dt;
@@ -212,12 +212,10 @@ pub fn player_surrender_input_system(
             surrender_state.has_surrendered = true;
             info!("玩家投降！");
         }
-    } else {
-        // 放開按鍵，如果還沒完全投降就取消
-        if !surrender_state.has_surrendered {
-            surrender_state.is_surrendering = false;
-            surrender_state.surrender_hold_timer = 0.0;
-        }
+    } else if !surrender_state.has_surrendered {
+        // 放開按鍵且尚未投降，取消投降
+        surrender_state.is_surrendering = false;
+        surrender_state.surrender_hold_timer = 0.0;
     }
 }
 
@@ -400,6 +398,56 @@ pub fn surrender_visual_system(
     }
 }
 
+/// 生成進度條 UI 的輔助函數
+fn spawn_progress_bar_ui(
+    commands: &mut Commands,
+    bar_color: Color,
+    text: &'static str,
+) {
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Percent(50.0),
+            top: Val::Percent(70.0),
+            width: Val::Px(200.0),
+            height: Val::Px(30.0),
+            margin: UiRect::left(Val::Px(-100.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
+        SurrenderUI,
+    )).with_children(|parent| {
+        // 進度條
+        parent.spawn((
+            Node {
+                width: Val::Percent(0.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            BackgroundColor(bar_color),
+            SurrenderProgressBar,
+        ));
+    }).with_children(|parent| {
+        // 文字
+        parent.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Text::new(text),
+            TextColor(Color::WHITE),
+            TextFont {
+                font_size: 16.0,
+                ..default()
+            },
+        ));
+    });
+}
+
 /// 投降 UI 系統
 pub fn surrender_ui_system(
     mut commands: Commands,
@@ -443,97 +491,15 @@ pub fn surrender_ui_system(
         return;
     }
 
-    if surrender_state.is_surrendering && !surrender_state.has_surrendered {
-        // 顯示投降進度
-        if !has_ui {
-            commands.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(50.0),
-                    top: Val::Percent(70.0),
-                    width: Val::Px(200.0),
-                    height: Val::Px(30.0),
-                    margin: UiRect::left(Val::Px(-100.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
-                SurrenderUI,
-            )).with_children(|parent| {
-                // 進度條
-                parent.spawn((
-                    Node {
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(1.0, 1.0, 0.0)),
-                    SurrenderProgressBar,
-                ));
-            }).with_children(|parent| {
-                // 文字
-                parent.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    Text::new("投降中... 按住 Y"),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 16.0,
-                        ..default()
-                    },
-                ));
-            });
-        }
-    } else if surrender_state.being_arrested {
-        // 顯示逮捕進度
-        if !has_ui {
-            commands.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(50.0),
-                    top: Val::Percent(70.0),
-                    width: Val::Px(200.0),
-                    height: Val::Px(30.0),
-                    margin: UiRect::left(Val::Px(-100.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
-                SurrenderUI,
-            )).with_children(|parent| {
-                parent.spawn((
-                    Node {
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(1.0, 0.0, 0.0)),
-                    SurrenderProgressBar,
-                ));
-            }).with_children(|parent| {
-                parent.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    Text::new("被逮捕中..."),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 16.0,
-                        ..default()
-                    },
-                ));
-            });
-        }
-    } else {
+    // 判斷需要顯示的 UI 類型
+    let needs_surrender_ui = surrender_state.is_surrendering && !surrender_state.has_surrendered;
+    let needs_arrest_ui = surrender_state.being_arrested;
+
+    if needs_surrender_ui && !has_ui {
+        spawn_progress_bar_ui(&mut commands, Color::srgb(1.0, 1.0, 0.0), "投降中... 按住 Y");
+    } else if needs_arrest_ui && !has_ui {
+        spawn_progress_bar_ui(&mut commands, Color::srgb(1.0, 0.0, 0.0), "被逮捕中...");
+    } else if !needs_surrender_ui && !needs_arrest_ui {
         // 移除 UI
         for entity in &ui_query {
             commands.entity(entity).despawn();

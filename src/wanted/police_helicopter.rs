@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use crate::combat::{
     DamageEvent, DamageSource, Health,
-    CombatVisuals, MuzzleFlash, TracerStyle, spawn_bullet_tracer,
+    CombatVisuals, TracerStyle, spawn_bullet_tracer, spawn_muzzle_flash,
 };
 use crate::player::Player;
 use super::WantedLevel;
@@ -370,6 +370,81 @@ fn spawn_helicopter(
 // AI 系統
 // ============================================================================
 
+/// 計算水平距離
+fn calc_horizontal_distance(pos1: Vec3, pos2: Vec3) -> f32 {
+    Vec2::new(pos1.x - pos2.x, pos1.z - pos2.z).length()
+}
+
+/// 處理接近狀態
+fn handle_approaching_state(helicopter: &mut PoliceHelicopter, horizontal_distance: f32) {
+    if horizontal_distance < HELICOPTER_ATTACK_RANGE * 0.8 {
+        helicopter.state = HelicopterState::Hovering;
+        helicopter.hover_timer = 0.0;
+    }
+}
+
+/// 處理懸停狀態
+fn handle_hovering_state(
+    helicopter: &mut PoliceHelicopter,
+    horizontal_distance: f32,
+    player_visible: bool,
+    dt: f32,
+) {
+    helicopter.hover_timer += dt;
+
+    if helicopter.hover_timer > 2.0 && player_visible {
+        helicopter.state = HelicopterState::Attacking;
+    } else if horizontal_distance > HELICOPTER_ATTACK_RANGE * 1.2 {
+        helicopter.state = HelicopterState::Pursuing;
+    }
+}
+
+/// 處理追擊狀態
+fn handle_pursuing_state(helicopter: &mut PoliceHelicopter, horizontal_distance: f32) {
+    if horizontal_distance < HELICOPTER_ATTACK_RANGE * 0.8 {
+        helicopter.state = HelicopterState::Hovering;
+        helicopter.hover_timer = 0.0;
+    }
+}
+
+/// 處理攻擊狀態
+fn handle_attacking_state(
+    helicopter: &mut PoliceHelicopter,
+    horizontal_distance: f32,
+    player_visible: bool,
+    dt: f32,
+) {
+    if horizontal_distance > HELICOPTER_ATTACK_RANGE {
+        helicopter.state = HelicopterState::Pursuing;
+        return;
+    }
+
+    if !player_visible {
+        helicopter.search_timer += dt;
+        if helicopter.search_timer > 5.0 {
+            helicopter.state = HelicopterState::Hovering;
+            helicopter.search_timer = 0.0;
+        }
+    } else {
+        helicopter.search_timer = 0.0;
+    }
+}
+
+/// 處理規避狀態
+fn handle_evading_state(helicopter: &mut PoliceHelicopter, dt: f32) {
+    helicopter.evade_timer -= dt;
+    if helicopter.evade_timer <= 0.0 {
+        helicopter.state = HelicopterState::Pursuing;
+    }
+}
+
+/// 檢查是否需要觸發規避
+fn should_trigger_evade(helicopter: &PoliceHelicopter, current_time: f32) -> bool {
+    current_time - helicopter.last_hit_time < 0.5
+        && helicopter.state != HelicopterState::Crashing
+        && helicopter.state != HelicopterState::Evading
+}
+
 /// 直升機 AI 系統
 pub fn helicopter_ai_system(
     time: Res<Time>,
@@ -384,79 +459,33 @@ pub fn helicopter_ai_system(
     let player_pos = player_transform.translation;
 
     for (mut helicopter, transform) in helicopter_query.iter_mut() {
-        // 墜毀狀態不處理 AI
         if helicopter.state == HelicopterState::Crashing {
             continue;
         }
 
-        let heli_pos = transform.translation;
-        let horizontal_distance = Vec2::new(heli_pos.x - player_pos.x, heli_pos.z - player_pos.z).length();
-
-        // 更新目標位置
+        let horizontal_distance = calc_horizontal_distance(transform.translation, player_pos);
         helicopter.target_position = Some(player_pos);
 
-        // 狀態機邏輯
         match helicopter.state {
             HelicopterState::Approaching => {
-                // 接近玩家直到達到攻擊範圍
-                if horizontal_distance < HELICOPTER_ATTACK_RANGE * 0.8 {
-                    helicopter.state = HelicopterState::Hovering;
-                    helicopter.hover_timer = 0.0;
-                }
+                handle_approaching_state(&mut helicopter, horizontal_distance);
             }
             HelicopterState::Hovering => {
-                helicopter.hover_timer += dt;
-
-                // 懸停觀察 2 秒後開始攻擊
-                if helicopter.hover_timer > 2.0 && wanted.player_visible {
-                    helicopter.state = HelicopterState::Attacking;
-                }
-
-                // 如果玩家移動太遠，切換到追擊
-                if horizontal_distance > HELICOPTER_ATTACK_RANGE * 1.2 {
-                    helicopter.state = HelicopterState::Pursuing;
-                }
+                handle_hovering_state(&mut helicopter, horizontal_distance, wanted.player_visible, dt);
             }
             HelicopterState::Pursuing => {
-                // 追擊直到進入攻擊範圍
-                if horizontal_distance < HELICOPTER_ATTACK_RANGE * 0.8 {
-                    helicopter.state = HelicopterState::Hovering;
-                    helicopter.hover_timer = 0.0;
-                }
+                handle_pursuing_state(&mut helicopter, horizontal_distance);
             }
             HelicopterState::Attacking => {
-                // 攻擊時保持在攻擊範圍內
-                if horizontal_distance > HELICOPTER_ATTACK_RANGE {
-                    helicopter.state = HelicopterState::Pursuing;
-                }
-
-                // 如果看不到玩家，切換到搜索
-                if !wanted.player_visible {
-                    helicopter.search_timer += dt;
-                    if helicopter.search_timer > 5.0 {
-                        helicopter.state = HelicopterState::Hovering;
-                        helicopter.search_timer = 0.0;
-                    }
-                } else {
-                    helicopter.search_timer = 0.0;
-                }
+                handle_attacking_state(&mut helicopter, horizontal_distance, wanted.player_visible, dt);
             }
             HelicopterState::Evading => {
-                helicopter.evade_timer -= dt;
-                if helicopter.evade_timer <= 0.0 {
-                    helicopter.state = HelicopterState::Pursuing;
-                }
+                handle_evading_state(&mut helicopter, dt);
             }
-            HelicopterState::Crashing => {
-                // 由 damage 系統處理
-            }
+            HelicopterState::Crashing => {}
         }
 
-        // 受傷後短暫規避
-        if current_time - helicopter.last_hit_time < 0.5
-            && helicopter.state != HelicopterState::Crashing
-            && helicopter.state != HelicopterState::Evading
-        {
+        if should_trigger_evade(&helicopter, current_time) {
             helicopter.state = HelicopterState::Evading;
             helicopter.evade_timer = EVADE_DURATION;
         }
@@ -467,77 +496,93 @@ pub fn helicopter_ai_system(
 // 移動系統
 // ============================================================================
 
+/// 處理墜毀移動
+fn handle_crash_movement(transform: &mut Transform, crash_velocity: Vec3, dt: f32) {
+    transform.translation += crash_velocity * dt;
+    transform.rotate_y(CRASH_ROTATION_SPEED.to_radians() * dt);
+    transform.rotate_x(30.0_f32.to_radians() * dt);
+
+    if transform.translation.y < 0.0 {
+        transform.translation.y = 0.0;
+    }
+}
+
+/// 取得狀態對應的速度倍率
+fn get_speed_multiplier(state: HelicopterState) -> f32 {
+    match state {
+        HelicopterState::Approaching => 1.0,
+        HelicopterState::Pursuing => 1.2,
+        HelicopterState::Evading => 1.5,
+        HelicopterState::Hovering | HelicopterState::Attacking => 0.2,
+        HelicopterState::Crashing => 0.0,
+    }
+}
+
+/// 計算規避時的移動方向
+fn calc_evade_direction(horizontal_dir: Vec3, elapsed_secs: f32) -> Vec3 {
+    let evade_angle = (elapsed_secs * 2.0).sin() * 0.5;
+    Quat::from_rotation_y(evade_angle) * horizontal_dir
+}
+
+/// 處理正常飛行移動
+fn handle_normal_flight(
+    transform: &mut Transform,
+    helicopter: &PoliceHelicopter,
+    elapsed_secs: f32,
+    dt: f32,
+) {
+    let Some(target) = helicopter.target_position else { return };
+
+    let to_target = target - transform.translation;
+    let horizontal_dir = Vec3::new(to_target.x, 0.0, to_target.z).normalize_or_zero();
+    let speed_mult = get_speed_multiplier(helicopter.state);
+
+    let move_dir = if helicopter.state == HelicopterState::Evading {
+        calc_evade_direction(horizontal_dir, elapsed_secs)
+    } else {
+        horizontal_dir
+    };
+
+    // 水平移動
+    let horizontal_distance = Vec2::new(to_target.x, to_target.z).length();
+    if horizontal_distance > 10.0 || helicopter.state == HelicopterState::Evading {
+        transform.translation += move_dir * HELICOPTER_SPEED * speed_mult * dt;
+    }
+
+    // 垂直移動
+    let altitude_diff = helicopter.target_altitude - transform.translation.y;
+    if altitude_diff.abs() > 1.0 {
+        transform.translation.y += altitude_diff.signum() * HELICOPTER_VERTICAL_SPEED * dt;
+    }
+
+    // 高度限制
+    transform.translation.y = transform.translation.y.clamp(
+        HELICOPTER_MIN_ALTITUDE,
+        HELICOPTER_MAX_ALTITUDE,
+    );
+
+    // 面向目標
+    if horizontal_dir != Vec3::ZERO {
+        let target_rotation = Quat::from_rotation_y(
+            (-horizontal_dir.z).atan2(horizontal_dir.x) - std::f32::consts::FRAC_PI_2
+        );
+        transform.rotation = transform.rotation.slerp(target_rotation, HELICOPTER_TURN_RATE * dt);
+    }
+}
+
 /// 直升機移動系統
 pub fn helicopter_movement_system(
     time: Res<Time>,
     mut helicopter_query: Query<(&mut Transform, &PoliceHelicopter)>,
 ) {
     let dt = time.delta_secs();
+    let elapsed = time.elapsed_secs();
 
     for (mut transform, helicopter) in helicopter_query.iter_mut() {
-        match helicopter.state {
-            HelicopterState::Crashing => {
-                // 墜毀：螺旋下墜
-                transform.translation += helicopter.crash_velocity * dt;
-                transform.rotate_y(CRASH_ROTATION_SPEED.to_radians() * dt);
-                transform.rotate_x(30.0_f32.to_radians() * dt);
-
-                // 地面碰撞檢測（簡化）
-                if transform.translation.y < 0.0 {
-                    transform.translation.y = 0.0;
-                }
-            }
-            _ => {
-                let Some(target) = helicopter.target_position else { continue };
-
-                // 計算目標方向
-                let to_target = target - transform.translation;
-                let horizontal_dir = Vec3::new(to_target.x, 0.0, to_target.z).normalize_or_zero();
-
-                // 根據狀態決定移動速度
-                let speed_mult = match helicopter.state {
-                    HelicopterState::Approaching => 1.0,
-                    HelicopterState::Pursuing => 1.2,
-                    HelicopterState::Evading => 1.5,
-                    HelicopterState::Hovering | HelicopterState::Attacking => 0.2,
-                    _ => 1.0,
-                };
-
-                // 規避時隨機移動
-                let move_dir = if helicopter.state == HelicopterState::Evading {
-                    let evade_angle = (time.elapsed_secs() * 2.0).sin() * 0.5;
-                    Quat::from_rotation_y(evade_angle) * horizontal_dir
-                } else {
-                    horizontal_dir
-                };
-
-                // 水平移動
-                let horizontal_distance = Vec2::new(to_target.x, to_target.z).length();
-                if horizontal_distance > 10.0 || helicopter.state == HelicopterState::Evading {
-                    transform.translation += move_dir * HELICOPTER_SPEED * speed_mult * dt;
-                }
-
-                // 垂直移動（維持目標高度）
-                let altitude_diff = helicopter.target_altitude - transform.translation.y;
-                if altitude_diff.abs() > 1.0 {
-                    let vertical_speed = altitude_diff.signum() * HELICOPTER_VERTICAL_SPEED * dt;
-                    transform.translation.y += vertical_speed;
-                }
-
-                // 高度限制
-                transform.translation.y = transform.translation.y.clamp(
-                    HELICOPTER_MIN_ALTITUDE,
-                    HELICOPTER_MAX_ALTITUDE,
-                );
-
-                // 面向目標（緩慢轉向）
-                if horizontal_dir != Vec3::ZERO {
-                    let target_rotation = Quat::from_rotation_y(
-                        (-horizontal_dir.z).atan2(horizontal_dir.x) - std::f32::consts::FRAC_PI_2
-                    );
-                    transform.rotation = transform.rotation.slerp(target_rotation, HELICOPTER_TURN_RATE * dt);
-                }
-            }
+        if helicopter.state == HelicopterState::Crashing {
+            handle_crash_movement(&mut transform, helicopter.crash_velocity, dt);
+        } else {
+            handle_normal_flight(&mut transform, helicopter, elapsed, dt);
         }
     }
 }
@@ -545,6 +590,18 @@ pub fn helicopter_movement_system(
 // ============================================================================
 // 戰鬥系統
 // ============================================================================
+
+/// 檢查直升機是否可以射擊
+fn can_helicopter_fire(helicopter: &PoliceHelicopter, distance: f32) -> bool {
+    helicopter.state == HelicopterState::Attacking
+        && helicopter.fire_cooldown <= 0.0
+        && distance <= HELICOPTER_ATTACK_RANGE
+}
+
+/// 計算槍口位置
+fn calc_muzzle_position(heli_pos: Vec3, forward: Dir3) -> Vec3 {
+    heli_pos + forward * 2.0 + Vec3::new(0.0, -1.0, 0.0)
+}
 
 /// 直升機射擊系統
 pub fn helicopter_combat_system(
@@ -563,67 +620,34 @@ pub fn helicopter_combat_system(
     let Ok(rapier) = rapier_context.single() else { return; };
 
     for (heli_entity, mut helicopter, transform) in helicopter_query.iter_mut() {
-        // 只在攻擊狀態射擊
-        if helicopter.state != HelicopterState::Attacking {
-            helicopter.fire_cooldown = 0.0;
-            continue;
-        }
-
-        // 更新冷卻（使用 dt 精確計時）
         helicopter.fire_cooldown = (helicopter.fire_cooldown - dt).max(0.0);
-        if helicopter.fire_cooldown > 0.0 {
-            continue;
-        }
 
-        // 檢查射擊角度和距離
         let heli_pos = transform.translation;
         let to_player = player_pos - heli_pos;
         let distance = to_player.length();
 
-        if distance > HELICOPTER_ATTACK_RANGE {
+        if !can_helicopter_fire(&helicopter, distance) {
             continue;
         }
 
-        // 射線檢測（確認視線）
         let direction = to_player.normalize();
+        let muzzle_pos = calc_muzzle_position(heli_pos, transform.forward());
 
-        // 機槍口位置（機身前下方）
-        let muzzle_pos = heli_pos + transform.forward() * 2.0 + Vec3::new(0.0, -1.0, 0.0);
-
-        // 生成槍口閃光
-        commands.spawn((
-            Mesh3d(visuals.muzzle_mesh.clone()),
-            MeshMaterial3d(visuals.muzzle_material.clone()),
-            Transform::from_translation(muzzle_pos).with_scale(Vec3::splat(0.5)),
-            MuzzleFlash { lifetime: 0.05 },
-        ));
+        spawn_muzzle_flash(&mut commands, &visuals, muzzle_pos);
 
         // 計算子彈終點
-        let tracer_end = if let Some((_, toi)) = rapier.cast_ray(
-            muzzle_pos,
-            direction,
-            HELICOPTER_ATTACK_RANGE,
-            true,
-            QueryFilter::default(),
-        ) {
-            muzzle_pos + direction * toi
-        } else {
-            muzzle_pos + direction * HELICOPTER_ATTACK_RANGE
-        };
+        let tracer_end = rapier
+            .cast_ray(muzzle_pos, direction, HELICOPTER_ATTACK_RANGE, true, QueryFilter::default())
+            .map(|(_, toi)| muzzle_pos + direction * toi)
+            .unwrap_or_else(|| muzzle_pos + direction * HELICOPTER_ATTACK_RANGE);
 
-        // 生成曳光彈（使用 SMG 風格）
         spawn_bullet_tracer(&mut commands, &visuals, muzzle_pos, tracer_end, TracerStyle::SMG);
 
         // 傷害判定
         if let Some((hit_entity, _)) = rapier.cast_ray(
-            muzzle_pos,
-            direction,
-            distance,
-            true,
-            QueryFilter::default(),
+            muzzle_pos, direction, distance, true, QueryFilter::default()
         ) {
             if hit_entity == player_entity {
-                // 命中玩家（追蹤攻擊者以正確歸屬擊殺）
                 damage_events.write(DamageEvent {
                     target: player_entity,
                     amount: HELICOPTER_BULLET_DAMAGE,
@@ -635,7 +659,6 @@ pub fn helicopter_combat_system(
             }
         }
 
-        // 重置冷卻
         helicopter.fire_cooldown = 1.0 / HELICOPTER_FIRE_RATE;
     }
 }

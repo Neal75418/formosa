@@ -841,7 +841,7 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
     // 第一章第一個任務：對話任務
     let mission1 = StoryMission::new(1, "初來乍到", "在酒吧與神秘人交談，了解這座島嶼的情況")
         .chapter(1)
-        .from_npc(100)
+        .with_quest_giver(100)
         .at_location(Vec3::new(50.0, 0.0, 50.0))
         .with_phase(
             MissionPhase::new(1, StoryMissionType::Dialogue, "找到神秘人")
@@ -873,7 +873,7 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
     // 第一章第二個任務：戰鬥任務
     let mission2 = StoryMission::new(2, "收債", "幫老王去向一個欠錢的人討債")
         .chapter(1)
-        .from_npc(100)
+        .with_quest_giver(100)
         .at_location(Vec3::new(100.0, 0.0, 100.0))
         .requires_mission(1) // 需要先完成任務 1
         .difficulty(Difficulty::Normal)
@@ -918,7 +918,7 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
     // 第一章第三個任務：追車任務
     let mission3 = StoryMission::new(3, "追蹤線索", "追蹤一輛可疑車輛，找出幕後老闆")
         .chapter(1)
-        .from_npc(100)
+        .with_quest_giver(100)
         .at_location(Vec3::new(80.0, 0.0, -50.0))
         .requires_mission(2) // 需要先完成任務 2
         .difficulty(Difficulty::Normal)
@@ -965,7 +965,7 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
     // 第一章第四個任務：潛入任務
     let mission4 = StoryMission::new(4, "夜間行動", "潛入老闆的秘密據點，取得證據")
         .chapter(1)
-        .from_npc(100)
+        .with_quest_giver(100)
         .at_location(Vec3::new(200.0, 0.0, -150.0))
         .requires_mission(3)
         .requires_flag("found_hideout")
@@ -1020,7 +1020,7 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
     // 第一章最終任務：刺殺老闆
     let mission5 = StoryMission::new(5, "清算日", "帶著證據找老闆算帳，結束這一切")
         .chapter(1)
-        .from_npc(100)
+        .with_quest_giver(100)
         .at_location(Vec3::new(0.0, 0.0, 200.0))
         .requires_mission(4)
         .requires_flag("has_evidence")

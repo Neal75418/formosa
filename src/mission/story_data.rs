@@ -552,7 +552,7 @@ impl StoryMission {
     }
 
     /// 設置任務給予者
-    pub fn from_npc(mut self, npc_id: NpcId) -> Self {
+    pub fn with_quest_giver(mut self, npc_id: NpcId) -> Self {
         self.quest_giver = Some(npc_id);
         self
     }

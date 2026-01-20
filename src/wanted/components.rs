@@ -25,6 +25,8 @@ pub struct WantedLevel {
     pub search_center: Option<Vec3>,
     /// 搜索區域半徑
     pub search_radius: f32,
+    /// 搜索區域剩餘時間（秒）- 超時後清除搜索區域
+    pub search_timer: f32,
 }
 
 impl WantedLevel {
@@ -66,13 +68,14 @@ impl WantedLevel {
     }
 
     /// 獲取消退所需時間（秒）
+    /// 高星級需要更長時間才能消退，增加挑戰性
     pub fn cooldown_duration(&self) -> f32 {
         match self.stars {
             1 => 10.0,
             2 => 15.0,
             3 => 20.0,
-            4 => 30.0,
-            5 => 45.0,
+            4 => 40.0,  // 提高：4星應該更難消退
+            5 => 60.0,  // 提高：5星需要很長時間
             _ => 5.0,
         }
     }
@@ -126,8 +129,8 @@ impl Default for PoliceConfig {
             // 戰鬥配置
             damage: 15.0,
             attack_cooldown: 1.5,
-            base_hit_chance: 0.5,
-            distance_hit_penalty: 0.3,
+            base_hit_chance: 0.28,        // 降低：避免 6 警察秒殺玩家
+            distance_hit_penalty: 0.2,    // 降低：讓距離衰減更平滑
         }
     }
 }

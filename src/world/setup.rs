@@ -227,11 +227,12 @@ pub fn setup_world(
         Z_WUCHANG, W_PEDESTRIAN, -1.0,
         22.0, 24.0, 22.0, "獅子林", Color::srgb(0.5, 0.4, 0.3));
 
-    // 電影公園 (西寧/武昌與昆明之間，西側)
+    // 電影公園 (西寧/武昌與昆明之間，西側) - 縮小尺寸確保不侵入道路
+    // 原本 25x20 剛好貼邊，改為 23x18 留 1m 間距
     spawn_building_at_corner(&mut commands, &mut meshes, &mut materials,
         X_XINING, W_SECONDARY, -1.0,
         Z_KUNMING, W_ALLEY, -1.0,
-        25.0, 4.0, 20.0, "電影公園", Color::srgb(0.25, 0.4, 0.25));
+        23.0, 4.0, 18.0, "電影公園", Color::srgb(0.25, 0.4, 0.25));
 
     // 唐吉訶德 Don Quijote (西寧東側/武昌南側) - 黃色顯眼大樓
     spawn_building_at_corner(&mut commands, &mut meshes, &mut materials,
@@ -324,11 +325,12 @@ pub fn setup_world(
 
     // ========== 康定路沿線建築 ==========
 
-    // 西門國小 (康定路東側，漢口街南側) - 實際位置更靠北
+    // 西門國小 (康定路東側，漢口街南側) - 縮小尺寸確保不侵入道路
+    // 原本 30x25 剛好貼邊，改為 28x23 留 1m 間距
     spawn_building_at_corner(&mut commands, &mut meshes, &mut materials,
         X_KANGDING, W_MAIN, 1.0,
         Z_HANKOU, W_SECONDARY, 1.0,
-        30.0, 12.0, 25.0, "西門國小", Color::srgb(0.7, 0.65, 0.55));
+        28.0, 12.0, 23.0, "西門國小", Color::srgb(0.7, 0.65, 0.55));
 
     // 便利商店區 (康定路東側，峨嵋北側)
     spawn_building_at_corner(&mut commands, &mut meshes, &mut materials,
@@ -347,17 +349,18 @@ pub fn setup_world(
 
     // ========== 電影街區域 (武昌街二段東段) - Phase 1 ==========
 
-    // 國賓影城 (武昌北側，漢中東側偏東)
+    // 國賓影城 (武昌北側，漢中東側偏東) - 往北移 2m 避免海報進入道路
     spawn_rich_building(&mut commands, &mut meshes, &mut materials,
-        Vec3::new(41.0, 16.0, -66.0), 22.0, 32.0, 18.0, "國賓影城");
+        Vec3::new(41.0, 16.0, -68.0), 22.0, 32.0, 18.0, "國賓影城");
 
     // 樂聲影城 (武昌南側)
     spawn_rich_building(&mut commands, &mut meshes, &mut materials,
         Vec3::new(36.0, 14.0, -34.0), 18.0, 28.0, 16.0, "樂聲影城");
 
-    // 日新威秀 (更東邊)
+    // 日新威秀 (更東邊) - 確保不侵入漢口街 (南邊界 Z=-74)
+    // 建築深度 20，所以 Z 中心需 >= -74 + 10 + 2 = -62
     spawn_rich_building(&mut commands, &mut meshes, &mut materials,
-        Vec3::new(59.0, 15.0, -67.0), 20.0, 30.0, 20.0, "日新威秀");
+        Vec3::new(59.0, 15.0, -62.0), 20.0, 30.0, 20.0, "日新威秀");
 
     // ========== 漢口街建築群 - Phase 2 ==========
 
@@ -379,9 +382,10 @@ pub fn setup_world(
         Z_HANKOU, W_SECONDARY, 1.0,
         10.0, 10.0, 10.0, "摩斯漢堡", Color::srgb(0.8, 0.2, 0.2));
 
-    // 湯姆熊遊戲中心 (漢口街南側偏東)
+    // 湯姆熊遊戲中心 (漢口街南側偏東) - 確保不侵入漢口街 (南邊界 Z=-74)
+    // 建築深度 15，所以 Z 中心需 >= -74 + 7.5 + 2 = -64.5，取 -64
     spawn_rich_building(&mut commands, &mut meshes, &mut materials,
-        Vec3::new(40.0, 10.0, -72.0), 18.0, 20.0, 15.0, "湯姆熊");
+        Vec3::new(40.0, 10.0, -64.0), 18.0, 20.0, 15.0, "湯姆熊");
 
     // ========== 成都路與峨嵋街補充 - Phase 3 ==========
     // 成都路 Z=50, 寬度16, 北側邊界 Z=42
@@ -422,10 +426,10 @@ pub fn setup_world(
         Vec3::new(30.0, 5.0, -17.0), 6.0, 10.0, 6.0, "潮流刺青");
 
     // 康定路南段補充
-    // 大創 (康定路東側，峨嵋南側)
+    // 大創 (康定路東側，成都路南側) - 移到這裡避免與峨嵋停車場重疊
     spawn_building_at_corner(&mut commands, &mut meshes, &mut materials,
         X_KANGDING, W_MAIN, 1.0,
-        Z_EMEI + 20.0, 10.0, 1.0,
+        Z_CHENGDU, W_MAIN, 1.0,
         12.0, 10.0, 12.0, "大創", Color::srgb(0.9, 0.4, 0.5));
 
     // 彈珠台 (康定路東側，成都北側)
@@ -451,6 +455,7 @@ pub fn setup_world(
     );
 
     // 峨嵋立體停車場 (康定路與峨嵋街交叉口)
+    // 保持原位置 X=-75, Z=20，由移動大創來避免重疊
     spawn_parking_garage(&mut commands, &mut meshes, &mut materials,
         Vec3::new(X_KANGDING + 25.0, 10.0, Z_EMEI + 20.0),
         22.0, 22.0, 32.0, "峨嵋停車場");
@@ -460,65 +465,18 @@ pub fn setup_world(
     let vehicle_mats = crate::vehicle::VehicleMaterials::new(&mut materials);
     commands.insert_resource(vehicle_mats.clone());
 
-    // 台灣街頭必備的機車，停在路邊讓玩家騎乘
+    // 徒步區閒置車輛 - 只放置一台機車和一台汽車讓玩家使用
     // 漢中街徒步區旁（玩家起始點旁）
     spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
         Vec3::new(12.0, 0.0, -8.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
-        Color::srgb(0.9, 0.1, 0.1));  // 紅色
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(12.0, 0.0, -5.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
-        Color::srgb(0.1, 0.5, 0.9));  // 藍色
+        Color::srgb(0.9, 0.1, 0.1));  // 紅色機車
 
-    // 西門紅樓前 (中華路/成都路交叉口)
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(X_ZHONGHUA - 30.0, 0.0, Z_CHENGDU + 12.0), Quat::from_rotation_y(0.5),
-        Color::srgb(0.15, 0.15, 0.15));  // 黑色
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(X_ZHONGHUA - 32.0, 0.0, Z_CHENGDU + 12.0), Quat::from_rotation_y(0.5),
-        Color::srgb(0.95, 0.95, 0.95));  // 白色
+    // 徒步區閒置汽車（漢中街，稍南）
+    spawn_vehicle(&mut commands, &mut meshes, &mut materials,
+        Vec3::new(-8.0, 0.0, -15.0), Vehicle::car(),
+        Color::srgb(0.2, 0.3, 0.6));  // 深藍色汽車
 
-    // 峨嵋街口（Uniqlo 旁）
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(10.0, 0.0, Z_EMEI + 2.0), Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
-        Color::srgb(0.0, 0.6, 0.3));  // 綠色 Gogoro 風格
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(10.0, 0.0, Z_EMEI + 4.0), Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
-        Color::srgb(0.9, 0.6, 0.1));  // 橘色
-
-    // 武昌街旁（唐吉訶德前）
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(X_XINING + 15.0, 0.0, Z_WUCHANG + 3.0), Quat::from_rotation_y(0.0),
-        Color::srgb(0.6, 0.1, 0.6));  // 紫色
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(X_XINING + 17.0, 0.0, Z_WUCHANG + 3.0), Quat::from_rotation_y(0.0),
-        Color::srgb(0.2, 0.2, 0.2));  // 深灰
-
-    // === Phase 7: 新增機車 ===
-
-    // 電影街前 (國賓/日新威秀)
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(38.0, 0.0, -60.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_4),
-        Color::srgb(0.1, 0.1, 0.1));  // 黑色
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(40.0, 0.0, -60.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_4),
-        Color::srgb(0.95, 0.95, 0.95));  // 白色
-
-    // 麥當勞前 (漢口街)
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(-15.0, 0.0, -68.0), Quat::from_rotation_y(0.0),
-        Color::srgb(0.9, 0.1, 0.1));  // 紅色
-
-    // 夾娃娃機店前 (成都路北側) - 移到 Z=38 (建築在 Z=33)
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(26.0, 0.0, 38.0), Quat::from_rotation_y(std::f32::consts::PI),
-        Color::srgb(0.1, 0.4, 0.9));  // 藍色
-
-    // 潮牌店前 (峨嵋街北側) - 移到 Z=-12 (建築在 Z=-10)
-    spawn_scooter(&mut commands, &mut meshes, &mut materials, &vehicle_mats,
-        Vec3::new(30.0, 0.0, -12.0), Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
-        Color::srgb(0.5, 1.0, 0.2));  // 螢光綠
-
-    info!("🛵 已生成 13 台機車於西門町各處");
+    info!("🚗 已生成 1 台機車和 1 台汽車於徒步區");
 
     // === 8. 霓虹燈招牌 ===
     // 西門町的靈魂 - 五光十色的霓虹燈
@@ -640,7 +598,7 @@ pub fn setup_world(
 
     // 湯姆熊 - 橘色閃爍
     spawn_neon_sign(&mut commands, &mut meshes, &mut materials,
-        Vec3::new(40.0, 15.0, -72.0),  // 湯姆熊遊樂場
+        Vec3::new(40.0, 15.0, -64.0),  // 湯姆熊遊樂場（配合建築位置更新）
         Vec3::new(4.5, 1.0, 0.3),
         "湯姆熊",
         NeonSign::flickering(Color::srgb(1.0, 0.5, 0.1), 7.0));
@@ -795,9 +753,9 @@ pub fn setup_world(
     info!("🎬 已生成 {} 個電影看板", billboard_configs.len());
 
     // 塗鴉牆 (電影公園圍牆，靠近建築避開馬路)
-    // 電影公園在 X_XINING(-55) - 12/2 - 25/2 = -73.5, Z_KUNMING(-25) - 8/2 - 20/2 = -39
+    // 電影公園縮小後：X_XINING(-55) - 12/2 - 23/2 = -72.5, Z_KUNMING(-25) - 8/2 - 18/2 = -38
     // 將塗鴉牆移到電影公園的東側圍牆
-    spawn_graffiti_wall(&mut commands, &mut meshes, &mut materials, Vec3::new(-63.0, 3.0, -40.0));
+    spawn_graffiti_wall(&mut commands, &mut meshes, &mut materials, Vec3::new(-62.0, 3.0, -38.0));
     info!("🎨 已生成塗鴉牆");
 
     // === 12. AI 掩體點生成 ===
@@ -895,12 +853,13 @@ fn spawn_lane_markings(
         (line_width, layout.road_len, Vec3::new(line_gap, 0.0, 0.0))
     };
 
-    // 雙黃線
+    // 雙黃線 - 使用 Cuboid 確保正確的水平方向
+    let line_height = 0.01; // 非常薄的高度
     for offset in [-gap_vec, gap_vec] {
         parent.spawn((
-            Mesh3d(meshes.add(Plane3d::default().mesh().size(lx, lz))),
+            Mesh3d(meshes.add(Cuboid::new(lx, line_height, lz))),
             MeshMaterial3d(line_mat.clone()),
-            Transform::from_translation(Vec3::new(0.0, 0.01, 0.0) + offset),
+            Transform::from_translation(Vec3::new(0.0, 0.01 + line_height / 2.0, 0.0) + offset),
             GlobalTransform::default(),
         ));
     }
@@ -987,6 +946,9 @@ fn spawn_road_segment(
     spawn_sidewalks(commands, meshes, materials, pos, &layout, drive_width);
 }
 
+/// 建築物與道路之間的緩衝距離（公尺）
+const BUILDING_ROAD_BUFFER: f32 = 1.5;
+
 fn spawn_building_at_corner(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -996,11 +958,11 @@ fn spawn_building_at_corner(
     width: f32, height: f32, depth: f32,
     name: &str, _color: Color  // 保留參數但標記為未使用（spawn_rich_building 會根據名稱決定顏色）
 ) {
-    // 計算貼合座標
-    // 如果 align1 = -1 (路左/西)，建築中心 x = 路中心 - 路寬/2 - 建築寬/2
-    // 如果 align1 = 1 (路右/東)，建築中心 x = 路中心 + 路寬/2 + 建築寬/2
-    let x = road1_center + align1 * (road1_width / 2.0 + width / 2.0);
-    let z = road2_center + align2 * (road2_width / 2.0 + depth / 2.0);
+    // 計算貼合座標（含緩衝距離，避免建築貼邊道路）
+    // 如果 align1 = -1 (路左/西)，建築中心 x = 路中心 - 路寬/2 - 建築寬/2 - 緩衝
+    // 如果 align1 = 1 (路右/東)，建築中心 x = 路中心 + 路寬/2 + 建築寬/2 + 緩衝
+    let x = road1_center + align1 * (road1_width / 2.0 + width / 2.0 + BUILDING_ROAD_BUFFER);
+    let z = road2_center + align2 * (road2_width / 2.0 + depth / 2.0 + BUILDING_ROAD_BUFFER);
     
     let pos = Vec3::new(x, height / 2.0, z);
     
@@ -1023,8 +985,8 @@ fn spawn_building_at_linear(
     // 這裡假設 road_center 是 X 軸 (垂直路)，building 沿 Z 軸分佈
     // 若要通用化需要更多參數，這裡簡化為 "Vertical Road Side"
     
-    // 如果是垂直路 (Hanzhong)，align 決定 X
-    let x = road_center + align * (road_width / 2.0 + width / 2.0);
+    // 如果是垂直路 (Hanzhong)，align 決定 X（含緩衝距離）
+    let x = road_center + align * (road_width / 2.0 + width / 2.0 + BUILDING_ROAD_BUFFER);
     let z = center_cross;
     
     let height = 20.0;
@@ -2348,12 +2310,7 @@ fn spawn_parking_garage(cmd: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, m
         }
     });
     
-    // 在停車場一樓內部生成車輛 (Inside)
-    let parking_x = pos.x; 
-    let start_z = pos.z - d/2.0 + 5.0; // 從北側入口往內
-
-    // 只生成一台計程車，方便玩家駛出
-    spawn_vehicle(cmd, meshes, mats, Vec3::new(parking_x, 0.5, start_z + 10.0), Vehicle::taxi(), Color::srgb(0.9, 0.8, 0.2));
+    // 停車場內不再生成車輛，玩家需要自己找車
 }
 
 // === 9. 人形角色生成 ===

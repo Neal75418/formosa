@@ -3,6 +3,7 @@
 //! 處理對話顯示、打字效果、選項選擇等
 
 use bevy::prelude::*;
+use std::collections::HashMap;
 
 use super::dialogue::*;
 use super::story_data::DialogueId;
@@ -72,7 +73,7 @@ impl Plugin for DialogueSystemPlugin {
 /// 設置範例對話
 fn setup_sample_dialogues(mut database: ResMut<DialogueDatabase>) {
     // 註冊範例對話 1（任務 1 的開場對話）
-    let dialogue1 = super::dialogue::create_sample_dialogue();
+    let dialogue1 = create_sample_dialogue();
     database.register_dialogue(dialogue1);
 
     // 註冊範例對話 2（任務 2 的開場對話）
@@ -160,6 +161,40 @@ pub struct CameraFocusData {
     pub original_position: Option<Vec3>,
 }
 
+// === 對話事件處理輔助函數 ===
+
+/// 處理對話開始事件
+fn handle_dialogue_start(
+    dialogue_id: DialogueId,
+    participants: &HashMap<String, String>,
+    dialogue_state: &mut DialogueState,
+    database: &DialogueDatabase,
+    elapsed_secs: f32,
+) {
+    let Some(tree) = database.get_dialogue(dialogue_id) else {
+        warn!("找不到對話樹: {}", dialogue_id);
+        return;
+    };
+
+    let mut active = ActiveDialogue::new(dialogue_id, tree.start_node);
+    active.start_time = elapsed_secs;
+
+    for (key, value) in participants.iter() {
+        active.participants.insert(key.to_string(), value.to_string());
+    }
+
+    dialogue_state.active_dialogue = Some(active);
+    info!("對話開始: {} (ID: {})", tree.name, dialogue_id);
+}
+
+/// 處理跳轉節點事件
+fn handle_go_to_node(active: &mut ActiveDialogue, node_id: u32) {
+    active.current_node = node_id;
+    active.typing_progress = 0.0;
+    active.typing_complete = false;
+    active.selected_choice = None;
+}
+
 /// 處理對話事件
 pub fn dialogue_event_handler(
     mut events: MessageReader<DialogueEvent>,
@@ -170,27 +205,11 @@ pub fn dialogue_event_handler(
     for event in events.read() {
         match event {
             DialogueEvent::Start { dialogue_id, participants } => {
-                if let Some(tree) = database.get_dialogue(*dialogue_id) {
-                    let mut active = ActiveDialogue::new(*dialogue_id, tree.start_node);
-                    active.start_time = time.elapsed_secs();
-
-                    // 添加參與者
-                    for (key, value) in participants {
-                        active.participants.insert(key.clone(), value.clone());
-                    }
-
-                    dialogue_state.active_dialogue = Some(active);
-                    info!("對話開始: {} (ID: {})", tree.name, dialogue_id);
-                } else {
-                    warn!("找不到對話樹: {}", dialogue_id);
-                }
+                handle_dialogue_start(*dialogue_id, participants, &mut dialogue_state, &database, time.elapsed_secs());
             }
             DialogueEvent::GoToNode(node_id) => {
                 if let Some(active) = &mut dialogue_state.active_dialogue {
-                    active.current_node = *node_id;
-                    active.typing_progress = 0.0;
-                    active.typing_complete = false;
-                    active.selected_choice = None;
+                    handle_go_to_node(active, *node_id);
                 }
             }
             DialogueEvent::SelectChoice(choice_index) => {
@@ -209,9 +228,7 @@ pub fn dialogue_event_handler(
                     info!("對話結束: {}", active.dialogue_id);
                 }
             }
-            DialogueEvent::Completed(_dialogue_id) => {
-                // 由其他系統處理完成回調
-            }
+            DialogueEvent::Completed(_) => {} // 由其他系統處理
         }
     }
 }
@@ -267,6 +284,54 @@ pub fn dialogue_typing_system(
     }
 }
 
+// === 對話輸入輔助函數 ===
+
+/// 取得選項對應的數字鍵
+fn get_choice_key(index: usize) -> Option<KeyCode> {
+    match index {
+        0 => Some(KeyCode::Digit1),
+        1 => Some(KeyCode::Digit2),
+        2 => Some(KeyCode::Digit3),
+        3 => Some(KeyCode::Digit4),
+        _ => None,
+    }
+}
+
+/// 處理對話前進（無選項時）
+fn handle_dialogue_advance(
+    node: &DialogueNode,
+    tree: &DialogueTree,
+    dialogue_id: DialogueId,
+    story_manager: &mut StoryMissionManager,
+    events: &mut MessageWriter<DialogueEvent>,
+) {
+    if let Some(next_node) = node.next_node {
+        events.write(DialogueEvent::GoToNode(next_node));
+    } else {
+        process_dialogue_consequences(&tree.on_complete, story_manager);
+        events.write(DialogueEvent::Completed(dialogue_id));
+        events.write(DialogueEvent::End);
+    }
+}
+
+/// 處理數字鍵選擇選項
+fn handle_choice_selection(
+    keyboard: &ButtonInput<KeyCode>,
+    valid_choices: &[&DialogueChoice],
+    story_manager: &mut StoryMissionManager,
+    events: &mut MessageWriter<DialogueEvent>,
+    tree: &DialogueTree,
+    dialogue_id: DialogueId,
+) {
+    for (index, _) in valid_choices.iter().enumerate() {
+        let Some(key) = get_choice_key(index) else { continue };
+        if keyboard.just_pressed(key) {
+            select_choice(index, valid_choices, story_manager, events, tree, dialogue_id);
+            return;
+        }
+    }
+}
+
 /// 對話輸入處理系統
 pub fn dialogue_input_system(
     dialogue_state: ResMut<DialogueState>,
@@ -276,67 +341,54 @@ pub fn dialogue_input_system(
     mouse: Res<ButtonInput<MouseButton>>,
     mut events: MessageWriter<DialogueEvent>,
 ) {
-    let Some(active) = &dialogue_state.active_dialogue else {
-        return;
-    };
+    let Some(active) = &dialogue_state.active_dialogue else { return };
+    let Some(tree) = database.get_dialogue(active.dialogue_id) else { return };
+    let Some(node) = tree.get_node(active.current_node) else { return };
 
-    let Some(tree) = database.get_dialogue(active.dialogue_id) else {
-        return;
-    };
-
-    let Some(node) = tree.get_node(active.current_node) else {
-        return;
-    };
-
-    // 空白鍵或滑鼠左鍵繼續
     let advance_pressed = keyboard.just_pressed(KeyCode::Space)
         || keyboard.just_pressed(KeyCode::Enter)
         || mouse.just_pressed(MouseButton::Left);
 
     if advance_pressed {
         if !active.typing_complete {
-            // 跳過打字效果
             events.write(DialogueEvent::SkipTyping);
         } else if node.choices.is_empty() {
-            // 沒有選項，自動跳到下一節點或結束
-            if let Some(next_node) = node.next_node {
-                events.write(DialogueEvent::GoToNode(next_node));
-            } else {
-                // 對話結束
-                process_dialogue_consequences(&tree.on_complete, &mut story_manager);
-                events.write(DialogueEvent::Completed(active.dialogue_id));
-                events.write(DialogueEvent::End);
-            }
+            handle_dialogue_advance(node, tree, active.dialogue_id, &mut story_manager, &mut events);
         }
     }
 
     // 數字鍵選擇選項
     if active.typing_complete && !node.choices.is_empty() {
         let valid_choices = get_valid_choices(node, &story_manager);
+        handle_choice_selection(&keyboard, &valid_choices, &mut story_manager, &mut events, tree, active.dialogue_id);
+    }
+}
 
-        for (index, _choice) in valid_choices.iter().enumerate() {
-            let key = match index {
-                0 => Some(KeyCode::Digit1),
-                1 => Some(KeyCode::Digit2),
-                2 => Some(KeyCode::Digit3),
-                3 => Some(KeyCode::Digit4),
-                _ => None,
-            };
+// === 自動前進輔助函數 ===
 
-            if let Some(key) = key {
-                if keyboard.just_pressed(key) {
-                    select_choice(
-                        index,
-                        &valid_choices,
-                        &mut story_manager,
-                        &mut events,
-                        tree,
-                        active.dialogue_id,
-                    );
-                    break;
-                }
-            }
-        }
+/// 執行自動前進（跳轉或結束對話）
+fn perform_auto_advance(next_node: Option<u32>, events: &mut MessageWriter<DialogueEvent>) {
+    match next_node {
+        Some(node_id) => { events.write(DialogueEvent::GoToNode(node_id)); }
+        None => { events.write(DialogueEvent::End); }
+    }
+}
+
+/// 檢查並處理自動前進計時器
+fn try_auto_advance(
+    timer: &mut f32,
+    delay: f32,
+    delta: f32,
+    next_node: Option<u32>,
+    events: &mut MessageWriter<DialogueEvent>,
+) -> bool {
+    *timer += delta;
+    if *timer >= delay {
+        *timer = 0.0;
+        perform_auto_advance(next_node, events);
+        true
+    } else {
+        false
     }
 }
 
@@ -359,40 +411,21 @@ pub fn dialogue_auto_advance_system(
         return;
     }
 
-    let Some(tree) = database.get_dialogue(active.dialogue_id) else {
+    let Some(tree) = database.get_dialogue(active.dialogue_id) else { return };
+    let Some(node) = tree.get_node(active.current_node) else { return };
+
+    // 無選項時才考慮自動前進
+    if !node.choices.is_empty() {
         return;
-    };
+    }
 
-    let Some(node) = tree.get_node(active.current_node) else {
-        return;
-    };
+    let delta = time.delta_secs();
 
-    // 只有在沒有選項且有設置自動前進時才自動前進
-    if node.choices.is_empty() && node.auto_advance_delay > 0.0 {
-        *auto_advance_timer += time.delta_secs();
-
-        if *auto_advance_timer >= node.auto_advance_delay {
-            *auto_advance_timer = 0.0;
-
-            if let Some(next_node) = node.next_node {
-                events.write(DialogueEvent::GoToNode(next_node));
-            } else {
-                events.write(DialogueEvent::End);
-            }
-        }
-    } else if settings.auto_advance && node.choices.is_empty() {
-        // 全局自動前進設置
-        *auto_advance_timer += time.delta_secs();
-
-        if *auto_advance_timer >= settings.auto_advance_delay {
-            *auto_advance_timer = 0.0;
-
-            if let Some(next_node) = node.next_node {
-                events.write(DialogueEvent::GoToNode(next_node));
-            } else {
-                events.write(DialogueEvent::End);
-            }
-        }
+    // 優先使用節點設置的延遲，否則使用全局設置
+    if node.auto_advance_delay > 0.0 {
+        try_auto_advance(&mut auto_advance_timer, node.auto_advance_delay, delta, node.next_node, &mut events);
+    } else if settings.auto_advance {
+        try_auto_advance(&mut auto_advance_timer, settings.auto_advance_delay, delta, node.next_node, &mut events);
     }
 }
 
@@ -401,7 +434,7 @@ pub fn dialogue_auto_advance_system(
 // ============================================================================
 
 /// 替換文字中的變數
-pub fn substitute_variables(text: &str, participants: &std::collections::HashMap<String, String>) -> String {
+pub fn substitute_variables(text: &str, participants: &HashMap<String, String>) -> String {
     let mut result = text.to_string();
 
     for (key, value) in participants {
@@ -413,7 +446,7 @@ pub fn substitute_variables(text: &str, participants: &std::collections::HashMap
 }
 
 /// 取得當前顯示的文字（根據打字進度）
-pub fn get_displayed_text(text: &str, progress: f32, participants: &std::collections::HashMap<String, String>) -> String {
+pub fn get_displayed_text(text: &str, progress: f32, participants: &HashMap<String, String>) -> String {
     let full_text = substitute_variables(text, participants);
     let total_chars = full_text.chars().count();
     let visible_chars = (total_chars as f32 * progress).round() as usize;
@@ -538,14 +571,14 @@ pub fn start_dialogue(
 ) {
     events.write(DialogueEvent::Start {
         dialogue_id,
-        participants: std::collections::HashMap::new(),
+        participants: HashMap::new(),
     });
 }
 
 /// 開始對話（帶參與者）的便利函數
 pub fn start_dialogue_with_participants(
     dialogue_id: DialogueId,
-    participants: std::collections::HashMap<String, String>,
+    participants: HashMap<String, String>,
     events: &mut MessageWriter<DialogueEvent>,
 ) {
     events.write(DialogueEvent::Start {

@@ -194,6 +194,35 @@ pub fn spawn_ambient_sound_point(
 }
 
 // ============================================================================
+// 音效播放共用輔助函數
+// ============================================================================
+
+/// 播放一次性音效（共用邏輯）
+/// 消除重複的 `if let Some(handle) = ... { commands.spawn(...) }` 模式
+#[inline]
+fn spawn_one_shot_sound(
+    commands: &mut Commands,
+    handle: Option<Handle<AudioSource>>,
+    volume: f32,
+) {
+    let Some(handle) = handle else { return };
+    commands.spawn((
+        AudioPlayer::<AudioSource>(handle),
+        PlaybackSettings {
+            mode: bevy::audio::PlaybackMode::Despawn,
+            volume: bevy::audio::Volume::Linear(volume),
+            ..default()
+        },
+    ));
+}
+
+/// 計算音效音量
+#[inline]
+fn calculate_sfx_volume(audio_manager: &AudioManager, multiplier: f32) -> f32 {
+    (audio_manager.master_volume * audio_manager.sfx_volume * multiplier).min(1.0)
+}
+
+// ============================================================================
 // 武器音效系統
 // ============================================================================
 
@@ -250,17 +279,8 @@ pub fn play_weapon_fire_sound(
         WeaponType::Fist | WeaponType::Staff | WeaponType::Knife => weapon_sounds.punch_whoosh.clone(),
     };
 
-    if let Some(handle) = sound_handle {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, sound_handle, volume);
 }
 
 /// 播放換彈音效
@@ -276,17 +296,8 @@ pub fn play_reload_sound(
         weapon_sounds.reload_start.clone()
     };
 
-    if let Some(handle) = sound_handle {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, sound_handle, volume);
 }
 
 /// 播放命中音效
@@ -303,17 +314,8 @@ pub fn play_hit_sound(
         weapon_sounds.hit_flesh.clone()
     };
 
-    if let Some(handle) = sound_handle {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, sound_handle, volume);
 }
 
 /// 播放武器切換音效
@@ -322,17 +324,8 @@ pub fn play_weapon_switch_sound(
     weapon_sounds: &WeaponSounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = weapon_sounds.weapon_switch.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume * 0.7; // 切換聲稍微小聲
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 0.7); // 切換聲稍微小聲
+    spawn_one_shot_sound(commands, weapon_sounds.weapon_switch.clone(), volume);
 }
 
 /// 播放空彈匣音效
@@ -341,17 +334,8 @@ pub fn play_empty_clip_sound(
     weapon_sounds: &WeaponSounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = weapon_sounds.empty_clip.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, weapon_sounds.empty_clip.clone(), volume);
 }
 
 // ============================================================================
@@ -401,17 +385,8 @@ pub fn play_door_open_sound(
     vehicle_sounds: &VehicleSounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = vehicle_sounds.door_open.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume * 0.8;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 0.8);
+    spawn_one_shot_sound(commands, vehicle_sounds.door_open.clone(), volume);
 }
 
 /// 播放車門關閉音效
@@ -420,17 +395,8 @@ pub fn play_door_close_sound(
     vehicle_sounds: &VehicleSounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = vehicle_sounds.door_close.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume * 0.9;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 0.9);
+    spawn_one_shot_sound(commands, vehicle_sounds.door_close.clone(), volume);
 }
 
 /// 播放引擎發動音效
@@ -439,17 +405,8 @@ pub fn play_engine_start_sound(
     vehicle_sounds: &VehicleSounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = vehicle_sounds.engine_start.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, vehicle_sounds.engine_start.clone(), volume);
 }
 
 /// 播放輪胎打滑音效
@@ -459,17 +416,8 @@ pub fn play_tire_screech_sound(
     audio_manager: &AudioManager,
     intensity: f32, // 0.0 ~ 1.0
 ) {
-    if let Some(handle) = vehicle_sounds.tire_screech.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume * intensity * 0.7;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, intensity * 0.7);
+    spawn_one_shot_sound(commands, vehicle_sounds.tire_screech.clone(), volume);
 }
 
 /// 播放碰撞音效
@@ -485,17 +433,8 @@ pub fn play_collision_sound(
         vehicle_sounds.collision_light.clone()
     };
 
-    if let Some(handle) = handle {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, handle, volume);
 }
 
 /// 播放爆炸音效
@@ -504,17 +443,9 @@ pub fn play_explosion_sound(
     vehicle_sounds: &VehicleSounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = vehicle_sounds.explosion.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume * 1.2; // 爆炸聲更大
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume.min(1.0)),
-                ..default()
-            },
-        ));
-    }
+    // 爆炸聲更大 (1.2x)，calculate_sfx_volume 已經會 .min(1.0)
+    let volume = calculate_sfx_volume(audio_manager, 1.2);
+    spawn_one_shot_sound(commands, vehicle_sounds.explosion.clone(), volume);
 }
 
 // ============================================================================
@@ -534,17 +465,8 @@ pub fn play_footstep_sound(
         FootstepSurface::Metal => player_sounds.footstep_metal.clone(),
     };
 
-    if let Some(handle) = handle {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume * 0.4;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 0.4);
+    spawn_one_shot_sound(commands, handle, volume);
 }
 
 /// 腳步表面類型
@@ -561,17 +483,8 @@ pub fn play_hurt_sound(
     player_sounds: &PlayerSounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = player_sounds.hurt.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume * 0.8;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 0.8);
+    spawn_one_shot_sound(commands, player_sounds.hurt.clone(), volume);
 }
 
 // ============================================================================
@@ -584,17 +497,8 @@ pub fn play_mission_start_sound(
     ui_sounds: &UISounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = ui_sounds.mission_start.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, ui_sounds.mission_start.clone(), volume);
 }
 
 /// 播放任務完成音效
@@ -603,17 +507,9 @@ pub fn play_mission_complete_sound(
     ui_sounds: &UISounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = ui_sounds.mission_complete.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume * 1.2;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume.min(1.0)),
-                ..default()
-            },
-        ));
-    }
+    // 任務完成音效稍大聲 (1.2x)
+    let volume = calculate_sfx_volume(audio_manager, 1.2);
+    spawn_one_shot_sound(commands, ui_sounds.mission_complete.clone(), volume);
 }
 
 /// 播放檢查點音效
@@ -622,17 +518,8 @@ pub fn play_checkpoint_sound(
     ui_sounds: &UISounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = ui_sounds.checkpoint.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, ui_sounds.checkpoint.clone(), volume);
 }
 
 /// 播放通緝星級增加音效
@@ -641,15 +528,6 @@ pub fn play_wanted_up_sound(
     ui_sounds: &UISounds,
     audio_manager: &AudioManager,
 ) {
-    if let Some(handle) = ui_sounds.wanted_up.clone() {
-        let volume = audio_manager.master_volume * audio_manager.sfx_volume;
-        commands.spawn((
-            AudioPlayer::<AudioSource>(handle),
-            PlaybackSettings {
-                mode: bevy::audio::PlaybackMode::Despawn,
-                volume: bevy::audio::Volume::Linear(volume),
-                ..default()
-            },
-        ));
-    }
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, ui_sounds.wanted_up.clone(), volume);
 }

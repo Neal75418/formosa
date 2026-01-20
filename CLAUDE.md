@@ -16,12 +16,12 @@
 
 **島嶼狂飆 (Island Rampage)** - 以台灣為舞台的 GTA 風格 3D 開放世界動作遊戲，使用 Rust 和 Bevy 0.17 開發。
 
-| 技術 | 版本 | 用途 |
-|------|------|------|
-| Rust | 2021 Edition | 程式語言 |
-| Bevy | 0.17 | ECS 遊戲引擎 |
-| bevy_rapier3d | 0.32 | 3D 物理引擎 |
-| serde/serde_json | 1.0 | 存檔系統 |
+| 技術               | 版本           | 用途       |
+|------------------|--------------|----------|
+| Rust             | 2021 Edition | 程式語言     |
+| Bevy             | 0.17         | ECS 遊戲引擎 |
+| bevy_rapier3d    | 0.32         | 3D 物理引擎  |
+| serde/serde_json | 1.0          | 存檔系統     |
 
 ## 常用指令
 
@@ -77,11 +77,11 @@ fn my_system(mut events: MessageReader<DamageEvent>) {
 
 位於 `core/spatial_hash.rs`。三個預定義網格：
 
-| 資源 | 網格大小 | 用途 |
-|------|----------|------|
-| `VehicleSpatialHash` | 15.0m | 行人碰撞檢測 |
-| `PedestrianSpatialHash` | 10.0m | 恐慌波傳播 |
-| `PoliceSpatialHash` | 20.0m | 玩家偵測 |
+| 資源                      | 網格大小  | 用途     |
+|-------------------------|-------|--------|
+| `VehicleSpatialHash`    | 15.0m | 行人碰撞檢測 |
+| `PedestrianSpatialHash` | 10.0m | 恐慌波傳播  |
+| `PoliceSpatialHash`     | 20.0m | 玩家偵測   |
 
 使用模式：
 ```rust
@@ -219,33 +219,33 @@ impl Plugin for CombatPlugin {
 
 ## 關鍵檔案
 
-| 系統 | 主要檔案 |
-|------|----------|
-| 空間哈希 | `src/core/spatial_hash.rs` |
-| 戰鬥插件 | `src/combat/mod.rs` |
-| 爆炸物 | `src/combat/explosives.rs` |
-| 掩體系統 | `src/combat/cover.rs` |
+| 系統    | 主要檔案                              |
+|-------|-----------------------------------|
+| 空間哈希  | `src/core/spatial_hash.rs`        |
+| 戰鬥插件  | `src/combat/mod.rs`               |
+| 爆炸物   | `src/combat/explosives.rs`        |
+| 掩體系統  | `src/combat/cover.rs`             |
 | 警用直升機 | `src/wanted/police_helicopter.rs` |
-| 偷車 | `src/vehicle/theft.rs` |
-| 車輛改裝 | `src/vehicle/modifications.rs` |
-| 可破壞物件 | `src/environment/systems.rs` |
-| 碎片物件池 | `src/environment/components.rs` |
+| 偷車    | `src/vehicle/theft.rs`            |
+| 車輛改裝  | `src/vehicle/modifications.rs`    |
+| 可破壞物件 | `src/environment/systems.rs`      |
+| 碎片物件池 | `src/environment/components.rs`   |
 
 ## 操作方式
 
-| 按鍵 | 步行 | 駕駛 |
-|------|------|------|
-| WASD | 移動 | 轉向/加速 |
-| Space | 跳躍 | 煞車 |
-| Shift | 衝刺 | 氮氣 |
-| E | 上車 | 下車 |
-| F | 偷車 | - |
-| R | 換彈 | - |
-| G | 投擲爆炸物 | - |
-| 1-4 | 切換武器 | - |
-| Tab | 武器輪盤 | - |
-| M | 地圖 | 地圖 |
-| Esc | 暫停 | 暫停 |
+| 按鍵    | 步行    | 駕駛    |
+|-------|-------|-------|
+| WASD  | 移動    | 轉向/加速 |
+| Space | 跳躍    | 煞車    |
+| Shift | 衝刺    | 氮氣    |
+| E     | 上車    | 下車    |
+| F     | 偷車    | -     |
+| R     | 換彈    | -     |
+| G     | 投擲爆炸物 | -     |
+| 1-4   | 切換武器  | -     |
+| Tab   | 武器輪盤  | -     |
+| M     | 地圖    | 地圖    |
+| Esc   | 暫停    | 暫停    |
 
 ## 驗證指令
 

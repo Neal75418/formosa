@@ -12,7 +12,7 @@ use super::{StoryMissionHud, StoryMissionTitle, StoryMissionPhaseText, StoryMiss
 use crate::core::{GameState, WorldTime, WeatherState, WeatherType};
 use crate::combat::{Enemy, Health, Armor, WeaponInventory};
 use crate::vehicle::{Vehicle, VehicleType};
-use crate::mission::{MissionManager, StoryMissionManager, StoryMissionDatabase, get_current_mission_info};
+use crate::mission::{MissionManager, MissionType, StoryMissionManager, StoryMissionDatabase, get_current_mission_info};
 use crate::player::Player;
 use crate::world::Building;
 
@@ -1653,6 +1653,16 @@ fn spawn_legend_item(parent: &mut ChildSpawnerCommands, color: Color, label: &st
     });
 }
 
+/// 取得載具類型中文名稱
+fn get_vehicle_type_name(vehicle_type: VehicleType) -> &'static str {
+    match vehicle_type {
+        VehicleType::Scooter => "機車",
+        VehicleType::Car => "汽車",
+        VehicleType::Taxi => "計程車",
+        VehicleType::Bus => "公車",
+    }
+}
+
 /// 更新 UI
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn update_ui(
@@ -1677,31 +1687,22 @@ pub fn update_ui(
 
     // 更新 GTA 風格狀態標籤
     if let Ok(mut status_text) = status_tag_query.single_mut() {
-        if game_state.player_in_vehicle {
-            // 取得載具類型名稱
-            let vehicle_name = vehicle_query.iter().next().map(|v| match v.vehicle_type {
-                VehicleType::Scooter => "機車",
-                VehicleType::Car => "汽車",
-                VehicleType::Taxi => "計程車",
-                VehicleType::Bus => "公車",
-            }).unwrap_or("駕駛");
-            **status_text = vehicle_name.to_string();
-        } else {
-            **status_text = "步行".to_string();
-        }
+        let name = if game_state.player_in_vehicle {
+            vehicle_query.iter().next().map(|v| get_vehicle_type_name(v.vehicle_type)).unwrap_or("駕駛")
+        } else { "步行" };
+        **status_text = name.to_string();
     }
 
     // 更新速度顯示
-    if let Ok((mut speed_text, mut visibility)) = speed_display_query.single_mut() {
-        if game_state.player_in_vehicle {
-            if let Some(vehicle) = vehicle_query.iter().next() {
-                let speed_kmh = (vehicle.current_speed * 3.6).abs() as i32;
-                **speed_text = format!("{} km/h", speed_kmh);
-                *visibility = Visibility::Visible;
-            }
-        } else {
-            *visibility = Visibility::Hidden;
-        }
+    let Ok((mut speed_text, mut visibility)) = speed_display_query.single_mut() else { return; };
+    if !game_state.player_in_vehicle {
+        *visibility = Visibility::Hidden;
+        return;
+    }
+    if let Some(vehicle) = vehicle_query.iter().next() {
+        let speed_kmh = (vehicle.current_speed * 3.6).abs() as i32;
+        **speed_text = format!("{} km/h", speed_kmh);
+        *visibility = Visibility::Visible;
     }
 }
 
@@ -1723,14 +1724,8 @@ fn get_control_hint_text(game_state: &GameState, vehicle_query: &Query<&Vehicle>
         return String::new();
     };
     
-    let vehicle_name = match vehicle.vehicle_type {
-        VehicleType::Scooter => "[機車]",
-        VehicleType::Car => "[汽車]",
-        VehicleType::Taxi => "[計程車]",
-        VehicleType::Bus => "[公車]",
-    };
     let speed_kmh = (vehicle.current_speed * 3.6).abs() as i32;
-    format!("{} {} km/h | WASD駕駛 | Space煞車 | Tab下車", vehicle_name, speed_kmh)
+    format!("[{}] {} km/h | WASD駕駛 | Space煞車 | Tab下車", get_vehicle_type_name(vehicle.vehicle_type), speed_kmh)
 }
 
 /// 格式化世界時間
@@ -1765,10 +1760,41 @@ pub fn update_mission_ui(
     }
 }
 
+/// 更新護甲區顯示
+fn update_armor_section(
+    armor_opt: Option<&Armor>,
+    armor_section_query: &mut Query<&mut Visibility, With<ArmorSection>>,
+    armor_fill_query: &mut Query<&mut Node, (With<ArmorBarFill>, Without<HealthBarFill>, Without<HealthBarHighlight>)>,
+    armor_label_query: &mut Query<&mut Text, (With<ArmorLabel>, Without<HealthLabel>, Without<MoneyDisplay>, Without<ArmorLabelShadow>)>,
+    armor_shadow_query: &mut Query<&mut Text, (With<ArmorLabelShadow>, Without<ArmorLabel>, Without<HealthLabel>, Without<HealthLabelShadow>)>,
+) {
+    let should_show = armor_opt.map(|a| a.current > 0.0).unwrap_or(false);
+
+    if let Ok(mut visibility) = armor_section_query.single_mut() {
+        *visibility = if should_show { Visibility::Visible } else { Visibility::Hidden };
+    }
+
+    if let Some(armor) = armor_opt.filter(|a| a.current > 0.0) {
+        let armor_percent = (armor.current / armor.max * 100.0).clamp(0.0, 100.0);
+
+        if let Ok(mut node) = armor_fill_query.single_mut() {
+            node.width = Val::Percent(armor_percent);
+        }
+
+        let armor_text = format!("{:.0}/{:.0}", armor.current, armor.max);
+        if let Ok(mut text) = armor_label_query.single_mut() {
+            **text = armor_text.clone();
+        }
+        if let Ok(mut text) = armor_shadow_query.single_mut() {
+            **text = armor_text;
+        }
+    }
+}
+
 /// 更新 HUD（血量條、護甲條、金錢）- GTA 風格
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_hud(
-    player_query: Query<(&crate::combat::Health, Option<&Armor>, &Player)>,
+    player_query: Query<(&Health, Option<&Armor>, &Player)>,
     mut health_fill_query: Query<&mut Node, (With<HealthBarFill>, Without<HealthBarHighlight>, Without<ArmorBarFill>)>,
     mut health_highlight_query: Query<&mut Node, (With<HealthBarHighlight>, Without<HealthBarFill>, Without<ArmorBarFill>)>,
     mut health_label_query: Query<&mut Text, (With<HealthLabel>, Without<MoneyDisplay>, Without<ArmorLabel>, Without<HealthLabelShadow>)>,
@@ -1802,41 +1828,14 @@ pub fn update_hud(
         **text = health_text;
     }
 
-    // 更新護甲區（有護甲時才顯示）
-    if let Some(armor) = armor_opt {
-        if armor.current > 0.0 {
-            // 顯示護甲區
-            if let Ok(mut visibility) = armor_section_query.single_mut() {
-                *visibility = Visibility::Visible;
-            }
-
-            let armor_percent = (armor.current / armor.max * 100.0).clamp(0.0, 100.0);
-
-            // 更新護甲條填充
-            if let Ok(mut node) = armor_fill_query.single_mut() {
-                node.width = Val::Percent(armor_percent);
-            }
-
-            // 更新護甲數值標籤和陰影
-            let armor_text = format!("{:.0}/{:.0}", armor.current, armor.max);
-            if let Ok(mut text) = armor_label_query.single_mut() {
-                **text = armor_text.clone();
-            }
-            if let Ok(mut text) = armor_shadow_query.single_mut() {
-                **text = armor_text;
-            }
-        } else {
-            // 隱藏護甲區
-            if let Ok(mut visibility) = armor_section_query.single_mut() {
-                *visibility = Visibility::Hidden;
-            }
-        }
-    } else {
-        // 無護甲組件，隱藏護甲區
-        if let Ok(mut visibility) = armor_section_query.single_mut() {
-            *visibility = Visibility::Hidden;
-        }
-    }
+    // 更新護甲區
+    update_armor_section(
+        armor_opt,
+        &mut armor_section_query,
+        &mut armor_fill_query,
+        &mut armor_label_query,
+        &mut armor_shadow_query,
+    );
 
     // 更新金錢顯示
     if let Ok(mut text) = money_query.single_mut() {
@@ -3526,6 +3525,41 @@ pub fn update_hit_marker(
     }
 }
 
+/// 格式化當前彈藥文字
+fn format_current_ammo_text(magazine_size: u32, current_ammo: u32, is_reloading: bool) -> String {
+    if magazine_size == 0 {
+        "∞".to_string()
+    } else if is_reloading {
+        "...".to_string()
+    } else {
+        format!("{}", current_ammo)
+    }
+}
+
+/// 取得當前彈藥顏色
+fn get_current_ammo_color(magazine_size: u32, is_reloading: bool, is_low_ammo: bool) -> Color {
+    if magazine_size == 0 {
+        AMMO_NORMAL
+    } else if is_reloading {
+        AMMO_RESERVE
+    } else if is_low_ammo {
+        AMMO_LOW
+    } else {
+        AMMO_NORMAL
+    }
+}
+
+/// 格式化後備彈藥文字
+fn format_reserve_ammo_text(magazine_size: u32, reserve_ammo: u32, is_reloading: bool) -> String {
+    if magazine_size == 0 {
+        String::new()
+    } else if is_reloading {
+        "換彈中".to_string()
+    } else {
+        format!("{}", reserve_ammo)
+    }
+}
+
 /// 更新彈藥顯示（GTA 風格，支援低彈藥變色）
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_ammo_display(
@@ -3538,71 +3572,64 @@ pub fn update_ammo_display(
     mut weapon_shadow_query: Query<&mut Text, (With<WeaponDisplayShadow>, Without<WeaponDisplay>, Without<CurrentAmmoText>, Without<ReserveAmmoText>, Without<CurrentAmmoShadow>, Without<ReserveAmmoShadow>)>,
     mut slot_query: Query<(&mut BackgroundColor, &WeaponSlot)>,
 ) {
-    let Ok(inventory) = player_query.single() else { return; };
-    let Some(weapon) = inventory.current_weapon() else { return; };
+    let Ok(inventory) = player_query.single() else { return };
+    let Some(weapon) = inventory.current_weapon() else { return };
 
-    // 計算是否低彈藥（< 25%）
-    let is_low_ammo = weapon.stats.magazine_size > 0
-        && weapon.current_ammo < (weapon.stats.magazine_size as f32 * 0.25) as u32
+    let magazine_size = weapon.stats.magazine_size;
+    let is_low_ammo = magazine_size > 0
+        && weapon.current_ammo < (magazine_size as f32 * 0.25) as u32
         && !weapon.is_reloading;
 
-    // 更新當前彈藥顯示和陰影
-    let current_ammo_text = if weapon.stats.magazine_size == 0 {
-        "∞".to_string()
-    } else if weapon.is_reloading {
-        "...".to_string()
-    } else {
-        format!("{}", weapon.current_ammo)
-    };
+    // 當前彈藥顯示
+    let current_text = format_current_ammo_text(magazine_size, weapon.current_ammo, weapon.is_reloading);
+    let current_color = get_current_ammo_color(magazine_size, weapon.is_reloading, is_low_ammo);
 
     for (mut text, mut color) in current_ammo_query.iter_mut() {
-        **text = current_ammo_text.clone();
-        if weapon.stats.magazine_size == 0 {
-            color.0 = AMMO_NORMAL;
-        } else if weapon.is_reloading {
-            color.0 = AMMO_RESERVE;
-        } else {
-            color.0 = if is_low_ammo { AMMO_LOW } else { AMMO_NORMAL };
-        }
+        **text = current_text.clone();
+        color.0 = current_color;
     }
     for mut text in current_ammo_shadow_query.iter_mut() {
-        **text = current_ammo_text.clone();
+        **text = current_text.clone();
     }
 
-    // 更新後備彈藥顯示和陰影
-    let reserve_ammo_text = if weapon.stats.magazine_size == 0 {
-        "".to_string()
-    } else if weapon.is_reloading {
-        "換彈中".to_string()
-    } else {
-        format!("{}", weapon.reserve_ammo)
-    };
+    // 後備彈藥顯示
+    let reserve_text = format_reserve_ammo_text(magazine_size, weapon.reserve_ammo, weapon.is_reloading);
+    for mut text in reserve_ammo_query.iter_mut() { **text = reserve_text.clone(); }
+    for mut text in reserve_ammo_shadow_query.iter_mut() { **text = reserve_text.clone(); }
 
-    for mut text in reserve_ammo_query.iter_mut() {
-        **text = reserve_ammo_text.clone();
-    }
-    for mut text in reserve_ammo_shadow_query.iter_mut() {
-        **text = reserve_ammo_text.clone();
-    }
-
-    // 更新武器名稱和陰影
+    // 武器名稱
     let weapon_name = weapon.stats.weapon_type.name().to_string();
-    for mut text in weapon_query.iter_mut() {
-        **text = weapon_name.clone();
-    }
-    for mut text in weapon_shadow_query.iter_mut() {
-        **text = weapon_name.clone();
-    }
+    for mut text in weapon_query.iter_mut() { **text = weapon_name.clone(); }
+    for mut text in weapon_shadow_query.iter_mut() { **text = weapon_name.clone(); }
 
-    // 更新武器槽位高亮
+    // 武器槽位高亮
     let current_slot = inventory.current_index;
     for (mut bg, slot) in slot_query.iter_mut() {
-        *bg = if slot.slot_index == current_slot {
-            BackgroundColor(SLOT_ACTIVE)
-        } else {
-            BackgroundColor(SLOT_INACTIVE)
-        };
+        *bg = BackgroundColor(if slot.slot_index == current_slot { SLOT_ACTIVE } else { SLOT_INACTIVE });
     }
+}
+
+/// 計算低彈藥時的閃爍 alpha
+fn calculate_low_ammo_blink_alpha(elapsed_secs: f32, is_low_ammo: bool) -> f32 {
+    if is_low_ammo {
+        let phase = elapsed_secs * 8.0;
+        0.5 + 0.5 * phase.sin()
+    } else {
+        1.0
+    }
+}
+
+/// 取得子彈圖示顏色
+fn get_bullet_icon_color(is_filled: bool, is_low_ammo: bool, blink_alpha: f32) -> Color {
+    if !is_filled { return BULLET_EMPTY; }
+    if !is_low_ammo { return BULLET_FILLED; }
+    let base = BULLET_LOW_WARN.to_srgba();
+    Color::srgba(base.red, base.green, base.blue, blink_alpha)
+}
+
+/// 檢查是否為低彈藥狀態
+fn is_low_ammo_state(current: usize, max: usize, is_reloading: bool) -> bool {
+    max > 0 && current < (max as f32 * 0.25).ceil() as usize && !is_reloading
 }
 
 /// 更新彈藥視覺化網格（子彈圖示）
@@ -3620,19 +3647,8 @@ pub fn update_ammo_visual_grid(
 
     let current_ammo = weapon.current_ammo as usize;
     let magazine_size = weapon.stats.magazine_size as usize;
-
-    // 計算是否低彈藥（< 25%）- 用於閃爍效果
-    let is_low_ammo = magazine_size > 0
-        && current_ammo < (magazine_size as f32 * 0.25).ceil() as usize
-        && !weapon.is_reloading;
-
-    // 低彈藥閃爍動畫（使用 sin 函數）
-    let blink_alpha = if is_low_ammo {
-        let phase = time.elapsed_secs() * 8.0;
-        0.5 + 0.5 * phase.sin()
-    } else {
-        1.0
-    };
+    let is_low_ammo = is_low_ammo_state(current_ammo, magazine_size, weapon.is_reloading);
+    let blink_alpha = calculate_low_ammo_blink_alpha(time.elapsed_secs(), is_low_ammo);
 
     // 獲取網格中現有的子彈圖示數量
     let Ok(grid_entity) = grid_query.single() else { return; };
@@ -3669,24 +3685,45 @@ pub fn update_ammo_visual_grid(
     // 更新現有子彈圖示顏色
     for (mut bg, bullet) in bullet_query.iter_mut() {
         let is_filled = bullet.index < current_ammo;
-        if is_filled {
-            // 有彈藥時顯示金黃色（低彈量時閃爍）
-            if is_low_ammo {
-                let color = Color::srgba(
-                    BULLET_LOW_WARN.to_srgba().red,
-                    BULLET_LOW_WARN.to_srgba().green,
-                    BULLET_LOW_WARN.to_srgba().blue,
-                    blink_alpha,
-                );
-                *bg = BackgroundColor(color);
-            } else {
-                *bg = BackgroundColor(BULLET_FILLED);
-            }
-        } else {
-            // 已用完的子彈顯示暗灰色
-            *bg = BackgroundColor(BULLET_EMPTY);
-        }
+        *bg = BackgroundColor(get_bullet_icon_color(is_filled, is_low_ammo, blink_alpha));
     }
+}
+
+/// 計算武器切換動畫的兩階段淡入淡出透明度
+fn calculate_switch_opacity(progress: f32) -> f32 {
+    if progress < 0.5 {
+        1.0 - (progress * 2.0)
+    } else {
+        (progress - 0.5) * 2.0
+    }
+}
+
+/// 計算武器槽位的亮度脈衝
+fn calculate_slot_brightness(ease_out: f32) -> f32 {
+    0.7 + (ease_out * std::f32::consts::PI).sin() * 0.3
+}
+
+/// 應用亮度到顏色
+fn apply_brightness_to_color(color: Color, brightness: f32) -> Color {
+    let base = color.to_srgba();
+    Color::srgba(
+        (base.red * brightness).min(1.0),
+        (base.green * brightness).min(1.0),
+        (base.blue * brightness).min(1.0),
+        base.alpha,
+    )
+}
+
+/// 更新切換動畫進度，回傳 (是否繼續動畫, 透明度, ease_out)
+fn update_switch_animation_progress(anim: &mut WeaponSwitchAnimation, dt: f32) -> Option<(f32, f32)> {
+    anim.progress += dt / anim.duration;
+    if anim.progress >= 1.0 {
+        anim.is_switching = false;
+        anim.progress = 1.0;
+        return None;
+    }
+    let p = anim.progress;
+    Some((calculate_switch_opacity(p), 1.0 - (1.0 - p).powi(2)))
 }
 
 /// 更新武器切換動畫（簡化版：只做透明度和縮放，不做位置變化）
@@ -3705,70 +3742,32 @@ pub fn update_weapon_switch_animation(
     mut slot_query: Query<&mut BackgroundColor, (With<WeaponSlot>, Without<WeaponDisplay>, Without<WeaponDisplayShadow>)>,
 ) {
     let Ok(inventory) = player_query.single() else { return; };
-    let current_index = inventory.current_index;
 
     // 檢測武器切換
-    if current_index != switch_anim.last_weapon_index {
+    if inventory.current_index != switch_anim.last_weapon_index {
         switch_anim.is_switching = true;
         switch_anim.progress = 0.0;
-        switch_anim.last_weapon_index = current_index;
+        switch_anim.last_weapon_index = inventory.current_index;
     }
 
-    // 如果正在切換動畫中
-    if switch_anim.is_switching {
-        let dt = time.delta_secs();
-        switch_anim.progress += dt / switch_anim.duration;
+    if !switch_anim.is_switching { return; }
 
-        if switch_anim.progress >= 1.0 {
-            // 動畫完成
-            switch_anim.is_switching = false;
-            switch_anim.progress = 1.0;
-            return;
-        }
+    let Some((opacity, ease_out)) = update_switch_animation_progress(&mut switch_anim, time.delta_secs()) else {
+        return;
+    };
 
-        // 計算動畫曲線
-        let p = switch_anim.progress;
-        let ease_out = 1.0 - (1.0 - p).powi(2);
+    // 應用透明度到文字和陰影
+    let shadow_alpha = opacity * 0.65;
+    for mut c in weapon_display_query.iter_mut() { c.0 = c.0.with_alpha(opacity); }
+    for mut c in weapon_shadow_query.iter_mut() { c.0 = c.0.with_alpha(shadow_alpha); }
+    for mut c in current_ammo_query.iter_mut() { c.0 = c.0.with_alpha(opacity); }
+    for mut c in current_shadow_query.iter_mut() { c.0 = c.0.with_alpha(shadow_alpha); }
+    for mut c in reserve_ammo_query.iter_mut() { c.0 = c.0.with_alpha(opacity); }
+    for mut c in reserve_shadow_query.iter_mut() { c.0 = c.0.with_alpha(shadow_alpha); }
 
-        // 動畫分兩階段：0~0.5 淡出，0.5~1.0 淡入
-        let opacity = if p < 0.5 {
-            1.0 - (p * 2.0)
-        } else {
-            (p - 0.5) * 2.0
-        };
-
-        // 應用透明度到所有文字
-        for mut color in weapon_display_query.iter_mut() {
-            color.0 = color.0.with_alpha(opacity);
-        }
-        for mut color in weapon_shadow_query.iter_mut() {
-            color.0 = color.0.with_alpha(opacity * 0.65);
-        }
-        for mut color in current_ammo_query.iter_mut() {
-            color.0 = color.0.with_alpha(opacity);
-        }
-        for mut color in current_shadow_query.iter_mut() {
-            color.0 = color.0.with_alpha(opacity * 0.65);
-        }
-        for mut color in reserve_ammo_query.iter_mut() {
-            color.0 = color.0.with_alpha(opacity);
-        }
-        for mut color in reserve_shadow_query.iter_mut() {
-            color.0 = color.0.with_alpha(opacity * 0.65);
-        }
-
-        // 武器槽位亮度脈衝
-        let brightness = 0.7 + (ease_out * std::f32::consts::PI).sin() * 0.3;
-        for mut bg in slot_query.iter_mut() {
-            let base = bg.0.to_srgba();
-            bg.0 = Color::srgba(
-                (base.red * brightness).min(1.0),
-                (base.green * brightness).min(1.0),
-                (base.blue * brightness).min(1.0),
-                base.alpha,
-            );
-        }
-    }
+    // 武器槽位亮度脈衝
+    let brightness = calculate_slot_brightness(ease_out);
+    for mut bg in slot_query.iter_mut() { bg.0 = apply_brightness_to_color(bg.0, brightness); }
 }
 
 // ============================================================================
@@ -4107,6 +4106,21 @@ const CROSSHAIR_HIT_BOUNCE_RECOVERY: f32 = 8.0;
 
 // === GTA 風格 HUD 動畫系統 ===
 
+/// 將動畫相位環繞到 0..TAU 範圍
+fn wrap_animation_phase(phase: &mut f32) {
+    if *phase > std::f32::consts::TAU {
+        *phase -= std::f32::consts::TAU;
+    }
+}
+
+/// 計算低血量發光強度
+fn calculate_low_health_glow_intensity(pulse_phase: f32, health_percent: f32) -> f32 {
+    let pulse = (pulse_phase.sin() + 1.0) * 0.5;
+    let glow_intensity = LOW_HEALTH_GLOW_MIN + (LOW_HEALTH_GLOW_MAX - LOW_HEALTH_GLOW_MIN) * pulse;
+    let health_factor = 1.0 - (health_percent / LOW_HEALTH_THRESHOLD);
+    glow_intensity * health_factor
+}
+
 /// 更新 HUD 動畫狀態（低血量脈衝、小地圖掃描）
 pub fn update_hud_animations(
     time: Res<Time>,
@@ -4121,28 +4135,18 @@ pub fn update_hud_animations(
     // === 低血量脈衝動畫 ===
     if let Ok(health) = player_query.single() {
         let health_percent = health.percentage();
+        let is_low_health = health_percent < LOW_HEALTH_THRESHOLD && !health.is_dead();
 
-        if health_percent < LOW_HEALTH_THRESHOLD && !health.is_dead() {
-            // 更新脈衝相位
+        if is_low_health {
             anim_state.low_health_pulse_phase += LOW_HEALTH_PULSE_SPEED * dt;
-            if anim_state.low_health_pulse_phase > std::f32::consts::TAU {
-                anim_state.low_health_pulse_phase -= std::f32::consts::TAU;
-            }
-
-            // 計算脈衝強度（正弦波）
-            let pulse = (anim_state.low_health_pulse_phase.sin() + 1.0) * 0.5;
-            let glow_intensity = LOW_HEALTH_GLOW_MIN + (LOW_HEALTH_GLOW_MAX - LOW_HEALTH_GLOW_MIN) * pulse;
-
-            // 根據血量百分比調整脈衝強度（血越低，脈衝越強）
-            let health_factor = 1.0 - (health_percent / LOW_HEALTH_THRESHOLD);
-            let final_intensity = glow_intensity * health_factor;
-
-            // 應用到血量條外發光
+            wrap_animation_phase(&mut anim_state.low_health_pulse_phase);
+            let final_intensity = calculate_low_health_glow_intensity(
+                anim_state.low_health_pulse_phase, health_percent
+            );
             for mut bg in health_glow_query.iter_mut() {
                 *bg = BackgroundColor(Color::srgba(0.8, 0.15, 0.1, final_intensity));
             }
         } else {
-            // 血量正常，隱藏外發光
             anim_state.low_health_pulse_phase = 0.0;
             for mut bg in health_glow_query.iter_mut() {
                 *bg = BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0));
@@ -4152,26 +4156,18 @@ pub fn update_hud_animations(
 
     // === 小地圖掃描線動畫 ===
     anim_state.minimap_scan_position += MINIMAP_SCAN_SPEED * dt;
-    if anim_state.minimap_scan_position > 1.0 {
-        anim_state.minimap_scan_position -= 1.0;
-    }
-
-    // 更新掃描線位置（從上到下）
+    if anim_state.minimap_scan_position > 1.0 { anim_state.minimap_scan_position -= 1.0; }
     for mut node in minimap_scan_query.iter_mut() {
         node.top = Val::Percent(anim_state.minimap_scan_position * 100.0);
     }
 
     // === 玩家標記脈衝動畫 ===
     anim_state.player_marker_pulse_phase += PLAYER_MARKER_PULSE_SPEED * dt;
-    if anim_state.player_marker_pulse_phase > std::f32::consts::TAU {
-        anim_state.player_marker_pulse_phase -= std::f32::consts::TAU;
-    }
-
+    wrap_animation_phase(&mut anim_state.player_marker_pulse_phase);
     let marker_pulse = (anim_state.player_marker_pulse_phase.sin() + 1.0) * 0.5;
-    let marker_glow_alpha = 0.15 + marker_pulse * 0.2;  // 較淡的白色脈衝
-
+    let marker_glow_alpha = 0.15 + marker_pulse * 0.2;
     for mut bg in player_glow_query.iter_mut() {
-        *bg = BackgroundColor(Color::srgba(1.0, 1.0, 1.0, marker_glow_alpha));  // 白色脈衝
+        *bg = BackgroundColor(Color::srgba(1.0, 1.0, 1.0, marker_glow_alpha));
     }
 }
 
@@ -4750,6 +4746,29 @@ fn weapon_slot_icon(slot: usize) -> &'static str {
     }
 }
 
+/// 取得武器輪盤顯示資訊（名稱、彈藥）
+fn get_wheel_weapon_info(inventory: &WeaponInventory, slot_index: usize) -> (String, String) {
+    if slot_index < inventory.weapons.len() {
+        let weapon = &inventory.weapons[slot_index];
+        let name = weapon.stats.weapon_type.name().to_string();
+        let ammo = if weapon.stats.magazine_size == 0 {
+            "∞".to_string()
+        } else {
+            format!("{} / {}", weapon.current_ammo, weapon.reserve_ammo)
+        };
+        (name, ammo)
+    } else {
+        ("空槽位".to_string(), "-".to_string())
+    }
+}
+
+/// 確認武器選擇並切換
+fn confirm_weapon_selection(inventory: &mut WeaponInventory, selected_index: usize) {
+    if selected_index < inventory.weapons.len() {
+        inventory.current_index = selected_index;
+    }
+}
+
 /// 武器輪盤輸入系統
 pub fn weapon_wheel_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -4759,44 +4778,32 @@ pub fn weapon_wheel_input_system(
     windows: Query<&Window>,
     mut player_query: Query<&mut WeaponInventory, With<Player>>,
 ) {
-    // Tab 鍵控制武器輪盤
+    // Tab 鍵打開武器輪盤
     if keyboard.just_pressed(KeyCode::Tab) {
         ui_state.show_weapon_wheel = true;
         wheel_state.is_animating = true;
         wheel_state.open_progress = 0.0;
-        for mut vis in wheel_query.iter_mut() {
-            *vis = Visibility::Visible;
-        }
+        for mut vis in wheel_query.iter_mut() { *vis = Visibility::Visible; }
     }
 
+    // Tab 鍵釋放關閉並確認選擇
     if keyboard.just_released(KeyCode::Tab) {
-        // 確認選擇並關閉
         if ui_state.show_weapon_wheel {
-            // 切換到選中的武器
             if let Ok(mut inventory) = player_query.single_mut() {
-                let slot_index = wheel_state.selected_index;
-                if slot_index < inventory.weapons.len() {
-                    inventory.current_index = slot_index;
-                }
+                confirm_weapon_selection(&mut inventory, wheel_state.selected_index);
             }
         }
         ui_state.show_weapon_wheel = false;
-        for mut vis in wheel_query.iter_mut() {
-            *vis = Visibility::Hidden;
-        }
+        for mut vis in wheel_query.iter_mut() { *vis = Visibility::Hidden; }
     }
 
     // 更新滑鼠位置選擇
-    if ui_state.show_weapon_wheel {
-        if let Ok(window) = windows.single() {
-            if let Some(cursor_pos) = window.cursor_position() {
-                let center = Vec2::new(window.width() / 2.0, window.height() / 2.0);
-                let offset = cursor_pos - center;
-                // 注意：螢幕 Y 軸是向下的，需要翻轉
-                wheel_state.update_selection(Vec2::new(offset.x, -offset.y));
-            }
-        }
-    }
+    if !ui_state.show_weapon_wheel { return; }
+    let Ok(window) = windows.single() else { return; };
+    let Some(cursor_pos) = window.cursor_position() else { return; };
+    let center = Vec2::new(window.width() / 2.0, window.height() / 2.0);
+    let offset = cursor_pos - center;
+    wheel_state.update_selection(Vec2::new(offset.x, -offset.y));
 }
 
 /// 武器輪盤更新系統
@@ -4850,28 +4857,9 @@ pub fn weapon_wheel_update_system(
 
     // 更新中央資訊
     if let Ok(inventory) = player_query.single() {
-        let weapon_name;
-        let ammo_text;
-
-        if selected < inventory.weapons.len() {
-            let weapon = &inventory.weapons[selected];
-            weapon_name = weapon.stats.weapon_type.name().to_string();
-            if weapon.stats.magazine_size == 0 {
-                ammo_text = "∞".to_string();
-            } else {
-                ammo_text = format!("{} / {}", weapon.current_ammo, weapon.reserve_ammo);
-            }
-        } else {
-            weapon_name = "空槽位".to_string();
-            ammo_text = "-".to_string();
-        }
-
-        if let Ok(mut text) = name_query.single_mut() {
-            **text = weapon_name;
-        }
-        if let Ok(mut text) = ammo_query.single_mut() {
-            **text = ammo_text;
-        }
+        let (weapon_name, ammo_text) = get_wheel_weapon_info(inventory, selected);
+        if let Ok(mut text) = name_query.single_mut() { **text = weapon_name; }
+        if let Ok(mut text) = ammo_query.single_mut() { **text = ammo_text; }
     }
 }
 
@@ -5146,6 +5134,22 @@ pub fn setup_gps_ui(
     });
 }
 
+/// 計算玩家面向方向與目標方向的夾角
+fn calculate_gps_direction_angle(player_forward: Vec3, to_dest: Vec3) -> f32 {
+    let to_dest_normalized = Vec3::new(to_dest.x, 0.0, to_dest.z).normalize_or_zero();
+    let player_forward_xz = Vec3::new(player_forward.x, 0.0, player_forward.z).normalize_or_zero();
+    player_forward_xz.x.atan2(player_forward_xz.z) - to_dest_normalized.x.atan2(to_dest_normalized.z)
+}
+
+/// 格式化 GPS 距離顯示
+fn format_gps_distance(distance_xz: f32) -> String {
+    if distance_xz >= 1000.0 {
+        format!("{:.1} km", distance_xz / 1000.0)
+    } else {
+        format!("{:.0} m", distance_xz)
+    }
+}
+
 /// 更新 GPS 導航狀態
 pub fn update_gps_navigation(
     time: Res<Time>,
@@ -5165,25 +5169,14 @@ pub fn update_gps_navigation(
     }
 
     // 如果導航未啟用，隱藏 UI
-    let Some(destination) = gps.destination else {
-        for (mut vis, _, _) in arrow_query.iter_mut() {
-            *vis = Visibility::Hidden;
-        }
-        for (mut vis, _) in distance_query.iter_mut() {
-            *vis = Visibility::Hidden;
-        }
-        return;
-    };
-
-    if !gps.active {
-        for (mut vis, _, _) in arrow_query.iter_mut() {
-            *vis = Visibility::Hidden;
-        }
-        for (mut vis, _) in distance_query.iter_mut() {
-            *vis = Visibility::Hidden;
-        }
+    let should_hide = gps.destination.is_none() || !gps.active;
+    if should_hide {
+        for (mut vis, _, _) in arrow_query.iter_mut() { *vis = Visibility::Hidden; }
+        for (mut vis, _) in distance_query.iter_mut() { *vis = Visibility::Hidden; }
         return;
     }
+
+    let destination = gps.destination.unwrap();
 
     // 計算距離和方向
     let to_dest = destination - player_pos;
@@ -5196,35 +5189,20 @@ pub fn update_gps_navigation(
         return;
     }
 
-    // 計算方向角度
-    let to_dest_normalized = Vec3::new(to_dest.x, 0.0, to_dest.z).normalize_or_zero();
-    let player_forward_xz = Vec3::new(player_forward.x, 0.0, player_forward.z).normalize_or_zero();
-
-    // 計算玩家面向方向與目標方向的夾角
-    let angle = player_forward_xz.x.atan2(player_forward_xz.z) - to_dest_normalized.x.atan2(to_dest_normalized.z);
-
-    // 更新方向箭頭
+    // 計算方向角度並更新箭頭
+    let angle = calculate_gps_direction_angle(player_forward, to_dest);
     for (mut vis, mut transform, _children) in arrow_query.iter_mut() {
         *vis = Visibility::Visible;
         transform.rotation = Quat::from_rotation_z(angle);
     }
 
     // 更新距離顯示
+    let distance_str = format_gps_distance(distance_xz);
     for (mut vis, children) in distance_query.iter_mut() {
         *vis = Visibility::Visible;
-
-        // 格式化距離
-        let distance_str = if distance_xz >= 1000.0 {
-            format!("{:.1} km", distance_xz / 1000.0)
-        } else {
-            format!("{:.0} m", distance_xz)
-        };
-
-        // 更新文字
         for child in children.iter() {
-            if let Ok(mut text) = text_query.get_mut(child) {
-                **text = distance_str.clone();
-            }
+            let Ok(mut text) = text_query.get_mut(child) else { continue };
+            **text = distance_str.clone();
         }
     }
 }
@@ -5293,48 +5271,54 @@ pub fn update_minimap_gps_marker(
     });
 }
 
-/// 處理任務開始時自動設置 GPS 目標
-pub fn gps_mission_integration(
-    mut gps: ResMut<GpsNavigationState>,
-    mission_manager: Res<crate::mission::MissionManager>,
-) {
-    // 當有活動任務時，設置 GPS 到任務目標
-    if let Some(mission) = &mission_manager.active_mission {
-        if !gps.active {
-            // 根據任務類型設置目標位置
-            match mission.data.mission_type {
-                crate::mission::MissionType::Delivery => {
-                    // 外送任務：使用 end_pos 作為目的地
-                    gps.set_destination(mission.data.end_pos, "送貨目的地");
-                }
-                crate::mission::MissionType::Taxi => {
-                    // 計程車任務：根據是否已接到乘客決定目的地
-                    if let Some(taxi_data) = &mission.data.taxi_data {
-                        if taxi_data.passenger_picked_up {
-                            gps.set_destination(mission.data.end_pos, &taxi_data.destination_name);
-                        } else {
-                            gps.set_destination(mission.data.start_pos, "接乘客");
-                        }
-                    }
-                }
-                crate::mission::MissionType::Race => {
-                    // 競速任務：導航到當前檢查點
-                    if let Some(race_data) = &mission.data.race_data {
-                        if let Some(cp) = race_data.current_checkpoint_pos() {
-                            gps.set_destination(cp, &format!("檢查點 {}", race_data.current_checkpoint + 1));
-                        }
-                    }
-                }
-                crate::mission::MissionType::Explore => {
-                    // 探索任務：直接設置終點
-                    gps.set_destination(mission.data.end_pos, "目標位置");
+/// 根據任務類型設置 GPS 目標
+fn set_gps_for_mission(gps: &mut GpsNavigationState, mission: &crate::mission::ActiveMission) {
+    let data = &mission.data;
+
+    match data.mission_type {
+        MissionType::Delivery => {
+            gps.set_destination(data.end_pos, "送貨目的地");
+        }
+        MissionType::Taxi => {
+            if let Some(taxi_data) = &data.taxi_data {
+                let (pos, name) = if taxi_data.passenger_picked_up {
+                    (data.end_pos, taxi_data.destination_name.as_str())
+                } else {
+                    (data.start_pos, "接乘客")
+                };
+                gps.set_destination(pos, name);
+            }
+        }
+        MissionType::Race => {
+            if let Some(race_data) = &data.race_data {
+                if let Some(cp) = race_data.current_checkpoint_pos() {
+                    gps.set_destination(cp, &format!("檢查點 {}", race_data.current_checkpoint + 1));
                 }
             }
         }
-    } else if gps.active && (gps.destination_name.contains("目的地")
-                            || gps.destination_name.contains("檢查點")
-                            || gps.destination_name.contains("乘客")) {
-        // 任務結束，清除自動設置的 GPS
+        MissionType::Explore => {
+            gps.set_destination(data.end_pos, "目標位置");
+        }
+    }
+}
+
+/// 檢查是否應該清除任務導航
+fn should_clear_mission_gps(destination_name: &str) -> bool {
+    destination_name.contains("目的地")
+        || destination_name.contains("檢查點")
+        || destination_name.contains("乘客")
+}
+
+/// 處理任務開始時自動設置 GPS 目標
+pub fn gps_mission_integration(
+    mut gps: ResMut<GpsNavigationState>,
+    mission_manager: Res<MissionManager>,
+) {
+    if let Some(mission) = &mission_manager.active_mission {
+        if !gps.active {
+            set_gps_for_mission(&mut gps, mission);
+        }
+    } else if gps.active && should_clear_mission_gps(&gps.destination_name) {
         gps.clear();
     }
 }
@@ -5465,6 +5449,46 @@ pub fn setup_story_mission_hud(
     });
 }
 
+/// 格式化任務計時器文字
+fn format_mission_timer(time_remaining: Option<f32>) -> String {
+    match time_remaining {
+        Some(remaining) => {
+            let mins = (remaining / 60.0).floor() as u32;
+            let secs = (remaining % 60.0).floor() as u32;
+            format!("⏱ {:02}:{:02}", mins, secs)
+        }
+        None => String::new(),
+    }
+}
+
+/// 取得目標勾選框狀態
+fn get_objective_check_state(is_completed: bool) -> (&'static str, Color) {
+    if is_completed {
+        (STORY_HUD_CHECK_DONE, STORY_HUD_OBJECTIVE_DONE)
+    } else {
+        (STORY_HUD_CHECK_EMPTY, STORY_HUD_OBJECTIVE_COLOR)
+    }
+}
+
+/// 格式化目標文字
+fn format_objective_text(description: &str, current_count: u32, target_count: u32) -> String {
+    if target_count > 1 {
+        format!("{} ({}/{})", description, current_count, target_count)
+    } else {
+        description.to_string()
+    }
+}
+
+/// 取得目標文字顏色
+fn get_objective_text_color(is_completed: bool) -> Color {
+    if is_completed { STORY_HUD_OBJECTIVE_DONE } else { STORY_HUD_OBJECTIVE_COLOR }
+}
+
+/// 根據條件取得可見度
+fn visibility_from_bool(visible: bool) -> Visibility {
+    if visible { Visibility::Visible } else { Visibility::Hidden }
+}
+
 /// 更新劇情任務 HUD
 pub fn update_story_mission_hud(
     story_manager: Res<StoryMissionManager>,
@@ -5477,81 +5501,35 @@ pub fn update_story_mission_hud(
     mut check_query: Query<(&mut Text, &mut TextColor, &StoryMissionObjectiveCheck), (Without<StoryMissionTitle>, Without<StoryMissionPhaseText>, Without<StoryMissionTimer>, Without<StoryMissionObjectiveText>)>,
     mut text_query: Query<(&mut Text, &mut TextColor, &StoryMissionObjectiveText), (Without<StoryMissionTitle>, Without<StoryMissionPhaseText>, Without<StoryMissionTimer>, Without<StoryMissionObjectiveCheck>)>,
 ) {
-    // 取得當前任務資訊
     let mission_info = get_current_mission_info(&story_manager, &story_database);
+    let hud_visible = visibility_from_bool(mission_info.is_some());
+    for mut visibility in &mut hud_query { *visibility = hud_visible; }
 
-    // 更新 HUD 可見度
-    for mut visibility in &mut hud_query {
-        *visibility = if mission_info.is_some() {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
-    }
+    let Some(info) = mission_info else { return };
 
-    let Some(info) = mission_info else {
-        return;
-    };
+    // 更新標題、階段、計時器
+    if let Ok(mut t) = title_query.single_mut() { **t = info.title; }
+    if let Ok(mut t) = phase_query.single_mut() { **t = info.phase_description; }
+    if let Ok(mut t) = timer_query.single_mut() { **t = format_mission_timer(info.time_remaining); }
 
-    // 更新標題
-    if let Ok(mut title) = title_query.single_mut() {
-        **title = info.title;
-    }
+    // 更新目標列表可見度
+    let obj_count = info.objectives.len();
+    for (mut vis, item) in &mut item_query { *vis = visibility_from_bool(item.index < obj_count); }
 
-    // 更新階段描述
-    if let Ok(mut phase) = phase_query.single_mut() {
-        **phase = info.phase_description;
-    }
-
-    // 更新計時器
-    if let Ok(mut timer) = timer_query.single_mut() {
-        if let Some(remaining) = info.time_remaining {
-            let mins = (remaining / 60.0).floor() as u32;
-            let secs = (remaining % 60.0).floor() as u32;
-            **timer = format!("⏱ {:02}:{:02}", mins, secs);
-        } else {
-            **timer = String::new();
-        }
-    }
-
-    // 更新目標列表
-    for (mut visibility, item) in &mut item_query {
-        if item.index < info.objectives.len() {
-            *visibility = Visibility::Visible;
-        } else {
-            *visibility = Visibility::Hidden;
-        }
-    }
-
-    // 更新勾選框和文字
+    // 更新勾選框
     for (mut check_text, mut check_color, check) in &mut check_query {
-        if check.index < info.objectives.len() {
-            let obj = &info.objectives[check.index];
-            if obj.is_completed {
-                **check_text = STORY_HUD_CHECK_DONE.to_string();
-                check_color.0 = STORY_HUD_OBJECTIVE_DONE;
-            } else {
-                **check_text = STORY_HUD_CHECK_EMPTY.to_string();
-                check_color.0 = STORY_HUD_OBJECTIVE_COLOR;
-            }
+        if let Some(obj) = info.objectives.get(check.index) {
+            let (text, color) = get_objective_check_state(obj.is_completed);
+            **check_text = text.to_string();
+            check_color.0 = color;
         }
     }
 
+    // 更新目標文字
     for (mut obj_text, mut obj_color, text_comp) in &mut text_query {
-        if text_comp.index < info.objectives.len() {
-            let obj = &info.objectives[text_comp.index];
-            // 顯示目標描述及進度
-            if obj.target_count > 1 {
-                **obj_text = format!("{} ({}/{})", obj.description, obj.current_count, obj.target_count);
-            } else {
-                **obj_text = obj.description.clone();
-            }
-
-            if obj.is_completed {
-                obj_color.0 = STORY_HUD_OBJECTIVE_DONE;
-            } else {
-                obj_color.0 = STORY_HUD_OBJECTIVE_COLOR;
-            }
+        if let Some(obj) = info.objectives.get(text_comp.index) {
+            **obj_text = format_objective_text(&obj.description, obj.current_count, obj.target_count);
+            obj_color.0 = get_objective_text_color(obj.is_completed);
         }
     }
 }

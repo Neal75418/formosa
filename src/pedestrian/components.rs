@@ -46,6 +46,10 @@ pub struct PedestrianState {
     pub flee_timer: f32,
     /// 最後威脅位置
     pub last_threat_pos: Option<Vec3>,
+    /// 卡住計時器（用於檢測行人是否卡在障礙物）
+    pub stuck_timer: f32,
+    /// 上一次記錄的位置（用於卡住檢測）
+    pub last_recorded_pos: Vec3,
 }
 
 impl Default for PedestrianState {
@@ -55,6 +59,8 @@ impl Default for PedestrianState {
             fear_level: 0.0,
             flee_timer: 0.0,
             last_threat_pos: None,
+            stuck_timer: 0.0,
+            last_recorded_pos: Vec3::ZERO,
         }
     }
 }
@@ -321,10 +327,10 @@ pub struct PedestrianConfig {
 impl Default for PedestrianConfig {
     fn default() -> Self {
         Self {
-            max_count: 30,
-            spawn_radius: 50.0,
-            despawn_radius: 80.0,
-            spawn_interval: 2.0,
+            max_count: 12,          // 減少：避免太多行人漫無目的
+            spawn_radius: 40.0,     // 縮小：只在玩家附近生成
+            despawn_radius: 60.0,   // 縮小：更快清除遠處行人
+            spawn_interval: 4.0,    // 增加：減緩生成速度
             spawn_timer: 0.0,
             walk_speed: 2.0,
             flee_speed: 5.0,
@@ -605,6 +611,78 @@ pub struct HitByVehicle {
 // A* 尋路系統
 // ============================================================================
 
+use std::collections::{BinaryHeap, HashMap};
+use std::cmp::Ordering;
+
+/// A* 節點（用於優先佇列）
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct AStarNode {
+    pos: (usize, usize),
+    f_cost: i32,
+}
+
+impl Ord for AStarNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.f_cost.cmp(&self.f_cost) // 反向以取得最小堆
+    }
+}
+
+impl PartialOrd for AStarNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// A* 四方向與對角線移動
+const ASTAR_DIRECTIONS: [(i32, i32); 8] = [
+    (-1, 0), (1, 0), (0, -1), (0, 1),  // 四方向
+    (-1, -1), (-1, 1), (1, -1), (1, 1), // 對角線
+];
+
+/// 計算曼哈頓距離啟發式
+fn astar_heuristic(pos: (usize, usize), goal: (usize, usize)) -> i32 {
+    let dx = (pos.0 as i32 - goal.0 as i32).abs();
+    let dz = (pos.1 as i32 - goal.1 as i32).abs();
+    (dx + dz) * 10
+}
+
+/// 簡化路徑（移除共線點）
+fn simplify_path(path: Vec<Vec3>) -> Vec<Vec3> {
+    if path.len() <= 2 {
+        return path;
+    }
+
+    let mut simplified = vec![path[0]];
+    for i in 1..path.len() - 1 {
+        let prev_dir = (path[i] - path[i - 1]).normalize_or_zero();
+        let next_dir = (path[i + 1] - path[i]).normalize_or_zero();
+        if prev_dir.dot(next_dir) < 0.99 {
+            simplified.push(path[i]);
+        }
+    }
+    simplified.push(*path.last().unwrap());
+    simplified
+}
+
+/// 重建 A* 路徑
+fn reconstruct_path(
+    came_from: &HashMap<(usize, usize), (usize, usize)>,
+    goal_grid: (usize, usize),
+    grid: &PathfindingGrid,
+) -> Vec<Vec3> {
+    let mut path = Vec::new();
+    let mut pos = goal_grid;
+    path.push(grid.grid_to_world(pos.0, pos.1));
+
+    while let Some(&prev) = came_from.get(&pos) {
+        pos = prev;
+        path.push(grid.grid_to_world(pos.0, pos.1));
+    }
+
+    path.reverse();
+    simplify_path(path)
+}
+
 /// A* 尋路網格配置
 #[derive(Resource)]
 pub struct PathfindingGrid {
@@ -682,124 +760,98 @@ impl PathfindingGrid {
         }
     }
 
+    /// 檢查對角線移動是否有效（鄰近格子需可通行）
+    fn is_diagonal_valid(&self, current: (usize, usize), neighbor: (usize, usize)) -> bool {
+        self.is_walkable(current.0, neighbor.1) && self.is_walkable(neighbor.0, current.1)
+    }
+
+    /// 計算鄰居座標（若有效）
+    fn get_neighbor(&self, current: (usize, usize), dx: i32, dz: i32) -> Option<(usize, usize)> {
+        let nx = current.0 as i32 + dx;
+        let nz = current.1 as i32 + dz;
+
+        if nx < 0 || nz < 0 {
+            return None;
+        }
+
+        let neighbor = (nx as usize, nz as usize);
+
+        if !self.is_walkable(neighbor.0, neighbor.1) {
+            return None;
+        }
+
+        // 對角線移動需要鄰近格子也可通行
+        let is_diagonal = dx != 0 && dz != 0;
+        if is_diagonal && !self.is_diagonal_valid(current, neighbor) {
+            return None;
+        }
+
+        Some(neighbor)
+    }
+
     /// A* 尋路
     pub fn find_path(&self, start: Vec3, goal: Vec3) -> Option<Vec<Vec3>> {
         let start_grid = self.world_to_grid(start)?;
         let goal_grid = self.world_to_grid(goal)?;
-
-        // 使用簡單的 A* 實現
-        use std::collections::{BinaryHeap, HashMap};
-        use std::cmp::Ordering;
-
-        #[derive(Clone, Copy, Eq, PartialEq)]
-        struct Node {
-            pos: (usize, usize),
-            f_cost: i32,
-        }
-
-        impl Ord for Node {
-            fn cmp(&self, other: &Self) -> Ordering {
-                other.f_cost.cmp(&self.f_cost) // 反向以取得最小堆
-            }
-        }
-
-        impl PartialOrd for Node {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                Some(self.cmp(other))
-            }
-        }
-
-        let heuristic = |pos: (usize, usize)| -> i32 {
-            let dx = (pos.0 as i32 - goal_grid.0 as i32).abs();
-            let dz = (pos.1 as i32 - goal_grid.1 as i32).abs();
-            (dx + dz) * 10 // 曼哈頓距離
-        };
 
         let mut open_set = BinaryHeap::new();
         let mut came_from: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
         let mut g_score: HashMap<(usize, usize), i32> = HashMap::new();
 
         g_score.insert(start_grid, 0);
-        open_set.push(Node {
+        open_set.push(AStarNode {
             pos: start_grid,
-            f_cost: heuristic(start_grid),
+            f_cost: astar_heuristic(start_grid, goal_grid),
         });
-
-        let directions = [
-            (-1i32, 0i32), (1, 0), (0, -1), (0, 1),  // 四方向
-            (-1, -1), (-1, 1), (1, -1), (1, 1),      // 對角線
-        ];
 
         while let Some(current) = open_set.pop() {
             if current.pos == goal_grid {
-                // 重建路徑
-                let mut path = Vec::new();
-                let mut pos = goal_grid;
-                path.push(self.grid_to_world(pos.0, pos.1));
-
-                while let Some(&prev) = came_from.get(&pos) {
-                    pos = prev;
-                    path.push(self.grid_to_world(pos.0, pos.1));
-                }
-
-                path.reverse();
-
-                // 簡化路徑（移除共線點）
-                if path.len() > 2 {
-                    let mut simplified = vec![path[0]];
-                    for i in 1..path.len() - 1 {
-                        let prev_dir = (path[i] - path[i - 1]).normalize_or_zero();
-                        let next_dir = (path[i + 1] - path[i]).normalize_or_zero();
-                        if prev_dir.dot(next_dir) < 0.99 {
-                            simplified.push(path[i]);
-                        }
-                    }
-                    simplified.push(*path.last().unwrap());
-                    return Some(simplified);
-                }
-
-                return Some(path);
+                return Some(reconstruct_path(&came_from, goal_grid, self));
             }
 
-            let current_g = *g_score.get(&current.pos).unwrap_or(&i32::MAX);
-
-            for (dx, dz) in directions.iter() {
-                let nx = current.pos.0 as i32 + dx;
-                let nz = current.pos.1 as i32 + dz;
-
-                if nx < 0 || nz < 0 {
-                    continue;
-                }
-
-                let neighbor = (nx as usize, nz as usize);
-
-                if !self.is_walkable(neighbor.0, neighbor.1) {
-                    continue;
-                }
-
-                // 對角線移動需要鄰近格子也可通行
-                if *dx != 0 && *dz != 0 {
-                    if !self.is_walkable(current.pos.0, neighbor.1)
-                        || !self.is_walkable(neighbor.0, current.pos.1) {
-                        continue;
-                    }
-                }
-
-                let move_cost = if *dx != 0 && *dz != 0 { 14 } else { 10 };
-                let tentative_g = current_g + move_cost;
-
-                if tentative_g < *g_score.get(&neighbor).unwrap_or(&i32::MAX) {
-                    came_from.insert(neighbor, current.pos);
-                    g_score.insert(neighbor, tentative_g);
-                    open_set.push(Node {
-                        pos: neighbor,
-                        f_cost: tentative_g + heuristic(neighbor),
-                    });
-                }
-            }
+            self.explore_neighbors(
+                current.pos,
+                goal_grid,
+                &mut open_set,
+                &mut came_from,
+                &mut g_score,
+            );
         }
 
-        None // 找不到路徑
+        None
+    }
+
+    /// 探索當前節點的所有鄰居
+    fn explore_neighbors(
+        &self,
+        current_pos: (usize, usize),
+        goal_grid: (usize, usize),
+        open_set: &mut BinaryHeap<AStarNode>,
+        came_from: &mut HashMap<(usize, usize), (usize, usize)>,
+        g_score: &mut HashMap<(usize, usize), i32>,
+    ) {
+        let current_g = *g_score.get(&current_pos).unwrap_or(&i32::MAX);
+
+        for (dx, dz) in ASTAR_DIRECTIONS.iter() {
+            let Some(neighbor) = self.get_neighbor(current_pos, *dx, *dz) else {
+                continue;
+            };
+
+            let is_diagonal = *dx != 0 && *dz != 0;
+            let move_cost = if is_diagonal { 14 } else { 10 };
+            let tentative_g = current_g + move_cost;
+
+            if tentative_g >= *g_score.get(&neighbor).unwrap_or(&i32::MAX) {
+                continue;
+            }
+
+            came_from.insert(neighbor, current_pos);
+            g_score.insert(neighbor, tentative_g);
+            open_set.push(AStarNode {
+                pos: neighbor,
+                f_cost: tentative_g + astar_heuristic(neighbor, goal_grid),
+            });
+        }
     }
 }
 

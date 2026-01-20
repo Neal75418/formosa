@@ -27,63 +27,59 @@ pub enum EasingType {
     EaseInOutExpo,
 }
 
+// === 緩動輔助函數 ===
+
+/// 二次/三次緩動 in-out 共用邏輯
+#[inline]
+fn ease_in_out_power(t: f32, power: i32) -> f32 {
+    if t < 0.5 {
+        (2.0_f32.powi(power - 1)) * t.powi(power)
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(power) / 2.0
+    }
+}
+
+/// 指數緩動 in
+#[inline]
+fn ease_in_expo(t: f32) -> f32 {
+    if t == 0.0 { 0.0 } else { 2.0_f32.powf(10.0 * t - 10.0) }
+}
+
+/// 指數緩動 out
+#[inline]
+fn ease_out_expo(t: f32) -> f32 {
+    if t == 1.0 { 1.0 } else { 1.0 - 2.0_f32.powf(-10.0 * t) }
+}
+
+/// 指數緩動 in-out
+#[inline]
+fn ease_in_out_expo(t: f32) -> f32 {
+    if t == 0.0 {
+        0.0
+    } else if t == 1.0 {
+        1.0
+    } else if t < 0.5 {
+        2.0_f32.powf(20.0 * t - 10.0) / 2.0
+    } else {
+        (2.0 - 2.0_f32.powf(-20.0 * t + 10.0)) / 2.0
+    }
+}
+
 impl EasingType {
     /// 計算緩動值（輸入 0.0-1.0，輸出 0.0-1.0）
     pub fn evaluate(&self, t: f32) -> f32 {
         match self {
             Self::Linear => t,
-            Self::EaseIn => t * t,
+            Self::EaseIn | Self::EaseInQuad => t * t,
             Self::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
-            Self::EaseInOut => {
-                if t < 0.5 {
-                    2.0 * t * t
-                } else {
-                    1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
-                }
-            }
-            Self::EaseInQuad => t * t,
             Self::EaseOutQuad => 1.0 - (1.0 - t).powi(2),
-            Self::EaseInOutQuad => {
-                if t < 0.5 {
-                    2.0 * t * t
-                } else {
-                    1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
-                }
-            }
+            Self::EaseInOut | Self::EaseInOutQuad => ease_in_out_power(t, 2),
             Self::EaseInCubic => t * t * t,
             Self::EaseOutCubic => 1.0 - (1.0 - t).powi(3),
-            Self::EaseInOutCubic => {
-                if t < 0.5 {
-                    4.0 * t * t * t
-                } else {
-                    1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
-                }
-            }
-            Self::EaseInExpo => {
-                if t == 0.0 {
-                    0.0
-                } else {
-                    2.0_f32.powf(10.0 * t - 10.0)
-                }
-            }
-            Self::EaseOutExpo => {
-                if t == 1.0 {
-                    1.0
-                } else {
-                    1.0 - 2.0_f32.powf(-10.0 * t)
-                }
-            }
-            Self::EaseInOutExpo => {
-                if t == 0.0 {
-                    0.0
-                } else if t == 1.0 {
-                    1.0
-                } else if t < 0.5 {
-                    2.0_f32.powf(20.0 * t - 10.0) / 2.0
-                } else {
-                    (2.0 - 2.0_f32.powf(-20.0 * t + 10.0)) / 2.0
-                }
-            }
+            Self::EaseInOutCubic => ease_in_out_power(t, 3),
+            Self::EaseInExpo => ease_in_expo(t),
+            Self::EaseOutExpo => ease_out_expo(t),
+            Self::EaseInOutExpo => ease_in_out_expo(t),
         }
     }
 }

@@ -14,6 +14,68 @@ use crate::core::WorldTime;
 use crate::wanted::WantedLevel;
 
 // ============================================================================
+// 輔助函數
+// ============================================================================
+
+/// 檢查室內空間是否營業中
+fn is_interior_open(
+    door: &Door,
+    interior_query: &Query<&InteriorSpace>,
+    current_hour: f32,
+) -> bool {
+    door.interior_entity
+        .and_then(|entity| interior_query.get(entity).ok())
+        .map(|interior| interior.is_open(current_hour))
+        .unwrap_or(true)
+}
+
+/// 決定門的提示文字
+fn get_door_prompt(is_locked: bool, is_open: bool) -> &'static str {
+    if is_locked {
+        "🔒 已上鎖"
+    } else if !is_open {
+        "🚫 營業時間外"
+    } else {
+        "按 E 進入"
+    }
+}
+
+/// 嘗試進入室內空間
+fn try_enter_interior(
+    door: &mut Door,
+    interior_entity: Entity,
+    interior: &InteriorSpace,
+    interior_state: &mut PlayerInteriorState,
+    world_time: &WorldTime,
+    notifications: &mut NotificationQueue,
+) -> bool {
+    if !interior.is_open(world_time.hour) {
+        notifications.warning(format!("{} 營業時間外", interior.name));
+        return false;
+    }
+
+    notifications.success(format!("進入 {}", interior.name));
+    interior_state.is_inside = true;
+    interior_state.current_interior = Some(interior_entity);
+    door.state = DoorState::Opening;
+    true
+}
+
+/// 嘗試離開室內空間
+fn try_exit_interior(
+    interior_state: &mut PlayerInteriorState,
+    interior_query: &Query<&InteriorSpace>,
+    notifications: &mut NotificationQueue,
+) {
+    let Some(interior_entity) = interior_state.current_interior else { return };
+    let Ok(interior) = interior_query.get(interior_entity) else { return };
+
+    notifications.info(format!("離開 {}", interior.name));
+    interior_state.is_inside = false;
+    interior_state.current_interior = None;
+}
+
+// ============================================================================
 // 系統
 // ============================================================================
 
@@ -44,41 +106,26 @@ pub fn interior_proximity_system(
         let door_pos = door_transform.translation;
         let distance = player_pos.distance(door_pos);
 
-        if distance < door.interact_radius {
-            // 檢查是否營業中
-            let is_open = if let Some(interior_entity) = door.interior_entity {
-                if let Ok(interior) = interior_query.get(interior_entity) {
-                    interior.is_open(world_time.hour)
-                } else {
-                    true
-                }
-            } else {
-                true
-            };
-
-            // 顯示提示
-            let prompt_text = if door.is_locked {
-                "🔒 已上鎖"
-            } else if !is_open {
-                "🚫 營業時間外"
-            } else {
-                "按 E 進入"
-            };
-
-            // 在門上方生成提示文字
-            commands.spawn((
-                Text2d::new(prompt_text),
-                TextFont {
-                    font: font.font.clone(),
-                    font_size: 16.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(1.0, 1.0, 0.8)),
-                Transform::from_translation(door_pos + Vec3::Y * 2.5)
-                    .with_scale(Vec3::splat(0.015)),
-                InteriorPrompt,
-            ));
+        if distance >= door.interact_radius {
+            continue;
         }
+
+        let is_open = is_interior_open(door, &interior_query, world_time.hour);
+        let prompt_text = get_door_prompt(door.is_locked, is_open);
+
+        // 在門上方生成提示文字
+        commands.spawn((
+            Text2d::new(prompt_text),
+            TextFont {
+                font: font.font.clone(),
+                font_size: 16.0,
+                ..default()
+            },
+            TextColor(Color::srgb(1.0, 1.0, 0.8)),
+            Transform::from_translation(door_pos + Vec3::Y * 2.5)
+                .with_scale(Vec3::splat(0.015)),
+            InteriorPrompt,
+        ));
     }
 }
 
@@ -101,15 +148,7 @@ pub fn interior_enter_system(
 
     // 如果已在室內，嘗試離開
     if interior_state.is_inside {
-        if let Some(interior_entity) = interior_state.current_interior {
-            if let Ok(interior) = interior_query.get(interior_entity) {
-                // 傳送到出口
-                notifications.info(format!("離開 {}", interior.name));
-                interior_state.is_inside = false;
-                interior_state.current_interior = None;
-                // 注意：實際的位置傳送需要在另一個系統中處理（因為這裡沒有可變 Transform）
-            }
-        }
+        try_exit_interior(&mut interior_state, &interior_query, &mut notifications);
         return;
     }
 
@@ -118,29 +157,20 @@ pub fn interior_enter_system(
         let door_pos = door_transform.translation;
         let distance = player_pos.distance(door_pos);
 
-        if distance < door.interact_radius {
-            // 檢查是否可進入
-            if door.is_locked {
-                notifications.warning("門已上鎖！");
-                return;
-            }
+        if distance >= door.interact_radius {
+            continue;
+        }
 
-            if let Some(interior_entity) = door.interior_entity {
-                if let Ok(interior) = interior_query.get(interior_entity) {
-                    // 檢查營業時間
-                    if !interior.is_open(world_time.hour) {
-                        notifications.warning(format!("{} 營業時間外", interior.name));
-                        return;
-                    }
+        if door.is_locked {
+            notifications.warning("門已上鎖！");
+            return;
+        }
 
-                    // 進入室內
-                    notifications.success(format!("進入 {}", interior.name));
-                    interior_state.is_inside = true;
-                    interior_state.current_interior = Some(interior_entity);
-                    door.state = DoorState::Opening;
-                    return;
-                }
-            }
+        let Some(interior_entity) = door.interior_entity else { continue };
+        let Ok(interior) = interior_query.get(interior_entity) else { continue };
+
+        if try_enter_interior(&mut door, interior_entity, interior, &mut interior_state, &world_time, &mut notifications) {
+            return;
         }
     }
 }
@@ -185,11 +215,11 @@ pub fn door_animation_system(
         match door.state {
             DoorState::Opening => {
                 // 門打開動畫（旋轉）
-                let current = transform.rotation.to_euler(bevy::math::EulerRot::XYZ);
+                let current = transform.rotation.to_euler(EulerRot::XYZ);
                 let target_y = std::f32::consts::FRAC_PI_2; // 90 度
                 let new_y = (current.1 + open_speed * dt).min(target_y);
                 transform.rotation = Quat::from_euler(
-                    bevy::math::EulerRot::XYZ,
+                    EulerRot::XYZ,
                     current.0,
                     new_y,
                     current.2,
@@ -200,10 +230,10 @@ pub fn door_animation_system(
             }
             DoorState::Closing => {
                 // 門關閉動畫
-                let current = transform.rotation.to_euler(bevy::math::EulerRot::XYZ);
+                let current = transform.rotation.to_euler(EulerRot::XYZ);
                 let new_y = (current.1 - open_speed * dt).max(0.0);
                 transform.rotation = Quat::from_euler(
-                    bevy::math::EulerRot::XYZ,
+                    EulerRot::XYZ,
                     current.0,
                     new_y,
                     current.2,

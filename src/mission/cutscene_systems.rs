@@ -134,6 +134,49 @@ fn setup_cutscene_ui(mut commands: Commands) {
 // 事件處理
 // ============================================================================
 
+// === 過場動畫事件處理輔助函數 ===
+
+/// 處理過場動畫開始事件
+fn handle_cutscene_start(
+    cutscene_id: CutsceneId,
+    cutscene_state: &mut CutsceneState,
+    database: &CutsceneDatabase,
+) {
+    let Some(cutscene) = database.get(cutscene_id) else {
+        warn!("找不到過場動畫: {}", cutscene_id);
+        return;
+    };
+
+    cutscene_state.active_cutscene = Some(ActiveCutscene::new(cutscene_id));
+
+    // 設置黑邊
+    if cutscene.letterbox {
+        cutscene_state.letterbox_visible = true;
+    }
+
+    // 設置淡入
+    if cutscene.fade_in_on_start {
+        cutscene_state.fade_state = FadeState::fade_in(1.0, Color::BLACK);
+    }
+
+    info!("過場動畫開始: {} (ID: {})", cutscene.name, cutscene_id);
+}
+
+/// 處理過場動畫跳過事件
+fn handle_cutscene_skip(cutscene_state: &mut CutsceneState) {
+    if let Some(active) = &mut cutscene_state.active_cutscene {
+        active.completed = true;
+        info!("過場動畫被跳過");
+    }
+}
+
+/// 設定過場動畫暫停狀態
+fn set_cutscene_paused(cutscene_state: &mut CutsceneState, paused: bool) {
+    if let Some(active) = &mut cutscene_state.active_cutscene {
+        active.paused = paused;
+    }
+}
+
 /// 處理過場動畫事件
 fn cutscene_event_handler(
     mut events: MessageReader<CutsceneEvent>,
@@ -143,46 +186,19 @@ fn cutscene_event_handler(
     for event in events.read() {
         match event {
             CutsceneEvent::Start(cutscene_id) => {
-                if let Some(cutscene) = database.get(*cutscene_id) {
-                    let active = ActiveCutscene::new(*cutscene_id);
-                    cutscene_state.active_cutscene = Some(active);
-
-                    // 設置黑邊
-                    if cutscene.letterbox {
-                        cutscene_state.letterbox_visible = true;
-                    }
-
-                    // 設置淡入
-                    if cutscene.fade_in_on_start {
-                        cutscene_state.fade_state = FadeState::fade_in(1.0, Color::BLACK);
-                    }
-
-                    info!("過場動畫開始: {} (ID: {})", cutscene.name, cutscene_id);
-                } else {
-                    warn!("找不到過場動畫: {}", cutscene_id);
-                }
+                handle_cutscene_start(*cutscene_id, &mut cutscene_state, &database);
             }
             CutsceneEvent::Skip => {
-                if let Some(active) = &mut cutscene_state.active_cutscene {
-                    active.completed = true;
-                    info!("過場動畫被跳過");
-                }
+                handle_cutscene_skip(&mut cutscene_state);
             }
             CutsceneEvent::Pause => {
-                if let Some(active) = &mut cutscene_state.active_cutscene {
-                    active.paused = true;
-                }
+                set_cutscene_paused(&mut cutscene_state, true);
             }
             CutsceneEvent::Resume => {
-                if let Some(active) = &mut cutscene_state.active_cutscene {
-                    active.paused = false;
-                }
+                set_cutscene_paused(&mut cutscene_state, false);
             }
-            CutsceneEvent::Completed(_cutscene_id) => {
+            CutsceneEvent::Completed(_) | CutsceneEvent::ExecuteAction(_) => {
                 // 由其他系統處理
-            }
-            CutsceneEvent::ExecuteAction(_action) => {
-                // 由時間軸系統處理
             }
         }
     }

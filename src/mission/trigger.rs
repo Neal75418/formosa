@@ -364,7 +364,7 @@ impl AreaTrigger {
     }
 
     /// 設置為任務目標區域
-    pub fn as_objective(mut self, mission_id: StoryMissionId) -> Self {
+    pub fn with_objective(mut self, mission_id: StoryMissionId) -> Self {
         self.is_objective = true;
         self.mission_id = Some(mission_id);
         self

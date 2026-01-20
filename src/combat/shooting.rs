@@ -16,7 +16,7 @@ fn real_to_f32(r: bevy_rapier3d::prelude::Real) -> f32 {
 
 use super::components::{*, check_headshot, HEADSHOT_MULTIPLIER, BLEED_CHANCE};
 use crate::player::Player;
-use crate::core::{CameraSettings, GameState, RecoilState, CameraShake};
+use crate::core::{CameraSettings, GameState, RecoilState, CameraShake, ease_out_quad, ease_out_cubic, ease_in_out_quad};
 use crate::ui::NotificationQueue;
 use crate::audio::{AudioManager, WeaponSounds, play_weapon_fire_sound, play_reload_sound, play_weapon_switch_sound};
 use super::RespawnState;
@@ -158,6 +158,57 @@ fn cancel_reload_on_switch(weapon: &mut Weapon, notifications: &mut Notification
     }
 }
 
+/// 更新換彈進度，返回是否完成換彈
+fn update_reload_progress(weapon: &mut Weapon, dt: f32) -> bool {
+    if !weapon.is_reloading {
+        return false;
+    }
+    weapon.reload_timer -= dt;
+    weapon.reload_timer <= 0.0
+}
+
+/// 嘗試開始換彈，返回是否成功開始
+fn try_start_reload(
+    weapon: &mut Weapon,
+    reload_pressed: bool,
+    notifications: &mut NotificationQueue,
+) -> bool {
+    if reload_pressed && weapon.start_reload() {
+        notifications.info("換彈中...");
+        return true;
+    }
+    if weapon.needs_reload() && weapon.start_reload() {
+        notifications.warning("彈匣空了！換彈中...");
+        return true;
+    }
+    false
+}
+
+/// 播放換彈音效（如果可用）
+#[inline]
+fn play_reload_sound_if_available(
+    commands: &mut Commands,
+    weapon_sounds: &Option<Res<WeaponSounds>>,
+    audio_manager: &AudioManager,
+    is_complete: bool,
+) {
+    if let Some(ref sounds) = weapon_sounds {
+        play_reload_sound(commands, sounds, audio_manager, is_complete);
+    }
+}
+
+/// 播放武器切換音效（如果可用）
+#[inline]
+fn play_switch_sound_if_available(
+    commands: &mut Commands,
+    weapon_sounds: &Option<Res<WeaponSounds>>,
+    audio_manager: &AudioManager,
+) {
+    if let Some(ref sounds) = weapon_sounds {
+        play_weapon_switch_sound(commands, sounds, audio_manager);
+    }
+}
+
 /// 換彈系統
 #[allow(clippy::too_many_arguments)]
 pub fn reload_system(
@@ -177,49 +228,29 @@ pub fn reload_system(
             if let Some(weapon) = inventory.current_weapon_mut() {
                 cancel_reload_on_switch(weapon, &mut notifications);
             }
-            // 處理武器切換
             handle_weapon_switch(&input, &mut inventory, &mut notifications);
-            // 播放武器切換音效
-            if let Some(ref sounds) = weapon_sounds {
-                play_weapon_switch_sound(&mut commands, sounds, &audio_manager);
-            }
-            // 切換後跳過當前幀，避免立即更新新武器的換彈進度
+            play_switch_sound_if_available(&mut commands, &weapon_sounds, &audio_manager);
             continue;
         }
 
-        // 處理換彈
         let Some(weapon) = inventory.current_weapon_mut() else { continue; };
 
-        // 檢查換彈完成
-        if weapon.is_reloading {
-            weapon.reload_timer -= dt;
-            if weapon.reload_timer <= 0.0 {
-                weapon.finish_reload();
-                notifications.success("換彈完成");
-                // 播放換彈完成音效
-                if let Some(ref sounds) = weapon_sounds {
-                    play_reload_sound(&mut commands, sounds, &audio_manager, true);
-                }
-            }
+        // 更新換彈進度
+        if update_reload_progress(weapon, dt) {
+            weapon.finish_reload();
+            notifications.success("換彈完成");
+            play_reload_sound_if_available(&mut commands, &weapon_sounds, &audio_manager, true);
             continue;
         }
 
-        // 處理換彈請求
-        let started_reload = if input.reload_pressed && weapon.start_reload() {
-            notifications.info("換彈中...");
-            true
-        } else if weapon.needs_reload() && weapon.start_reload() {
-            notifications.warning("彈匣空了！換彈中...");
-            true
-        } else {
-            false
-        };
+        // 跳過正在換彈的武器
+        if weapon.is_reloading {
+            continue;
+        }
 
-        // 播放換彈開始音效
-        if started_reload {
-            if let Some(ref sounds) = weapon_sounds {
-                play_reload_sound(&mut commands, sounds, &audio_manager, false);
-            }
+        // 嘗試開始換彈
+        if try_start_reload(weapon, input.reload_pressed, &mut notifications) {
+            play_reload_sound_if_available(&mut commands, &weapon_sounds, &audio_manager, false);
         }
     }
 }
@@ -322,6 +353,37 @@ fn should_fire(input: &ShootingInput, weapon: &Weapon) -> bool {
         input.fire_pressed
     };
     trigger_pressed && weapon.can_fire()
+}
+
+/// 取得武器類型對應的攝影機震動強度
+#[inline]
+fn get_camera_shake_intensity(weapon_type: WeaponType) -> f32 {
+    match weapon_type {
+        WeaponType::Pistol => 0.02,
+        WeaponType::SMG => 0.015,
+        WeaponType::Shotgun => 0.05,
+        WeaponType::Rifle => 0.025,
+        WeaponType::Fist | WeaponType::Staff | WeaponType::Knife => 0.0,
+    }
+}
+
+/// 應用遠程武器發射後效果（後座力、攝影機震動）
+fn apply_ranged_fire_effects(
+    weapon: &Weapon,
+    is_aiming: bool,
+    recoil_state: &mut RecoilState,
+    camera_shake: &mut CameraShake,
+) {
+    let recoil_mult = if is_aiming { 0.5 } else { 1.0 };
+    recoil_state.add_recoil(
+        weapon.stats.recoil_vertical * recoil_mult,
+        weapon.stats.recoil_horizontal * recoil_mult,
+    );
+
+    let shake_intensity = get_camera_shake_intensity(weapon.stats.weapon_type);
+    if shake_intensity > 0.0 {
+        camera_shake.trigger(shake_intensity, 0.08);
+    }
 }
 
 /// 生成霰彈槍散佈模式（環形分布）
@@ -513,27 +575,7 @@ pub fn fire_weapon_system(
                 &damageable_query,
                 &transform_query,
             );
-
-            // 添加後座力（瞄準時減半）
-            let recoil_mult = if combat_state.is_aiming { 0.5 } else { 1.0 };
-            recoil_state.add_recoil(
-                weapon.stats.recoil_vertical * recoil_mult,
-                weapon.stats.recoil_horizontal * recoil_mult,
-            );
-
-            // 觸發攝影機震動（根據武器類型調整強度）
-            let shake_intensity = match weapon.stats.weapon_type {
-                WeaponType::Pistol => 0.02,
-                WeaponType::SMG => 0.015,
-                WeaponType::Shotgun => 0.05,
-                WeaponType::Rifle => 0.025,
-                WeaponType::Fist => 0.0,
-                WeaponType::Staff => 0.0,
-                WeaponType::Knife => 0.0,
-            };
-            if shake_intensity > 0.0 {
-                camera_shake.trigger(shake_intensity, 0.08);
-            }
+            apply_ranged_fire_effects(weapon, combat_state.is_aiming, &mut recoil_state, &mut camera_shake);
         }
 
         // 播放槍聲
@@ -853,8 +895,8 @@ pub fn spawn_bullet_tracer(
     ));
 }
 
-/// 生成槍口閃光
-fn spawn_muzzle_flash(
+/// 生成槍口閃光（公開供其他模組使用）
+pub fn spawn_muzzle_flash(
     commands: &mut Commands,
     visuals: &CombatVisuals,
     position: Vec3,
@@ -1014,17 +1056,11 @@ pub fn punch_animation_update_system(
         // 更新計時器
         anim.timer += dt;
 
+        // 更新階段
+        anim.update_phase();
+
         let (wind_up_end, strike_end, duration) = anim.phase_times();
         let t = anim.timer;
-
-        // 更新階段
-        if t < wind_up_end {
-            anim.phase = PunchPhase::WindUp;
-        } else if t < strike_end {
-            anim.phase = PunchPhase::Strike;
-        } else if t < duration {
-            anim.phase = PunchPhase::Return;
-        }
 
         // 只處理右手臂的動畫
         if !arm.is_right {
@@ -1124,24 +1160,6 @@ pub fn punch_animation_update_system(
     }
 }
 
-// === 緩動函數 ===
-
-fn ease_out_quad(t: f32) -> f32 {
-    1.0 - (1.0 - t) * (1.0 - t)
-}
-
-fn ease_out_cubic(t: f32) -> f32 {
-    1.0 - (1.0 - t).powi(3)
-}
-
-fn ease_in_out_quad(t: f32) -> f32 {
-    if t < 0.5 {
-        2.0 * t * t
-    } else {
-        1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
-    }
-}
-
 // ============================================================================
 // 武器模型系統
 // ============================================================================
@@ -1193,15 +1211,11 @@ pub fn spawn_player_weapons(
     }
 }
 
-/// 根據當前武器更新武器模型可見性
-pub fn weapon_visibility_system(
-    player_query: Query<&WeaponInventory, (With<Player>, Changed<WeaponInventory>)>,
-    mut weapon_model_query: Query<(&WeaponModel, &mut Visibility)>,
+/// 更新武器模型可見性（共用邏輯）
+fn update_weapon_visibility(
+    current_type: WeaponType,
+    weapon_model_query: &mut Query<(&WeaponModel, &mut Visibility)>,
 ) {
-    let Ok(inventory) = player_query.single() else { return; };
-    let Some(current_weapon) = inventory.current_weapon() else { return; };
-    let current_type = current_weapon.stats.weapon_type;
-
     for (model, mut visibility) in weapon_model_query.iter_mut() {
         *visibility = if model.weapon_type == current_type {
             Visibility::Inherited
@@ -1209,6 +1223,17 @@ pub fn weapon_visibility_system(
             Visibility::Hidden
         };
     }
+}
+
+/// 根據當前武器更新武器模型可見性
+pub fn weapon_visibility_system(
+    player_query: Query<&WeaponInventory, (With<Player>, Changed<WeaponInventory>)>,
+    mut weapon_model_query: Query<(&WeaponModel, &mut Visibility)>,
+) {
+    let Ok(inventory) = player_query.single() else { return; };
+    let Some(current_weapon) = inventory.current_weapon() else { return; };
+
+    update_weapon_visibility(current_weapon.stats.weapon_type, &mut weapon_model_query);
 }
 
 /// 強制更新武器可見性（用於初始化）
@@ -1223,21 +1248,14 @@ pub fn weapon_visibility_init_system(
 
     let Ok(inventory) = player_query.single() else { return; };
     let Some(current_weapon) = inventory.current_weapon() else { return; };
-    let current_type = current_weapon.stats.weapon_type;
 
-    let mut found_any = false;
-    for (model, mut visibility) in weapon_model_query.iter_mut() {
-        found_any = true;
-        *visibility = if model.weapon_type == current_type {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
+    // 檢查是否有武器模型存在
+    if weapon_model_query.iter().next().is_none() {
+        return;
     }
 
-    if found_any {
-        *initialized = true;
-    }
+    update_weapon_visibility(current_weapon.stats.weapon_type, &mut weapon_model_query);
+    *initialized = true;
 }
 
 // ============================================================================

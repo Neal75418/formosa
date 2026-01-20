@@ -135,6 +135,40 @@ pub fn handle_shop_interaction(
     }
 }
 
+// === 商店選單輔助函數 ===
+
+/// 處理商店選單導航（上下選擇）
+fn handle_shop_navigation(keyboard: &ButtonInput<KeyCode>, selected_index: &mut usize, item_count: usize) {
+    let up_pressed = keyboard.just_pressed(KeyCode::KeyW) || keyboard.just_pressed(KeyCode::ArrowUp);
+    let down_pressed = keyboard.just_pressed(KeyCode::KeyS) || keyboard.just_pressed(KeyCode::ArrowDown);
+
+    if up_pressed && *selected_index > 0 {
+        *selected_index -= 1;
+    }
+    if down_pressed && *selected_index < item_count - 1 {
+        *selected_index += 1;
+    }
+}
+
+/// 嘗試購買商品
+fn try_purchase_item(
+    item: &ShopItem,
+    wallet: &mut PlayerWallet,
+    money_events: &mut MessageWriter<MoneyChangedEvent>,
+) {
+    if wallet.spend_cash(item.price) {
+        money_events.write(MoneyChangedEvent {
+            amount: -item.price,
+            reason: MoneyChangeReason::Purchase,
+            new_balance: wallet.cash,
+        });
+        info!("購買成功: {} (-${})", item.name, item.price);
+        // TODO: 實際給予物品效果
+    } else {
+        warn!("餘額不足！需要 ${}, 只有 ${}", item.price, wallet.cash);
+    }
+}
+
 /// 處理商店選單輸入
 fn handle_shop_menu_input(
     keyboard: &ButtonInput<KeyCode>,
@@ -143,52 +177,22 @@ fn handle_shop_menu_input(
     money_events: &mut MessageWriter<MoneyChangedEvent>,
     shop_inventory: &ShopInventory,
 ) {
-    // ESC 關閉選單
     if keyboard.just_pressed(KeyCode::Escape) {
         menu_state.is_open = false;
         menu_state.current_shop = None;
         return;
     }
 
-    let Some(shop_type) = menu_state.shop_type else {
-        return;
-    };
-
+    let Some(shop_type) = menu_state.shop_type else { return };
     let items = shop_inventory.get_items(shop_type);
-    if items.is_empty() {
-        return;
-    }
+    if items.is_empty() { return }
 
-    // 上下選擇
-    if keyboard.just_pressed(KeyCode::KeyW) || keyboard.just_pressed(KeyCode::ArrowUp) {
-        if menu_state.selected_index > 0 {
-            menu_state.selected_index -= 1;
-        }
-    }
-    if keyboard.just_pressed(KeyCode::KeyS) || keyboard.just_pressed(KeyCode::ArrowDown) {
-        if menu_state.selected_index < items.len() - 1 {
-            menu_state.selected_index += 1;
-        }
-    }
+    handle_shop_navigation(keyboard, &mut menu_state.selected_index, items.len());
 
-    // 購買
-    if keyboard.just_pressed(KeyCode::Enter) || keyboard.just_pressed(KeyCode::KeyE) {
+    let purchase_pressed = keyboard.just_pressed(KeyCode::Enter) || keyboard.just_pressed(KeyCode::KeyE);
+    if purchase_pressed {
         if let Some(item) = items.get(menu_state.selected_index) {
-            if wallet.spend_cash(item.price) {
-                // 購買成功
-                money_events.write(MoneyChangedEvent {
-                    amount: -item.price,
-                    reason: MoneyChangeReason::Purchase,
-                    new_balance: wallet.cash,
-                });
-                info!("購買成功: {} (-${})", item.name, item.price);
-
-                // TODO: 實際給予物品效果
-                // 根據 item.category 和 item.effect_value 處理
-            } else {
-                // 餘額不足
-                warn!("餘額不足！需要 ${}, 只有 ${}", item.price, wallet.cash);
-            }
+            try_purchase_item(item, wallet, money_events);
         }
     }
 }
@@ -250,6 +254,88 @@ pub fn handle_atm_interaction(
     }
 }
 
+// === ATM 選單輔助函數 ===
+
+/// 處理 ATM ESC 按鍵
+/// 返回 true 表示已處理並應返回
+fn handle_atm_escape(keyboard: &ButtonInput<KeyCode>, menu_state: &mut AtmMenuState) -> bool {
+    if !keyboard.just_pressed(KeyCode::Escape) {
+        return false;
+    }
+
+    if matches!(menu_state.mode, AtmMode::Main) {
+        menu_state.is_open = false;
+        menu_state.current_atm = None;
+    } else {
+        menu_state.mode = AtmMode::Main;
+        menu_state.input_amount = 0;
+    }
+    true
+}
+
+/// 處理 ATM 主選單輸入
+fn handle_atm_main_menu(keyboard: &ButtonInput<KeyCode>, menu_state: &mut AtmMenuState) {
+    if keyboard.just_pressed(KeyCode::Digit1) {
+        menu_state.mode = AtmMode::Withdraw;
+    } else if keyboard.just_pressed(KeyCode::Digit2) {
+        menu_state.mode = AtmMode::Deposit;
+    } else if keyboard.just_pressed(KeyCode::Digit3) {
+        menu_state.mode = AtmMode::Balance;
+    }
+}
+
+/// 處理 ATM 提款操作
+fn handle_atm_withdraw(
+    keyboard: &ButtonInput<KeyCode>,
+    wallet: &mut PlayerWallet,
+    menu_state: &mut AtmMenuState,
+    money_events: &mut MessageWriter<MoneyChangedEvent>,
+) {
+    handle_amount_input(keyboard, &mut menu_state.input_amount);
+
+    if !keyboard.just_pressed(KeyCode::Enter) { return }
+
+    let amount = menu_state.input_amount;
+    if amount > 0 && wallet.withdraw(amount) {
+        money_events.write(MoneyChangedEvent {
+            amount,
+            reason: MoneyChangeReason::AtmWithdraw,
+            new_balance: wallet.cash,
+        });
+        info!("提款成功: ${}", amount);
+        menu_state.mode = AtmMode::Main;
+        menu_state.input_amount = 0;
+    } else {
+        warn!("提款失敗！銀行餘額: ${}", wallet.bank);
+    }
+}
+
+/// 處理 ATM 存款操作
+fn handle_atm_deposit(
+    keyboard: &ButtonInput<KeyCode>,
+    wallet: &mut PlayerWallet,
+    menu_state: &mut AtmMenuState,
+    money_events: &mut MessageWriter<MoneyChangedEvent>,
+) {
+    handle_amount_input(keyboard, &mut menu_state.input_amount);
+
+    if !keyboard.just_pressed(KeyCode::Enter) { return }
+
+    let amount = menu_state.input_amount;
+    if amount > 0 && wallet.deposit(amount) {
+        money_events.write(MoneyChangedEvent {
+            amount: -amount,
+            reason: MoneyChangeReason::AtmDeposit,
+            new_balance: wallet.cash,
+        });
+        info!("存款成功: ${}", amount);
+        menu_state.mode = AtmMode::Main;
+        menu_state.input_amount = 0;
+    } else {
+        warn!("存款失敗！現金餘額: ${}", wallet.cash);
+    }
+}
+
 /// 處理 ATM 選單輸入
 fn handle_atm_menu_input(
     keyboard: &ButtonInput<KeyCode>,
@@ -257,74 +343,13 @@ fn handle_atm_menu_input(
     menu_state: &mut AtmMenuState,
     money_events: &mut MessageWriter<MoneyChangedEvent>,
 ) {
-    // ESC 返回/關閉
-    if keyboard.just_pressed(KeyCode::Escape) {
-        match menu_state.mode {
-            AtmMode::Main => {
-                menu_state.is_open = false;
-                menu_state.current_atm = None;
-            }
-            _ => {
-                menu_state.mode = AtmMode::Main;
-                menu_state.input_amount = 0;
-            }
-        }
-        return;
-    }
+    if handle_atm_escape(keyboard, menu_state) { return }
 
     match menu_state.mode {
-        AtmMode::Main => {
-            // 主選單選項
-            if keyboard.just_pressed(KeyCode::Digit1) {
-                menu_state.mode = AtmMode::Withdraw;
-            } else if keyboard.just_pressed(KeyCode::Digit2) {
-                menu_state.mode = AtmMode::Deposit;
-            } else if keyboard.just_pressed(KeyCode::Digit3) {
-                menu_state.mode = AtmMode::Balance;
-            }
-        }
-        AtmMode::Withdraw => {
-            // 提款金額輸入
-            handle_amount_input(keyboard, &mut menu_state.input_amount);
-
-            if keyboard.just_pressed(KeyCode::Enter) {
-                let amount = menu_state.input_amount;
-                if amount > 0 && wallet.withdraw(amount) {
-                    money_events.write(MoneyChangedEvent {
-                        amount,
-                        reason: MoneyChangeReason::AtmWithdraw,
-                        new_balance: wallet.cash,
-                    });
-                    info!("提款成功: ${}", amount);
-                    menu_state.mode = AtmMode::Main;
-                    menu_state.input_amount = 0;
-                } else {
-                    warn!("提款失敗！銀行餘額: ${}", wallet.bank);
-                }
-            }
-        }
-        AtmMode::Deposit => {
-            // 存款金額輸入
-            handle_amount_input(keyboard, &mut menu_state.input_amount);
-
-            if keyboard.just_pressed(KeyCode::Enter) {
-                let amount = menu_state.input_amount;
-                if amount > 0 && wallet.deposit(amount) {
-                    money_events.write(MoneyChangedEvent {
-                        amount: -amount,
-                        reason: MoneyChangeReason::AtmDeposit,
-                        new_balance: wallet.cash,
-                    });
-                    info!("存款成功: ${}", amount);
-                    menu_state.mode = AtmMode::Main;
-                    menu_state.input_amount = 0;
-                } else {
-                    warn!("存款失敗！現金餘額: ${}", wallet.cash);
-                }
-            }
-        }
+        AtmMode::Main => handle_atm_main_menu(keyboard, menu_state),
+        AtmMode::Withdraw => handle_atm_withdraw(keyboard, wallet, menu_state, money_events),
+        AtmMode::Deposit => handle_atm_deposit(keyboard, wallet, menu_state, money_events),
         AtmMode::Balance => {
-            // 顯示餘額，按任意鍵返回
             if keyboard.get_just_pressed().len() > 0 {
                 menu_state.mode = AtmMode::Main;
             }

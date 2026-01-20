@@ -1572,6 +1572,19 @@ impl PunchAnimation {
     pub fn is_finished(&self) -> bool {
         self.timer >= self.duration
     }
+
+    /// 根據計時器更新動畫階段
+    pub fn update_phase(&mut self) {
+        let (wind_up_end, strike_end, duration) = self.phase_times();
+        let t = self.timer;
+        if t < wind_up_end {
+            self.phase = PunchPhase::WindUp;
+        } else if t < strike_end {
+            self.phase = PunchPhase::Strike;
+        } else if t < duration {
+            self.phase = PunchPhase::Return;
+        }
+    }
 }
 
 // ============================================================================
@@ -1650,6 +1663,19 @@ impl EnemyPunchAnimation {
     /// 檢查動畫是否完成
     pub fn is_finished(&self) -> bool {
         self.timer >= self.duration
+    }
+
+    /// 根據計時器更新動畫階段
+    pub fn update_phase(&mut self) {
+        let (wind_up_end, strike_end, duration) = self.phase_times();
+        let t = self.timer;
+        if t < wind_up_end {
+            self.phase = PunchPhase::WindUp;
+        } else if t < strike_end {
+            self.phase = PunchPhase::Strike;
+        } else if t < duration {
+            self.phase = PunchPhase::Return;
+        }
     }
 }
 

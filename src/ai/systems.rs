@@ -11,11 +11,11 @@ use bevy_rapier3d::prelude::*;
 use rand::Rng;
 
 use crate::combat::{
-    DamageEvent, DamageSource, DeathEvent, Enemy, EnemyType,
-    Health, Weapon, Damageable, EnemyArm, EnemyPunchAnimation, PunchPhase,
+    CombatVisuals, DamageEvent, DamageSource, DeathEvent, Enemy, EnemyType,
+    Health, MuzzleFlash, Weapon, Damageable, EnemyArm, EnemyPunchAnimation, PunchPhase,
     spawn_bullet_tracer, TracerStyle, Ragdoll, HitReaction,
 };
-use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_VEHICLE, COLLISION_GROUP_STATIC};
+use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_VEHICLE, COLLISION_GROUP_STATIC, ease_out_quad, ease_out_cubic, ease_in_out_quad, WeatherState, WeatherType};
 use crate::player::Player;
 use super::{
     AiBehavior, AiCombat, AiMovement, AiPerception, AiState,
@@ -113,7 +113,7 @@ const FLANK_ARRIVAL_SQ: f32 = 4.0;
 pub fn ai_perception_system(
     time: Res<Time>,
     mut timer: ResMut<AiUpdateTimer>,
-    weather: Res<crate::core::WeatherState>,
+    weather: Res<WeatherState>,
     player_query: Query<(Entity, &Transform), With<Player>>,
     mut enemy_query: Query<(
         Entity,
@@ -141,10 +141,10 @@ pub fn ai_perception_system(
 
     // === GTA5 風格：天氣影響 AI 感知 ===
     let weather_sight_multiplier = match weather.weather_type {
-        crate::core::WeatherType::Clear => WEATHER_CLEAR_SIGHT,
-        crate::core::WeatherType::Cloudy => WEATHER_CLOUDY_SIGHT,
-        crate::core::WeatherType::Rainy => WEATHER_RAINY_SIGHT_BASE - weather.intensity * WEATHER_RAINY_SIGHT_DECAY,
-        crate::core::WeatherType::Foggy => WEATHER_FOGGY_SIGHT_BASE - weather.intensity * WEATHER_FOGGY_SIGHT_DECAY,
+        WeatherType::Clear => WEATHER_CLEAR_SIGHT,
+        WeatherType::Cloudy => WEATHER_CLOUDY_SIGHT,
+        WeatherType::Rainy => WEATHER_RAINY_SIGHT_BASE - weather.intensity * WEATHER_RAINY_SIGHT_DECAY,
+        WeatherType::Foggy => WEATHER_FOGGY_SIGHT_BASE - weather.intensity * WEATHER_FOGGY_SIGHT_DECAY,
     };
 
     for (enemy_entity, transform, mut perception, mut behavior) in &mut enemy_query {
@@ -207,10 +207,209 @@ pub fn ai_perception_system(
 // 決策系統
 // ============================================================================
 
+// === 決策系統輔助函數 ===
+
+/// 處理逃跑狀態的開始
+/// 返回 true 表示開始逃跑，應跳過後續處理
+#[inline]
+fn check_start_flee(
+    health_percent: f32,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    my_pos: Vec3,
+    current_time: f32,
+) -> bool {
+    if health_percent > behavior.flee_threshold || behavior.is_fleeing {
+        return false;
+    }
+
+    behavior.is_fleeing = true;
+    behavior.set_state(AiState::Flee, current_time);
+    movement.is_running = true;
+
+    if let Some(target_pos) = behavior.last_known_target_pos {
+        let flee_dir = (my_pos - target_pos).normalize_or_zero();
+        movement.move_target = Some(my_pos + flee_dir * FLEE_DISTANCE);
+    }
+    true
+}
+
+/// 處理逃跑狀態的持續
+/// 返回 true 表示仍在逃跑，應跳過狀態機處理
+#[inline]
+fn handle_fleeing_state(
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    my_pos: Vec3,
+    current_time: f32,
+) -> bool {
+    if !behavior.is_fleeing {
+        return false;
+    }
+
+    let Some(target_pos) = behavior.last_known_target_pos else {
+        // 沒有目標位置，停止逃跑
+        behavior.is_fleeing = false;
+        behavior.set_state(AiState::Idle, current_time);
+        movement.is_running = false;
+        movement.move_target = None;
+        return true;
+    };
+
+    let distance_from_threat_sq = my_pos.distance_squared(target_pos);
+
+    if distance_from_threat_sq > ALERT_DISTANCE_SQ {
+        // 逃離超過安全距離
+        behavior.is_fleeing = false;
+        behavior.set_state(AiState::Alert, current_time);
+        movement.is_running = false;
+        movement.move_target = None;
+    } else {
+        // 繼續逃跑
+        let flee_dir = (my_pos - target_pos).normalize_or_zero();
+        movement.move_target = Some(my_pos + flee_dir * FLEE_DISTANCE);
+    }
+    true
+}
+
+/// 設置追逐狀態
+#[inline]
+fn enter_chase_state(behavior: &mut AiBehavior, movement: &mut AiMovement, current_time: f32) {
+    behavior.set_state(AiState::Chase, current_time);
+    movement.is_running = true;
+    movement.move_target = behavior.last_known_target_pos;
+}
+
+/// 處理 Idle 狀態的決策
+#[inline]
+fn handle_idle_state(
+    perception: &AiPerception,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    has_patrol: bool,
+    current_time: f32,
+) {
+    if perception.can_see_target {
+        enter_chase_state(behavior, movement, current_time);
+    } else if perception.heard_noise {
+        behavior.set_state(AiState::Alert, current_time);
+        movement.move_target = perception.noise_position;
+    } else if has_patrol && behavior.state_timer > PATROL_IDLE_THRESHOLD {
+        behavior.set_state(AiState::Patrol, current_time);
+    }
+}
+
+/// 處理 Patrol 狀態的決策
+#[inline]
+fn handle_patrol_state(
+    perception: &AiPerception,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    current_time: f32,
+) {
+    if perception.can_see_target {
+        enter_chase_state(behavior, movement, current_time);
+    } else if perception.heard_noise {
+        behavior.set_state(AiState::Alert, current_time);
+        movement.move_target = perception.noise_position;
+    }
+}
+
+/// 處理 Alert 狀態的決策
+#[inline]
+fn handle_alert_state(
+    perception: &AiPerception,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    has_patrol: bool,
+    current_time: f32,
+) {
+    if perception.can_see_target {
+        enter_chase_state(behavior, movement, current_time);
+    } else if behavior.state_timer > ALERT_TIMEOUT {
+        if has_patrol {
+            behavior.set_state(AiState::Patrol, current_time);
+        } else {
+            behavior.set_state(AiState::Idle, current_time);
+        }
+    }
+}
+
+/// 處理 Chase 狀態的決策
+#[inline]
+fn handle_chase_state(
+    perception: &AiPerception,
+    combat: &AiCombat,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    my_pos: Vec3,
+    current_time: f32,
+) {
+    if let Some(target_pos) = behavior.last_known_target_pos {
+        movement.move_target = Some(target_pos);
+
+        // 在攻擊範圍內且能看到 → 攻擊
+        if combat.is_in_range(my_pos, target_pos) && perception.can_see_target {
+            behavior.set_state(AiState::Attack, current_time);
+            movement.is_running = false;
+            movement.move_target = None;
+        }
+    }
+
+    // 失去目標超過閾值
+    if behavior.lose_target(current_time, LOSE_TARGET_TIMEOUT) {
+        behavior.set_state(AiState::Alert, current_time);
+        movement.is_running = false;
+        movement.move_target = behavior.last_known_target_pos;
+    }
+}
+
+/// 處理 Attack 狀態的決策
+#[inline]
+fn handle_attack_state(
+    perception: &AiPerception,
+    combat: &AiCombat,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    my_pos: Vec3,
+    current_time: f32,
+) {
+    let Some(target_pos) = behavior.last_known_target_pos else {
+        behavior.set_state(AiState::Alert, current_time);
+        return;
+    };
+
+    if !combat.is_in_range(my_pos, target_pos) || !perception.can_see_target {
+        behavior.set_state(AiState::Chase, current_time);
+        movement.is_running = true;
+        movement.move_target = Some(target_pos);
+    }
+}
+
+/// 處理 TakingCover 狀態的決策
+#[inline]
+fn handle_taking_cover_state(
+    perception: &AiPerception,
+    health_percent: f32,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    current_time: f32,
+) {
+    let Some(target_pos) = behavior.last_known_target_pos else { return };
+
+    if !perception.can_see_target && behavior.state_timer > ALERT_TIMEOUT {
+        behavior.set_state(AiState::Alert, current_time);
+    } else if health_percent > LOW_HEALTH_THRESHOLD {
+        // 血量恢復，重新進攻
+        behavior.set_state(AiState::Chase, current_time);
+        movement.is_running = true;
+        movement.move_target = Some(target_pos);
+    }
+}
+
 /// AI 決策系統：根據感知更新狀態
 /// 每幀執行，確保即時響應
 #[allow(clippy::type_complexity)]
-#[allow(clippy::too_many_lines)]
 pub fn ai_decision_system(
     time: Res<Time>,
     mut enemy_query: Query<(
@@ -228,142 +427,50 @@ pub fn ai_decision_system(
 
     for (transform, health, perception, combat, mut behavior, mut movement, patrol) in &mut enemy_query {
         let my_pos = transform.translation;
+        let health_percent = health.percentage();
+        let has_patrol = patrol.is_some();
 
         // 更新狀態計時器
         behavior.tick(dt);
 
         // 檢查是否應該逃跑
-        if health.percentage() <= behavior.flee_threshold && !behavior.is_fleeing {
-            behavior.is_fleeing = true;
-            behavior.set_state(AiState::Flee, current_time);
-            movement.is_running = true;
-            if let Some(target_pos) = behavior.last_known_target_pos {
-                let flee_dir = (my_pos - target_pos).normalize_or_zero();
-                movement.move_target = Some(my_pos + flee_dir * FLEE_DISTANCE);
-            }
+        if check_start_flee(
+            health_percent,
+            &mut behavior,
+            &mut movement,
+            my_pos,
+            current_time,
+        ) {
             continue;
         }
 
         // 逃跑狀態持續
-        if behavior.is_fleeing {
-            if let Some(target_pos) = behavior.last_known_target_pos {
-                let distance_from_threat_sq = my_pos.distance_squared(target_pos);
-
-                // 逃離超過安全距離後停止逃跑，進入警戒狀態
-                if distance_from_threat_sq > ALERT_DISTANCE_SQ {
-                    behavior.is_fleeing = false;
-                    behavior.set_state(AiState::Alert, current_time);
-                    movement.is_running = false;
-                    movement.move_target = None;
-                } else {
-                    // 繼續逃跑
-                    let flee_dir = (my_pos - target_pos).normalize_or_zero();
-                    movement.move_target = Some(my_pos + flee_dir * FLEE_DISTANCE);
-                }
-            } else {
-                // 沒有目標位置，停止逃跑
-                behavior.is_fleeing = false;
-                behavior.set_state(AiState::Idle, current_time);
-                movement.is_running = false;
-                movement.move_target = None;
-            }
+        if handle_fleeing_state(&mut behavior, &mut movement, my_pos, current_time) {
             continue;
         }
 
         // 正常狀態機轉換
         match behavior.state {
             AiState::Idle => {
-                if perception.can_see_target {
-                    // 看到玩家 → 追逐，並立即設定移動目標
-                    behavior.set_state(AiState::Chase, current_time);
-                    movement.is_running = true;
-                    movement.move_target = behavior.last_known_target_pos;
-                } else if perception.heard_noise {
-                    behavior.set_state(AiState::Alert, current_time);
-                    movement.move_target = perception.noise_position;
-                } else if patrol.is_some() && behavior.state_timer > PATROL_IDLE_THRESHOLD {
-                    behavior.set_state(AiState::Patrol, current_time);
-                }
+                handle_idle_state(perception, &mut behavior, &mut movement, has_patrol, current_time);
             }
-
             AiState::Patrol => {
-                if perception.can_see_target {
-                    behavior.set_state(AiState::Chase, current_time);
-                    movement.is_running = true;
-                    movement.move_target = behavior.last_known_target_pos;
-                } else if perception.heard_noise {
-                    behavior.set_state(AiState::Alert, current_time);
-                    movement.move_target = perception.noise_position;
-                }
+                handle_patrol_state(perception, &mut behavior, &mut movement, current_time);
             }
-
             AiState::Alert => {
-                if perception.can_see_target {
-                    behavior.set_state(AiState::Chase, current_time);
-                    movement.is_running = true;
-                    movement.move_target = behavior.last_known_target_pos;
-                } else if behavior.state_timer > ALERT_TIMEOUT {
-                    if patrol.is_some() {
-                        behavior.set_state(AiState::Patrol, current_time);
-                    } else {
-                        behavior.set_state(AiState::Idle, current_time);
-                    }
-                }
+                handle_alert_state(perception, &mut behavior, &mut movement, has_patrol, current_time);
             }
-
             AiState::Chase => {
-                // 持續更新移動目標
-                if let Some(target_pos) = behavior.last_known_target_pos {
-                    movement.move_target = Some(target_pos);
-
-                    // 在攻擊範圍內且能看到 → 攻擊
-                    if combat.is_in_range(my_pos, target_pos) && perception.can_see_target {
-                        behavior.set_state(AiState::Attack, current_time);
-                        movement.is_running = false;
-                        movement.move_target = None; // 攻擊時停止移動
-                    }
-                }
-
-                // 失去目標超過閾值時間
-                if behavior.lose_target(current_time, LOSE_TARGET_TIMEOUT) {
-                    behavior.set_state(AiState::Alert, current_time);
-                    movement.is_running = false;
-                    movement.move_target = behavior.last_known_target_pos;
-                }
+                handle_chase_state(perception, combat, &mut behavior, &mut movement, my_pos, current_time);
             }
-
             AiState::Attack => {
-                // 攻擊時面向目標但不移動
-                if let Some(target_pos) = behavior.last_known_target_pos {
-                    if !combat.is_in_range(my_pos, target_pos) || !perception.can_see_target {
-                        // 目標離開攻擊範圍 → 追逐
-                        behavior.set_state(AiState::Chase, current_time);
-                        movement.is_running = true;
-                        movement.move_target = Some(target_pos);
-                    }
-                } else {
-                    behavior.set_state(AiState::Alert, current_time);
-                }
+                handle_attack_state(perception, combat, &mut behavior, &mut movement, my_pos, current_time);
             }
-
             AiState::Flee => {
                 // 逃跑狀態在上面已處理
             }
-
             AiState::TakingCover => {
-                // 在掩體後：等待並週期性探出射擊
-                // 實際邏輯在 ai_cover_system 中處理
-                if let Some(target_pos) = behavior.last_known_target_pos {
-                    // 如果目標離開視野且血量恢復，可以離開掩體
-                    if !perception.can_see_target && behavior.state_timer > ALERT_TIMEOUT {
-                        behavior.set_state(AiState::Alert, current_time);
-                    } else if health.percentage() > LOW_HEALTH_THRESHOLD {
-                        // 血量恢復到 70% 以上，重新進攻
-                        behavior.set_state(AiState::Chase, current_time);
-                        movement.is_running = true;
-                        movement.move_target = Some(target_pos);
-                    }
-                }
+                handle_taking_cover_state(perception, health_percent, &mut behavior, &mut movement, current_time);
             }
         }
     }
@@ -375,6 +482,188 @@ pub fn ai_decision_system(
 
 /// 重力常數
 const GRAVITY: f32 = -9.8;
+
+// === 移動系統輔助函數 ===
+
+/// 讓實體面向指定位置（只轉 Y 軸）
+#[inline]
+fn face_target(transform: &mut Transform, target_pos: Vec3) {
+    let direction = (target_pos - transform.translation).normalize_or_zero();
+    let flat_direction = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
+    if flat_direction.length_squared() > 0.01 {
+        let look_target = transform.translation + flat_direction;
+        transform.look_at(look_target, Vec3::Y);
+    }
+}
+
+/// 處理攻擊狀態的移動（不移動，只面向目標）
+/// 返回 true 表示已處理
+#[inline]
+fn handle_attack_state_movement(
+    behavior: &AiBehavior,
+    transform: &mut Transform,
+    controller: &mut KinematicCharacterController,
+    gravity_velocity: f32,
+) -> bool {
+    if behavior.state != AiState::Attack {
+        return false;
+    }
+
+    controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
+    if let Some(target_pos) = behavior.last_known_target_pos {
+        face_target(transform, target_pos);
+    }
+    true
+}
+
+/// 處理巡邏狀態的移動
+/// 返回 true 表示需要等待（不執行移動）
+#[inline]
+fn handle_patrol_movement(
+    patrol_path: &mut PatrolPath,
+    movement: &mut AiMovement,
+    transform_translation: Vec3,
+    controller: &mut KinematicCharacterController,
+    gravity_velocity: f32,
+    dt: f32,
+) -> bool {
+    // 處理等待
+    if patrol_path.wait_timer > 0.0 {
+        patrol_path.wait_timer -= dt;
+        controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
+        return true;
+    }
+
+    // 取得當前巡邏點
+    if let Some(waypoint) = patrol_path.current_waypoint() {
+        movement.move_target = Some(waypoint);
+        movement.is_running = false;
+
+        // 檢查是否到達
+        if movement.has_arrived(transform_translation) {
+            patrol_path.wait_timer = patrol_path.wait_time;
+            patrol_path.advance();
+        }
+    }
+    false
+}
+
+/// 執行移動到目標位置
+#[inline]
+fn execute_movement_to_target(
+    target: Vec3,
+    transform: &mut Transform,
+    movement: &AiMovement,
+    controller: &mut KinematicCharacterController,
+    gravity_velocity: f32,
+    dt: f32,
+) {
+    let my_pos = transform.translation;
+    let direction = (target - my_pos).normalize_or_zero();
+    let flat_direction = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
+
+    if flat_direction.length_squared() > 0.01 {
+        let speed = movement.current_speed();
+        let horizontal = flat_direction * speed * dt;
+        controller.translation = Some(Vec3::new(horizontal.x, gravity_velocity, horizontal.z));
+
+        // 面向移動方向
+        let look_target = transform.translation + flat_direction;
+        transform.look_at(look_target, Vec3::Y);
+    } else {
+        controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
+    }
+}
+
+/// 處理閒置狀態的移動（只應用重力）
+#[inline]
+fn handle_idle_state_movement(
+    behavior: &AiBehavior,
+    controller: &mut KinematicCharacterController,
+    gravity_velocity: f32,
+) -> bool {
+    if behavior.state != AiState::Idle {
+        return false;
+    }
+    controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
+    true
+}
+
+/// 處理移動目標或靜止
+#[inline]
+fn handle_movement_or_idle(
+    movement: &AiMovement,
+    transform: &mut Transform,
+    controller: &mut KinematicCharacterController,
+    gravity_velocity: f32,
+    dt: f32,
+) {
+    if let Some(target) = movement.move_target {
+        execute_movement_to_target(target, transform, movement, controller, gravity_velocity, dt);
+    } else {
+        controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
+    }
+}
+
+/// 處理巡邏狀態的移動
+/// 返回 true 表示已處理（正在巡邏或等待中）
+#[inline]
+fn handle_patrol_state_movement(
+    behavior: &AiBehavior,
+    patrol: &mut Option<Mut<PatrolPath>>,
+    movement: &mut AiMovement,
+    transform_translation: Vec3,
+    controller: &mut KinematicCharacterController,
+    gravity_velocity: f32,
+    dt: f32,
+) -> bool {
+    if behavior.state != AiState::Patrol {
+        return false;
+    }
+    let Some(ref mut patrol_path) = patrol else {
+        return false;
+    };
+    handle_patrol_movement(
+        patrol_path,
+        movement,
+        transform_translation,
+        controller,
+        gravity_velocity,
+        dt,
+    )
+}
+
+/// 計算重力速度
+#[inline]
+fn calculate_gravity_velocity(output: Option<&KinematicCharacterControllerOutput>, dt: f32) -> f32 {
+    let is_grounded = output.is_some_and(|o| o.grounded);
+    if is_grounded { 0.0 } else { GRAVITY * dt }
+}
+
+/// 處理單個敵人的移動邏輯
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn process_single_enemy_movement(
+    transform: &mut Transform,
+    behavior: &AiBehavior,
+    movement: &mut AiMovement,
+    controller: &mut KinematicCharacterController,
+    patrol: &mut Option<Mut<PatrolPath>>,
+    gravity_velocity: f32,
+    dt: f32,
+) {
+    // 根據狀態處理移動（按優先級順序）
+    if handle_attack_state_movement(behavior, transform, controller, gravity_velocity) {
+        return;
+    }
+    if handle_idle_state_movement(behavior, controller, gravity_velocity) {
+        return;
+    }
+    if handle_patrol_state_movement(behavior, patrol, movement, transform.translation, controller, gravity_velocity, dt) {
+        return;
+    }
+    handle_movement_or_idle(movement, transform, controller, gravity_velocity, dt);
+}
 
 /// AI 移動系統：移動到目標位置
 #[allow(clippy::type_complexity)]
@@ -391,78 +680,17 @@ pub fn ai_movement_system(
 ) {
     let dt = time.delta_secs();
 
-    for (mut transform, behavior, mut movement, mut controller, output, patrol) in &mut enemy_query {
-        // 檢查是否在地面（用於重力計算）
-        let is_grounded = output.is_some_and(|o| o.grounded);
-        let gravity_velocity = if is_grounded { 0.0 } else { GRAVITY * dt };
-
-        // 攻擊狀態：不移動，但面向目標（仍需重力）
-        if behavior.state == AiState::Attack {
-            controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
-            if let Some(target_pos) = behavior.last_known_target_pos {
-                let direction = (target_pos - transform.translation).normalize_or_zero();
-                let flat_direction = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
-                if flat_direction.length_squared() > 0.01 {
-                    let look_target = transform.translation + flat_direction;
-                    transform.look_at(look_target, Vec3::Y);
-                }
-            }
-            continue;
-        }
-
-        // 閒置狀態不移動（仍需重力）
-        if behavior.state == AiState::Idle {
-            controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
-            continue;
-        }
-
-        // 巡邏狀態：使用巡邏路徑
-        if behavior.state == AiState::Patrol {
-            if let Some(mut patrol_path) = patrol {
-                // 處理等待
-                if patrol_path.wait_timer > 0.0 {
-                    patrol_path.wait_timer -= dt;
-                    controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
-                    continue;
-                }
-
-                // 取得當前巡邏點
-                if let Some(waypoint) = patrol_path.current_waypoint() {
-                    movement.move_target = Some(waypoint);
-                    movement.is_running = false;
-
-                    // 檢查是否到達
-                    if movement.has_arrived(transform.translation) {
-                        patrol_path.wait_timer = patrol_path.wait_time;
-                        patrol_path.advance();
-                    }
-                }
-            }
-        }
-
-        // 執行移動（包含重力）
-        if let Some(target) = movement.move_target {
-            let my_pos = transform.translation;
-            let direction = (target - my_pos).normalize_or_zero();
-
-            // 只在 XZ 平面移動
-            let flat_direction = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
-
-            if flat_direction.length_squared() > 0.01 {
-                // 使用 KinematicCharacterController 移動 + 重力
-                let speed = movement.current_speed();
-                let horizontal = flat_direction * speed * dt;
-                controller.translation = Some(Vec3::new(horizontal.x, gravity_velocity, horizontal.z));
-
-                // 面向移動方向
-                let look_target = transform.translation + flat_direction;
-                transform.look_at(look_target, Vec3::Y);
-            } else {
-                controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
-            }
-        } else {
-            controller.translation = Some(Vec3::new(0.0, gravity_velocity, 0.0));
-        }
+    for (mut transform, behavior, mut movement, mut controller, output, mut patrol) in &mut enemy_query {
+        let gravity_velocity = calculate_gravity_velocity(output, dt);
+        process_single_enemy_movement(
+            &mut transform,
+            behavior,
+            &mut movement,
+            &mut controller,
+            &mut patrol,
+            gravity_velocity,
+            dt,
+        );
     }
 }
 
@@ -477,13 +705,195 @@ const MELEE_DAMAGE: f32 = 15.0;
 /// 近戰冷卻時間（秒）
 const MELEE_COOLDOWN: f32 = 0.5;
 
+// === 攻擊系統輔助函數 ===
+
+/// 更新武器冷卻和換彈狀態
+/// 返回 true 表示正在換彈，應跳過攻擊
+#[inline]
+fn update_weapon_state(weapon: &mut Weapon, dt: f32) -> bool {
+    if weapon.fire_cooldown > 0.0 {
+        weapon.fire_cooldown -= dt;
+    }
+    if weapon.is_reloading {
+        weapon.reload_timer -= dt;
+        if weapon.reload_timer <= 0.0 {
+            weapon.finish_reload();
+        }
+        return true;
+    }
+    false
+}
+
+/// 檢查是否滿足攻擊前置條件
+#[inline]
+fn check_attack_preconditions(behavior: &AiBehavior, perception: &AiPerception) -> bool {
+    !behavior.is_spawn_protected()
+        && behavior.state == AiState::Attack
+        && perception.can_see_target
+}
+
+/// 執行近戰攻擊
+/// 返回 true 表示觸發了近戰攻擊
+#[inline]
+fn execute_melee_attack(
+    commands: &mut Commands,
+    children: &Children,
+    arm_query: &Query<(Entity, &EnemyArm), Without<EnemyPunchAnimation>>,
+    player_entity: Entity,
+    enemy_entity: Entity,
+    weapon: &mut Weapon,
+) -> bool {
+    if weapon.fire_cooldown > 0.0 {
+        return false;
+    }
+
+    // 找到右手臂觸發揮拳動畫
+    for child in children.iter() {
+        if let Ok((arm_entity, arm)) = arm_query.get(child) {
+            if arm.is_right {
+                commands.entity(arm_entity).insert(
+                    EnemyPunchAnimation::with_target(player_entity, enemy_entity)
+                );
+                break;
+            }
+        }
+    }
+
+    weapon.fire_cooldown = MELEE_COOLDOWN;
+    true
+}
+
+/// 計算射擊精度（含距離衰減）
+#[inline]
+fn calculate_effective_accuracy(base_accuracy: f32, weapon_range: f32, target_distance: f32) -> f32 {
+    let half_range = weapon_range * 0.5;
+    let range_penalty = if target_distance > half_range {
+        let over_range = (target_distance - half_range) / half_range;
+        over_range.clamp(0.0, MAX_RANGE_PENALTY)
+    } else {
+        0.0
+    };
+    (base_accuracy - range_penalty).max(MIN_ACCURACY)
+}
+
+/// 計算彈道終點（命中或未命中）
+#[inline]
+fn calculate_tracer_end(
+    hit_roll: f32,
+    effective_accuracy: f32,
+    player_pos: Vec3,
+    player_entity: Entity,
+    enemy_entity: Entity,
+    muzzle_pos: Vec3,
+    damage: f32,
+    damage_events: &mut MessageWriter<DamageEvent>,
+) -> Vec3 {
+    if hit_roll <= effective_accuracy {
+        // 命中
+        damage_events.write(
+            DamageEvent::new(player_entity, damage, DamageSource::Bullet)
+                .with_attacker(enemy_entity)
+                .with_position(muzzle_pos)
+        );
+        player_pos + Vec3::Y * 1.0
+    } else {
+        // 未命中 - 偏移到玩家附近
+        let mut rng = rand::rng();
+        let miss_offset = Vec3::new(
+            rng.random_range(-MISS_SPREAD_X..MISS_SPREAD_X),
+            rng.random_range(MISS_SPREAD_Y_MIN..MISS_SPREAD_Y_MAX),
+            rng.random_range(-MISS_SPREAD_Z..MISS_SPREAD_Z),
+        );
+        player_pos + Vec3::Y * PLAYER_BODY_HEIGHT + miss_offset
+    }
+}
+
+/// 生成槍口特效和子彈拖尾
+#[inline]
+fn spawn_muzzle_effects(
+    commands: &mut Commands,
+    visuals: &CombatVisuals,
+    muzzle_pos: Vec3,
+    tracer_end: Vec3,
+) {
+    // 槍口閃光
+    commands.spawn((
+        Mesh3d(visuals.muzzle_mesh.clone()),
+        MeshMaterial3d(visuals.muzzle_material.clone()),
+        Transform::from_translation(muzzle_pos),
+        MuzzleFlash { lifetime: 0.05 },
+    ));
+
+    // 子彈拖尾
+    spawn_bullet_tracer(commands, visuals, muzzle_pos, tracer_end, TracerStyle::Rifle);
+}
+
+/// 執行遠程攻擊的射擊邏輯
+/// 返回 true 表示成功開火
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn execute_ranged_attack(
+    commands: &mut Commands,
+    visuals: &Option<Res<CombatVisuals>>,
+    transform: &Transform,
+    combat: &mut AiCombat,
+    weapon: &mut Weapon,
+    player_pos: Vec3,
+    player_entity: Entity,
+    enemy_entity: Entity,
+    target_distance: f32,
+    damage_events: &mut MessageWriter<DamageEvent>,
+) -> bool {
+    // 檢查是否需要換彈
+    if weapon.needs_reload() {
+        weapon.start_reload();
+        return false;
+    }
+
+    // 檢查是否可以開火
+    let should_fire = combat.can_attack() || combat.should_fire_next();
+    if !should_fire || !weapon.can_fire() {
+        return false;
+    }
+
+    // 計算槍口位置
+    let forward = transform.forward();
+    let muzzle_pos = transform.translation + forward.as_vec3() * MUZZLE_FORWARD_OFFSET + Vec3::new(0.0, MUZZLE_HEIGHT_OFFSET, 0.0);
+
+    // 計算精度和彈道終點
+    let mut rng = rand::rng();
+    let hit_roll: f32 = rng.random();
+    let effective_accuracy = calculate_effective_accuracy(combat.accuracy, weapon.stats.range, target_distance);
+    let tracer_end = calculate_tracer_end(
+        hit_roll,
+        effective_accuracy,
+        player_pos,
+        player_entity,
+        enemy_entity,
+        muzzle_pos,
+        weapon.stats.damage,
+        damage_events,
+    );
+
+    // 生成特效
+    if let Some(ref vis) = visuals {
+        spawn_muzzle_effects(commands, vis, muzzle_pos, tracer_end);
+    }
+
+    // 消耗彈藥並更新狀態
+    weapon.consume_ammo();
+    weapon.fire_cooldown = weapon.stats.fire_rate;
+    combat.fire_once();
+    true
+}
+
 /// AI 攻擊系統：向玩家開火或近戰攻擊
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 pub fn ai_attack_system(
     mut commands: Commands,
     time: Res<Time>,
-    visuals: Option<Res<crate::combat::CombatVisuals>>,
+    visuals: Option<Res<CombatVisuals>>,
     mut enemy_query: Query<(
         Entity,
         &Transform,
@@ -509,139 +919,39 @@ pub fn ai_attack_system(
         // 更新冷卻
         combat.tick(dt);
 
-        // 更新武器冷卻和換彈
-        if weapon.fire_cooldown > 0.0 {
-            weapon.fire_cooldown -= dt;
-        }
-        if weapon.is_reloading {
-            weapon.reload_timer -= dt;
-            if weapon.reload_timer <= 0.0 {
-                weapon.finish_reload();
-            }
-            continue; // 換彈中不能攻擊
-        }
-
-        // 生成保護期內不攻擊（給玩家反應時間）
-        if behavior.is_spawn_protected() {
+        // 更新武器狀態（換彈中跳過）
+        if update_weapon_state(&mut weapon, dt) {
             continue;
         }
 
-        // 只在攻擊狀態才開火
-        if behavior.state != AiState::Attack {
-            continue;
-        }
-
-        // 必須能看到目標
-        if !perception.can_see_target {
+        // 檢查攻擊前置條件
+        if !check_attack_preconditions(behavior, perception) {
             continue;
         }
 
         // 計算與目標的距離
-        let target_distance = if let Some(target_pos) = behavior.last_known_target_pos {
-            transform.translation.distance(target_pos)
+        let target_distance = behavior.last_known_target_pos
+            .map(|pos| transform.translation.distance(pos))
+            .unwrap_or(f32::MAX);
+
+        // 判斷攻擊類型
+        if target_distance <= MELEE_ATTACK_RANGE {
+            // 近戰攻擊
+            execute_melee_attack(&mut commands, children, &arm_query, player_entity, enemy_entity, &mut weapon);
         } else {
-            f32::MAX
-        };
-
-        // 判斷是否使用近戰攻擊
-        let use_melee = target_distance <= MELEE_ATTACK_RANGE;
-
-        if use_melee {
-            // === 近戰攻擊 ===
-            // 檢查武器冷卻（近戰也用 weapon.fire_cooldown）
-            if weapon.fire_cooldown > 0.0 {
-                continue;
-            }
-
-            // 觸發揮拳動畫（找到右手臂）
-            // 傷害事件將在動畫 Strike 階段發送
-            for child in children.iter() {
-                // 搜索直接子實體中的手臂
-                if let Ok((arm_entity, arm)) = arm_query.get(child) {
-                    if arm.is_right {
-                        commands.entity(arm_entity).insert(
-                            EnemyPunchAnimation::with_target(player_entity, enemy_entity)
-                        );
-                        break;
-                    }
-                }
-            }
-
-            // 設置近戰冷卻
-            weapon.fire_cooldown = MELEE_COOLDOWN;
-        } else {
-            // === 遠程攻擊 ===
-            // 檢查彈藥（自動換彈）
-            if weapon.needs_reload() {
-                weapon.start_reload();
-                continue;
-            }
-
-            // 檢查是否可以開火
-            let should_fire = combat.can_attack() || combat.should_fire_next();
-            if !should_fire || !weapon.can_fire() {
-                continue;
-            }
-
-            // 計算槍口位置（敵人手部前方）
-            let forward = transform.forward();
-            let muzzle_pos = transform.translation + forward.as_vec3() * MUZZLE_FORWARD_OFFSET + Vec3::new(0.0, MUZZLE_HEIGHT_OFFSET, 0.0);
-
-            // 計算命中（簡化：基於精度和距離）
-            let mut rng = rand::rng();
-            let hit_roll: f32 = rng.random();
-
-            // 距離衰減：超過有效射程一半後精度開始下降
-            let half_range = weapon.stats.range * 0.5;
-            let range_penalty = if target_distance > half_range {
-                let over_range = (target_distance - half_range) / half_range;
-                over_range.clamp(0.0, MAX_RANGE_PENALTY)
-            } else {
-                0.0
-            };
-            let effective_accuracy = (combat.accuracy - range_penalty).max(MIN_ACCURACY);
-
-            // 計算彈道終點
-            let tracer_end = if hit_roll <= effective_accuracy {
-                // 命中！發送傷害事件
-                let damage = weapon.stats.damage;
-                damage_events.write(
-                    DamageEvent::new(player_entity, damage, DamageSource::Bullet)
-                        .with_attacker(enemy_entity)
-                        .with_position(muzzle_pos)
-                );
-                // 命中時彈道直指玩家身體中心
-                player_pos + Vec3::Y * 1.0
-            } else {
-                // 未命中時彈道偏移到玩家附近
-                let miss_offset = Vec3::new(
-                    rng.random_range(-MISS_SPREAD_X..MISS_SPREAD_X),
-                    rng.random_range(MISS_SPREAD_Y_MIN..MISS_SPREAD_Y_MAX),
-                    rng.random_range(-MISS_SPREAD_Z..MISS_SPREAD_Z),
-                );
-                player_pos + Vec3::Y * PLAYER_BODY_HEIGHT + miss_offset
-            };
-
-            // 生成槍口閃光和子彈拖尾
-            if let Some(ref vis) = visuals {
-                // 槍口閃光
-                commands.spawn((
-                    Mesh3d(vis.muzzle_mesh.clone()),
-                    MeshMaterial3d(vis.muzzle_material.clone()),
-                    Transform::from_translation(muzzle_pos),
-                    crate::combat::MuzzleFlash { lifetime: 0.05 },
-                ));
-
-                // 子彈拖尾（使用步槍風格）
-                spawn_bullet_tracer(&mut commands, vis, muzzle_pos, tracer_end, TracerStyle::Rifle);
-            }
-
-            // 消耗彈藥
-            weapon.consume_ammo();
-            weapon.fire_cooldown = weapon.stats.fire_rate;
-
-            // 更新連射狀態
-            combat.fire_once();
+            // 遠程攻擊
+            execute_ranged_attack(
+                &mut commands,
+                &visuals,
+                transform,
+                &mut combat,
+                &mut weapon,
+                player_pos,
+                player_entity,
+                enemy_entity,
+                target_distance,
+                &mut damage_events,
+            );
         }
     }
 }
@@ -1283,6 +1593,58 @@ fn spawn_leg(
 // 敵人揮拳動畫系統
 // ============================================================================
 
+// === 揮拳動畫輔助函數 ===
+
+/// 應用蓄力階段動畫
+#[inline]
+fn apply_wind_up_animation(transform: &mut Transform, arm: &EnemyArm, t: f32, wind_up_end: f32) {
+    let phase_progress = t / wind_up_end;
+    let ease = ease_out_quad(phase_progress);
+    let rest_z = arm.rest_rotation.to_euler(EulerRot::XYZ).2;
+
+    transform.rotation = Quat::from_euler(
+        EulerRot::XYZ,
+        -0.3 * ease,
+        0.0,
+        rest_z + 0.3 * ease
+    );
+}
+
+/// 應用出拳階段動畫
+#[inline]
+fn apply_strike_animation(transform: &mut Transform, arm: &EnemyArm, t: f32, wind_up_end: f32, strike_end: f32) {
+    let phase_t = t - wind_up_end;
+    let phase_duration = strike_end - wind_up_end;
+    let phase_progress = phase_t / phase_duration;
+    let ease = ease_out_cubic(phase_progress);
+    let rest_z = arm.rest_rotation.to_euler(EulerRot::XYZ).2;
+
+    let rotation = Quat::from_euler(
+        EulerRot::XYZ,
+        1.4 * ease,
+        0.0,
+        rest_z * (1.0 - ease)
+    );
+
+    transform.translation = arm.rest_position + Vec3::new(0.0, 0.0, 0.4 * ease);
+    transform.rotation = rotation;
+}
+
+/// 應用收回階段動畫
+#[inline]
+fn apply_return_animation(transform: &mut Transform, arm: &EnemyArm, t: f32, strike_end: f32, duration: f32) {
+    let phase_t = t - strike_end;
+    let phase_duration = duration - strike_end;
+    let phase_progress = phase_t / phase_duration;
+    let ease = ease_in_out_quad(phase_progress);
+
+    let strike_rotation = Quat::from_euler(EulerRot::XYZ, 1.4, 0.0, 0.0);
+    let strike_offset = Vec3::new(0.0, 0.0, 0.4);
+
+    transform.translation = (arm.rest_position + strike_offset).lerp(arm.rest_position, ease);
+    transform.rotation = strike_rotation.slerp(arm.rest_rotation, ease);
+}
+
 /// 敵人揮拳動畫更新系統
 /// 處理手臂動畫的三個階段：WindUp → Strike → Return
 /// 在 Strike 階段發送傷害事件
@@ -1295,20 +1657,13 @@ pub fn enemy_punch_animation_system(
     let dt = time.delta_secs();
 
     for (entity, arm, mut transform, mut anim) in &mut arm_query {
-        // 更新計時器
         anim.timer += dt;
+
+        // 更新階段
+        anim.update_phase();
 
         let (wind_up_end, strike_end, duration) = anim.phase_times();
         let t = anim.timer;
-
-        // 更新階段
-        if t < wind_up_end {
-            anim.phase = PunchPhase::WindUp;
-        } else if t < strike_end {
-            anim.phase = PunchPhase::Strike;
-        } else if t < duration {
-            anim.phase = PunchPhase::Return;
-        }
 
         // 進入 Strike 階段時發送傷害事件
         if anim.phase == PunchPhase::Strike && !anim.damage_dealt {
@@ -1326,62 +1681,11 @@ pub fn enemy_punch_animation_system(
             continue;
         }
 
-        // 揮拳動畫（相對於手臂根位置）
+        // 應用階段動畫
         match anim.phase {
-            PunchPhase::WindUp => {
-                // 蓄力：手臂向後收
-                let phase_progress = t / wind_up_end;
-                let ease = ease_out_quad(phase_progress);
-
-                // 旋轉手臂向後收
-                let rotation = Quat::from_euler(
-                    bevy::math::EulerRot::XYZ,
-                    -0.3 * ease,     // X: 稍微抬起
-                    0.0,
-                    arm.rest_rotation.to_euler(bevy::math::EulerRot::XYZ).2 + 0.3 * ease
-                );
-
-                transform.rotation = rotation;
-            }
-            PunchPhase::Strike => {
-                // 出拳：手臂快速向前伸直
-                let phase_t = t - wind_up_end;
-                let phase_duration = strike_end - wind_up_end;
-                let phase_progress = phase_t / phase_duration;
-                let ease = ease_out_cubic(phase_progress);
-
-                // 手臂旋轉成水平向前
-                let rotation = Quat::from_euler(
-                    bevy::math::EulerRot::XYZ,
-                    1.4 * ease,  // X: 從垂直轉到水平
-                    0.0,
-                    arm.rest_rotation.to_euler(bevy::math::EulerRot::XYZ).2 * (1.0 - ease)
-                );
-
-                // 位置向前伸出
-                let offset = Vec3::new(0.0, 0.0, 0.4 * ease);
-                transform.translation = arm.rest_position + offset;
-                transform.rotation = rotation;
-            }
-            PunchPhase::Return => {
-                // 收回：快速回到原位
-                let phase_t = t - strike_end;
-                let phase_duration = duration - strike_end;
-                let phase_progress = phase_t / phase_duration;
-                let ease = ease_in_out_quad(phase_progress);
-
-                // 從出拳終點插值回原位
-                let strike_rotation = Quat::from_euler(
-                    bevy::math::EulerRot::XYZ,
-                    1.4,
-                    0.0,
-                    0.0
-                );
-                let strike_offset = Vec3::new(0.0, 0.0, 0.4);
-
-                transform.translation = (arm.rest_position + strike_offset).lerp(arm.rest_position, ease);
-                transform.rotation = strike_rotation.slerp(arm.rest_rotation, ease);
-            }
+            PunchPhase::WindUp => apply_wind_up_animation(&mut transform, arm, t, wind_up_end),
+            PunchPhase::Strike => apply_strike_animation(&mut transform, arm, t, wind_up_end, strike_end),
+            PunchPhase::Return => apply_return_animation(&mut transform, arm, t, strike_end, duration),
         }
 
         // 動畫結束，移除組件
@@ -1390,24 +1694,6 @@ pub fn enemy_punch_animation_system(
             transform.rotation = arm.rest_rotation;
             commands.entity(entity).remove::<EnemyPunchAnimation>();
         }
-    }
-}
-
-// === 緩動函數 ===
-
-fn ease_out_quad(t: f32) -> f32 {
-    1.0 - (1.0 - t) * (1.0 - t)
-}
-
-fn ease_out_cubic(t: f32) -> f32 {
-    1.0 - (1.0 - t).powi(3)
-}
-
-fn ease_in_out_quad(t: f32) -> f32 {
-    if t < 0.5 {
-        2.0 * t * t
-    } else {
-        1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
     }
 }
 
@@ -1483,6 +1769,124 @@ pub fn cover_release_system(
 // 掩體系統 (GTA 5 風格)
 // ============================================================================
 
+// === 掩體系統輔助函數 ===
+
+/// 處理在掩體中的行為（探出射擊）
+/// 返回 true 表示正在掩體中，應跳過後續處理
+#[inline]
+fn handle_in_cover_state(
+    seeker: &mut CoverSeeker,
+    behavior: &mut AiBehavior,
+    current_time: f32,
+) -> bool {
+    if !seeker.is_in_cover {
+        return false;
+    }
+
+    // 處理探出射擊
+    if seeker.is_peeking {
+        // 探出時可以攻擊
+        if behavior.state != AiState::Attack {
+            behavior.set_state(AiState::Attack, current_time);
+        }
+        // 探出 0.5 秒後縮回
+        if seeker.peek_timer <= seeker.peek_interval - 0.5 {
+            seeker.end_peek();
+            behavior.set_state(AiState::TakingCover, current_time);
+        }
+    }
+    true
+}
+
+/// 尋找最佳掩體
+/// 返回 (掩體實體, 掩體位置, 距離平方)
+#[inline]
+fn find_best_cover(
+    my_pos: Vec3,
+    player_pos: Vec3,
+    max_cover_distance: f32,
+    cover_query: &Query<(Entity, &Transform, &mut CoverPoint)>,
+) -> Option<(Entity, Vec3, f32)> {
+    let max_cover_distance_sq = max_cover_distance * max_cover_distance;
+    let mut best_cover: Option<(Entity, Vec3, f32)> = None;
+
+    for (cover_entity, cover_transform, cover) in cover_query.iter() {
+        if !cover.is_available() {
+            continue;
+        }
+
+        let cover_pos = cover_transform.translation;
+        let distance_sq = my_pos.distance_squared(cover_pos);
+
+        // 檢查距離是否在範圍內
+        if distance_sq > max_cover_distance_sq {
+            continue;
+        }
+
+        // 檢查掩體是否能遮擋玩家
+        if !cover.is_covered_from(cover_pos, cover_pos - cover.cover_direction * 0.5, player_pos) {
+            continue;
+        }
+
+        // 選擇最近的掩體
+        if best_cover.map_or(true, |(_, _, d)| distance_sq < d) {
+            best_cover = Some((cover_entity, cover_pos, distance_sq));
+        }
+    }
+
+    best_cover
+}
+
+/// 移動到掩體並佔用
+#[inline]
+fn move_to_cover(
+    enemy_entity: Entity,
+    cover_entity: Entity,
+    cover_pos: Vec3,
+    seeker: &mut CoverSeeker,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    cover_query: &mut Query<(Entity, &Transform, &mut CoverPoint)>,
+    current_time: f32,
+) {
+    // 檢查掩體是否有效
+    let Ok((_, _, cover)) = cover_query.get(cover_entity) else { return };
+
+    seeker.target_cover = Some(cover_entity);
+    behavior.set_state(AiState::TakingCover, current_time);
+    movement.is_running = true;
+
+    // 移動到掩體後方
+    let behind_cover = cover_pos - cover.cover_direction * 0.8;
+    movement.move_target = Some(behind_cover);
+
+    // 佔用掩體
+    if let Ok((_, _, mut cover_mut)) = cover_query.get_mut(cover_entity) {
+        cover_mut.occupy(enemy_entity);
+    }
+}
+
+/// 檢查是否到達掩體
+#[inline]
+fn check_cover_arrival(
+    my_pos: Vec3,
+    seeker: &mut CoverSeeker,
+    movement: &mut AiMovement,
+    cover_query: &Query<(Entity, &Transform, &mut CoverPoint)>,
+) {
+    let Some(cover_entity) = seeker.target_cover else { return };
+
+    if let Ok((_, cover_transform, _)) = cover_query.get(cover_entity) {
+        let cover_pos = cover_transform.translation;
+        if my_pos.distance_squared(cover_pos) < COVER_ARRIVAL_SQ {
+            // 到達掩體
+            seeker.enter_cover(cover_entity);
+            movement.is_running = false;
+            movement.move_target = None;
+        }
+    }
+}
+
 /// AI 掩體尋找系統
 /// 當 AI 血量低時，尋找附近的掩體並移動過去
 #[allow(clippy::type_complexity)]
@@ -1514,84 +1918,36 @@ pub fn ai_cover_system(
         // 更新掩體計時器
         seeker.tick(dt);
 
-        // 如果正在掩體中
-        if seeker.is_in_cover {
-            // 處理探出射擊
-            if seeker.is_peeking {
-                // 探出時可以攻擊
-                if behavior.state != AiState::Attack {
-                    behavior.set_state(AiState::Attack, current_time);
-                }
-                // 探出 0.5 秒後縮回
-                if seeker.peek_timer <= seeker.peek_interval - 0.5 {
-                    seeker.end_peek();
-                    behavior.set_state(AiState::TakingCover, current_time);
-                }
-            }
+        // 處理在掩體中的狀態
+        if handle_in_cover_state(&mut seeker, &mut behavior, current_time) {
             continue;
         }
 
         // 檢查是否應該尋找掩體
         if seeker.should_seek_cover(health_percent) && behavior.state != AiState::Flee {
-            // 尋找最近的可用掩體
-            let mut best_cover: Option<(Entity, Vec3, f32)> = None;
-
-            for (cover_entity, cover_transform, cover) in cover_query.iter() {
-                if !cover.is_available() {
-                    continue;
-                }
-
-                let cover_pos = cover_transform.translation;
-                let distance_sq = my_pos.distance_squared(cover_pos);
-                let max_cover_distance_sq = seeker.max_cover_distance * seeker.max_cover_distance;
-
-                // 檢查距離是否在範圍內 (使用 distance_squared 避免 sqrt)
-                if distance_sq > max_cover_distance_sq {
-                    continue;
-                }
-
-                // 檢查掩體是否能遮擋玩家
-                if !cover.is_covered_from(cover_pos, cover_pos - cover.cover_direction * 0.5, player_pos) {
-                    continue;
-                }
-
-                // 選擇最近的掩體 (使用 distance_squared)
-                let is_closer = best_cover.map_or(true, |(_, _, d)| distance_sq < d);
-                if is_closer {
-                    best_cover = Some((cover_entity, cover_pos, distance_sq));
-                }
-            }
-
-            // 找到掩體，移動過去
-            if let Some((cover_entity, cover_pos, _)) = best_cover {
-                // 再次檢查掩體是否有效
-                let Ok((_, _, cover)) = cover_query.get(cover_entity) else { continue };
-                seeker.target_cover = Some(cover_entity);
-                behavior.set_state(AiState::TakingCover, current_time);
-                movement.is_running = true;
-                // 移動到掩體後方
-                let behind_cover = cover_pos - cover.cover_direction * 0.8;
-                movement.move_target = Some(behind_cover);
-
-                // 佔用掩體
-                if let Ok((_, _, mut cover_mut)) = cover_query.get_mut(cover_entity) {
-                    cover_mut.occupy(enemy_entity);
-                }
+            // 尋找最佳掩體
+            if let Some((cover_entity, cover_pos, _)) = find_best_cover(
+                my_pos,
+                player_pos,
+                seeker.max_cover_distance,
+                &cover_query,
+            ) {
+                // 移動到掩體並佔用
+                move_to_cover(
+                    enemy_entity,
+                    cover_entity,
+                    cover_pos,
+                    &mut seeker,
+                    &mut behavior,
+                    &mut movement,
+                    &mut cover_query,
+                    current_time,
+                );
             }
         }
 
-        // 檢查是否到達掩體 (使用 distance_squared 避免 sqrt)
-        if let Some(cover_entity) = seeker.target_cover {
-            if let Ok((_, cover_transform, _)) = cover_query.get(cover_entity) {
-                let cover_pos = cover_transform.translation;
-                if my_pos.distance_squared(cover_pos) < COVER_ARRIVAL_SQ {
-                    // 到達掩體
-                    seeker.enter_cover(cover_entity);
-                    movement.is_running = false;
-                    movement.move_target = None;
-                }
-            }
-        }
+        // 檢查是否到達掩體
+        check_cover_arrival(my_pos, &mut seeker, &mut movement, &cover_query);
     }
 }
 
@@ -1600,6 +1956,159 @@ pub fn ai_cover_system(
 // ============================================================================
 // 小隊協調系統 (GTA 5 風格包抄戰術)
 // ============================================================================
+
+// === 小隊協調系統輔助函數 ===
+
+/// 檢查是否在戰鬥狀態中可執行包抄
+/// 返回 true 表示應該跳過此敵人
+#[inline]
+fn check_combat_state_for_flanking(behavior: &AiBehavior, member: &mut SquadMember) -> bool {
+    if behavior.state != AiState::Chase && behavior.state != AiState::Attack {
+        // 如果正在包抄但狀態改變，結束包抄
+        if member.is_flanking {
+            member.end_flank();
+        }
+        return true;
+    }
+    false
+}
+
+/// 嘗試開始包抄（Flanker 角色專用）
+#[inline]
+fn try_start_flanking(
+    my_pos: Vec3,
+    player_pos: Vec3,
+    member: &mut SquadMember,
+    movement: &mut AiMovement,
+    ally_positions: &[Vec3],
+) {
+    if member.role != SquadRole::Flanker || !member.can_flank() {
+        return;
+    }
+
+    // 過濾自己的位置，避免把自己算入隊友
+    let other_positions: Vec<Vec3> = ally_positions
+        .iter()
+        .filter(|p| p.distance(my_pos) > 0.5)
+        .copied()
+        .collect();
+
+    let flank_pos = calculate_flank_position(
+        my_pos,
+        player_pos,
+        member.role,
+        &other_positions,
+        member.min_ally_distance,
+    );
+
+    // 開始包抄
+    member.start_flank(flank_pos);
+    movement.move_target = Some(flank_pos);
+    movement.is_running = true;
+}
+
+/// 更新包抄狀態
+/// 返回 true 表示到達包抄位置
+#[inline]
+fn update_flanking_state(
+    my_pos: Vec3,
+    member: &mut SquadMember,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    current_time: f32,
+) {
+    if !member.is_flanking {
+        return;
+    }
+
+    let Some(flank_target) = member.flank_target else { return };
+
+    if my_pos.distance_squared(flank_target) < FLANK_ARRIVAL_SQ {
+        // 到達包抄位置，結束包抄，準備攻擊
+        member.end_flank();
+        if behavior.state == AiState::Chase {
+            behavior.set_state(AiState::Attack, current_time);
+            movement.is_running = false;
+        }
+    } else {
+        // 繼續向包抄位置移動
+        movement.move_target = Some(flank_target);
+    }
+}
+
+/// 處理突擊者角色行為
+#[inline]
+fn handle_rusher_role(
+    member: &SquadMember,
+    behavior: &AiBehavior,
+    movement: &mut AiMovement,
+) {
+    if !member.is_flanking && behavior.state == AiState::Chase {
+        movement.move_target = behavior.last_known_target_pos;
+        movement.is_running = true;
+    }
+}
+
+/// 計算距離相關數據（用於角色行為判斷）
+/// 返回 (目標位置, 距離, 理想距離) 或 None
+#[inline]
+fn calculate_role_distance_data(
+    my_pos: Vec3,
+    member: &SquadMember,
+    behavior: &AiBehavior,
+) -> Option<(Vec3, f32, f32)> {
+    let target_pos = behavior.last_known_target_pos?;
+    let distance = my_pos.distance(target_pos);
+    let ideal_dist = member.role.ideal_attack_distance();
+    Some((target_pos, distance, ideal_dist))
+}
+
+/// 執行後退移動
+#[inline]
+fn execute_retreat(my_pos: Vec3, target_pos: Vec3, retreat_dist: f32, movement: &mut AiMovement) {
+    let retreat_dir = (my_pos - target_pos).normalize_or_zero();
+    movement.move_target = Some(my_pos + retreat_dir * retreat_dist);
+    movement.is_running = false;
+}
+
+/// 處理壓制者角色行為
+#[inline]
+fn handle_suppressor_role(
+    my_pos: Vec3,
+    member: &SquadMember,
+    behavior: &AiBehavior,
+    movement: &mut AiMovement,
+) {
+    let Some((target_pos, distance, ideal_dist)) = calculate_role_distance_data(my_pos, member, behavior) else { return };
+
+    if distance < ideal_dist - 2.0 {
+        // 太近了，後退
+        execute_retreat(my_pos, target_pos, 5.0, movement);
+    } else if distance > ideal_dist + 5.0 {
+        // 太遠了，靠近一點
+        movement.move_target = Some(target_pos);
+        movement.is_running = false;
+    } else {
+        // 距離合適，停止移動準備射擊
+        movement.move_target = None;
+    }
+}
+
+/// 處理隊長角色行為
+#[inline]
+fn handle_leader_role(
+    my_pos: Vec3,
+    member: &SquadMember,
+    behavior: &AiBehavior,
+    movement: &mut AiMovement,
+) {
+    let Some((target_pos, distance, ideal_dist)) = calculate_role_distance_data(my_pos, member, behavior) else { return };
+
+    if distance < ideal_dist - 3.0 {
+        // 太近了，稍微後退
+        execute_retreat(my_pos, target_pos, 3.0, movement);
+    }
+}
 
 /// 小隊協調系統
 /// 協調同一小隊的敵人進行包抄戰術
@@ -1649,103 +2158,22 @@ pub fn squad_coordination_system(
     for (_entity, transform, mut behavior, mut movement, mut member) in &mut enemy_query {
         let my_pos = transform.translation;
 
-        // 只有在追逐或攻擊狀態時才執行包抄
-        if behavior.state != AiState::Chase && behavior.state != AiState::Attack {
-            // 如果正在包抄但狀態改變，結束包抄
-            if member.is_flanking {
-                member.end_flank();
-            }
+        // 檢查是否在戰鬥狀態中
+        if check_combat_state_for_flanking(&behavior, &mut member) {
             continue;
         }
 
-        // 檢查是否可以開始新的包抄（Flanker 角色專用）
-        if member.role == SquadRole::Flanker && member.can_flank() {
-            // 計算包抄位置
-            // 注意：過濾自己的位置，避免把自己算入隊友
-            // 效能備註：對於少量敵人（< 20）這是可接受的
-            let other_positions: Vec<Vec3> = ally_positions
-                .iter()
-                .filter(|p| p.distance(my_pos) > 0.5) // 排除自己（使用距離而非 Entity 比較）
-                .copied()
-                .collect();
+        // 嘗試開始包抄（Flanker 角色專用）
+        try_start_flanking(my_pos, player_pos, &mut member, &mut movement, &ally_positions);
 
-            let flank_pos = calculate_flank_position(
-                my_pos,
-                player_pos,
-                member.role,
-                &other_positions,
-                member.min_ally_distance,
-            );
-
-            // 開始包抄
-            member.start_flank(flank_pos);
-            movement.move_target = Some(flank_pos);
-            movement.is_running = true;
-        }
-
-        // 如果正在包抄，更新移動目標
-        if member.is_flanking {
-            if let Some(flank_target) = member.flank_target {
-                // 檢查是否到達包抄位置 (使用 distance_squared 避免 sqrt)
-                if my_pos.distance_squared(flank_target) < FLANK_ARRIVAL_SQ {
-                    // 到達包抄位置，結束包抄，準備攻擊
-                    member.end_flank();
-                    // 切換到攻擊狀態
-                    if behavior.state == AiState::Chase {
-                        behavior.set_state(AiState::Attack, current_time);
-                        movement.is_running = false;
-                    }
-                } else {
-                    // 繼續向包抄位置移動
-                    movement.move_target = Some(flank_target);
-                }
-            }
-        }
+        // 更新包抄狀態
+        update_flanking_state(my_pos, &mut member, &mut behavior, &mut movement, current_time);
 
         // 根據角色調整行為
         match member.role {
-            SquadRole::Rusher => {
-                // 突擊者：直接衝向目標
-                if !member.is_flanking && behavior.state == AiState::Chase {
-                    movement.move_target = behavior.last_known_target_pos;
-                    movement.is_running = true;
-                }
-            }
-            SquadRole::Suppressor => {
-                // 壓制者：保持距離，不主動接近
-                if let Some(target_pos) = behavior.last_known_target_pos {
-                    let distance = my_pos.distance(target_pos);
-                    let ideal_dist = member.role.ideal_attack_distance();
-
-                    if distance < ideal_dist - 2.0 {
-                        // 太近了，後退
-                        let retreat_dir = (my_pos - target_pos).normalize_or_zero();
-                        movement.move_target = Some(my_pos + retreat_dir * 5.0);
-                        movement.is_running = false;
-                    } else if distance > ideal_dist + 5.0 {
-                        // 太遠了，靠近一點
-                        movement.move_target = Some(target_pos);
-                        movement.is_running = false;
-                    } else {
-                        // 距離合適，停止移動準備射擊
-                        movement.move_target = None;
-                    }
-                }
-            }
-            SquadRole::Leader => {
-                // 隊長：中距離觀察，不衝太前面
-                if let Some(target_pos) = behavior.last_known_target_pos {
-                    let distance = my_pos.distance(target_pos);
-                    let ideal_dist = member.role.ideal_attack_distance();
-
-                    if distance < ideal_dist - 3.0 {
-                        // 太近了，稍微後退
-                        let retreat_dir = (my_pos - target_pos).normalize_or_zero();
-                        movement.move_target = Some(my_pos + retreat_dir * 3.0);
-                        movement.is_running = false;
-                    }
-                }
-            }
+            SquadRole::Rusher => handle_rusher_role(&member, &behavior, &mut movement),
+            SquadRole::Suppressor => handle_suppressor_role(my_pos, &member, &behavior, &mut movement),
+            SquadRole::Leader => handle_leader_role(my_pos, &member, &behavior, &mut movement),
             SquadRole::Flanker => {
                 // 側翼者：由上面的包抄邏輯處理
             }

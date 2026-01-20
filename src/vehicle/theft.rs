@@ -301,6 +301,213 @@ pub enum TheftEventType {
 }
 
 // ============================================================================
+// 輔助函數
+// ============================================================================
+
+/// 尋找最近的上鎖車輛
+fn find_nearest_locked_vehicle(
+    player_pos: Vec3,
+    vehicle_query: &Query<(Entity, &Transform, &Vehicle, Option<&VehicleOwnership>), Without<Player>>,
+) -> Option<(Entity, VehicleType)> {
+    vehicle_query.iter()
+        .filter_map(|(entity, transform, vehicle, ownership)| {
+            // 跳過機車（通常不用破窗）
+            if vehicle.vehicle_type == VehicleType::Scooter {
+                return None;
+            }
+
+            let distance = (transform.translation - player_pos).length();
+            if distance > DOOR_INTERACT_DISTANCE {
+                return None;
+            }
+
+            // 檢查是否上鎖
+            ownership.filter(|o| o.is_locked).map(|_| (entity, distance, vehicle.vehicle_type))
+        })
+        .min_by(|(_, a, _), (_, b, _)| a.total_cmp(b))
+        .map(|(entity, _, vehicle_type)| (entity, vehicle_type))
+}
+
+/// 發送偷車中斷事件並重置狀態
+fn send_interrupt_and_reset(
+    theft_state: &mut PlayerTheftState,
+    theft_events: &mut MessageWriter<TheftEvent>,
+    player_entity: Entity,
+    reason: &str,
+) {
+    if let Some(vehicle_entity) = theft_state.target_vehicle {
+        theft_events.write(TheftEvent {
+            thief: player_entity,
+            vehicle: vehicle_entity,
+            event_type: TheftEventType::Interrupted,
+        });
+    }
+    theft_state.reset();
+    info!("偷車中斷：{}", reason);
+}
+
+/// 決定車主反應類型
+fn decide_owner_reaction() -> OwnerReactionType {
+    if rand::random::<f32>() < OWNER_FLEE_CHANCE {
+        OwnerReactionType::Flee
+    } else if rand::random::<f32>() < OWNER_FIGHT_CHANCE / (1.0 - OWNER_FLEE_CHANCE) {
+        OwnerReactionType::Fight
+    } else {
+        OwnerReactionType::CallForHelp
+    }
+}
+
+/// 生成隨機旋轉四元數
+pub fn random_rotation() -> Quat {
+    Quat::from_euler(
+        EulerRot::XYZ,
+        rand::random::<f32>() * std::f32::consts::TAU,
+        rand::random::<f32>() * std::f32::consts::TAU,
+        rand::random::<f32>() * std::f32::consts::TAU,
+    )
+}
+
+/// 設置行人恐慌狀態
+fn set_pedestrian_panic(
+    ped_state: &mut PedestrianState,
+    threat_pos: Vec3,
+    fear_level: f32,
+) {
+    ped_state.state = PedState::Fleeing;
+    ped_state.fear_level = fear_level;
+    ped_state.last_threat_pos = Some(threat_pos);
+}
+
+/// 檢查偷車是否被中斷（玩家受傷或按鍵放開）
+fn check_theft_interruption(
+    theft_state: &PlayerTheftState,
+    player_health: Option<&Health>,
+    keyboard: &ButtonInput<KeyCode>,
+) -> Option<&'static str> {
+    // 檢查玩家是否受傷
+    if let Some(health) = player_health {
+        if health.current < theft_state.initial_health - 0.1 {
+            return Some("玩家被攻擊");
+        }
+    }
+
+    // 檢查是否放開按鍵
+    if !keyboard.pressed(KeyCode::Tab) {
+        return Some("放開按鍵");
+    }
+
+    None
+}
+
+/// 處理破窗階段完成
+fn handle_window_break_complete(
+    commands: &mut Commands,
+    visuals: &TheftVisuals,
+    theft_state: &mut PlayerTheftState,
+    ownership: Option<&mut VehicleOwnership>,
+    vehicle_transform: &Transform,
+    player_entity: Entity,
+    vehicle_entity: Entity,
+    theft_events: &mut MessageWriter<TheftEvent>,
+    crime_events: &mut MessageWriter<CrimeEvent>,
+) {
+    // 生成玻璃碎片
+    spawn_glass_shards(commands, visuals, vehicle_transform.translation);
+
+    // 觸發警報
+    if let Some(ownership) = ownership {
+        ownership.window_intact = false;
+        if ownership.has_alarm {
+            ownership.alarm_active = true;
+            ownership.alarm_timer = ALARM_DURATION;
+            info!("車輛警報觸發！");
+
+            theft_events.write(TheftEvent {
+                thief: player_entity,
+                vehicle: vehicle_entity,
+                event_type: TheftEventType::AlarmTriggered,
+            });
+        }
+    }
+
+    theft_events.write(TheftEvent {
+        thief: player_entity,
+        vehicle: vehicle_entity,
+        event_type: TheftEventType::WindowBroken,
+    });
+
+    // 觸發犯罪事件
+    crime_events.write(CrimeEvent::VehicleTheft {
+        position: vehicle_transform.translation,
+    });
+
+    // 進入熱線啟動階段
+    theft_state.next_stage(TheftState::Hotwiring, HOTWIRE_BASE_DURATION);
+    info!("車窗打破，開始熱線啟動");
+}
+
+/// 處理熱線啟動階段完成
+fn handle_hotwire_complete(
+    theft_state: &mut PlayerTheftState,
+    ownership: Option<&mut VehicleOwnership>,
+    player_entity: Entity,
+    vehicle_entity: Entity,
+    theft_events: &mut MessageWriter<TheftEvent>,
+) {
+    // 解鎖車輛
+    if let Some(ownership) = ownership {
+        ownership.is_locked = false;
+    }
+
+    theft_events.write(TheftEvent {
+        thief: player_entity,
+        vehicle: vehicle_entity,
+        event_type: TheftEventType::Succeeded,
+    });
+
+    theft_state.next_stage(TheftState::Entered, 0.0);
+    info!("偷車成功！");
+}
+
+/// 處理車主對偷車事件的反應
+fn handle_owner_theft_reaction(
+    commands: &mut Commands,
+    owner_entity: Entity,
+    vehicle_pos: Vec3,
+    ped_state_query: &mut Query<&mut PedestrianState>,
+) {
+    let reaction = decide_owner_reaction();
+
+    commands.entity(owner_entity).insert(VehicleOwnerReaction {
+        reaction,
+        reaction_timer: 5.0,
+        has_reacted: false,
+    });
+
+    if let Ok(mut ped_state) = ped_state_query.get_mut(owner_entity) {
+        set_pedestrian_panic(&mut ped_state, vehicle_pos, 1.0);
+    }
+
+    info!("車主反應: {:?}", reaction);
+}
+
+/// 警報附近的行人
+fn alert_nearby_pedestrians(
+    vehicle_pos: Vec3,
+    pedestrian_query: &Query<(Entity, &Transform), With<Pedestrian>>,
+    ped_state_query: &mut Query<&mut PedestrianState>,
+) {
+    for (entity, ped_transform) in pedestrian_query {
+        let distance = (ped_transform.translation - vehicle_pos).length();
+        if distance < 15.0 && rand::random::<f32>() < 0.3 {
+            if let Ok(mut ped_state) = ped_state_query.get_mut(entity) {
+                set_pedestrian_panic(&mut ped_state, vehicle_pos, 0.8);
+            }
+        }
+    }
+}
+
+// ============================================================================
 // 系統
 // ============================================================================
 
@@ -347,46 +554,25 @@ pub fn theft_input_system(
     }
 
     // 尋找最近的上鎖車輛
-    let nearest_locked_vehicle = vehicle_query.iter()
-        .filter_map(|(entity, transform, vehicle, ownership)| {
-            // 跳過機車（通常不用破窗）
-            if vehicle.vehicle_type == VehicleType::Scooter {
-                return None;
-            }
+    let Some((vehicle_entity, vehicle_type)) = find_nearest_locked_vehicle(player_pos, &vehicle_query) else {
+        return;
+    };
 
-            let distance = (transform.translation - player_pos).length();
-            if distance > DOOR_INTERACT_DISTANCE {
-                return None;
-            }
+    // 根據車輛類型計算偷車時間
+    let _hotwire_time = match vehicle_type {
+        VehicleType::Car => HOTWIRE_BASE_DURATION,
+        VehicleType::Taxi => HOTWIRE_BASE_DURATION * 0.8, // 計程車較容易
+        VehicleType::Bus => HOTWIRE_BASE_DURATION * 1.5,  // 公車較難
+        VehicleType::Scooter => HOTWIRE_BASE_DURATION * 0.5, // 機車最容易
+    };
 
-            // 檢查是否上鎖
-            if let Some(ownership) = ownership {
-                if ownership.is_locked {
-                    return Some((entity, distance, vehicle.vehicle_type));
-                }
-            }
+    theft_state.start_theft(vehicle_entity, WINDOW_BREAK_DURATION);
+    theft_state.next_stage(TheftState::BreakingWindow, WINDOW_BREAK_DURATION);
 
-            None
-        })
-        .min_by(|(_, a, _), (_, b, _)| a.total_cmp(b));
+    // 記錄開始偷車時的血量（用於檢測被攻擊中斷）
+    theft_state.initial_health = player_health.map(|h| h.current).unwrap_or(100.0);
 
-    if let Some((vehicle_entity, _, vehicle_type)) = nearest_locked_vehicle {
-        // 根據車輛類型計算偷車時間
-        let _hotwire_time = match vehicle_type {
-            VehicleType::Car => HOTWIRE_BASE_DURATION,
-            VehicleType::Taxi => HOTWIRE_BASE_DURATION * 0.8, // 計程車較容易
-            VehicleType::Bus => HOTWIRE_BASE_DURATION * 1.5,  // 公車較難
-            VehicleType::Scooter => HOTWIRE_BASE_DURATION * 0.5, // 機車最容易
-        };
-
-        theft_state.start_theft(vehicle_entity, WINDOW_BREAK_DURATION);
-        theft_state.next_stage(TheftState::BreakingWindow, WINDOW_BREAK_DURATION);
-
-        // 記錄開始偷車時的血量（用於檢測被攻擊中斷）
-        theft_state.initial_health = player_health.map(|h| h.current).unwrap_or(100.0);
-
-        info!("開始偷車");
-    }
+    info!("開始偷車");
 }
 
 /// 偷車進度更新系統
@@ -409,18 +595,8 @@ pub fn theft_progress_system(
     };
 
     // 玩家死亡時重置偷車狀態
-    if respawn_state.is_dead {
-        if theft_state.is_stealing() {
-            if let Some(vehicle_entity) = theft_state.target_vehicle {
-                theft_events.write(TheftEvent {
-                    thief: player_entity,
-                    vehicle: vehicle_entity,
-                    event_type: TheftEventType::Interrupted,
-                });
-            }
-            theft_state.reset();
-            info!("偷車中斷：玩家死亡");
-        }
+    if respawn_state.is_dead && theft_state.is_stealing() {
+        send_interrupt_and_reset(&mut theft_state, &mut theft_events, player_entity, "玩家死亡");
         return;
     }
 
@@ -428,32 +604,14 @@ pub fn theft_progress_system(
         return;
     }
 
-    // 檢查玩家是否受傷（血量下降 = 被攻擊）
-    if let Some(health) = player_health {
-        if health.current < theft_state.initial_health - 0.1 {
-            // 玩家被攻擊，中斷偷車
-            if let Some(vehicle_entity) = theft_state.target_vehicle {
-                theft_events.write(TheftEvent {
-                    thief: player_entity,
-                    vehicle: vehicle_entity,
-                    event_type: TheftEventType::Interrupted,
-                });
-            }
-            theft_state.reset();
-            info!("偷車中斷：玩家被攻擊");
-            return;
-        }
-    }
-
     let Some(vehicle_entity) = theft_state.target_vehicle else {
         theft_state.reset();
         return;
     };
 
-    // 持續按住 Tab 鍵才能繼續偷車
-    if !keyboard.pressed(KeyCode::Tab) {
-        theft_state.reset();
-        info!("偷車中斷：放開按鍵");
+    // 檢查中斷條件
+    if let Some(reason) = check_theft_interruption(&theft_state, player_health, &keyboard) {
+        send_interrupt_and_reset(&mut theft_state, &mut theft_events, player_entity, reason);
         return;
     }
 
@@ -475,74 +633,33 @@ pub fn theft_progress_system(
     theft_state.progress = (theft_state.elapsed_time / theft_state.required_time).min(1.0);
 
     // 階段完成檢查
-    if theft_state.progress >= 1.0 {
-        match theft_state.state {
-            TheftState::BreakingWindow => {
-                // 破窗完成
-                let Ok((_, vehicle_transform, _, ownership)) = vehicle_query.get_mut(vehicle_entity) else {
-                    theft_state.reset();
-                    return;
-                };
+    if theft_state.progress < 1.0 {
+        return;
+    }
 
-                // 生成玻璃碎片
-                spawn_glass_shards(&mut commands, &visuals, vehicle_transform.translation);
-
-                // 觸發警報
-                if let Some(mut ownership) = ownership {
-                    ownership.window_intact = false;
-                    if ownership.has_alarm {
-                        ownership.alarm_active = true;
-                        ownership.alarm_timer = ALARM_DURATION;
-                        info!("車輛警報觸發！");
-
-                        theft_events.write(TheftEvent {
-                            thief: player_entity,
-                            vehicle: vehicle_entity,
-                            event_type: TheftEventType::AlarmTriggered,
-                        });
-                    }
-                }
-
-                theft_events.write(TheftEvent {
-                    thief: player_entity,
-                    vehicle: vehicle_entity,
-                    event_type: TheftEventType::WindowBroken,
-                });
-
-                // 觸發犯罪事件
-                crime_events.write(CrimeEvent::VehicleTheft {
-                    position: vehicle_transform.translation,
-                });
-
-                // 進入熱線啟動階段
-                theft_state.next_stage(TheftState::Hotwiring, HOTWIRE_BASE_DURATION);
-                info!("車窗打破，開始熱線啟動");
-            }
-
-            TheftState::Hotwiring => {
-                // 熱線啟動完成
-                let Ok((_, _, _vehicle, mut ownership)) = vehicle_query.get_mut(vehicle_entity) else {
-                    theft_state.reset();
-                    return;
-                };
-
-                // 解鎖車輛
-                if let Some(ref mut ownership) = ownership {
-                    ownership.is_locked = false;
-                }
-
-                theft_events.write(TheftEvent {
-                    thief: player_entity,
-                    vehicle: vehicle_entity,
-                    event_type: TheftEventType::Succeeded,
-                });
-
-                theft_state.next_stage(TheftState::Entered, 0.0);
-                info!("偷車成功！");
-            }
-
-            _ => {}
+    match theft_state.state {
+        TheftState::BreakingWindow => {
+            let Ok((_, vehicle_transform, _, mut ownership)) = vehicle_query.get_mut(vehicle_entity) else {
+                theft_state.reset();
+                return;
+            };
+            handle_window_break_complete(
+                &mut commands, &visuals, &mut theft_state, ownership.as_deref_mut(),
+                vehicle_transform, player_entity, vehicle_entity,
+                &mut theft_events, &mut crime_events,
+            );
         }
+        TheftState::Hotwiring => {
+            let Ok((_, _, _, mut ownership)) = vehicle_query.get_mut(vehicle_entity) else {
+                theft_state.reset();
+                return;
+            };
+            handle_hotwire_complete(
+                &mut theft_state, ownership.as_deref_mut(),
+                player_entity, vehicle_entity, &mut theft_events,
+            );
+        }
+        _ => {}
     }
 }
 
@@ -575,7 +692,7 @@ pub fn owner_reaction_system(
     player_query: Query<&Transform, With<Player>>,
 ) {
     for event in theft_events.read() {
-        // 只處理破窗和成功偷車事件
+        // 只處理破窗和警報觸發事件
         if !matches!(event.event_type, TheftEventType::WindowBroken | TheftEventType::AlarmTriggered) {
             continue;
         }
@@ -584,50 +701,18 @@ pub fn owner_reaction_system(
             continue;
         };
 
-        // 如果有車主
+        let vehicle_pos = vehicle_transform.translation;
+
+        // 處理車主反應
         if let Some(owner_entity) = ownership.owner {
-            if let Ok((_, _ped_transform)) = pedestrian_query.get(owner_entity) {
-                // 決定反應類型
-                let reaction = if rand::random::<f32>() < OWNER_FLEE_CHANCE {
-                    OwnerReactionType::Flee
-                } else if rand::random::<f32>() < OWNER_FIGHT_CHANCE / (1.0 - OWNER_FLEE_CHANCE) {
-                    OwnerReactionType::Fight
-                } else {
-                    OwnerReactionType::CallForHelp
-                };
-
-                commands.entity(owner_entity).insert(VehicleOwnerReaction {
-                    reaction,
-                    reaction_timer: 5.0,
-                    has_reacted: false,
-                });
-
-                // 設置行人狀態（讓他們驚慌逃跑）
-                if let Ok(mut ped_state) = ped_state_query.get_mut(owner_entity) {
-                    ped_state.state = PedState::Fleeing;
-                    ped_state.fear_level = 1.0;
-                    ped_state.last_threat_pos = Some(vehicle_transform.translation);
-                }
-
-                info!("車主反應: {:?}", reaction);
+            if pedestrian_query.get(owner_entity).is_ok() {
+                handle_owner_theft_reaction(&mut commands, owner_entity, vehicle_pos, &mut ped_state_query);
             }
         }
 
         // 附近行人也可能報警
-        let Ok(_player_transform) = player_query.single() else {
-            continue;
-        };
-
-        for (entity, ped_transform) in &pedestrian_query {
-            let distance = (ped_transform.translation - vehicle_transform.translation).length();
-            if distance < 15.0 && rand::random::<f32>() < 0.3 {
-                // 讓附近行人恐慌
-                if let Ok(mut ped_state) = ped_state_query.get_mut(entity) {
-                    ped_state.state = PedState::Fleeing;
-                    ped_state.fear_level = 0.8;
-                    ped_state.last_threat_pos = Some(vehicle_transform.translation);
-                }
-            }
+        if player_query.single().is_ok() {
+            alert_nearby_pedestrians(vehicle_pos, &pedestrian_query, &mut ped_state_query);
         }
     }
 }
@@ -768,12 +853,7 @@ fn spawn_glass_shards(
             Mesh3d(visuals.glass_shard_mesh.clone()),
             MeshMaterial3d(visuals.glass_material.clone()),
             Transform::from_translation(shard_pos)
-                .with_rotation(Quat::from_euler(
-                    EulerRot::XYZ,
-                    rand::random::<f32>() * std::f32::consts::TAU,
-                    rand::random::<f32>() * std::f32::consts::TAU,
-                    rand::random::<f32>() * std::f32::consts::TAU,
-                ))
+                .with_rotation(random_rotation())
                 .with_scale(Vec3::splat(0.5 + rand::random::<f32>() * 0.5)),
             GlassShard {
                 lifetime: 2.0 + rand::random::<f32>() * 1.0,

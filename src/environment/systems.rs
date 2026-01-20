@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
+use std::f32::consts::TAU;
 
 use super::{Destructible, DestructibleMaterial, DestructibleVisuals, Debris, DestructionEvent, DebrisPool};
 use crate::combat::{DamageEvent, Damageable};
@@ -20,6 +21,51 @@ pub fn setup_destructible_visuals(
     info!("💥 可破壞環境系統已初始化（含碎片物件池）");
 }
 
+// === 可破壞物件輔助函數 ===
+
+/// 處理單個可破壞物件的傷害
+fn process_destructible_damage(
+    commands: &mut Commands,
+    entity: Entity,
+    transform: &Transform,
+    destructible: &mut Destructible,
+    damage_amount: f32,
+    hit_position: Option<Vec3>,
+    current_time: f32,
+    destruction_events: &mut MessageWriter<DestructionEvent>,
+) {
+    // 計算方向（從攻擊者到目標）
+    let impact_direction = hit_position.map(|pos| {
+        (transform.translation - pos).normalize_or_zero()
+    });
+
+    // 造成傷害
+    let destroyed = destructible.take_damage(damage_amount, current_time);
+
+    if !destroyed {
+        return;
+    }
+
+    // 發送破壞事件
+    let mut destruction_event = DestructionEvent::new(
+        entity,
+        transform.translation,
+        destructible.material,
+        destructible.original_size,
+    );
+
+    if let Some(dir) = impact_direction {
+        destruction_event = destruction_event.with_impact_direction(dir);
+    }
+
+    destruction_events.write(destruction_event);
+
+    // 移除原始實體
+    if let Ok(mut entity_commands) = commands.get_entity(entity) {
+        entity_commands.despawn();
+    }
+}
+
 /// 可破壞物件受傷系統
 /// 監聯傷害事件，對可破壞物件造成傷害
 pub fn destructible_damage_system(
@@ -32,43 +78,160 @@ pub fn destructible_damage_system(
     let current_time = time.elapsed_secs();
 
     for event in damage_events.read() {
-        // 檢查目標是否是可破壞物件
-        if let Ok((entity, transform, mut destructible)) = destructible_query.get_mut(event.target) {
-            // 已破壞的物件不處理
-            if destructible.is_destroyed {
-                continue;
-            }
+        let Ok((entity, transform, mut destructible)) = destructible_query.get_mut(event.target) else {
+            continue;
+        };
 
-            // 計算方向（從攻擊者到目標）
-            let impact_direction = event.hit_position.map(|pos| {
-                (transform.translation - pos).normalize_or_zero()
-            });
-
-            // 造成傷害
-            let destroyed = destructible.take_damage(event.amount, current_time);
-
-            if destroyed {
-                // 發送破壞事件
-                let mut destruction_event = DestructionEvent::new(
-                    entity,
-                    transform.translation,
-                    destructible.material,
-                    destructible.original_size,
-                );
-
-                if let Some(dir) = impact_direction {
-                    destruction_event = destruction_event.with_impact_direction(dir);
-                }
-
-                destruction_events.write(destruction_event);
-
-                // 移除原始實體
-                if let Ok(mut entity_commands) = commands.get_entity(entity) {
-                    entity_commands.despawn();
-                }
-            }
+        if destructible.is_destroyed {
+            continue;
         }
+
+        process_destructible_damage(
+            &mut commands,
+            entity,
+            transform,
+            &mut destructible,
+            event.amount,
+            event.hit_position,
+            current_time,
+            &mut destruction_events,
+        );
     }
+}
+
+// === 碎片生成輔助函數 ===
+
+/// 碎片生成參數
+struct DebrisSpawnParams {
+    position: Vec3,
+    velocity: Vec3,
+    rotation: Quat,
+    scale: f32,
+    max_lifetime: f32,
+    material: DestructibleMaterial,
+}
+
+/// 計算碎片生成參數
+fn calculate_debris_params(
+    rng: &mut impl Rng,
+    event: &DestructionEvent,
+    min_scale: f32,
+    max_scale: f32,
+) -> DebrisSpawnParams {
+    let offset = Vec3::new(
+        rng.random_range(-event.size.x / 2.0..event.size.x / 2.0),
+        rng.random_range(-event.size.y / 2.0..event.size.y / 2.0),
+        rng.random_range(-event.size.z / 2.0..event.size.z / 2.0),
+    );
+
+    let base_velocity = event.impact_direction
+        .map(|dir| dir * rng.random_range(3.0..8.0))
+        .unwrap_or(Vec3::ZERO);
+
+    let scatter = Vec3::new(
+        rng.random_range(-3.0..3.0),
+        rng.random_range(1.0..5.0),
+        rng.random_range(-3.0..3.0),
+    );
+
+    DebrisSpawnParams {
+        position: event.position + offset,
+        velocity: base_velocity + scatter,
+        rotation: Quat::from_euler(
+            EulerRot::XYZ,
+            rng.random_range(0.0..TAU),
+            rng.random_range(0.0..TAU),
+            rng.random_range(0.0..TAU),
+        ),
+        scale: rng.random_range(min_scale..max_scale),
+        max_lifetime: event.material.debris_lifetime(),
+        material: event.material,
+    }
+}
+
+/// 重用池中的碎片實體
+fn reuse_pooled_debris(
+    rng: &mut impl Rng,
+    debris: &mut Debris,
+    transform: &mut Transform,
+    visibility: &mut Visibility,
+    params: &DebrisSpawnParams,
+) {
+    debris.material = params.material;
+    debris.velocity = params.velocity;
+    debris.angular_velocity = Vec3::new(
+        rng.random_range(-5.0..5.0),
+        rng.random_range(-5.0..5.0),
+        rng.random_range(-5.0..5.0),
+    );
+    debris.lifetime = 0.0;
+    debris.max_lifetime = params.max_lifetime;
+    debris.has_gravity = true;
+    debris.bounce_count = 0;
+
+    transform.translation = params.position;
+    transform.rotation = params.rotation;
+    transform.scale = Vec3::splat(params.scale);
+
+    *visibility = Visibility::Visible;
+}
+
+/// 創建新的碎片實體
+fn spawn_new_debris(
+    commands: &mut Commands,
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
+    params: &DebrisSpawnParams,
+) -> Entity {
+    commands.spawn((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Transform::from_translation(params.position)
+            .with_rotation(params.rotation)
+            .with_scale(Vec3::splat(params.scale)),
+        Debris::new(params.material, params.velocity),
+        Visibility::Visible,
+    )).id()
+}
+
+/// 嘗試從池中取得碎片實體
+/// 返回 true 表示成功取得並重用
+fn try_reuse_pooled_debris(
+    rng: &mut impl Rng,
+    debris_pool: &mut DebrisPool,
+    debris_query: &mut Query<(&mut Debris, &mut Transform, &mut Visibility), Without<Destructible>>,
+    params: &DebrisSpawnParams,
+) -> bool {
+    let Some(pooled_entity) = debris_pool.acquire() else {
+        return false;
+    };
+
+    let Ok((mut debris, mut transform, mut visibility)) = debris_query.get_mut(pooled_entity) else {
+        warn!("碎片池實體 {:?} 無效，已從池中移除", pooled_entity);
+        return false;
+    };
+
+    reuse_pooled_debris(rng, &mut debris, &mut transform, &mut visibility, params);
+    debris_pool.confirm_acquire(pooled_entity);
+    true
+}
+
+/// 嘗試創建新碎片實體
+/// 返回 true 表示成功創建
+fn try_create_new_debris(
+    commands: &mut Commands,
+    debris_pool: &mut DebrisPool,
+    mesh: &Handle<Mesh>,
+    material: &Handle<StandardMaterial>,
+    params: &DebrisSpawnParams,
+) -> bool {
+    if !debris_pool.can_create_new() {
+        return false;
+    }
+
+    let entity = spawn_new_debris(commands, mesh.clone(), material.clone(), params);
+    debris_pool.add_new_entity(entity);
+    true
 }
 
 /// 破壞效果系統（使用物件池優化）
@@ -89,84 +252,13 @@ pub fn destruction_effect_system(
         let (mesh, material) = visuals.get_debris_visuals(event.material);
 
         let mut spawned = 0;
-
-        // 生成碎片
         for _ in 0..debris_count {
-            // 計算碎片參數
-            let offset = Vec3::new(
-                rng.random_range(-event.size.x / 2.0..event.size.x / 2.0),
-                rng.random_range(-event.size.y / 2.0..event.size.y / 2.0),
-                rng.random_range(-event.size.z / 2.0..event.size.z / 2.0),
-            );
-            let spawn_pos = event.position + offset;
+            let params = calculate_debris_params(&mut rng, &event, min_scale, max_scale);
 
-            let base_velocity = if let Some(impact_dir) = event.impact_direction {
-                impact_dir * rng.random_range(3.0..8.0)
-            } else {
-                Vec3::ZERO
-            };
+            let success = try_reuse_pooled_debris(&mut rng, &mut debris_pool, &mut debris_query, &params)
+                || try_create_new_debris(&mut commands, &mut debris_pool, &mesh, &material, &params);
 
-            let scatter = Vec3::new(
-                rng.random_range(-3.0..3.0),
-                rng.random_range(1.0..5.0),
-                rng.random_range(-3.0..3.0),
-            );
-            let velocity = base_velocity + scatter;
-
-            let scale = rng.random_range(min_scale..max_scale);
-
-            let rotation = Quat::from_euler(
-                EulerRot::XYZ,
-                rng.random_range(0.0..std::f32::consts::TAU),
-                rng.random_range(0.0..std::f32::consts::TAU),
-                rng.random_range(0.0..std::f32::consts::TAU),
-            );
-
-            let max_lifetime = event.material.debris_lifetime();
-
-            // 優先從池中取得實體
-            if let Some(pooled_entity) = debris_pool.acquire() {
-                if let Ok((mut debris, mut transform, mut visibility)) = debris_query.get_mut(pooled_entity) {
-                    // 重用池中的碎片
-                    debris.material = event.material;
-                    debris.velocity = velocity;
-                    debris.angular_velocity = Vec3::new(
-                        rng.random_range(-5.0..5.0),
-                        rng.random_range(-5.0..5.0),
-                        rng.random_range(-5.0..5.0),
-                    );
-                    debris.lifetime = 0.0;
-                    debris.max_lifetime = max_lifetime;
-                    debris.has_gravity = true;
-                    debris.bounce_count = 0;
-
-                    transform.translation = spawn_pos;
-                    transform.rotation = rotation;
-                    transform.scale = Vec3::splat(scale);
-
-                    *visibility = Visibility::Visible;
-                    debris_pool.confirm_acquire(pooled_entity);
-                    spawned += 1;
-                    continue;
-                } else {
-                    // 實體無效（可能被外部刪除），不放回池中
-                    warn!("碎片池實體 {:?} 無效，已從池中移除", pooled_entity);
-                }
-            }
-
-            // 池中無可用實體，創建新的（但限制總數）
-            if debris_pool.in_use.len() + debris_pool.available.len() < debris_pool.max_size {
-                let entity = commands.spawn((
-                    Mesh3d(mesh.clone()),
-                    MeshMaterial3d(material.clone()),
-                    Transform::from_translation(spawn_pos)
-                        .with_rotation(rotation)
-                        .with_scale(Vec3::splat(scale)),
-                    Debris::new(event.material, velocity),
-                    Visibility::Visible,
-                )).id();
-
-                debris_pool.in_use.push(entity);
+            if success {
                 spawned += 1;
             }
         }
@@ -174,6 +266,60 @@ pub fn destruction_effect_system(
         if spawned < debris_count {
             warn!("碎片池已滿，只生成了 {}/{} 個碎片", spawned, debris_count);
         }
+    }
+}
+
+// === 碎片更新輔助函數 ===
+
+/// 處理碎片的物理更新
+fn update_debris_physics(debris: &mut Debris, transform: &mut Transform, dt: f32) {
+    // 重力
+    if debris.has_gravity {
+        debris.velocity.y -= 9.8 * dt;
+    }
+
+    // 空氣阻力
+    debris.velocity *= 1.0 - dt * 0.5;
+
+    // 更新位置
+    transform.translation += debris.velocity * dt;
+
+    // 更新旋轉
+    let rotation_delta = Quat::from_euler(
+        EulerRot::XYZ,
+        debris.angular_velocity.x * dt,
+        debris.angular_velocity.y * dt,
+        debris.angular_velocity.z * dt,
+    );
+    transform.rotation *= rotation_delta;
+}
+
+/// 處理碎片地面碰撞
+fn handle_debris_ground_collision(debris: &mut Debris, transform: &mut Transform) {
+    if transform.translation.y >= 0.05 {
+        return;
+    }
+
+    transform.translation.y = 0.05;
+
+    // 彈跳
+    if debris.bounce_count < 2 && debris.velocity.y.abs() > 1.0 {
+        debris.velocity.y = -debris.velocity.y * 0.3;
+        debris.velocity.x *= 0.7;
+        debris.velocity.z *= 0.7;
+        debris.bounce_count += 1;
+    } else {
+        debris.velocity = Vec3::ZERO;
+        debris.angular_velocity *= 0.5;
+    }
+}
+
+/// 處理碎片淡出效果
+fn apply_debris_fade(debris: &Debris, transform: &mut Transform) {
+    let progress = debris.lifetime / debris.max_lifetime;
+    if progress > 0.7 {
+        let fade = 1.0 - (progress - 0.7) / 0.3;
+        transform.scale *= Vec3::splat(fade.powf(0.1));
     }
 }
 
@@ -187,64 +333,23 @@ pub fn debris_update_system(
     let dt = time.delta_secs();
 
     for (entity, mut debris, mut transform, mut visibility) in debris_query.iter_mut() {
-        // 跳過已隱藏（已歸還池）的碎片
         if *visibility == Visibility::Hidden {
             continue;
         }
 
-        // 更新生命時間
         debris.lifetime += dt;
 
-        // 檢查是否過期 - 歸還池而非銷毀
+        // 檢查是否過期
         if debris.lifetime >= debris.max_lifetime {
             *visibility = Visibility::Hidden;
-            transform.translation = Vec3::new(0.0, -1000.0, 0.0);  // 移到地圖外
+            transform.translation = Vec3::new(0.0, -1000.0, 0.0);
             debris_pool.release(entity);
             continue;
         }
 
-        // 重力
-        if debris.has_gravity {
-            debris.velocity.y -= 9.8 * dt;
-        }
-
-        // 空氣阻力
-        debris.velocity *= 1.0 - dt * 0.5;
-
-        // 更新位置
-        transform.translation += debris.velocity * dt;
-
-        // 更新旋轉
-        let rotation_delta = Quat::from_euler(
-            EulerRot::XYZ,
-            debris.angular_velocity.x * dt,
-            debris.angular_velocity.y * dt,
-            debris.angular_velocity.z * dt,
-        );
-        transform.rotation *= rotation_delta;
-
-        // 碰撞地面
-        if transform.translation.y < 0.05 {
-            transform.translation.y = 0.05;
-
-            // 彈跳
-            if debris.bounce_count < 2 && debris.velocity.y.abs() > 1.0 {
-                debris.velocity.y = -debris.velocity.y * 0.3;
-                debris.velocity.x *= 0.7;
-                debris.velocity.z *= 0.7;
-                debris.bounce_count += 1;
-            } else {
-                debris.velocity = Vec3::ZERO;
-                debris.angular_velocity *= 0.5;
-            }
-        }
-
-        // 縮放（逐漸變小並消失）
-        let progress = debris.lifetime / debris.max_lifetime;
-        if progress > 0.7 {
-            let fade = 1.0 - (progress - 0.7) / 0.3;
-            transform.scale *= Vec3::splat(fade.powf(0.1));
-        }
+        update_debris_physics(&mut debris, &mut transform, dt);
+        handle_debris_ground_collision(&mut debris, &mut transform);
+        apply_debris_fade(&debris, &mut transform);
     }
 }
 
@@ -266,7 +371,7 @@ impl DestructibleMaterialCache {
         Self {
             glass: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.7, 0.85, 1.0, 0.4),
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                alpha_mode: AlphaMode::Blend,
                 metallic: 0.0,
                 perceptual_roughness: 0.1,
                 ..default()
@@ -324,7 +429,7 @@ pub fn spawn_glass_window(
 ) {
     let glass_material = materials.add(StandardMaterial {
         base_color: Color::srgba(0.7, 0.85, 1.0, 0.4),
-        alpha_mode: bevy::prelude::AlphaMode::Blend,
+        alpha_mode: AlphaMode::Blend,
         metallic: 0.0,
         perceptual_roughness: 0.1,
         ..default()

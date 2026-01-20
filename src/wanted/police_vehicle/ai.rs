@@ -18,6 +18,131 @@ use super::{
 };
 
 // ============================================================================
+// AI 輔助函數
+// ============================================================================
+
+/// 處理回應狀態
+fn handle_responding_state(
+    police_car: &mut PoliceCar,
+    force: &mut ExternalForce,
+    transform: &Transform,
+    direction: Vec3,
+    distance_sq: f32,
+    config: &PoliceCarConfig,
+    dt: f32,
+) {
+    if distance_sq < CHASE_SWITCH_DISTANCE_SQ {
+        police_car.state = PoliceCarState::Chasing;
+    } else {
+        let target_speed = config.chase_speed * CHASE_SPEED_MULTIPLIER;
+        apply_driving_force(force, transform, direction, target_speed, dt);
+    }
+}
+
+/// 檢查是否可以執行 PIT 機動
+fn can_attempt_pit(
+    distance_sq: f32,
+    pit_cooldown: f32,
+    wanted_stars: u8,
+    car_forward: Vec3,
+    to_player: Vec3,
+) -> bool {
+    if distance_sq >= PIT_MANEUVER_DISTANCE_SQ * 4.0 || pit_cooldown > 0.0 || wanted_stars < 3 {
+        return false;
+    }
+    let angle = car_forward.dot(to_player.normalize_or_zero()).acos();
+    angle < PIT_MANEUVER_ANGLE
+}
+
+/// 處理追逐狀態
+fn handle_chasing_state(
+    police_car: &mut PoliceCar,
+    force: &mut ExternalForce,
+    transform: &Transform,
+    car_forward: Vec3,
+    to_player: Vec3,
+    distance_sq: f32,
+    player_vel: Vec3,
+    wanted_stars: u8,
+    config: &PoliceCarConfig,
+    dt: f32,
+) -> bool {
+    police_car.chase_timer += dt;
+
+    // 預測玩家位置
+    let car_pos = transform.translation;
+    let player_pos = car_pos + to_player;
+    let predicted_pos = player_pos + player_vel * 1.0;
+    let to_predicted = (predicted_pos - car_pos).normalize_or_zero();
+
+    // 檢查 PIT 機動
+    if can_attempt_pit(distance_sq, police_car.pit_cooldown, wanted_stars, car_forward, to_player) {
+        police_car.state = PoliceCarState::PitManeuver;
+        return true;
+    }
+
+    // 檢查攔截
+    if distance_sq > INTERCEPT_DISTANCE_SQ && police_car.chase_timer > 5.0 && rand::random::<f32>() < 0.3 {
+        police_car.state = PoliceCarState::Intercepting;
+        police_car.chase_timer = 0.0;
+        return true;
+    }
+
+    apply_driving_force(force, transform, to_predicted, config.chase_speed, dt);
+    false
+}
+
+/// 處理 PIT 機動狀態
+fn handle_pit_maneuver_state(
+    police_car: &mut PoliceCar,
+    force: &mut ExternalForce,
+    transform: &Transform,
+    car_forward: Vec3,
+    player_pos: Vec3,
+    distance_sq: f32,
+    config: &PoliceCarConfig,
+    dt: f32,
+) {
+    let car_pos = transform.translation;
+    let target_offset = player_pos - car_forward * 2.0 + car_forward.cross(Vec3::Y) * 1.5;
+    let to_target = (target_offset - car_pos).normalize_or_zero();
+
+    apply_driving_force(force, transform, to_target, config.pit_speed, dt);
+
+    if distance_sq < PIT_MANEUVER_DISTANCE_SQ {
+        police_car.state = PoliceCarState::Chasing;
+        police_car.pit_cooldown = 10.0;
+    } else if distance_sq > PIT_ABANDON_DISTANCE_SQ {
+        police_car.state = PoliceCarState::Chasing;
+    }
+}
+
+/// 處理攔截狀態
+fn handle_intercepting_state(
+    police_car: &mut PoliceCar,
+    force: &mut ExternalForce,
+    transform: &Transform,
+    car_forward: Vec3,
+    to_player: Vec3,
+    player_pos: Vec3,
+    player_vel: Vec3,
+    distance_sq: f32,
+    config: &PoliceCarConfig,
+    dt: f32,
+) {
+    let car_pos = transform.translation;
+    let intercept_pos = player_pos + player_vel.normalize_or_zero() * 30.0;
+    let to_intercept = (intercept_pos - car_pos).normalize_or_zero();
+
+    apply_driving_force(force, transform, to_intercept, config.intercept_speed, dt);
+
+    let dot = car_forward.dot(-to_player);
+    if dot > FRONT_DOT_THRESHOLD || distance_sq > INTERCEPT_ABANDON_DISTANCE_SQ {
+        police_car.state = PoliceCarState::Chasing;
+    }
+}
+
+// ============================================================================
 // AI 系統
 // ============================================================================
 
@@ -50,7 +175,7 @@ pub fn police_car_ai_system(
     let player_vel = player_velocity.linvel;
     let dt = time.delta_secs();
 
-    for (_entity, transform, mut police_car, mut _vehicle, mut force, health) in &mut police_car_query {
+    for (_entity, transform, mut police_car, _vehicle, mut force, health) in &mut police_car_query {
         // 車輛已損壞，停止 AI
         if health.is_destroyed() {
             police_car.state = PoliceCarState::Disabled;
@@ -69,90 +194,23 @@ pub fn police_car_ai_system(
             police_car.pit_cooldown -= dt;
         }
 
-        // 根據狀態執行行為（使用 distance_sq 避免 sqrt 運算）
+        // 根據狀態執行行為
         match police_car.state {
             PoliceCarState::Responding => {
-                // 前往玩家位置
-                if distance_sq < CHASE_SWITCH_DISTANCE_SQ {
-                    police_car.state = PoliceCarState::Chasing;
-                } else {
-                    // 直線前往
-                    let target_speed = config.chase_speed * CHASE_SPEED_MULTIPLIER;
-                    apply_driving_force(&mut force, transform, direction, target_speed, dt);
-                }
+                handle_responding_state(&mut police_car, &mut force, transform, direction, distance_sq, &config, dt);
             }
-
             PoliceCarState::Chasing => {
-                // 追逐玩家車輛
-                police_car.chase_timer += dt;
-
-                // 預測玩家位置
-                let predicted_pos = player_pos + player_vel * 1.0;
-                let to_predicted = (predicted_pos - car_pos).normalize_or_zero();
-
-                // 檢查是否可以執行 PIT 機動（距離夠近）
-                if distance_sq < PIT_MANEUVER_DISTANCE_SQ * 4.0
-                    && police_car.pit_cooldown <= 0.0
-                    && wanted.stars >= 3
-                {
-                    // 檢查角度
-                    let angle = car_forward.dot(to_player).acos();
-                    if angle < PIT_MANEUVER_ANGLE {
-                        police_car.state = PoliceCarState::PitManeuver;
-                        continue;
-                    }
+                if handle_chasing_state(&mut police_car, &mut force, transform, car_forward, to_player, distance_sq, player_vel, wanted.stars, &config, dt) {
+                    continue;
                 }
-
-                // 檢查是否應該攔截
-                if distance_sq > INTERCEPT_DISTANCE_SQ && police_car.chase_timer > 5.0 {
-                    // 每 5 秒有機會嘗試攔截
-                    if rand::random::<f32>() < 0.3 {
-                        police_car.state = PoliceCarState::Intercepting;
-                        police_car.chase_timer = 0.0;
-                        continue;
-                    }
-                }
-
-                // 追逐
-                let target_speed = config.chase_speed;
-                apply_driving_force(&mut force, transform, to_predicted, target_speed, dt);
             }
-
             PoliceCarState::PitManeuver => {
-                // PIT 機動：撞擊玩家車輛後側
-                let target_offset = player_pos - car_forward * 2.0 + car_forward.cross(Vec3::Y) * 1.5;
-                let to_target = (target_offset - car_pos).normalize_or_zero();
-
-                apply_driving_force(&mut force, transform, to_target, config.pit_speed, dt);
-
-                // 撞擊後重置狀態
-                if distance_sq < PIT_MANEUVER_DISTANCE_SQ {
-                    police_car.state = PoliceCarState::Chasing;
-                    police_car.pit_cooldown = 10.0; // 10 秒冷卻
-                }
-
-                // 如果距離太遠，放棄 PIT
-                if distance_sq > PIT_ABANDON_DISTANCE_SQ {
-                    police_car.state = PoliceCarState::Chasing;
-                }
+                handle_pit_maneuver_state(&mut police_car, &mut force, transform, car_forward, player_pos, distance_sq, &config, dt);
             }
-
             PoliceCarState::Intercepting => {
-                // 嘗試擋在玩家前方
-                let intercept_pos = player_pos + player_vel.normalize_or_zero() * 30.0;
-                let to_intercept = (intercept_pos - car_pos).normalize_or_zero();
-
-                apply_driving_force(&mut force, transform, to_intercept, config.intercept_speed, dt);
-
-                // 如果已經在前方或太遠，恢復追逐
-                let dot = car_forward.dot(-to_player);
-                if dot > FRONT_DOT_THRESHOLD || distance_sq > INTERCEPT_ABANDON_DISTANCE_SQ {
-                    police_car.state = PoliceCarState::Chasing;
-                }
+                handle_intercepting_state(&mut police_car, &mut force, transform, car_forward, to_player, player_pos, player_vel, distance_sq, &config, dt);
             }
-
             PoliceCarState::Disabled => {
-                // 停止所有力
                 force.force = Vec3::ZERO;
                 force.torque = Vec3::ZERO;
             }
@@ -187,15 +245,18 @@ fn apply_driving_force(
 // 碰撞系統
 // ============================================================================
 
+/// 碰撞傷害的參考速度（m/s）- 以此速度碰撞時造成基礎傷害
+const COLLISION_REFERENCE_SPEED: f32 = 15.0;
+
 /// 警車碰撞處理系統
 pub fn police_car_collision_system(
     mut collision_events: MessageReader<CollisionEvent>,
-    mut police_car_query: Query<(&Transform, &mut PoliceCar, &mut VehicleHealth)>,
-    player_vehicle_query: Query<Entity, (With<Player>, With<Vehicle>)>,
+    mut police_car_query: Query<(&Transform, &mut PoliceCar, &mut VehicleHealth, &Vehicle)>,
+    player_vehicle_query: Query<(Entity, &Vehicle), With<Player>>,
     mut damage_events: MessageWriter<DamageEvent>,
     time: Res<Time>,
 ) {
-    let Ok(player_vehicle) = player_vehicle_query.single() else {
+    let Ok((player_vehicle, player_vehicle_data)) = player_vehicle_query.single() else {
         return;
     };
 
@@ -204,21 +265,17 @@ pub fn police_car_collision_system(
             continue;
         };
 
-        // 檢查是否是警車與玩家車輛的碰撞
-        let (police_entity, is_player_collision) = if *entity1 == player_vehicle {
-            (*entity2, true)
+        // 檢查是否是警車與玩家車輛的碰撞，取得警車實體
+        let police_entity = if *entity1 == player_vehicle {
+            *entity2
         } else if *entity2 == player_vehicle {
-            (*entity1, true)
+            *entity1
         } else {
             continue;
         };
 
-        if !is_player_collision {
-            continue;
-        }
-
         // 獲取警車資料
-        let Ok((transform, mut police_car, mut health)) = police_car_query.get_mut(police_entity) else {
+        let Ok((transform, mut police_car, mut health, police_vehicle)) = police_car_query.get_mut(police_entity) else {
             continue;
         };
 
@@ -229,20 +286,27 @@ pub fn police_car_collision_system(
         }
         police_car.last_collision_time = elapsed;
 
-        // 警車受傷
-        health.take_damage(50.0, elapsed);
+        // 計算相對速度（兩車速度差）
+        let relative_speed = (police_vehicle.current_speed - player_vehicle_data.current_speed).abs();
+        // 速度因子：低速碰撞傷害減少，高速碰撞傷害增加
+        let speed_factor = (relative_speed / COLLISION_REFERENCE_SPEED).clamp(0.3, 2.0);
+        let damage = POLICE_CAR_COLLISION_DAMAGE * speed_factor;
+
+        // 警車受傷（也受速度因子影響）
+        health.take_damage(50.0 * speed_factor, elapsed);
 
         // 對玩家造成傷害
         damage_events.write(DamageEvent {
             target: player_vehicle,
-            amount: POLICE_CAR_COLLISION_DAMAGE,
+            amount: damage,
             source: DamageSource::Explosion, // 使用爆炸類型表示碰撞
             attacker: Some(police_entity),
             hit_position: Some(transform.translation),
             is_headshot: false,
         });
 
-        info!("警車碰撞！警車血量: {:.0}", health.current);
+        info!("警車碰撞！相對速度: {:.1} m/s, 傷害: {:.1}, 警車血量: {:.0}",
+              relative_speed, damage, health.current);
     }
 }
 

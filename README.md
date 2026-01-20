@@ -1,11 +1,16 @@
+<div align="center">
+
 # 🏝️ 島嶼狂飆 Island Rampage
 
-> 一款以台灣為舞台的 3D 開放世界動作冒險遊戲
-> A GTA-style open-world action game set in Taiwan
+**一款以台灣為舞台的 3D 開放世界動作冒險遊戲**
 
-![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)
-![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+*A GTA-style open-world action game set in Taiwan*
+
+[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/) [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/) [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE) [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/Neal75418/island-rampage)
+
+</div>
+
+---
 
 ## 🎮 遊戲簡介
 
@@ -54,12 +59,12 @@
 
 ## 🛠️ 技術棧
 
-| 項目 | 技術 |
-|------|------|
-| 語言 | Rust 🦀 |
+| 項目 |                  技術                  |
+|:--:|:------------------------------------:|
+| 語言 |               Rust 🦀                |
 | 引擎 | [Bevy](https://bevyengine.org/) 0.17 |
-| 物理 | bevy_rapier3d |
-| 風格 | Low-poly 霓虹風 |
+| 物理 |            bevy_rapier3d             |
+| 風格 |             Low-poly 霓虹風             |
 
 ## 🚀 開發
 
@@ -83,20 +88,20 @@ cargo test
 
 ### 操作方式
 
-| 按鍵 | 動作 |
-|------|------|
-| WASD | 移動 |
-| Space | 跳躍 |
+|  按鍵   |    動作     |
+|:-----:|:---------:|
+| WASD  |    移動     |
+| Space |    跳躍     |
 | Shift | 衝刺 / 氮氣加速 |
-| 滑鼠左鍵 | 射擊 / 攻擊 |
-| 滑鼠右鍵 | 瞄準 |
-| R | 換彈 |
-| E | 互動 / 上下車 |
-| F | 偷車 |
-| G | 投擲爆炸物 |
-| 1-4 | 切換武器 |
-| Tab | 武器輪盤 |
-| Esc | 暫停選單 |
+| 滑鼠左鍵  |  射擊 / 攻擊  |
+| 滑鼠右鍵  |    瞄準     |
+|   R   |    換彈     |
+|   E   | 互動 / 上下車  |
+|   F   |    偷車     |
+|   G   |   投擲爆炸物   |
+|  1-4  |   切換武器    |
+|  Tab  |   武器輪盤    |
+|  Esc  |   暫停選單    |
 
 ## 📍 開發進度
 
@@ -173,25 +178,16 @@ cargo test --package island-rampage economy::tests
 cargo clippy
 ```
 
-## 🤝 貢獻
-
-歡迎任何形式的貢獻！
-
-- 🐛 回報 Bug
-- 💡 提出新功能建議
-- 🎨 貢獻美術資源
-- 🔧 提交 Pull Request
-
 ## 📜 授權
 
-MIT License - 詳見 [LICENSE](LICENSE)
+Copyright © 2024-2025 Neal Chen. All Rights Reserved.
 
-## 🙏 致謝
-
-- [Bevy Engine](https://bevyengine.org/) - 優秀的 Rust 遊戲引擎
-- [Rapier](https://rapier.rs/) - 高效能物理引擎
-- 台灣這片美麗的土地 🇹🇼
+本軟體為專有軟體，未經授權不得複製、修改或散布。
 
 ---
 
-Made with ❤️ in Taiwan
+<div align="center">
+
+**Made with ❤️ in Taiwan 🇹🇼**
+
+</div>

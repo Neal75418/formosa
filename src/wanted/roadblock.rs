@@ -422,6 +422,32 @@ fn spawn_roadblock_police(
     police_entity
 }
 
+/// 清理路障及其關聯實體
+fn cleanup_roadblock(commands: &mut Commands, roadblock: &Roadblock, entity: Entity) {
+    for police in &roadblock.police_officers {
+        commands.entity(*police).despawn();
+    }
+    for barrier in &roadblock.barrier_vehicles {
+        commands.entity(*barrier).despawn();
+    }
+    commands.entity(entity).despawn();
+}
+
+/// 處理 Active 狀態的路障
+fn handle_active_roadblock(roadblock: &mut Roadblock, distance: f32) {
+    if roadblock.health <= 0.0 {
+        roadblock.state = RoadblockState::Breached;
+        info!("路障被突破！");
+    } else if distance > ROADBLOCK_DESPAWN_DISTANCE {
+        roadblock.state = RoadblockState::Retreating;
+    }
+}
+
+/// 檢查是否應該切換到撤離狀態
+fn should_retreat(distance: f32) -> bool {
+    distance > ROADBLOCK_DESPAWN_DISTANCE
+}
+
 /// 路障狀態更新系統
 pub fn roadblock_update_system(
     mut commands: Commands,
@@ -439,47 +465,24 @@ pub fn roadblock_update_system(
 
         match roadblock.state {
             RoadblockState::Setting => {
-                // 等待一秒後就位
                 roadblock.state = RoadblockState::Ready;
             }
-
             RoadblockState::Ready => {
-                // 玩家靠近後啟動
                 if distance < ROADBLOCK_ACTIVE_DISTANCE {
                     roadblock.state = RoadblockState::Active;
                     info!("路障啟動！");
                 }
             }
-
             RoadblockState::Active => {
-                // 檢查是否被突破（血量歸零）
-                if roadblock.health <= 0.0 {
-                    roadblock.state = RoadblockState::Breached;
-                    info!("路障被突破！");
-                }
-
-                // 玩家通過後撤離
-                if distance > ROADBLOCK_DESPAWN_DISTANCE {
-                    roadblock.state = RoadblockState::Retreating;
-                }
+                handle_active_roadblock(&mut roadblock, distance);
             }
-
             RoadblockState::Breached => {
-                // 被突破後等待撤離
-                if distance > ROADBLOCK_DESPAWN_DISTANCE {
+                if should_retreat(distance) {
                     roadblock.state = RoadblockState::Retreating;
                 }
             }
-
             RoadblockState::Retreating => {
-                // 清理路障
-                for police in &roadblock.police_officers {
-                    commands.entity(*police).despawn();
-                }
-                for barrier in &roadblock.barrier_vehicles {
-                    commands.entity(*barrier).despawn();
-                }
-                commands.entity(entity).despawn();
+                cleanup_roadblock(&mut commands, &roadblock, entity);
                 debug!("路障撤離: {:?}", entity);
             }
         }
@@ -541,6 +544,11 @@ pub fn roadblock_collision_system(
     }
 }
 
+/// 檢查路障是否應該消失
+fn should_despawn_roadblock(wanted_stars: u8, distance: f32) -> bool {
+    wanted_stars < 3 || distance > ROADBLOCK_DESPAWN_DISTANCE * 1.5
+}
+
 /// 路障消失系統
 pub fn despawn_roadblock_system(
     mut commands: Commands,
@@ -556,19 +564,10 @@ pub fn despawn_roadblock_system(
     for (entity, roadblock, transform) in &roadblock_query {
         let distance = (transform.translation - player_pos).length();
 
-        // 消失條件：通緝消退或距離太遠
-        let should_despawn = wanted.stars < 3
-            || distance > ROADBLOCK_DESPAWN_DISTANCE * 1.5;
-
-        if should_despawn && roadblock.state != RoadblockState::Retreating {
-            // 清理所有關聯實體
-            for police in &roadblock.police_officers {
-                commands.entity(*police).despawn();
-            }
-            for barrier in &roadblock.barrier_vehicles {
-                commands.entity(*barrier).despawn();
-            }
-            commands.entity(entity).despawn();
+        if should_despawn_roadblock(wanted.stars, distance)
+            && roadblock.state != RoadblockState::Retreating
+        {
+            cleanup_roadblock(&mut commands, roadblock, entity);
         }
     }
 }

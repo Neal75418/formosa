@@ -135,33 +135,65 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
         }
     }
 
+    // === 查詢輔助函數 ===
+
+    /// 處理單個網格中的實體，對在半徑內的實體調用處理函數
+    #[inline]
+    fn process_cell_in_radius<R>(
+        entities: &[(T, Vec3)],
+        center: Vec3,
+        radius_sq: f32,
+        f: &mut impl FnMut(T, Vec3, f32) -> Option<R>,
+    ) -> Option<R> {
+        for &(entity, pos) in entities {
+            let dist_sq = center.distance_squared(pos);
+            if dist_sq > radius_sq {
+                continue;
+            }
+            if let Some(result) = f(entity, pos, dist_sq) {
+                return Some(result);
+            }
+        }
+        None
+    }
+
+    /// 遍歷指定半徑內的所有實體，對每個實體調用處理函數
+    ///
+    /// 這是所有半徑查詢的核心邏輯，避免重複的巢狀迴圈。
+    /// 處理函數返回 `Some(result)` 時會立即返回該結果（用於提前終止）。
+    #[inline]
+    fn for_each_in_radius<R>(
+        &self,
+        center: Vec3,
+        radius: f32,
+        mut f: impl FnMut(T, Vec3, f32) -> Option<R>,
+    ) -> Option<R> {
+        let radius_sq = radius * radius;
+        let cells_needed = (radius / self.cell_size).ceil() as i32;
+        let center_coord = CellCoord::from_world(center, self.cell_size);
+
+        for dx in -cells_needed..=cells_needed {
+            for dz in -cells_needed..=cells_needed {
+                let coord = CellCoord::new(center_coord.x + dx, center_coord.z + dz);
+                let Some(entities) = self.cells.get(&coord) else { continue };
+
+                if let Some(result) = Self::process_cell_in_radius(entities, center, radius_sq, &mut f) {
+                    return Some(result);
+                }
+            }
+        }
+        None
+    }
+
     /// 查詢指定半徑內的所有實體
     ///
     /// 時間複雜度：O(k)，k = 查詢區域內的實體數量
     pub fn query_radius(&self, center: Vec3, radius: f32) -> Vec<(T, Vec3, f32)> {
-        let radius_sq = radius * radius;
         let mut results = Vec::new();
-
-        // 計算需要檢查的網格範圍
-        let cells_needed = (radius / self.cell_size).ceil() as i32;
-        let center_coord = CellCoord::from_world(center, self.cell_size);
-
-        // 檢查中心點及周圍網格
-        for dx in -cells_needed..=cells_needed {
-            for dz in -cells_needed..=cells_needed {
-                let coord = CellCoord::new(center_coord.x + dx, center_coord.z + dz);
-
-                if let Some(entities) = self.cells.get(&coord) {
-                    for &(entity, pos) in entities {
-                        let dist_sq = center.distance_squared(pos);
-                        if dist_sq <= radius_sq {
-                            results.push((entity, pos, dist_sq));
-                        }
-                    }
-                }
-            }
-        }
-
+        self.for_each_in_radius(center, radius, |entity, pos, dist_sq| {
+            results.push((entity, pos, dist_sq));
+            None::<()>
+        });
         results
     }
 
@@ -184,44 +216,16 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     ///
     /// 比 `!query_radius().is_empty()` 更有效率，因為找到第一個就返回。
     pub fn has_entity_in_radius(&self, center: Vec3, radius: f32) -> bool {
-        let radius_sq = radius * radius;
-        let cells_needed = (radius / self.cell_size).ceil() as i32;
-        let center_coord = CellCoord::from_world(center, self.cell_size);
-
-        for dx in -cells_needed..=cells_needed {
-            for dz in -cells_needed..=cells_needed {
-                let coord = CellCoord::new(center_coord.x + dx, center_coord.z + dz);
-                if let Some(entities) = self.cells.get(&coord) {
-                    for &(_, pos) in entities {
-                        if center.distance_squared(pos) <= radius_sq {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        false
+        self.for_each_in_radius(center, radius, |_, _, _| Some(())).is_some()
     }
 
     /// 計算指定半徑內的實體數量（不分配記憶體）
     pub fn count_in_radius(&self, center: Vec3, radius: f32) -> usize {
-        let radius_sq = radius * radius;
-        let cells_needed = (radius / self.cell_size).ceil() as i32;
-        let center_coord = CellCoord::from_world(center, self.cell_size);
         let mut count = 0;
-
-        for dx in -cells_needed..=cells_needed {
-            for dz in -cells_needed..=cells_needed {
-                let coord = CellCoord::new(center_coord.x + dx, center_coord.z + dz);
-                if let Some(entities) = self.cells.get(&coord) {
-                    for &(_, pos) in entities {
-                        if center.distance_squared(pos) <= radius_sq {
-                            count += 1;
-                        }
-                    }
-                }
-            }
-        }
+        self.for_each_in_radius(center, radius, |_, _, _| {
+            count += 1;
+            None::<()>
+        });
         count
     }
 

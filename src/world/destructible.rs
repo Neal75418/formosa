@@ -12,8 +12,9 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::vehicle::Vehicle;
+use crate::vehicle::{Vehicle, random_rotation};
 use crate::combat::{DamageEvent, DamageSource};
+use crate::core::EntityPool;
 
 // ============================================================================
 // 常數
@@ -43,47 +44,52 @@ const EXPLOSION_DAMAGE_BASE: f32 = 150.0;
 // ============================================================================
 
 /// 碎片物件池（效能優化）
+///
+/// 使用通用 `EntityPool` 實現，避免重複程式碼。
 #[derive(Resource, Default)]
 pub struct DebrisPool {
-    /// 可用的碎片實體（隱藏狀態）
-    pub available: Vec<Entity>,
-    /// 正在使用的碎片實體
-    pub in_use: Vec<Entity>,
-    /// 池最大大小
-    pub max_size: usize,
+    /// 內部實體池
+    pool: EntityPool,
 }
 
 impl DebrisPool {
     pub fn new(max_size: usize) -> Self {
         Self {
-            available: Vec::with_capacity(max_size),
-            in_use: Vec::with_capacity(max_size),
-            max_size,
+            pool: EntityPool::new(max_size),
         }
     }
 
     /// 從池中取得一個碎片實體
     pub fn acquire(&mut self) -> Option<Entity> {
-        let entity = self.available.pop();
+        let entity = self.pool.acquire();
         if let Some(e) = entity {
-            self.in_use.push(e);
+            self.pool.confirm_acquire(e);
         }
         entity
     }
 
     /// 歸還碎片實體到池中
+    #[inline]
     pub fn release(&mut self, entity: Entity) {
-        if let Some(idx) = self.in_use.iter().position(|&e| e == entity) {
-            self.in_use.swap_remove(idx);
-            if self.available.len() < self.max_size {
-                self.available.push(entity);
-            }
-        }
+        self.pool.release(entity);
     }
 
     /// 檢查池是否還有空間
+    #[inline]
     pub fn has_capacity(&self) -> bool {
-        self.available.len() < self.max_size || !self.available.is_empty()
+        self.pool.has_capacity()
+    }
+
+    /// 將新建立的實體加入使用中列表
+    #[inline]
+    pub fn add_new_entity(&mut self, entity: Entity) {
+        self.pool.in_use.push(entity);
+    }
+
+    /// 檢查是否可以創建新實體
+    #[inline]
+    pub fn can_create_new(&self) -> bool {
+        self.pool.in_use.len() + self.pool.available.len() < self.pool.max_size
     }
 }
 
@@ -608,6 +614,135 @@ pub fn destruction_particle_update_system(
 // 輔助函數
 // ============================================================================
 
+/// 碎片隨機參數
+struct DebrisParams {
+    position: Vec3,
+    rotation: Quat,
+    velocity: Vec3,
+    scale: f32,
+    lifetime: f32,
+}
+
+/// 根據碎片類型取得對應的 mesh 和 material
+fn get_debris_mesh_and_material(
+    visuals: &DestructibleVisuals,
+    debris_type: DestructibleType,
+) -> (Handle<Mesh>, Handle<StandardMaterial>) {
+    match debris_type {
+        DestructibleType::Glass => (visuals.glass_shard_mesh.clone(), visuals.glass_material.clone()),
+        DestructibleType::Wood | DestructibleType::Plastic => {
+            (visuals.wood_debris_mesh.clone(), visuals.wood_material.clone())
+        }
+        DestructibleType::Metal | DestructibleType::Electronic => {
+            (visuals.metal_debris_mesh.clone(), visuals.metal_material.clone())
+        }
+    }
+}
+
+/// 計算隨機碎片參數
+fn calc_random_debris_params(base_position: Vec3, impact_direction: Vec3) -> DebrisParams {
+    let random_offset = Vec3::new(
+        (rand::random::<f32>() - 0.5) * 2.0,
+        rand::random::<f32>() * 0.5 + 0.3,
+        (rand::random::<f32>() - 0.5) * 2.0,
+    );
+
+    let velocity = (impact_direction * 0.5 + random_offset).normalize()
+        * (DEBRIS_MIN_SPEED + rand::random::<f32>() * (DEBRIS_MAX_SPEED - DEBRIS_MIN_SPEED));
+
+    let position = base_position + Vec3::new(
+        (rand::random::<f32>() - 0.5) * 0.5,
+        rand::random::<f32>() * 0.5,
+        (rand::random::<f32>() - 0.5) * 0.5,
+    );
+
+    DebrisParams {
+        position,
+        rotation: random_rotation(),
+        velocity,
+        scale: 0.5 + rand::random::<f32>() * 0.5,
+        lifetime: DEBRIS_LIFETIME + rand::random::<f32>() * 2.0,
+    }
+}
+
+/// 生成單一粒子（火花或灰塵）
+fn spawn_particle(
+    commands: &mut Commands,
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
+    position: Vec3,
+    is_spark: bool,
+) {
+    let (velocity, lifetime, scale, y_offset) = if is_spark {
+        (
+            Vec3::new(
+                (rand::random::<f32>() - 0.5) * 6.0,
+                rand::random::<f32>() * 4.0 + 2.0,
+                (rand::random::<f32>() - 0.5) * 6.0,
+            ),
+            0.3 + rand::random::<f32>() * 0.3,
+            0.05,
+            0.3,
+        )
+    } else {
+        (
+            Vec3::new(
+                (rand::random::<f32>() - 0.5) * 2.0,
+                rand::random::<f32>() * 1.5 + 0.5,
+                (rand::random::<f32>() - 0.5) * 2.0,
+            ),
+            1.0 + rand::random::<f32>() * 0.5,
+            0.2,
+            0.0,
+        )
+    };
+
+    commands.spawn((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Transform::from_translation(position + Vec3::Y * y_offset)
+            .with_scale(Vec3::splat(scale)),
+        DestructionParticle {
+            is_spark,
+            lifetime,
+            velocity,
+        },
+    ));
+}
+
+/// 生成單一碎片實體
+fn spawn_debris_entity(
+    commands: &mut Commands,
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
+    params: &DebrisParams,
+    debris_type: DestructibleType,
+    index: usize,
+) -> Entity {
+    commands.spawn((
+        Name::new(format!("Debris_{}", index)),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Transform::from_translation(params.position)
+            .with_rotation(params.rotation)
+            .with_scale(Vec3::splat(params.scale)),
+        RigidBody::Dynamic,
+        Collider::cuboid(0.05 * params.scale, 0.05 * params.scale, 0.05 * params.scale),
+        Velocity::linear(params.velocity),
+        GravityScale(1.5),
+        Damping {
+            linear_damping: 0.5,
+            angular_damping: 0.8,
+        },
+        Debris {
+            debris_type,
+            lifetime: params.lifetime,
+            max_lifetime: DEBRIS_LIFETIME + 2.0,
+        },
+        Visibility::Visible,
+    )).id()
+}
+
 /// 生成碎片（使用物件池優化）
 fn spawn_debris_pooled<F: bevy::ecs::query::QueryFilter>(
     commands: &mut Commands,
@@ -619,58 +754,25 @@ fn spawn_debris_pooled<F: bevy::ecs::query::QueryFilter>(
     count: usize,
     impact_direction: Vec3,
 ) {
-    let (mesh, material) = match debris_type {
-        DestructibleType::Glass => (visuals.glass_shard_mesh.clone(), visuals.glass_material.clone()),
-        DestructibleType::Wood | DestructibleType::Plastic => {
-            (visuals.wood_debris_mesh.clone(), visuals.wood_material.clone())
-        }
-        DestructibleType::Metal | DestructibleType::Electronic => {
-            (visuals.metal_debris_mesh.clone(), visuals.metal_material.clone())
-        }
-    };
-
+    let (mesh, material) = get_debris_mesh_and_material(visuals, debris_type);
     let mut spawned = 0;
 
     for i in 0..count {
-        // 計算碎片參數
-        let random_offset = Vec3::new(
-            (rand::random::<f32>() - 0.5) * 2.0,
-            rand::random::<f32>() * 0.5 + 0.3,
-            (rand::random::<f32>() - 0.5) * 2.0,
-        );
-
-        let velocity_vec = (impact_direction * 0.5 + random_offset).normalize()
-            * (DEBRIS_MIN_SPEED + rand::random::<f32>() * (DEBRIS_MAX_SPEED - DEBRIS_MIN_SPEED));
-
-        let debris_pos = position + Vec3::new(
-            (rand::random::<f32>() - 0.5) * 0.5,
-            rand::random::<f32>() * 0.5,
-            (rand::random::<f32>() - 0.5) * 0.5,
-        );
-
-        let rotation = Quat::from_euler(
-            EulerRot::XYZ,
-            rand::random::<f32>() * std::f32::consts::TAU,
-            rand::random::<f32>() * std::f32::consts::TAU,
-            rand::random::<f32>() * std::f32::consts::TAU,
-        );
-
-        let scale = 0.5 + rand::random::<f32>() * 0.5;
-        let lifetime = DEBRIS_LIFETIME + rand::random::<f32>() * 2.0;
+        let params = calc_random_debris_params(position, impact_direction);
 
         // 嘗試從池中取得實體
         if let Some(pooled_entity) = debris_pool.acquire() {
             // 重用池中的實體
             if let Ok((mut debris, mut transform, mut velocity, mut visibility)) = debris_query.get_mut(pooled_entity) {
                 debris.debris_type = debris_type;
-                debris.lifetime = lifetime;
+                debris.lifetime = params.lifetime;
                 debris.max_lifetime = DEBRIS_LIFETIME + 2.0;
 
-                transform.translation = debris_pos;
-                transform.rotation = rotation;
-                transform.scale = Vec3::splat(scale);
+                transform.translation = params.position;
+                transform.rotation = params.rotation;
+                transform.scale = Vec3::splat(params.scale);
 
-                velocity.linvel = velocity_vec;
+                velocity.linvel = params.velocity;
 
                 *visibility = Visibility::Visible;
                 spawned += 1;
@@ -679,31 +781,9 @@ fn spawn_debris_pooled<F: bevy::ecs::query::QueryFilter>(
         }
 
         // 池中無可用實體，創建新的（但限制總數）
-        if debris_pool.in_use.len() + debris_pool.available.len() < debris_pool.max_size {
-            let entity = commands.spawn((
-                Name::new(format!("Debris_{}", i)),
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                Transform::from_translation(debris_pos)
-                    .with_rotation(rotation)
-                    .with_scale(Vec3::splat(scale)),
-                RigidBody::Dynamic,
-                Collider::cuboid(0.05 * scale, 0.05 * scale, 0.05 * scale),
-                Velocity::linear(velocity_vec),
-                GravityScale(1.5),
-                Damping {
-                    linear_damping: 0.5,
-                    angular_damping: 0.8,
-                },
-                Debris {
-                    debris_type,
-                    lifetime,
-                    max_lifetime: DEBRIS_LIFETIME + 2.0,
-                },
-                Visibility::Visible,
-            )).id();
-
-            debris_pool.in_use.push(entity);
+        if debris_pool.can_create_new() {
+            let entity = spawn_debris_entity(commands, mesh.clone(), material.clone(), &params, debris_type, i);
+            debris_pool.add_new_entity(entity);
             spawned += 1;
         }
     }
@@ -714,6 +794,7 @@ fn spawn_debris_pooled<F: bevy::ecs::query::QueryFilter>(
 }
 
 /// 生成碎片（舊版，不使用物件池 - 用於無池情況）
+#[allow(dead_code)]
 fn spawn_debris(
     commands: &mut Commands,
     visuals: &DestructibleVisuals,
@@ -724,64 +805,11 @@ fn spawn_debris(
 ) {
     // 限制最大生成數量以防止效能問題
     let actual_count = count.min(10);
-
-    let (mesh, material) = match debris_type {
-        DestructibleType::Glass => (visuals.glass_shard_mesh.clone(), visuals.glass_material.clone()),
-        DestructibleType::Wood | DestructibleType::Plastic => {
-            (visuals.wood_debris_mesh.clone(), visuals.wood_material.clone())
-        }
-        DestructibleType::Metal | DestructibleType::Electronic => {
-            (visuals.metal_debris_mesh.clone(), visuals.metal_material.clone())
-        }
-    };
+    let (mesh, material) = get_debris_mesh_and_material(visuals, debris_type);
 
     for i in 0..actual_count {
-        let random_offset = Vec3::new(
-            (rand::random::<f32>() - 0.5) * 2.0,
-            rand::random::<f32>() * 0.5 + 0.3,
-            (rand::random::<f32>() - 0.5) * 2.0,
-        );
-
-        let velocity = (impact_direction * 0.5 + random_offset).normalize()
-            * (DEBRIS_MIN_SPEED + rand::random::<f32>() * (DEBRIS_MAX_SPEED - DEBRIS_MIN_SPEED));
-
-        let debris_pos = position + Vec3::new(
-            (rand::random::<f32>() - 0.5) * 0.5,
-            rand::random::<f32>() * 0.5,
-            (rand::random::<f32>() - 0.5) * 0.5,
-        );
-
-        let rotation = Quat::from_euler(
-            EulerRot::XYZ,
-            rand::random::<f32>() * std::f32::consts::TAU,
-            rand::random::<f32>() * std::f32::consts::TAU,
-            rand::random::<f32>() * std::f32::consts::TAU,
-        );
-
-        let scale = 0.5 + rand::random::<f32>() * 0.5;
-
-        commands.spawn((
-            Name::new(format!("Debris_{}", i)),
-            Mesh3d(mesh.clone()),
-            MeshMaterial3d(material.clone()),
-            Transform::from_translation(debris_pos)
-                .with_rotation(rotation)
-                .with_scale(Vec3::splat(scale)),
-            RigidBody::Dynamic,
-            Collider::cuboid(0.05 * scale, 0.05 * scale, 0.05 * scale),
-            Velocity::linear(velocity),
-            GravityScale(1.5),
-            Damping {
-                linear_damping: 0.5,
-                angular_damping: 0.8,
-            },
-            Debris {
-                debris_type,
-                lifetime: DEBRIS_LIFETIME + rand::random::<f32>() * 2.0,
-                max_lifetime: DEBRIS_LIFETIME + 2.0,
-            },
-            Visibility::Visible,
-        ));
+        let params = calc_random_debris_params(position, impact_direction);
+        spawn_debris_entity(commands, mesh.clone(), material.clone(), &params, debris_type, i);
     }
 }
 
@@ -795,45 +823,25 @@ fn spawn_destruction_particles(
     // 火花（金屬/電子設備）
     if debris_type.produces_sparks() {
         for _ in 0..10 {
-            let velocity = Vec3::new(
-                (rand::random::<f32>() - 0.5) * 6.0,
-                rand::random::<f32>() * 4.0 + 2.0,
-                (rand::random::<f32>() - 0.5) * 6.0,
+            spawn_particle(
+                commands,
+                visuals.glass_shard_mesh.clone(),
+                visuals.spark_material.clone(),
+                position,
+                true, // is_spark
             );
-
-            commands.spawn((
-                Mesh3d(visuals.glass_shard_mesh.clone()),
-                MeshMaterial3d(visuals.spark_material.clone()),
-                Transform::from_translation(position + Vec3::Y * 0.3)
-                    .with_scale(Vec3::splat(0.05)),
-                DestructionParticle {
-                    is_spark: true,
-                    lifetime: 0.3 + rand::random::<f32>() * 0.3,
-                    velocity,
-                },
-            ));
         }
     }
 
     // 灰塵
     for _ in 0..8 {
-        let velocity = Vec3::new(
-            (rand::random::<f32>() - 0.5) * 2.0,
-            rand::random::<f32>() * 1.5 + 0.5,
-            (rand::random::<f32>() - 0.5) * 2.0,
+        spawn_particle(
+            commands,
+            visuals.glass_shard_mesh.clone(),
+            visuals.dust_material.clone(),
+            position,
+            false, // is_spark
         );
-
-        commands.spawn((
-            Mesh3d(visuals.glass_shard_mesh.clone()),
-            MeshMaterial3d(visuals.dust_material.clone()),
-            Transform::from_translation(position)
-                .with_scale(Vec3::splat(0.2)),
-            DestructionParticle {
-                is_spark: false,
-                lifetime: 1.0 + rand::random::<f32>() * 0.5,
-                velocity,
-            },
-        ));
     }
 }
 

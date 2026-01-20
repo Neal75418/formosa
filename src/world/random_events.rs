@@ -313,6 +313,84 @@ pub fn random_event_spawn_system(
     info!("隨機事件生成: {:?} at ({:.1}, {:.1})", event_type, event_pos.x, event_pos.z);
 }
 
+// ============================================================================
+// 事件更新輔助函數
+// ============================================================================
+
+/// 檢查並更新參與者列表，返回是否應該自動結束
+fn update_participants(
+    event: &mut RandomEvent,
+    participant_query: &Query<Entity>,
+) -> Option<RandomEventState> {
+    if event.participants.is_empty() {
+        return None;
+    }
+
+    let valid_participants: Vec<Entity> = event.participants
+        .iter()
+        .filter(|&&e| participant_query.get(e).is_ok())
+        .copied()
+        .collect();
+
+    // 如果所有參與者都消失了，根據事件類型決定結果
+    let result = if valid_participants.is_empty() && event.state == RandomEventState::Active {
+        info!("事件 {:?} 所有參與者消失，自動完成", event.event_type);
+        Some(match event.event_type {
+            RandomEventType::StreetRobbery | RandomEventType::CarTheft => RandomEventState::Resolved,
+            _ => RandomEventState::Failed,
+        })
+    } else {
+        None
+    };
+
+    event.participants = valid_participants;
+    result
+}
+
+/// 處理 Active 狀態
+fn handle_active_event(event: &mut RandomEvent, distance: f32) {
+    if distance < EVENT_ACTIVE_DISTANCE && !event.player_intervened {
+        event.state = RandomEventState::PlayerIntervening;
+        event.player_intervened = true;
+        info!("玩家介入事件: {:?}", event.event_type);
+    } else if event.remaining_time <= 0.0 {
+        event.state = RandomEventState::Failed;
+    }
+}
+
+/// 處理 PlayerIntervening 狀態
+fn handle_intervening_event(event: &mut RandomEvent, distance: f32) {
+    if event.remaining_time <= event.event_type.duration() - 10.0 {
+        event.state = RandomEventState::Resolved;
+    } else if distance > EVENT_MAX_DISTANCE {
+        event.state = RandomEventState::Failed;
+    }
+}
+
+/// 發送事件完成通知
+fn send_completion(
+    event: &mut RandomEvent,
+    entity: Entity,
+    success: bool,
+    event_completed: &mut MessageWriter<RandomEventCompleted>,
+) {
+    if event.reward_claimed {
+        return;
+    }
+
+    let reward = if success { event.event_type.base_reward() } else { 0 };
+
+    event_completed.write(RandomEventCompleted {
+        event_entity: entity,
+        event_type: event.event_type,
+        success,
+        reward,
+    });
+
+    event.reward_claimed = true;
+    event.state = RandomEventState::Completed;
+}
+
 /// 隨機事件更新系統
 pub fn random_event_update_system(
     mut commands: Commands,
@@ -334,100 +412,25 @@ pub fn random_event_update_system(
         event.absolute_timeout -= dt;
 
         // 檢查絕對超時（防止任何情況下卡住）
-        if event.should_force_end() {
-            if event.state != RandomEventState::Completed {
-                warn!("事件 {:?} 強制結束（絕對超時）", event.event_type);
-                event.state = RandomEventState::Failed;
-            }
+        if event.should_force_end() && event.state != RandomEventState::Completed {
+            warn!("事件 {:?} 強制結束（絕對超時）", event.event_type);
+            event.state = RandomEventState::Failed;
         }
 
-        // 檢查參與者是否仍然存在（防止參與者被殺死後卡住）
-        if !event.participants.is_empty() {
-            let valid_participants: Vec<Entity> = event.participants
-                .iter()
-                .filter(|&&e| participant_query.get(e).is_ok())
-                .copied()
-                .collect();
-
-            // 如果所有參與者都消失了，根據事件類型決定結果
-            if valid_participants.is_empty() && event.state == RandomEventState::Active {
-                info!("事件 {:?} 所有參與者消失，自動完成", event.event_type);
-                // 搶劫/偷車事件：參與者消失視為玩家成功
-                // 其他事件：視為失敗
-                event.state = match event.event_type {
-                    RandomEventType::StreetRobbery | RandomEventType::CarTheft => {
-                        RandomEventState::Resolved
-                    }
-                    _ => RandomEventState::Failed,
-                };
-            }
-
-            event.participants = valid_participants;
+        // 檢查參與者是否仍然存在
+        if let Some(new_state) = update_participants(&mut event, &participant_query) {
+            event.state = new_state;
         }
 
         // 計算玩家距離
         let distance = (transform.translation - player_pos).length();
 
         match event.state {
-            RandomEventState::Active => {
-                // 檢查玩家是否靠近
-                if distance < EVENT_ACTIVE_DISTANCE && !event.player_intervened {
-                    event.state = RandomEventState::PlayerIntervening;
-                    event.player_intervened = true;
-                    info!("玩家介入事件: {:?}", event.event_type);
-                }
-
-                // 超時失敗
-                if event.remaining_time <= 0.0 {
-                    event.state = RandomEventState::Failed;
-                }
-            }
-
-            RandomEventState::PlayerIntervening => {
-                // 簡化：玩家靠近一段時間後自動解決
-                // 實際遊戲中應該根據事件類型有不同的解決條件
-                if event.remaining_time <= event.event_type.duration() - 10.0 {
-                    event.state = RandomEventState::Resolved;
-                }
-
-                // 玩家離開太遠，事件失敗
-                if distance > EVENT_MAX_DISTANCE {
-                    event.state = RandomEventState::Failed;
-                }
-            }
-
-            RandomEventState::Resolved => {
-                if !event.reward_claimed {
-                    let reward = event.event_type.base_reward();
-
-                    event_completed.write(RandomEventCompleted {
-                        event_entity: entity,
-                        event_type: event.event_type,
-                        success: true,
-                        reward,
-                    });
-
-                    event.reward_claimed = true;
-                    event.state = RandomEventState::Completed;
-                }
-            }
-
-            RandomEventState::Failed => {
-                if !event.reward_claimed {
-                    event_completed.write(RandomEventCompleted {
-                        event_entity: entity,
-                        event_type: event.event_type,
-                        success: false,
-                        reward: 0,
-                    });
-
-                    event.reward_claimed = true;
-                    event.state = RandomEventState::Completed;
-                }
-            }
-
+            RandomEventState::Active => handle_active_event(&mut event, distance),
+            RandomEventState::PlayerIntervening => handle_intervening_event(&mut event, distance),
+            RandomEventState::Resolved => send_completion(&mut event, entity, true, &mut event_completed),
+            RandomEventState::Failed => send_completion(&mut event, entity, false, &mut event_completed),
             RandomEventState::Completed => {
-                // 完成後移除事件
                 commands.entity(entity).despawn();
             }
         }

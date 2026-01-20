@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::pbr::StandardMaterial;
+use crate::core::calculate_fade_alpha;
 
 /// 共享載具材質（效能優化：避免重複創建相同材質）
 /// 每種通用材質只創建一次，所有載具共用
@@ -122,6 +123,53 @@ pub struct Vehicle {
     pub wheel_spin: f32,        // 輪胎打滑程度 (0.0~1.0)
 }
 
+impl Default for Vehicle {
+    /// 預設值：所有車輛共用的初始狀態
+    fn default() -> Self {
+        Self {
+            vehicle_type: VehicleType::Car,
+            max_speed: 30.0,
+            acceleration: 10.0,
+            turn_speed: 2.0,
+            current_speed: 0.0,
+            is_occupied: false,
+
+            lean_angle: 0.0,
+            max_lean_angle: 0.0,
+
+            power_band_low: 1.0,
+            power_band_peak: 1.0,
+            top_end_falloff: 0.5,
+
+            braking_power: 0.7,
+            brake_force: 20.0,
+            handbrake_force: 30.0,
+
+            handling: 1.0,
+            high_speed_turn_factor: 0.3,
+            steering_response: 5.0,
+            counter_steer_assist: 0.4,
+
+            drift_threshold: 0.4,
+            drift_grip: 0.5,
+            is_drifting: false,
+            drift_angle: 0.0,
+            is_handbraking: false,
+
+            body_roll_factor: 0.05,
+            body_pitch_factor: 0.05,
+            body_roll: 0.0,
+            body_pitch: 0.0,
+            suspension_stiffness: 4.0,
+
+            throttle_input: 0.0,
+            brake_input: 0.0,
+            steer_input: 0.0,
+            wheel_spin: 0.0,
+        }
+    }
+}
+
 impl Vehicle {
     /// 機車 - 台灣街頭最常見的交通工具
     /// 特色：靈活、加速快、可傾斜過彎、容易漂移
@@ -131,11 +179,8 @@ impl Vehicle {
             max_speed: 22.0,           // 約 80 km/h
             acceleration: 18.0,        // 機車加速快
             turn_speed: 4.0,           // 轉向靈活
-            current_speed: 0.0,
-            is_occupied: false,
 
             // 機車傾斜
-            lean_angle: 0.0,
             max_lean_angle: 0.5,       // 約 28 度傾斜
 
             // 加速系統（機車低速扭力強）
@@ -157,22 +202,13 @@ impl Vehicle {
             // 漂移
             drift_threshold: 0.3,
             drift_grip: 0.6,
-            is_drifting: false,
-            drift_angle: 0.0,
-            is_handbraking: false,
 
             // 車身動態（機車用 lean 不用 roll）
             body_roll_factor: 0.0,
             body_pitch_factor: 0.15,   // 輕微前後傾
-            body_roll: 0.0,
-            body_pitch: 0.0,
             suspension_stiffness: 5.0,
 
-            // 輸入狀態
-            throttle_input: 0.0,
-            brake_input: 0.0,
-            steer_input: 0.0,
-            wheel_spin: 0.0,
+            ..Default::default()
         }
     }
 
@@ -183,47 +219,21 @@ impl Vehicle {
             max_speed: 35.0,
             acceleration: 12.0,
             turn_speed: 2.0,
-            current_speed: 0.0,
-            is_occupied: false,
-
-            lean_angle: 0.0,
-            max_lean_angle: 0.0,       // 汽車不傾斜
 
             // 加速系統（中速區最強）
-            power_band_low: 1.0,
             power_band_peak: 1.2,
-            top_end_falloff: 0.5,
 
             // 煞車
-            braking_power: 0.7,
-            brake_force: 20.0,
             handbrake_force: 40.0,     // 手煞車漂移關鍵
 
             // 轉向
-            handling: 1.0,
-            high_speed_turn_factor: 0.3, // 高速難轉
-            steering_response: 5.0,
             counter_steer_assist: 0.5,   // GTA 風格救車
-
-            // 漂移
-            drift_threshold: 0.4,
-            drift_grip: 0.5,
-            is_drifting: false,
-            drift_angle: 0.0,
-            is_handbraking: false,
 
             // 車身動態（明顯側傾）
             body_roll_factor: 0.08,
             body_pitch_factor: 0.06,   // 加速後仰/煞車前傾
-            body_roll: 0.0,
-            body_pitch: 0.0,
-            suspension_stiffness: 4.0,
 
-            // 輸入狀態
-            throttle_input: 0.0,
-            brake_input: 0.0,
-            steer_input: 0.0,
-            wheel_spin: 0.0,
+            ..Default::default()
         }
     }
 
@@ -231,14 +241,8 @@ impl Vehicle {
     pub fn taxi() -> Self {
         Self {
             vehicle_type: VehicleType::Taxi,
-            max_speed: 30.0,
             acceleration: 11.0,
             turn_speed: 2.2,
-            current_speed: 0.0,
-            is_occupied: false,
-
-            lean_angle: 0.0,
-            max_lean_angle: 0.0,
 
             power_band_low: 1.1,
             power_band_peak: 1.1,
@@ -253,22 +257,10 @@ impl Vehicle {
             steering_response: 5.5,
             counter_steer_assist: 0.45,
 
-            drift_threshold: 0.4,
-            drift_grip: 0.5,
-            is_drifting: false,
-            drift_angle: 0.0,
-            is_handbraking: false,
-
             body_roll_factor: 0.07,
-            body_pitch_factor: 0.05,
-            body_roll: 0.0,
-            body_pitch: 0.0,
             suspension_stiffness: 4.5,
 
-            throttle_input: 0.0,
-            brake_input: 0.0,
-            steer_input: 0.0,
-            wheel_spin: 0.0,
+            ..Default::default()
         }
     }
 
@@ -278,12 +270,7 @@ impl Vehicle {
             vehicle_type: VehicleType::Bus,
             max_speed: 15.0,
             acceleration: 8.0,
-            turn_speed: 1.5,
-            current_speed: 0.0,
-            is_occupied: false,
-
-            lean_angle: 0.0,
-            max_lean_angle: 0.0,
+            turn_speed: 1.8,  // 提高以改善轉彎能力
 
             // 柴油引擎低速扭力大
             power_band_low: 1.5,
@@ -301,21 +288,13 @@ impl Vehicle {
 
             drift_threshold: 0.6,      // 難進入漂移
             drift_grip: 0.3,
-            is_drifting: false,
-            drift_angle: 0.0,
-            is_handbraking: false,
 
             // 誇張側傾（有趣的視覺效果）
             body_roll_factor: 0.15,
             body_pitch_factor: 0.10,   // 明顯點頭
-            body_roll: 0.0,
-            body_pitch: 0.0,
             suspension_stiffness: 2.0, // 軟懸吊
 
-            throttle_input: 0.0,
-            brake_input: 0.0,
-            steer_input: 0.0,
-            wheel_spin: 0.0,
+            ..Default::default()
         }
     }
 }
@@ -388,14 +367,8 @@ impl TireTrack {
 
     /// 計算當前透明度
     pub fn alpha(&self) -> f32 {
-        // 前 70% 時間完全不透明，之後淡出
-        let fade_start = 0.7;
         let progress = self.lifetime / self.max_lifetime;
-        if progress < fade_start {
-            1.0
-        } else {
-            1.0 - (progress - fade_start) / (1.0 - fade_start)
-        }
+        calculate_fade_alpha(progress, 0.7)
     }
 }
 
@@ -503,13 +476,13 @@ impl VehicleEffectVisuals {
             smoke_mesh: meshes.add(Sphere::new(0.5)),
             smoke_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.8, 0.8, 0.8, 0.5),  // 灰白色半透明
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                alpha_mode: AlphaMode::Blend,
                 unlit: true,  // 不受光照影響
                 ..default()
             }),
             tire_track_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.1, 0.1, 0.1, 0.8),  // 深色輪胎痕
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 double_sided: true,  // 雙面可見
                 ..default()
@@ -519,8 +492,8 @@ impl VehicleEffectVisuals {
             nitro_flame_mesh: meshes.add(Sphere::new(0.3)),
             nitro_flame_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.8, 0.9, 1.0, 0.9),  // 藍白色
-                emissive: bevy::color::LinearRgba::rgb(5.0, 6.0, 8.0),  // 強發光
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                emissive: LinearRgba::rgb(5.0, 6.0, 8.0),  // 強發光
+                alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()
             }),
@@ -873,13 +846,13 @@ impl VehicleDamageVisuals {
             smoke_mesh: meshes.add(Sphere::new(0.3)),
             light_smoke_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.8, 0.8, 0.8, 0.4),
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()
             }),
             heavy_smoke_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.2, 0.2, 0.2, 0.6),
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()
             }),
@@ -887,14 +860,14 @@ impl VehicleDamageVisuals {
             fire_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.5, 0.0),
                 emissive: LinearRgba::new(15.0, 8.0, 0.0, 1.0),
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                alpha_mode: AlphaMode::Blend,
                 ..default()
             }),
             explosion_mesh: meshes.add(Sphere::new(2.0)),
             explosion_material: materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.8, 0.2),
                 emissive: LinearRgba::new(50.0, 30.0, 5.0, 1.0),
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                alpha_mode: AlphaMode::Blend,
                 ..default()
             }),
         }

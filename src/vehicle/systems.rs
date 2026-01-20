@@ -70,15 +70,41 @@ const LOW_SPEED_TURN_DECAY: f32 = 0.9;
 /// 轉向輸入死區
 const STEER_INPUT_DEADZONE: f32 = 0.01;
 
+// === 漂移物理 ===
+/// 低牽引力漂移放大係數
+const DRIFT_AMPLIFIER_LOW_TRACTION: f32 = 1.3;
+/// 正常漂移放大係數
+const DRIFT_AMPLIFIER_NORMAL: f32 = 1.0;
+/// 漂移角度調整速率
+const DRIFT_ANGLE_RATE: f32 = 2.5;
+/// 最大漂移角度
+const MAX_DRIFT_ANGLE: f32 = 0.8;
+/// 漂移反制力速率
+const DRIFT_COUNTER_FORCE_RATE: f32 = 3.0;
+/// 反打方向盤救車速率
+const COUNTER_STEER_RATE: f32 = 2.0;
+/// 漂移結束角度閾值
+const DRIFT_END_ANGLE_THRESHOLD: f32 = 0.1;
+/// 正常漂移結束速度閾值
+const DRIFT_END_SPEED_NORMAL: f32 = 5.0;
+/// 低牽引力漂移結束速度閾值
+const DRIFT_END_SPEED_LOW_TRACTION: f32 = 4.0;
+/// 漂移速度損失係數
+const DRIFT_SPEED_LOSS_RATE: f32 = 0.5;
+/// 非漂移側滑角度衰減速率
+const DRIFT_DECAY_RATE: f32 = 4.0;
+/// 側滑角度歸零閾值
+const DRIFT_ANGLE_ZERO_THRESHOLD: f32 = 0.05;
+
 // === NPC 車輛 ===
 /// 障礙物檢測高度
 const NPC_OBSTACLE_CHECK_HEIGHT: f32 = 0.6;
 /// 障礙物檢測最大距離
 const NPC_OBSTACLE_MAX_DISTANCE: f32 = 8.0;
-/// 航點到達距離
-const NPC_WAYPOINT_ARRIVAL_DISTANCE: f32 = 8.0;
-/// 航點到達距離平方 (8.0² = 64.0)
-const NPC_WAYPOINT_ARRIVAL_DISTANCE_SQ: f32 = 64.0;
+/// 航點到達距離（降低以減少迂迴行為）
+const NPC_WAYPOINT_ARRIVAL_DISTANCE: f32 = 5.0;
+/// 航點到達距離平方 (5.0² = 25.0)
+const NPC_WAYPOINT_ARRIVAL_DISTANCE_SQ: f32 = 25.0;
 /// NPC 巡航速度比例
 const NPC_CRUISING_SPEED_RATIO: f32 = 0.6;
 
@@ -220,6 +246,74 @@ fn get_weather_handling_factor(weather: &WeatherState) -> f32 {
     }
 }
 
+/// 處理加速邏輯
+fn handle_acceleration(vehicle: &mut Vehicle, dt: f32, traction_factor: f32, accel_mod: f32, accel_mult: f32) {
+    let accel_force = calculate_acceleration_force(vehicle) * accel_mod;
+    let effective_accel = accel_force * accel_mult * vehicle.throttle_input * traction_factor;
+
+    // 輪胎打滑模擬
+    let slip_threshold = if traction_factor < NORMAL_TRACTION_THRESHOLD { SLIP_SPEED_LOW_TRACTION } else { SLIP_SPEED_NORMAL };
+    if vehicle.current_speed < slip_threshold && (accel_mult > 1.0 || traction_factor < LOW_TRACTION_THRESHOLD) {
+        let slip_factor = if traction_factor < LOW_TRACTION_THRESHOLD { SLIP_FACTOR_LOW_TRACTION } else { SLIP_FACTOR_NORMAL };
+        vehicle.wheel_spin = (vehicle.wheel_spin + dt * slip_factor).min(1.0);
+        let grip = traction_factor * (1.0 - vehicle.wheel_spin * SLIP_GRIP_PENALTY);
+        vehicle.current_speed += effective_accel * grip * dt;
+    } else {
+        vehicle.wheel_spin = (vehicle.wheel_spin - dt * SLIP_RECOVERY_RATE).max(0.0);
+        vehicle.current_speed += effective_accel * dt;
+    }
+}
+
+/// 處理煞車邏輯
+fn handle_braking(vehicle: &mut Vehicle, dt: f32, traction_factor: f32, accel_mod: f32, brake_mod: f32) {
+    if vehicle.current_speed > 0.5 {
+        let brake_decel = vehicle.brake_force * brake_mod * vehicle.brake_input * traction_factor;
+        vehicle.current_speed -= brake_decel * dt;
+        vehicle.current_speed = vehicle.current_speed.max(0.0);
+    } else {
+        let reverse_accel = calculate_acceleration_force(vehicle) * accel_mod * 0.5 * traction_factor;
+        vehicle.current_speed -= reverse_accel * dt;
+    }
+}
+
+/// 處理手煞車邏輯
+fn handle_handbrake(vehicle: &mut Vehicle, traction_factor: f32) {
+    let handbrake_decel = vehicle.handbrake_force * 0.03 * traction_factor;
+    vehicle.current_speed *= 1.0 - handbrake_decel;
+
+    // 觸發漂移條件
+    let drift_speed_threshold = if traction_factor < NORMAL_TRACTION_THRESHOLD { 6.0 } else { 8.0 };
+    let drift_steer_threshold = if traction_factor < NORMAL_TRACTION_THRESHOLD { 0.2 } else { 0.3 };
+    if vehicle.current_speed.abs() > drift_speed_threshold && vehicle.steer_input.abs() > drift_steer_threshold && !vehicle.is_drifting {
+        vehicle.is_drifting = true;
+    }
+}
+
+/// 讀取車輛輸入狀態
+fn read_vehicle_inputs(
+    keyboard: &ButtonInput<KeyCode>,
+    mouse_button: &ButtonInput<MouseButton>,
+) -> (f32, f32) {
+    let both_mouse = mouse_button.pressed(MouseButton::Left) && mouse_button.pressed(MouseButton::Right);
+    let throttle = if keyboard.pressed(KeyCode::KeyW) || both_mouse { 1.0 } else { 0.0 };
+    let brake = if keyboard.pressed(KeyCode::KeyS) { 1.0 } else { 0.0 };
+    (throttle, brake)
+}
+
+/// 處理自然減速
+fn handle_natural_deceleration(vehicle: &mut Vehicle, effective_max_speed: f32) {
+    let drag = 1.0 + (vehicle.current_speed.abs() / effective_max_speed) * 0.5;
+    vehicle.current_speed *= 1.0 - 0.025 * drag;
+}
+
+/// 限制並正規化車輛速度
+fn clamp_vehicle_speed(vehicle: &mut Vehicle, effective_max_speed: f32) {
+    vehicle.current_speed = vehicle.current_speed.clamp(-effective_max_speed * REVERSE_SPEED_RATIO, effective_max_speed);
+    if vehicle.current_speed.abs() < STOP_SPEED_THRESHOLD && vehicle.throttle_input == 0.0 {
+        vehicle.current_speed = 0.0;
+    }
+}
+
 /// 更新車輛速度（含天氣影響 + 改裝加成）
 fn update_vehicle_speed_with_mods(
     keyboard: &ButtonInput<KeyCode>,
@@ -232,82 +326,24 @@ fn update_vehicle_speed_with_mods(
     speed_mod: f32,
     nitro_mult: f32,
 ) {
-    // Shift 加速不再觸發氮氣（由 nitro_boost_system 處理）
-    let accel_mult = if nitro_mult > 1.0 { nitro_mult } else { 1.0 };
-    let both_mouse = mouse_button.pressed(MouseButton::Left) && mouse_button.pressed(MouseButton::Right);
+    let (throttle, brake) = read_vehicle_inputs(keyboard, mouse_button);
+    vehicle.throttle_input = throttle;
+    vehicle.brake_input = brake;
 
-    // 記錄輸入狀態
-    vehicle.throttle_input = if keyboard.pressed(KeyCode::KeyW) || both_mouse { 1.0 } else { 0.0 };
-    vehicle.brake_input = if keyboard.pressed(KeyCode::KeyS) { 1.0 } else { 0.0 };
-
-    // 計算改裝後的最高速度
+    let accel_mult = nitro_mult.max(1.0);
     let effective_max_speed = vehicle.max_speed * speed_mod;
 
-    // === 加速處理（非線性曲線 + 天氣影響 + 改裝加成）===
     if vehicle.throttle_input > 0.0 {
-        let accel_force = calculate_acceleration_force(vehicle) * accel_mod;
-        let effective_accel = accel_force * accel_mult * vehicle.throttle_input * traction_factor;
-
-        // 輪胎打滑模擬（Shift 加速起步時 + 雨天更容易打滑）
-        let slip_threshold = if traction_factor < 0.9 { 8.0 } else { 5.0 };
-        if vehicle.current_speed < slip_threshold && (accel_mult > 1.0 || traction_factor < 0.8) {
-            let slip_factor = if traction_factor < 0.8 { 4.0 } else { 3.0 };
-            vehicle.wheel_spin = (vehicle.wheel_spin + dt * slip_factor).min(1.0);
-            let grip = traction_factor * (1.0 - vehicle.wheel_spin * 0.4);
-            vehicle.current_speed += effective_accel * grip * dt;
-        } else {
-            vehicle.wheel_spin = (vehicle.wheel_spin - dt * 2.0).max(0.0);
-            vehicle.current_speed += effective_accel * dt;
-        }
+        handle_acceleration(vehicle, dt, traction_factor, accel_mod, accel_mult);
+    } else if vehicle.brake_input > 0.0 && !vehicle.is_handbraking {
+        handle_braking(vehicle, dt, traction_factor, accel_mod, brake_mod);
+    } else if vehicle.is_handbraking {
+        handle_handbrake(vehicle, traction_factor);
+    } else {
+        handle_natural_deceleration(vehicle, effective_max_speed);
     }
 
-    // === 煞車處理（S 鍵 + 天氣影響 + 改裝加成）===
-    if vehicle.brake_input > 0.0 && !vehicle.is_handbraking {
-        if vehicle.current_speed > 0.5 {
-            // 改裝煞車提升制動力
-            let brake_decel = vehicle.brake_force * brake_mod * vehicle.brake_input * traction_factor;
-            vehicle.current_speed -= brake_decel * dt;
-            if vehicle.current_speed < 0.0 {
-                vehicle.current_speed = 0.0;
-            }
-        } else {
-            let reverse_accel = calculate_acceleration_force(vehicle) * accel_mod * 0.5 * traction_factor;
-            vehicle.current_speed -= reverse_accel * dt;
-        }
-    }
-
-    // === 手煞車處理（漂移觸發 + 雨天更容易）===
-    if vehicle.is_handbraking {
-        let handbrake_decel = vehicle.handbrake_force * 0.03 * traction_factor;
-        vehicle.current_speed *= 1.0 - handbrake_decel;
-
-        // 觸發漂移條件：雨天更容易漂移
-        let drift_speed_threshold = if traction_factor < 0.9 { 6.0 } else { 8.0 };
-        let drift_steer_threshold = if traction_factor < 0.9 { 0.2 } else { 0.3 };
-        if vehicle.current_speed.abs() > drift_speed_threshold && vehicle.steer_input.abs() > drift_steer_threshold {
-            if !vehicle.is_drifting {
-                vehicle.is_drifting = true;
-            }
-        }
-    }
-
-    // === 自然減速（引擎煞車 + 阻力）===
-    let no_input = vehicle.throttle_input == 0.0 && vehicle.brake_input == 0.0 && !vehicle.is_handbraking;
-    if no_input {
-        let drag = 1.0 + (vehicle.current_speed.abs() / effective_max_speed) * 0.5;
-        vehicle.current_speed *= 1.0 - 0.025 * drag;
-    }
-
-    // 速度限制（使用改裝後的最高速度）
-    vehicle.current_speed = vehicle.current_speed.clamp(
-        -effective_max_speed * 0.3,
-        effective_max_speed,
-    );
-
-    // 極低速歸零
-    if vehicle.current_speed.abs() < 0.1 && vehicle.throttle_input == 0.0 {
-        vehicle.current_speed = 0.0;
-    }
+    clamp_vehicle_speed(vehicle, effective_max_speed);
 }
 
 /// 更新車輛轉向（含天氣影響）
@@ -371,6 +407,55 @@ fn update_vehicle_turning_with_weather(
     transform.rotate_y(effective_turn);
 }
 
+/// 處理手煞車觸發漂移
+fn handle_handbrake_drift(vehicle: &mut Vehicle, dt: f32, traction_factor: f32) {
+    let drift_amplifier = if traction_factor < NORMAL_TRACTION_THRESHOLD {
+        DRIFT_AMPLIFIER_LOW_TRACTION
+    } else {
+        DRIFT_AMPLIFIER_NORMAL
+    };
+
+    vehicle.drift_angle += vehicle.steer_input * dt * DRIFT_ANGLE_RATE * drift_amplifier;
+    vehicle.drift_angle = vehicle.drift_angle.clamp(-MAX_DRIFT_ANGLE, MAX_DRIFT_ANGLE);
+    vehicle.is_drifting = vehicle.drift_angle.abs() > vehicle.drift_threshold;
+}
+
+/// 處理正在漂移中的物理
+fn handle_active_drift(vehicle: &mut Vehicle, dt: f32, traction_factor: f32) {
+    // 漂移中的反制力（雨天更難控制）
+    let counter = -vehicle.drift_angle * (1.0 - vehicle.drift_grip * traction_factor) * dt * DRIFT_COUNTER_FORCE_RATE;
+    vehicle.drift_angle += counter;
+
+    // 反打方向盤救車
+    if vehicle.steer_input != 0.0 && vehicle.steer_input.signum() == -vehicle.drift_angle.signum() {
+        vehicle.drift_angle += vehicle.steer_input * vehicle.counter_steer_assist * dt * COUNTER_STEER_RATE;
+    }
+
+    // 漂移結束判定
+    let end_speed = if traction_factor < NORMAL_TRACTION_THRESHOLD {
+        DRIFT_END_SPEED_LOW_TRACTION
+    } else {
+        DRIFT_END_SPEED_NORMAL
+    };
+    if vehicle.drift_angle.abs() < DRIFT_END_ANGLE_THRESHOLD || vehicle.current_speed.abs() < end_speed {
+        vehicle.is_drifting = false;
+        vehicle.drift_angle = 0.0;
+        return;
+    }
+
+    // 漂移損失速度（雨天損失更少，因為更滑）
+    let drift_speed_loss = vehicle.drift_angle.abs() * (1.0 - vehicle.drift_grip) * traction_factor * dt * DRIFT_SPEED_LOSS_RATE;
+    vehicle.current_speed *= 1.0 - drift_speed_loss;
+}
+
+/// 處理非漂移狀態的側滑角度衰減
+fn handle_drift_decay(vehicle: &mut Vehicle, dt: f32) {
+    vehicle.drift_angle *= 1.0 - dt * DRIFT_DECAY_RATE;
+    if vehicle.drift_angle.abs() < DRIFT_ANGLE_ZERO_THRESHOLD {
+        vehicle.drift_angle = 0.0;
+    }
+}
+
 /// 漂移物理系統（含天氣影響）
 fn update_drift_physics_with_weather(
     vehicle: &mut Vehicle,
@@ -378,41 +463,18 @@ fn update_drift_physics_with_weather(
     dt: f32,
     traction_factor: f32,
 ) {
-    // 雨天漂移係數增加
-    let drift_amplifier = if traction_factor < 0.9 { 1.3 } else { 1.0 };
-
-    // 手煞車觸發漂移
-    let drift_speed_threshold = if traction_factor < 0.9 { 6.0 } else { 8.0 };
-    if vehicle.is_handbraking && vehicle.current_speed.abs() > drift_speed_threshold {
-        vehicle.drift_angle += vehicle.steer_input * dt * 2.5 * drift_amplifier;
-        vehicle.drift_angle = vehicle.drift_angle.clamp(-0.8, 0.8);
-        vehicle.is_drifting = vehicle.drift_angle.abs() > vehicle.drift_threshold;
-    } else if vehicle.is_drifting {
-        // 漂移中的反制力（雨天更難控制）
-        let counter = -vehicle.drift_angle * (1.0 - vehicle.drift_grip * traction_factor) * dt * 3.0;
-        vehicle.drift_angle += counter;
-
-        // 反打方向盤救車
-        if vehicle.steer_input != 0.0 && vehicle.steer_input.signum() == -vehicle.drift_angle.signum() {
-            vehicle.drift_angle += vehicle.steer_input * vehicle.counter_steer_assist * dt * 2.0;
-        }
-
-        // 漂移結束判定
-        let end_speed = if traction_factor < 0.9 { 4.0 } else { 5.0 };
-        if vehicle.drift_angle.abs() < 0.1 || vehicle.current_speed.abs() < end_speed {
-            vehicle.is_drifting = false;
-            vehicle.drift_angle = 0.0;
-        }
-
-        // 漂移損失速度（雨天損失更少，因為更滑）
-        let drift_speed_loss = vehicle.drift_angle.abs() * (1.0 - vehicle.drift_grip) * traction_factor * dt * 0.5;
-        vehicle.current_speed *= 1.0 - drift_speed_loss;
+    let drift_speed_threshold = if traction_factor < NORMAL_TRACTION_THRESHOLD {
+        DRIFT_SPEED_THRESHOLD_LOW_TRACTION
     } else {
-        // 非漂移狀態：側滑角度歸零
-        vehicle.drift_angle *= 1.0 - dt * 4.0;
-        if vehicle.drift_angle.abs() < 0.05 {
-            vehicle.drift_angle = 0.0;
-        }
+        DRIFT_SPEED_THRESHOLD_NORMAL
+    };
+
+    if vehicle.is_handbraking && vehicle.current_speed.abs() > drift_speed_threshold {
+        handle_handbrake_drift(vehicle, dt, traction_factor);
+    } else if vehicle.is_drifting {
+        handle_active_drift(vehicle, dt, traction_factor);
+    } else {
+        handle_drift_decay(vehicle, dt);
     }
 }
 
@@ -538,27 +600,42 @@ enum ObstacleCheckResult {
 }
 
 /// 檢查前方障礙物
+/// 使用多重射線偵測：正前方 + 左前方 + 右前方
 fn check_obstacle(
     rapier: &RapierContext,
     entity: Entity,
     transform: &Transform,
 ) -> ObstacleCheckResult {
     let ray_pos = transform.translation + Vec3::new(0.0, 0.6, 0.0);
-    let ray_dir = transform.forward().as_vec3();
-    let max_toi: bevy_rapier3d::prelude::Real = 8.0;
+    let forward = transform.forward().as_vec3();
+    let right = transform.right().as_vec3();
+
+    // 檢測距離：10m 煞車，4m 緊急倒車
+    let max_toi: bevy_rapier3d::prelude::Real = 10.0;
     let filter = QueryFilter::new().exclude_rigid_body(entity);
 
-    if let Some((_hit_entity, toi)) = rapier.cast_ray(
-        ray_pos, ray_dir, max_toi, true, filter
-    ) {
-        let toi_f32 = rapier_real_to_f32(toi);
-        if toi_f32 < 4.0 {
-            ObstacleCheckResult::TooClose
-        } else {
-            ObstacleCheckResult::NeedBrake
+    // 多射線：正前方、左前方(30°)、右前方(30°)
+    let ray_dirs = [
+        forward,
+        (forward + right * 0.5).normalize(),   // 右前方
+        (forward - right * 0.5).normalize(),   // 左前方
+    ];
+
+    let mut closest_hit: Option<f32> = None;
+
+    for ray_dir in ray_dirs {
+        if let Some((_hit_entity, toi)) = rapier.cast_ray(
+            ray_pos, ray_dir, max_toi, true, filter
+        ) {
+            let toi_f32 = rapier_real_to_f32(toi);
+            closest_hit = Some(closest_hit.map_or(toi_f32, |prev| prev.min(toi_f32)));
         }
-    } else {
-        ObstacleCheckResult::Clear
+    }
+
+    match closest_hit {
+        Some(dist) if dist < 4.0 => ObstacleCheckResult::TooClose,
+        Some(dist) if dist < 8.0 => ObstacleCheckResult::NeedBrake,
+        _ => ObstacleCheckResult::Clear, // 8m 以上或無障礙 = 清空
     }
 }
 
@@ -570,14 +647,17 @@ fn update_npc_state_from_obstacle(
 ) {
     match result {
         ObstacleCheckResult::TooClose => {
-            if npc.state != NpcState::Reversing {
+            // stuck_timer < 0 表示剛完成倒車，有短暫免疫期
+            if npc.state != NpcState::Reversing && npc.stuck_timer >= 0.0 {
                 npc.state = NpcState::Reversing;
                 npc.stuck_timer = 0.0;
                 vehicle.current_speed = -3.0;
             }
         }
         ObstacleCheckResult::NeedBrake => {
-            npc.state = NpcState::Braking;
+            if npc.stuck_timer >= 0.0 {
+                npc.state = NpcState::Braking;
+            }
         }
         ObstacleCheckResult::Clear => {
             if npc.state != NpcState::Cruising && npc.state != NpcState::Reversing {
@@ -638,7 +718,12 @@ fn handle_cruising_state(
     vehicle: &mut Vehicle,
     dt: f32,
 ) {
-    npc.stuck_timer = 0.0;
+    // 處理倒車後的免疫期（負值逐漸增加到 0）
+    if npc.stuck_timer < 0.0 {
+        npc.stuck_timer += dt;
+    } else {
+        npc.stuck_timer = 0.0;
+    }
 
     // 加速到目標速度
     let target_speed = vehicle.max_speed * NPC_CRUISING_SPEED_RATIO;
@@ -679,11 +764,11 @@ fn handle_stopped_state(npc: &mut NpcVehicle, vehicle: &mut Vehicle, dt: f32) {
     vehicle.current_speed = 0.0;
     npc.stuck_timer += dt;
 
-    // 防卡死：停止太久就倒車
-    if npc.stuck_timer > 3.0 {
+    // 防卡死：停止太久就倒車（延長到 5 秒，給其他車輛讓路的時間）
+    if npc.stuck_timer > 5.0 {
         npc.state = NpcState::Reversing;
         npc.stuck_timer = 0.0;
-        vehicle.current_speed = -3.0;
+        vehicle.current_speed = -4.0;  // 稍快倒車
     }
 }
 
@@ -696,16 +781,35 @@ fn handle_reversing_state(
 ) {
     npc.stuck_timer += dt;
 
-    // 直直倒車
+    // 倒車時轉向（增大角度避免直直倒車又撞回去）
+    // 根據 stuck_timer 的奇偶決定轉向（偽隨機）
+    let turn_dir = if (npc.stuck_timer * 10.0) as i32 % 2 == 0 { 1.0 } else { -1.0 };
+    transform.rotate_y(turn_dir * 1.2 * dt);  // 增大轉向角度
+
+    // 倒車移動
     let forward = transform.forward();
     transform.translation += forward * vehicle.current_speed * dt;
 
-    // 倒車 1.5 秒後嘗試前進
-    if npc.stuck_timer > 1.5 {
+    // 倒車 2 秒後嘗試前進
+    if npc.stuck_timer > 2.0 {
         npc.state = NpcState::Cruising;
-        vehicle.current_speed = 0.0;
-        npc.stuck_timer = 0.0;
+        vehicle.current_speed = 2.0;  // 給一個前進初速度
+        npc.stuck_timer = -1.0;  // 負值表示免疫期（1秒內不會再次倒車）
     }
+}
+
+/// 檢查車輛前方是否有需要停車的紅綠燈
+fn should_stop_for_traffic_light(
+    vehicle_pos: Vec3,
+    vehicle_forward: Vec3,
+    traffic_light_query: &Query<(&Transform, &TrafficLight), Without<NpcVehicle>>,
+) -> bool {
+    for (light_transform, light) in traffic_light_query.iter() {
+        if light.should_vehicle_stop(vehicle_pos, vehicle_forward, light_transform.translation) {
+            return true;
+        }
+    }
+    false
 }
 
 /// NPC 車輛 AI（含避障功能和紅綠燈遵守）
@@ -725,16 +829,13 @@ pub fn npc_vehicle_ai(
             let result = check_obstacle(&rapier, entity, &transform);
             update_npc_state_from_obstacle(&mut npc, &mut vehicle, result);
 
-            // 檢查紅綠燈（只在巡航狀態下）
-            if npc.state == NpcState::Cruising {
+            // 檢查紅綠燈（除了倒車和等紅燈狀態外都要檢查）
+            // 避免 Braking/Stopped 狀態的車輛闖紅燈
+            if npc.state != NpcState::Reversing && npc.state != NpcState::WaitingAtLight {
                 let vehicle_pos = transform.translation;
                 let vehicle_forward = transform.forward().as_vec3();
-
-                for (light_transform, light) in traffic_light_query.iter() {
-                    if light.should_vehicle_stop(vehicle_pos, vehicle_forward, light_transform.translation) {
-                        npc.state = NpcState::WaitingAtLight;
-                        break;
-                    }
+                if should_stop_for_traffic_light(vehicle_pos, vehicle_forward, &traffic_light_query) {
+                    npc.state = NpcState::WaitingAtLight;
                 }
             }
         }
@@ -764,20 +865,10 @@ fn handle_waiting_at_light_state(
         vehicle.current_speed = 0.0;
     }
 
-    // 檢查燈是否變綠了
+    // 檢查燈是否變綠了，如果變綠則恢復巡航
     let vehicle_pos = transform.translation;
     let vehicle_forward = transform.forward().as_vec3();
-
-    let mut should_wait = false;
-    for (light_transform, light) in traffic_light_query.iter() {
-        if light.should_vehicle_stop(vehicle_pos, vehicle_forward, light_transform.translation) {
-            should_wait = true;
-            break;
-        }
-    }
-
-    // 燈變綠了，恢復巡航
-    if !should_wait {
+    if !should_stop_for_traffic_light(vehicle_pos, vehicle_forward, traffic_light_query) {
         npc.state = NpcState::Cruising;
     }
 }
@@ -1044,38 +1135,62 @@ pub fn spawn_initial_traffic(
 
     // NPC 車輛路線 - 只走柏油路，避開徒步區
     // 可用道路：中華路 (X=75, 寬50m), 西寧南路 (X=-50), 成都路 (Z=50)
-    // 中華路車道範圍：X = 50 ~ 100
+    // ★ 重要：
+    //   1. 每條路線必須形成閉環
+    //   2. 不同路線的車道必須錯開，避免重疊
+    //   3. 車寬約 2.5m，車道間距至少 8m
 
-    // 路線 1：外圈 (東側車道) - 逆時針
-    let route_east = vec![
-        Vec3::new(-48.0, 0.0, 48.0),  // 西寧/成都 西側
-        Vec3::new(90.0, 0.0, 48.0),   // 中華/成都 東側
-        Vec3::new(90.0, 0.0, -70.0),  // 中華路北端
-        Vec3::new(-48.0, 0.0, -70.0), // 西寧路北端
-        Vec3::new(-48.0, 0.0, 48.0),  // 返回起點
+    // === 道路座標參考 ===
+    // Z_HANKOU = -80 (漢口街, 寬12) → 北 -86, 南 -74
+    // Z_CHENGDU = 50 (成都路, 寬16) → 北 42, 南 58
+    // X_ZHONGHUA = 80 (中華路, 寬20) → 西 70, 東 90
+    // X_XINING = -55 (西寧南路, 寬12) → 西 -61, 東 -49
+    // X_KANGDING = -100 (康定路, 寬16) → 西 -108, 東 -92
+
+    // 路線 A：外圈 (逆時針) - 使用實際道路座標
+    // 成都路北側車道 Z≈45，漢口街南側車道 Z≈-77
+    let route_outer = vec![
+        Vec3::new(-52.0, 0.0, 45.0),  // 0: 西南角 (西寧/成都)
+        Vec3::new(85.0, 0.0, 45.0),   // 1: 東南角 (中華/成都)
+        Vec3::new(85.0, 0.0, -77.0),  // 2: 東北角 (中華/漢口)
+        Vec3::new(-52.0, 0.0, -77.0), // 3: 西北角 (西寧/漢口)
     ];
 
-    // 路線 2：內圈 (西側車道) - 順時針
-    let route_west = vec![
-        Vec3::new(60.0, 0.0, 52.0),   // 中華/成都 西側車道
-        Vec3::new(-52.0, 0.0, 52.0),  // 西寧/成都 西側
-        Vec3::new(-52.0, 0.0, -70.0), // 西寧路北端
-        Vec3::new(60.0, 0.0, -70.0),  // 中華路北端西側
-        Vec3::new(60.0, 0.0, 52.0),   // 返回起點
+    // 路線 B：內圈 (順時針) - 成都路南側車道 Z≈58
+    // 公車起點往南移 3m (Z=58)，避開與中華路車輛和成都路車輛衝突
+    let route_inner = vec![
+        Vec3::new(72.0, 0.0, 58.0),   // 0: 東南角（西側車道，更南）
+        Vec3::new(-58.0, 0.0, 58.0),  // 1: 西南角
+        Vec3::new(-58.0, 0.0, -83.0), // 2: 西北角 (漢口街北側)
+        Vec3::new(72.0, 0.0, -83.0),  // 3: 東北角
     ];
 
-    // 路線 3：南北向主要道路（中華路 X=75，地圖範圍內）
-    let route_north_south = vec![
-        Vec3::new(75.0, 0.0, -75.0),  // 北端（漢口街附近）
-        Vec3::new(75.0, 0.0, 55.0),   // 南端（成都路附近）
-        Vec3::new(75.0, 0.0, -75.0),  // 返回
+    // 路線 C：中華路直線 (南北向) - 在中華路上 (X=80, 寬20)
+    // 北行：X=88 (東側車道)，南行：X=72 (西側車道) - 避開與公車衝突
+    let route_zhonghua = vec![
+        Vec3::new(88.0, 0.0, 55.0),   // 0: 南端 (成都路南側)
+        Vec3::new(88.0, 0.0, -83.0),  // 1: 北端 (漢口街北側)
+        Vec3::new(72.0, 0.0, -83.0),  // 2: U 型轉彎
+        Vec3::new(72.0, 0.0, 55.0),   // 3: 南端
     ];
 
-    // 路線 4：東西向道路（沿成都路 Z=50，避開徒步區 Z=0）
-    let route_east_west = vec![
-        Vec3::new(-90.0, 0.0, 50.0),  // 西端起點（成都路西側）
-        Vec3::new(70.0, 0.0, 50.0),   // 東端（成都路東側）
-        Vec3::new(-90.0, 0.0, 50.0),  // 返回
+    // 路線 D：成都路直線 (東西向) - 在成都路上 (Z=50, 寬16)
+    // 東行：Z=44 (北側車道)，西行：Z=56 (南側車道)
+    // 調整避開與公車 (Z=58) 衝突
+    let route_chengdu = vec![
+        Vec3::new(-90.0, 0.0, 44.0),  // 0: 西端 (康定路東側)
+        Vec3::new(85.0, 0.0, 44.0),   // 1: 東端 (中華路)
+        Vec3::new(85.0, 0.0, 56.0),   // 2: U 型轉彎（Z=56，避開公車 Z=58）
+        Vec3::new(-90.0, 0.0, 56.0),  // 3: 西端
+    ];
+
+    // 路線 E：西寧路直線 (南北向) - 在西寧南路上 (X=-55, 寬12)
+    // 北行：X=-50 (東側車道)，南行：X=-60 (西側車道) - 避開與公車衝突
+    let route_xining = vec![
+        Vec3::new(-50.0, 0.0, 58.0),  // 0: 南端 (成都路南側偏南)
+        Vec3::new(-50.0, 0.0, -77.0), // 1: 北端 (漢口街)
+        Vec3::new(-60.0, 0.0, -77.0), // 2: U 型轉彎
+        Vec3::new(-60.0, 0.0, 58.0),  // 3: 南端
     ];
 
     // 車輛顏色池
@@ -1090,36 +1205,22 @@ pub fn spawn_initial_traffic(
     ];
 
     // 生成配置 (位置, 類型, 顏色, 起始索引, 路徑)
+    // ★ 減少車輛數量避免相撞，每條路線只放 1 台
     let spawn_configs = [
-        // 計程車 1 - 東行路線 (外圈)
-        (route_east[0], VehicleType::Taxi, Color::srgb(1.0, 0.8, 0.0), 0, route_east.clone()),
+        // === 路線 A：外圈（逆時針）- 計程車 ===
+        (route_outer[0], VehicleType::Taxi, Color::srgb(1.0, 0.8, 0.0), 0, route_outer.clone()),
 
-        // 公車 - 西行路線 (內圈)
-        (route_west[0], VehicleType::Bus, Color::srgb(0.2, 0.4, 0.8), 0, route_west.clone()),
+        // === 路線 B：內圈（順時針）- 公車 ===
+        (route_inner[0], VehicleType::Bus, Color::srgb(0.2, 0.4, 0.8), 0, route_inner.clone()),
 
-        // 汽車 1 - 外圈（不同起點）
-        (route_east[1], VehicleType::Car, car_colors[0], 1, route_east.clone()),
+        // === 路線 C：中華路（U 型迴轉）===
+        (route_zhonghua[0], VehicleType::Car, car_colors[2], 0, route_zhonghua.clone()),
 
-        // 汽車 2 - 內圈
-        (route_west[2], VehicleType::Car, car_colors[1], 2, route_west.clone()),
+        // === 路線 D：成都路（U 型迴轉）===
+        (route_chengdu[0], VehicleType::Car, car_colors[3], 0, route_chengdu.clone()),
 
-        // 計程車 2 - 外圈另一位置
-        (route_east[2], VehicleType::Taxi, Color::srgb(1.0, 0.8, 0.0), 2, route_east.clone()),
-
-        // 汽車 3 - 南北向道路
-        (route_north_south[0], VehicleType::Car, car_colors[2], 0, route_north_south.clone()),
-
-        // 汽車 4 - 東西向道路
-        (route_east_west[0], VehicleType::Car, car_colors[3], 0, route_east_west.clone()),
-
-        // 汽車 5 - 外圈第三位置
-        (route_east[3], VehicleType::Car, car_colors[4], 3, route_east.clone()),
-
-        // 汽車 6 - 內圈第二位置
-        (route_west[1], VehicleType::Car, car_colors[5], 1, route_west.clone()),
-
-        // 汽車 7 - 南北向反向
-        (route_north_south[1], VehicleType::Car, car_colors[6], 1, route_north_south.clone()),
+        // === 路線 E：西寧路（U 型迴轉）===
+        (route_xining[0], VehicleType::Car, car_colors[5], 0, route_xining.clone()),
     ];
 
     info!("🚗 生成 {} 台初始交通車輛", spawn_configs.len());
@@ -1130,27 +1231,23 @@ pub fn spawn_initial_traffic(
         // 它的首個目標應該是它所在位置的下一個點
         let next_idx = (*start_idx as usize + 1) % path.len();
 
+        // 計算初始朝向：面向下一個航點
+        let next_pos = path[next_idx];
+        let dir = (next_pos - *pos).normalize_or_zero();
+        let initial_rotation = if dir.length_squared() > 0.001 {
+            Quat::from_rotation_y((-dir.x).atan2(-dir.z))
+        } else {
+            Quat::IDENTITY
+        };
+
         spawn_npc_vehicle(
             &mut commands, &mut meshes, &mut materials, &shared_mats,
-            *pos, Quat::IDENTITY, *v_type, *color,
+            *pos, initial_rotation, *v_type, *color,
             path.clone(), next_idx
         );
     }
 
-    // === 生成紅綠燈 ===
-    // 交叉路口 1：中華路/成都路交叉口
-    let intersection1 = Vec3::new(75.0, 0.0, 50.0);
-    spawn_intersection_lights(&mut commands, &traffic_visuals, intersection1, 15.0);
-
-    // 交叉路口 2：西寧路/成都路交叉口
-    let intersection2 = Vec3::new(-50.0, 0.0, 50.0);
-    spawn_intersection_lights(&mut commands, &traffic_visuals, intersection2, 12.0);
-
-    // 交叉路口 3：主要十字路口（地圖中心）
-    let intersection3 = Vec3::new(0.0, 0.0, 0.0);
-    spawn_intersection_lights(&mut commands, &traffic_visuals, intersection3, 15.0);
-
-    info!("🚦 生成 3 個交叉路口紅綠燈（共 12 座）");
+    // 紅綠燈由 spawn_world_traffic_lights 系統統一生成，不在此處重複
 
     // 儲存紅綠燈視覺資源
     commands.insert_resource(traffic_visuals);
@@ -1317,6 +1414,30 @@ pub fn spawn_scooter(
 // 車輛視覺效果系統（GTA 5 風格）
 // ============================================================================
 
+/// 判斷車輛是否應該生成漂移煙霧
+fn should_spawn_drift_smoke(vehicle: &Vehicle) -> bool {
+    (vehicle.is_drifting && vehicle.drift_angle.abs() > 0.2)
+        || (vehicle.is_handbraking && vehicle.current_speed > 10.0)
+        || (vehicle.wheel_spin > 0.5)  // 輪胎打滑時也有煙
+}
+
+/// 取得車輛類型對應的後輪偏移量
+fn get_rear_wheel_offset(vehicle_type: VehicleType) -> Vec3 {
+    match vehicle_type {
+        VehicleType::Scooter => Vec3::new(0.0, 0.0, 0.8),
+        VehicleType::Car | VehicleType::Taxi => Vec3::new(0.0, 0.0, 1.5),
+        VehicleType::Bus => Vec3::new(0.0, 0.0, 3.0),
+    }
+}
+
+/// 取得車輛類型對應的輪子側向偏移量
+fn get_wheel_lateral_offset(vehicle_type: VehicleType, side: f32) -> f32 {
+    match vehicle_type {
+        VehicleType::Scooter => 0.0,  // 機車只有中間
+        _ => 0.8 * side,
+    }
+}
+
 /// 漂移煙霧生成系統
 /// 當車輛漂移或急煞時，在後輪位置生成煙霧粒子
 pub fn drift_smoke_spawn_system(
@@ -1335,58 +1456,31 @@ pub fn drift_smoke_spawn_system(
     }
 
     for (transform, vehicle) in vehicle_query.iter() {
-        // 只在漂移或高速手煞車時生成煙霧
-        let should_spawn = (vehicle.is_drifting && vehicle.drift_angle.abs() > 0.2)
-            || (vehicle.is_handbraking && vehicle.current_speed > 10.0)
-            || (vehicle.wheel_spin > 0.5);  // 輪胎打滑時也有煙
-
-        if !should_spawn {
+        if !should_spawn_drift_smoke(vehicle) || effect_tracker.smoke_count >= effect_tracker.max_smoke_count {
             continue;
         }
 
-        // 檢查粒子數量限制
-        if effect_tracker.smoke_count >= effect_tracker.max_smoke_count {
-            continue;
-        }
-
-        // 計算後輪位置（相對於車輛）
-        let rear_offset = match vehicle.vehicle_type {
-            VehicleType::Scooter => Vec3::new(0.0, 0.0, 0.8),
-            VehicleType::Car | VehicleType::Taxi => Vec3::new(0.0, 0.0, 1.5),
-            VehicleType::Bus => Vec3::new(0.0, 0.0, 3.0),
-        };
-
-        // 轉換到世界座標
+        let rear_offset = get_rear_wheel_offset(vehicle.vehicle_type);
         let world_pos = transform.translation + transform.rotation * rear_offset;
         let wheel_height = 0.2;
 
-        // 生成煙霧粒子（左右各一個）
         let mut rng = rand::rng();
         for side in [-1.0, 1.0] {
-            let wheel_offset = match vehicle.vehicle_type {
-                VehicleType::Scooter => 0.0,  // 機車只有中間
-                _ => 0.8 * side,
-            };
-
+            let wheel_offset = get_wheel_lateral_offset(vehicle.vehicle_type, side);
             let spawn_pos = world_pos + transform.rotation * Vec3::new(wheel_offset, wheel_height, 0.0);
 
-            // 隨機散射速度
             let spread = Vec3::new(
                 rng.random_range(-0.5..0.5),
                 rng.random_range(0.3..0.8),
                 rng.random_range(-0.5..0.5),
             );
-
-            // 煙霧往後飄（相對於車輛移動方向）
             let base_velocity = -transform.forward().as_vec3() * (vehicle.current_speed * 0.1).max(1.0);
-            let velocity = base_velocity + spread;
 
             commands.spawn((
                 Mesh3d(visuals.smoke_mesh.clone()),
                 MeshMaterial3d(visuals.smoke_material.clone()),
-                Transform::from_translation(spawn_pos)
-                    .with_scale(Vec3::splat(0.3)),
-                DriftSmoke::new(velocity, rng.random_range(0.5..1.0)),
+                Transform::from_translation(spawn_pos).with_scale(Vec3::splat(0.3)),
+                DriftSmoke::new(base_velocity + spread, rng.random_range(0.5..1.0)),
             ));
 
             effect_tracker.smoke_count += 1;
@@ -1519,6 +1613,21 @@ pub fn nitro_flame_update_system(
     }
 }
 
+/// 判斷車輛是否應該生成輪胎痕跡
+fn should_spawn_tire_track(vehicle: &Vehicle) -> bool {
+    (vehicle.is_drifting && vehicle.drift_angle.abs() > 0.15)
+        || (vehicle.is_handbraking && vehicle.current_speed > 8.0)
+}
+
+/// 取得車輛類型對應的輪胎痕跡後輪偏移量
+fn get_track_rear_offset(vehicle_type: VehicleType) -> Vec3 {
+    match vehicle_type {
+        VehicleType::Scooter => Vec3::new(0.0, 0.0, 0.7),
+        VehicleType::Car | VehicleType::Taxi => Vec3::new(0.0, 0.0, 1.2),
+        VehicleType::Bus => Vec3::new(0.0, 0.0, 2.5),
+    }
+}
+
 /// 輪胎痕跡生成系統
 /// 當車輛漂移或急煞時，在地面留下輪胎痕跡
 pub fn tire_track_spawn_system(
@@ -1531,49 +1640,23 @@ pub fn tire_track_spawn_system(
     let Some(visuals) = effect_visuals else { return };
     let current_time = time.elapsed_secs();
 
-    // 檢查生成間隔
     if current_time - effect_tracker.last_track_spawn < effect_tracker.track_spawn_interval {
         return;
     }
 
     for (transform, vehicle) in vehicle_query.iter() {
-        // 只在漂移或急煞時生成痕跡
-        let should_spawn = (vehicle.is_drifting && vehicle.drift_angle.abs() > 0.15)
-            || (vehicle.is_handbraking && vehicle.current_speed > 8.0);
-
-        if !should_spawn {
+        if !should_spawn_tire_track(vehicle) || effect_tracker.track_count >= effect_tracker.max_track_count {
             continue;
         }
 
-        // 檢查痕跡數量限制
-        if effect_tracker.track_count >= effect_tracker.max_track_count {
-            continue;
-        }
-
-        // 計算後輪位置
-        let rear_offset = match vehicle.vehicle_type {
-            VehicleType::Scooter => Vec3::new(0.0, 0.0, 0.7),
-            VehicleType::Car | VehicleType::Taxi => Vec3::new(0.0, 0.0, 1.2),
-            VehicleType::Bus => Vec3::new(0.0, 0.0, 2.5),
-        };
-
-        // 痕跡寬度根據漂移角度調整
+        let rear_offset = get_track_rear_offset(vehicle.vehicle_type);
         let track_width = 0.2 + vehicle.drift_angle.abs() * 0.3;
 
-        // 生成左右輪胎痕跡
         for side in [-1.0, 1.0] {
-            let wheel_offset = match vehicle.vehicle_type {
-                VehicleType::Scooter => 0.0,
-                _ => 0.8 * side,
-            };
-
-            let track_pos = transform.translation
-                + transform.rotation * (rear_offset + Vec3::new(wheel_offset, 0.0, 0.0));
-
-            // 貼地
+            let wheel_offset = get_wheel_lateral_offset(vehicle.vehicle_type, side);
+            let track_pos = transform.translation + transform.rotation * (rear_offset + Vec3::new(wheel_offset, 0.0, 0.0));
             let ground_pos = Vec3::new(track_pos.x, 0.02, track_pos.z);
 
-            // 創建輪胎痕跡
             commands.spawn((
                 Mesh3d(visuals.tire_track_mesh.clone()),
                 MeshMaterial3d(visuals.tire_track_material.clone()),
@@ -1585,7 +1668,6 @@ pub fn tire_track_spawn_system(
 
             effect_tracker.track_count += 1;
 
-            // 機車只生成一條痕跡
             if vehicle.vehicle_type == VehicleType::Scooter {
                 break;
             }
@@ -1708,6 +1790,24 @@ pub fn vehicle_collision_damage_system(
     }
 }
 
+/// 取得車輛類型對應的爆炸半徑
+fn get_explosion_radius(vehicle_type: VehicleType) -> f32 {
+    match vehicle_type {
+        VehicleType::Scooter => 5.0,
+        VehicleType::Car | VehicleType::Taxi => 8.0,
+        VehicleType::Bus => 12.0,
+    }
+}
+
+/// 取得車輛類型對應的爆炸傷害
+fn get_explosion_damage(vehicle_type: VehicleType) -> f32 {
+    match vehicle_type {
+        VehicleType::Scooter => 100.0,
+        VehicleType::Car | VehicleType::Taxi => 200.0,
+        VehicleType::Bus => 300.0,
+    }
+}
+
 /// 車輛火焰系統
 /// 處理著火狀態和爆炸倒計時
 pub fn vehicle_fire_system(
@@ -1719,40 +1819,30 @@ pub fn vehicle_fire_system(
     let dt = time.delta_secs();
 
     for (entity, transform, vehicle, mut health) in vehicle_query.iter_mut() {
-        // 已爆炸的車輛不處理
         if health.is_destroyed() {
             continue;
         }
 
-        // 更新著火計時器
-        if health.tick_fire(dt) {
-            // 爆炸！
-            let explosion_pos = transform.translation + Vec3::Y * 0.5;
-            let explosion_radius = match vehicle.vehicle_type {
-                VehicleType::Scooter => 5.0,
-                VehicleType::Car | VehicleType::Taxi => 8.0,
-                VehicleType::Bus => 12.0,
-            };
-            let explosion_damage = match vehicle.vehicle_type {
-                VehicleType::Scooter => 100.0,
-                VehicleType::Car | VehicleType::Taxi => 200.0,
-                VehicleType::Bus => 300.0,
-            };
+        if !health.tick_fire(dt) {
+            continue;
+        }
 
-            // 生成爆炸效果
-            if let Some(ref visuals) = damage_visuals {
-                commands.spawn((
-                    Mesh3d(visuals.explosion_mesh.clone()),
-                    MeshMaterial3d(visuals.explosion_material.clone()),
-                    Transform::from_translation(explosion_pos),
-                    VehicleExplosion::new(explosion_pos, explosion_radius, explosion_damage),
-                ));
-            }
+        // 爆炸！
+        let explosion_pos = transform.translation + Vec3::Y * 0.5;
+        let explosion_radius = get_explosion_radius(vehicle.vehicle_type);
+        let explosion_damage = get_explosion_damage(vehicle.vehicle_type);
 
-            // 移除車輛實體
-            if let Ok(mut entity_commands) = commands.get_entity(entity) {
-                entity_commands.despawn();
-            }
+        if let Some(ref visuals) = damage_visuals {
+            commands.spawn((
+                Mesh3d(visuals.explosion_mesh.clone()),
+                MeshMaterial3d(visuals.explosion_material.clone()),
+                Transform::from_translation(explosion_pos),
+                VehicleExplosion::new(explosion_pos, explosion_radius, explosion_damage),
+            ));
+        }
+
+        if let Ok(mut entity_commands) = commands.get_entity(entity) {
+            entity_commands.despawn();
         }
     }
 }
@@ -1869,6 +1959,46 @@ fn spawn_vehicle_fire(
     ));
 }
 
+/// 對範圍內的目標造成爆炸傷害
+fn apply_explosion_damage_to_targets<'a>(
+    targets: impl Iterator<Item = (Entity, &'a Transform)>,
+    explosion_center: Vec3,
+    explosion_radius: f32,
+    explosion_damage: f32,
+    damage_events: &mut MessageWriter<DamageEvent>,
+    exclude_entity: Option<Entity>,
+) {
+    for (target_entity, target_transform) in targets {
+        if Some(target_entity) == exclude_entity {
+            continue;
+        }
+        let distance = explosion_center.distance(target_transform.translation);
+        if distance < explosion_radius {
+            let damage_factor = 1.0 - (distance / explosion_radius);
+            damage_events.write(
+                DamageEvent::new(target_entity, explosion_damage * damage_factor, DamageSource::Explosion)
+                    .with_position(explosion_center)
+            );
+        }
+    }
+}
+
+/// 觸發爆炸攝影機震動效果
+fn trigger_explosion_camera_shake(
+    explosion_center: Vec3,
+    explosion_radius: f32,
+    player_pos: Vec3,
+    camera_shake: &mut crate::core::CameraShake,
+) {
+    let distance_to_player = explosion_center.distance(player_pos);
+    let max_shake_distance = explosion_radius * 3.0;
+
+    if distance_to_player < max_shake_distance {
+        let falloff = 1.0 - distance_to_player / max_shake_distance;
+        camera_shake.trigger(0.5 * falloff, 0.4 + 0.3 * falloff);
+    }
+}
+
 /// 車輛爆炸系統
 /// 處理爆炸效果和範圍傷害
 /// 對範圍內的所有可傷害實體（玩家、敵人、行人、警察、其他車輛）造成傷害
@@ -1878,111 +2008,33 @@ pub fn vehicle_explosion_system(
     time: Res<Time>,
     mut camera_shake: ResMut<crate::core::CameraShake>,
     mut explosion_query: Query<(Entity, &mut VehicleExplosion, &mut Transform)>,
-    // 玩家查詢（排除爆炸實體以避免 Query 衝突）
     player_query: Query<(Entity, &Transform), (With<Player>, Without<VehicleExplosion>)>,
-    // 敵人查詢（排除爆炸實體以避免 Query 衝突）
     enemy_query: Query<(Entity, &Transform), (With<Enemy>, Without<VehicleExplosion>)>,
-    // 行人查詢
     pedestrian_query: Query<(Entity, &Transform), (With<Pedestrian>, Without<Player>, Without<Enemy>, Without<VehicleExplosion>)>,
-    // 警察查詢
     police_query: Query<(Entity, &Transform), (With<PoliceOfficer>, Without<Player>, Without<Enemy>, Without<VehicleExplosion>)>,
-    // 其他車輛查詢（有 VehicleHealth 的實體，排除爆炸實體）
     vehicle_query: Query<(Entity, &Transform), (With<VehicleHealth>, Without<VehicleExplosion>)>,
     mut damage_events: MessageWriter<DamageEvent>,
 ) {
     let dt = time.delta_secs();
 
     for (entity, mut explosion, mut transform) in explosion_query.iter_mut() {
-        // 更新生命時間
         explosion.lifetime += dt;
+        transform.scale = Vec3::splat(explosion.scale());
 
-        // 更新縮放
-        let scale = explosion.scale();
-        transform.scale = Vec3::splat(scale);
-
-        // 造成範圍傷害（只在第一幀）
         if !explosion.damage_dealt {
             explosion.damage_dealt = true;
 
-            // 爆炸攝影機震動（依據距離玩家的距離調整強度）
             if let Ok((_, player_transform)) = player_query.single() {
-                let distance_to_player = explosion.center.distance(player_transform.translation);
-                let max_shake_distance = explosion.radius * 3.0; // 震動範圍為爆炸半徑的 3 倍
-                if distance_to_player < max_shake_distance {
-                    let shake_intensity = 0.5 * (1.0 - distance_to_player / max_shake_distance);
-                    let shake_duration = 0.4 + 0.3 * (1.0 - distance_to_player / max_shake_distance);
-                    camera_shake.trigger(shake_intensity, shake_duration);
-                }
+                trigger_explosion_camera_shake(explosion.center, explosion.radius, player_transform.translation, &mut camera_shake);
             }
 
-            // 計算傷害的輔助閉包
-            let calc_explosion_damage = |target_pos: Vec3| -> Option<f32> {
-                let distance = explosion.center.distance(target_pos);
-                if distance < explosion.radius {
-                    // 距離衰減：越近傷害越高
-                    let damage_factor = 1.0 - (distance / explosion.radius);
-                    Some(explosion.damage * damage_factor)
-                } else {
-                    None
-                }
-            };
-
-            // 對範圍內的玩家造成傷害
-            for (target_entity, target_transform) in player_query.iter() {
-                if let Some(damage) = calc_explosion_damage(target_transform.translation) {
-                    damage_events.write(
-                        DamageEvent::new(target_entity, damage, DamageSource::Explosion)
-                            .with_position(explosion.center)
-                    );
-                }
-            }
-
-            // 對範圍內的敵人造成傷害
-            for (target_entity, target_transform) in enemy_query.iter() {
-                if let Some(damage) = calc_explosion_damage(target_transform.translation) {
-                    damage_events.write(
-                        DamageEvent::new(target_entity, damage, DamageSource::Explosion)
-                            .with_position(explosion.center)
-                    );
-                }
-            }
-
-            // 對範圍內的行人造成傷害
-            for (target_entity, target_transform) in pedestrian_query.iter() {
-                if let Some(damage) = calc_explosion_damage(target_transform.translation) {
-                    damage_events.write(
-                        DamageEvent::new(target_entity, damage, DamageSource::Explosion)
-                            .with_position(explosion.center)
-                    );
-                }
-            }
-
-            // 對範圍內的警察造成傷害
-            for (target_entity, target_transform) in police_query.iter() {
-                if let Some(damage) = calc_explosion_damage(target_transform.translation) {
-                    damage_events.write(
-                        DamageEvent::new(target_entity, damage, DamageSource::Explosion)
-                            .with_position(explosion.center)
-                    );
-                }
-            }
-
-            // 對範圍內的其他車輛造成傷害（連鎖爆炸！）
-            for (target_entity, target_transform) in vehicle_query.iter() {
-                // 跳過自己（爆炸源車輛已被移除，但以防萬一）
-                if target_entity == entity {
-                    continue;
-                }
-                if let Some(damage) = calc_explosion_damage(target_transform.translation) {
-                    damage_events.write(
-                        DamageEvent::new(target_entity, damage, DamageSource::Explosion)
-                            .with_position(explosion.center)
-                    );
-                }
-            }
+            apply_explosion_damage_to_targets(player_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, None);
+            apply_explosion_damage_to_targets(enemy_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, None);
+            apply_explosion_damage_to_targets(pedestrian_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, None);
+            apply_explosion_damage_to_targets(police_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, None);
+            apply_explosion_damage_to_targets(vehicle_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, Some(entity));
         }
 
-        // 檢查是否過期
         if explosion.lifetime >= explosion.max_lifetime {
             if let Ok(mut entity_commands) = commands.get_entity(entity) {
                 entity_commands.despawn();
@@ -2189,46 +2241,55 @@ pub fn spawn_traffic_light(
 }
 
 /// 生成交叉路口的紅綠燈組（4個方向）
+/// ns_road_width: 南北向道路寬度（X方向）
+/// ew_road_width: 東西向道路寬度（Z方向）
 pub fn spawn_intersection_lights(
     commands: &mut Commands,
     visuals: &TrafficLightVisuals,
     center: Vec3,
-    road_width: f32,
+    ns_road_width: f32,
+    ew_road_width: f32,
 ) {
-    let offset = road_width / 2.0 + 1.0;
+    // 紅綠燈放在道路邊緣外側 1 公尺
+    let offset_x = ns_road_width / 2.0 + 1.0;  // X 方向偏移（南北向道路寬度）
+    let offset_z = ew_road_width / 2.0 + 1.0;  // Z 方向偏移（東西向道路寬度）
 
     // 北向（控制南北向車流）- 主燈
+    // 放在交叉口西北角（西側人行道，面向南來車）
     spawn_traffic_light(
         commands,
         visuals,
-        center + Vec3::new(-offset, 0.0, -offset),
+        center + Vec3::new(-offset_x, 0.0, -offset_z),
         Vec3::NEG_Z,
         true,
     );
 
     // 南向（控制南北向車流）- 主燈
+    // 放在交叉口東南角（東側人行道，面向北來車）
     spawn_traffic_light(
         commands,
         visuals,
-        center + Vec3::new(offset, 0.0, offset),
+        center + Vec3::new(offset_x, 0.0, offset_z),
         Vec3::Z,
         true,
     );
 
     // 東向（控制東西向車流）- 副燈
+    // 放在交叉口東北角（北側人行道，面向西來車）
     spawn_traffic_light(
         commands,
         visuals,
-        center + Vec3::new(offset, 0.0, -offset),
+        center + Vec3::new(offset_x, 0.0, -offset_z),
         Vec3::X,
         false,
     );
 
     // 西向（控制東西向車流）- 副燈
+    // 放在交叉口西南角（南側人行道，面向東來車）
     spawn_traffic_light(
         commands,
         visuals,
-        center + Vec3::new(-offset, 0.0, offset),
+        center + Vec3::new(-offset_x, 0.0, offset_z),
         Vec3::NEG_X,
         false,
     );
@@ -2247,24 +2308,32 @@ pub fn spawn_world_traffic_lights(
 
     info!("🚦 正在生成交通燈...");
 
-    // 主要路口位置 - 根據實際車輛行駛道路設置
-    // 車輛道路：中華路 (X≈75), 西寧南路 (X≈-50), 成都路 (Z≈50), 北邊道路 (Z≈-70)
-    // 注意：徒步區 (X=0, Z=0 附近) 不需要紅綠燈
-    let intersections = [
-        // 西寧路/成都路交叉口（西南角）
-        Vec3::new(-50.0, 0.0, 50.0),
-        // 中華路/成都路交叉口（東南角）
-        Vec3::new(75.0, 0.0, 50.0),
-        // 西寧路北端路口
-        Vec3::new(-50.0, 0.0, -70.0),
-        // 中華路北端路口
-        Vec3::new(75.0, 0.0, -70.0),
+    // 道路常數（與 setup.rs 一致）
+    // 南北向道路 X 位置
+    const X_ZHONGHUA: f32 = 80.0;   // 中華路
+    const X_XINING: f32 = -55.0;    // 西寧南路
+    // 東西向道路 Z 位置
+    const Z_HANKOU: f32 = -80.0;    // 漢口街
+    const Z_CHENGDU: f32 = 50.0;    // 成都路
+    // 道路寬度
+    const W_ZHONGHUA: f32 = 40.0;   // 中華路寬度
+    const W_MAIN: f32 = 16.0;       // 成都路寬度
+    const W_SECONDARY: f32 = 12.0;  // 西寧路、漢口街寬度
+
+    // 主要路口：(位置, 南北道路寬度, 東西道路寬度)
+    let intersections: [(Vec3, f32, f32); 4] = [
+        // 西寧路/成都路交叉口
+        (Vec3::new(X_XINING, 0.0, Z_CHENGDU), W_SECONDARY, W_MAIN),
+        // 中華路/成都路交叉口
+        (Vec3::new(X_ZHONGHUA, 0.0, Z_CHENGDU), W_ZHONGHUA, W_MAIN),
+        // 西寧路/漢口街交叉口
+        (Vec3::new(X_XINING, 0.0, Z_HANKOU), W_SECONDARY, W_SECONDARY),
+        // 中華路/漢口街交叉口
+        (Vec3::new(X_ZHONGHUA, 0.0, Z_HANKOU), W_ZHONGHUA, W_SECONDARY),
     ];
 
-    let road_width = 12.0;  // 稍微加寬以符合主幹道
-
-    for center in intersections.iter() {
-        spawn_intersection_lights(&mut commands, &visuals, *center, road_width);
+    for (center, ns_width, ew_width) in intersections.iter() {
+        spawn_intersection_lights(&mut commands, &visuals, *center, *ns_width, *ew_width);
     }
 
     info!("✅ 已生成 {} 組交通燈（共 {} 個）", intersections.len(), intersections.len() * 4);

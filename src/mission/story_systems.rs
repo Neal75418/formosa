@@ -3,6 +3,8 @@
 //! 處理任務觸發、目標追蹤、階段切換等核心邏輯
 
 use bevy::prelude::*;
+use std::collections::{HashMap, HashSet};
+use std::f32::consts::{FRAC_PI_2, TAU};
 
 use super::cutscene::CutsceneEvent;
 use super::cutscene_systems::is_cutscene_active;
@@ -98,6 +100,153 @@ struct TriggerTrackingState {
     triggered: bool,
 }
 
+/// 觸發器上下文（用於簡化參數傳遞）
+struct TriggerContext {
+    entity: Entity,
+    in_range: bool,
+    just_entered: bool,
+    just_exited: bool,
+}
+
+impl TriggerContext {
+    fn new(entity: Entity, trigger_pos: Vec3, player_pos: Vec3, shape: &TriggerShape, was_inside: bool) -> Self {
+        let in_range = shape.contains(trigger_pos, player_pos);
+        Self {
+            entity,
+            in_range,
+            just_entered: in_range && !was_inside,
+            just_exited: !in_range && was_inside,
+        }
+    }
+}
+
+// === 任務觸發類型處理輔助函數 ===
+
+/// 處理 OnEnter 觸發
+fn handle_mission_on_enter(
+    ctx: &TriggerContext,
+    trigger: &mut MissionTrigger,
+    events: &mut MessageWriter<TriggerEvent>,
+    mission_events: &mut MessageWriter<StoryMissionEvent>,
+    database: &StoryMissionDatabase,
+) {
+    if !ctx.just_entered {
+        return;
+    }
+    trigger.triggered = trigger.one_shot;
+    events.write(TriggerEvent::PlayerEntered {
+        entity: ctx.entity,
+        trigger_type: TriggerEventType::Mission(trigger.mission_id),
+    });
+    try_start_mission(trigger.mission_id, database, mission_events);
+}
+
+/// 處理 OnInteract 觸發
+fn handle_mission_on_interact(
+    ctx: &TriggerContext,
+    trigger: &mut MissionTrigger,
+    keyboard: &ButtonInput<KeyCode>,
+    events: &mut MessageWriter<TriggerEvent>,
+    mission_events: &mut MessageWriter<StoryMissionEvent>,
+    database: &StoryMissionDatabase,
+) {
+    if !ctx.in_range || !keyboard.just_pressed(KeyCode::KeyF) {
+        return;
+    }
+    trigger.triggered = trigger.one_shot;
+    events.write(TriggerEvent::PlayerInteracted {
+        entity: ctx.entity,
+        trigger_type: TriggerEventType::Mission(trigger.mission_id),
+    });
+    try_start_mission(trigger.mission_id, database, mission_events);
+}
+
+/// 處理 OnEnterDelayed 觸發
+fn handle_mission_on_enter_delayed(
+    ctx: &TriggerContext,
+    trigger: &mut MissionTrigger,
+    track: &mut TriggerTrackingState,
+    delay: u32,
+    delta_ms: f32,
+    events: &mut MessageWriter<TriggerEvent>,
+    mission_events: &mut MessageWriter<StoryMissionEvent>,
+    database: &StoryMissionDatabase,
+) {
+    if ctx.just_entered {
+        track.timer = 0.0;
+        track.triggered = false;
+    }
+    if !ctx.in_range || track.triggered {
+        return;
+    }
+    track.timer += delta_ms;
+    if track.timer < delay as f32 {
+        return;
+    }
+    track.triggered = true;
+    trigger.triggered = trigger.one_shot;
+    events.write(TriggerEvent::PlayerEntered {
+        entity: ctx.entity,
+        trigger_type: TriggerEventType::Mission(trigger.mission_id),
+    });
+    try_start_mission(trigger.mission_id, database, mission_events);
+    info!("延遲觸發: {} ms 後觸發任務 {}", delay, trigger.mission_id);
+}
+
+/// 處理 OnExit 觸發
+fn handle_mission_on_exit(
+    ctx: &TriggerContext,
+    trigger: &mut MissionTrigger,
+    events: &mut MessageWriter<TriggerEvent>,
+    mission_events: &mut MessageWriter<StoryMissionEvent>,
+    database: &StoryMissionDatabase,
+) {
+    if !ctx.just_exited {
+        return;
+    }
+    trigger.triggered = trigger.one_shot;
+    events.write(TriggerEvent::PlayerExited {
+        entity: ctx.entity,
+        trigger_type: TriggerEventType::Mission(trigger.mission_id),
+    });
+    try_start_mission(trigger.mission_id, database, mission_events);
+    info!("離開觸發: 任務 {}", trigger.mission_id);
+}
+
+/// 處理 OnStay 觸發
+fn handle_mission_on_stay(
+    ctx: &TriggerContext,
+    trigger: &mut MissionTrigger,
+    track: &mut TriggerTrackingState,
+    duration: u32,
+    delta_ms: f32,
+    events: &mut MessageWriter<TriggerEvent>,
+    mission_events: &mut MessageWriter<StoryMissionEvent>,
+    database: &StoryMissionDatabase,
+) {
+    if ctx.just_entered {
+        track.timer = 0.0;
+        track.triggered = false;
+    }
+    if ctx.in_range && !track.triggered {
+        track.timer += delta_ms;
+        if track.timer >= duration as f32 {
+            track.triggered = true;
+            trigger.triggered = trigger.one_shot;
+            events.write(TriggerEvent::PlayerStayed {
+                entity: ctx.entity,
+                trigger_type: TriggerEventType::Mission(trigger.mission_id),
+                duration: track.timer / 1000.0,
+            });
+            try_start_mission(trigger.mission_id, database, mission_events);
+            info!("停留觸發: 停留 {} ms 後觸發任務 {}", duration, trigger.mission_id);
+        }
+    } else if !ctx.in_range {
+        track.timer = 0.0;
+        track.triggered = false;
+    }
+}
+
 /// 任務觸發點系統（支援所有 TriggerType）
 fn mission_trigger_system(
     mut trigger_query: Query<(Entity, &Transform, &mut MissionTrigger)>,
@@ -108,21 +257,18 @@ fn mission_trigger_system(
     database: Res<StoryMissionDatabase>,
     mut events: MessageWriter<TriggerEvent>,
     mut mission_events: MessageWriter<StoryMissionEvent>,
-    mut tracking: Local<std::collections::HashMap<Entity, TriggerTrackingState>>,
+    mut tracking: Local<HashMap<Entity, TriggerTrackingState>>,
 ) {
     let Ok(player_transform) = player_query.single() else {
         return;
     };
-
     let player_pos = player_transform.translation;
+    let delta_ms = time.delta_secs() * 1000.0;
 
     for (entity, transform, mut trigger) in &mut trigger_query {
-        if !trigger.enabled {
+        if !trigger.enabled || (trigger.triggered && trigger.one_shot) {
             continue;
         }
-
-        // 取得或初始化追蹤狀態
-        let track = tracking.entry(entity).or_default();
 
         // 檢查旗標條件
         if let Some(flag) = &trigger.required_flag {
@@ -131,98 +277,146 @@ fn mission_trigger_system(
             }
         }
 
-        // 檢查玩家是否在觸發區域內
-        let in_range = trigger.shape.contains(transform.translation, player_pos);
-        let just_entered = in_range && !track.was_inside;
-        let just_exited = !in_range && track.was_inside;
-
-        // 更新追蹤狀態
-        track.was_inside = in_range;
-
-        // 如果已觸發且是 one_shot，跳過
-        if trigger.triggered && trigger.one_shot {
-            continue;
-        }
+        let track = tracking.entry(entity).or_default();
+        let ctx = TriggerContext::new(entity, transform.translation, player_pos, &trigger.shape, track.was_inside);
+        track.was_inside = ctx.in_range;
 
         match trigger.trigger_type {
             TriggerType::OnEnter => {
-                if just_entered {
-                    trigger.triggered = trigger.one_shot;
-                    events.write(TriggerEvent::PlayerEntered {
-                        entity,
-                        trigger_type: TriggerEventType::Mission(trigger.mission_id),
-                    });
-                    try_start_mission(trigger.mission_id, &database, &mut mission_events);
-                }
+                handle_mission_on_enter(&ctx, &mut trigger, &mut events, &mut mission_events, &database);
             }
             TriggerType::OnInteract => {
-                if in_range && keyboard.just_pressed(KeyCode::KeyF) {
-                    trigger.triggered = trigger.one_shot;
-                    events.write(TriggerEvent::PlayerInteracted {
-                        entity,
-                        trigger_type: TriggerEventType::Mission(trigger.mission_id),
-                    });
-                    try_start_mission(trigger.mission_id, &database, &mut mission_events);
-                }
+                handle_mission_on_interact(&ctx, &mut trigger, &keyboard, &mut events, &mut mission_events, &database);
             }
             TriggerType::OnEnterDelayed { delay } => {
-                if just_entered {
-                    // 開始計時
-                    track.timer = 0.0;
-                    track.triggered = false;
-                }
-
-                if in_range && !track.triggered {
-                    track.timer += time.delta_secs() * 1000.0; // 轉換為毫秒
-                    if track.timer >= delay as f32 {
-                        track.triggered = true;
-                        trigger.triggered = trigger.one_shot;
-                        events.write(TriggerEvent::PlayerEntered {
-                            entity,
-                            trigger_type: TriggerEventType::Mission(trigger.mission_id),
-                        });
-                        try_start_mission(trigger.mission_id, &database, &mut mission_events);
-                        info!("延遲觸發: {} ms 後觸發任務 {}", delay, trigger.mission_id);
-                    }
-                }
+                handle_mission_on_enter_delayed(&ctx, &mut trigger, track, delay, delta_ms, &mut events, &mut mission_events, &database);
             }
             TriggerType::OnExit => {
-                if just_exited {
-                    trigger.triggered = trigger.one_shot;
-                    events.write(TriggerEvent::PlayerExited {
-                        entity,
-                        trigger_type: TriggerEventType::Mission(trigger.mission_id),
-                    });
-                    try_start_mission(trigger.mission_id, &database, &mut mission_events);
-                    info!("離開觸發: 任務 {}", trigger.mission_id);
-                }
+                handle_mission_on_exit(&ctx, &mut trigger, &mut events, &mut mission_events, &database);
             }
             TriggerType::OnStay { duration } => {
-                if just_entered {
-                    track.timer = 0.0;
-                    track.triggered = false;
-                }
-
-                if in_range && !track.triggered {
-                    track.timer += time.delta_secs() * 1000.0;
-                    if track.timer >= duration as f32 {
-                        track.triggered = true;
-                        trigger.triggered = trigger.one_shot;
-                        events.write(TriggerEvent::PlayerStayed {
-                            entity,
-                            trigger_type: TriggerEventType::Mission(trigger.mission_id),
-                            duration: track.timer / 1000.0,
-                        });
-                        try_start_mission(trigger.mission_id, &database, &mut mission_events);
-                        info!("停留觸發: 停留 {} ms 後觸發任務 {}", duration, trigger.mission_id);
-                    }
-                } else if !in_range {
-                    // 離開區域重置計時
-                    track.timer = 0.0;
-                    track.triggered = false;
-                }
+                handle_mission_on_stay(&ctx, &mut trigger, track, duration, delta_ms, &mut events, &mut mission_events, &database);
             }
         }
+    }
+}
+
+// === 對話觸發類型處理輔助函數 ===
+
+/// 處理對話 OnEnter 觸發
+fn handle_dialogue_on_enter(
+    ctx: &TriggerContext,
+    trigger: &mut DialogueTrigger,
+    events: &mut MessageWriter<TriggerEvent>,
+    dialogue_events: &mut MessageWriter<DialogueEvent>,
+) {
+    if !ctx.just_entered {
+        return;
+    }
+    trigger.triggered = trigger.one_shot;
+    events.write(TriggerEvent::PlayerEntered {
+        entity: ctx.entity,
+        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
+    });
+    start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
+}
+
+/// 處理對話 OnInteract 觸發
+fn handle_dialogue_on_interact(
+    ctx: &TriggerContext,
+    trigger: &mut DialogueTrigger,
+    keyboard: &ButtonInput<KeyCode>,
+    events: &mut MessageWriter<TriggerEvent>,
+    dialogue_events: &mut MessageWriter<DialogueEvent>,
+) {
+    if !ctx.in_range || !keyboard.just_pressed(KeyCode::KeyF) {
+        return;
+    }
+    trigger.triggered = trigger.one_shot;
+    events.write(TriggerEvent::PlayerInteracted {
+        entity: ctx.entity,
+        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
+    });
+    start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
+}
+
+/// 處理對話 OnEnterDelayed 觸發
+fn handle_dialogue_on_enter_delayed(
+    ctx: &TriggerContext,
+    trigger: &mut DialogueTrigger,
+    track: &mut TriggerTrackingState,
+    delay: u32,
+    delta_ms: f32,
+    events: &mut MessageWriter<TriggerEvent>,
+    dialogue_events: &mut MessageWriter<DialogueEvent>,
+) {
+    if ctx.just_entered {
+        track.timer = 0.0;
+        track.triggered = false;
+    }
+    if !ctx.in_range || track.triggered {
+        return;
+    }
+    track.timer += delta_ms;
+    if track.timer < delay as f32 {
+        return;
+    }
+    track.triggered = true;
+    trigger.triggered = trigger.one_shot;
+    events.write(TriggerEvent::PlayerEntered {
+        entity: ctx.entity,
+        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
+    });
+    start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
+}
+
+/// 處理對話 OnExit 觸發
+fn handle_dialogue_on_exit(
+    ctx: &TriggerContext,
+    trigger: &mut DialogueTrigger,
+    events: &mut MessageWriter<TriggerEvent>,
+    dialogue_events: &mut MessageWriter<DialogueEvent>,
+) {
+    if !ctx.just_exited {
+        return;
+    }
+    trigger.triggered = trigger.one_shot;
+    events.write(TriggerEvent::PlayerExited {
+        entity: ctx.entity,
+        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
+    });
+    start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
+}
+
+/// 處理對話 OnStay 觸發
+fn handle_dialogue_on_stay(
+    ctx: &TriggerContext,
+    trigger: &mut DialogueTrigger,
+    track: &mut TriggerTrackingState,
+    duration: u32,
+    delta_ms: f32,
+    events: &mut MessageWriter<TriggerEvent>,
+    dialogue_events: &mut MessageWriter<DialogueEvent>,
+) {
+    if ctx.just_entered {
+        track.timer = 0.0;
+        track.triggered = false;
+    }
+    if ctx.in_range && !track.triggered {
+        track.timer += delta_ms;
+        if track.timer >= duration as f32 {
+            track.triggered = true;
+            trigger.triggered = trigger.one_shot;
+            events.write(TriggerEvent::PlayerStayed {
+                entity: ctx.entity,
+                trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
+                duration: track.timer / 1000.0,
+            });
+            start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
+        }
+    } else if !ctx.in_range {
+        track.timer = 0.0;
+        track.triggered = false;
     }
 }
 
@@ -235,112 +429,42 @@ fn dialogue_trigger_system(
     dialogue_state: Res<super::dialogue::DialogueState>,
     mut events: MessageWriter<TriggerEvent>,
     mut dialogue_events: MessageWriter<DialogueEvent>,
-    mut tracking: Local<std::collections::HashMap<Entity, TriggerTrackingState>>,
+    mut tracking: Local<HashMap<Entity, TriggerTrackingState>>,
 ) {
-    // 如果已有對話進行中，不處理
-    if super::dialogue_systems::is_dialogue_active(&dialogue_state) {
+    if is_dialogue_active(&dialogue_state) {
         return;
     }
 
     let Ok(player_transform) = player_query.single() else {
         return;
     };
-
     let player_pos = player_transform.translation;
+    let delta_ms = time.delta_secs() * 1000.0;
 
     for (entity, transform, mut trigger) in &mut trigger_query {
-        if !trigger.enabled {
+        if !trigger.enabled || (trigger.triggered && trigger.one_shot) {
             continue;
         }
 
-        // 取得或初始化追蹤狀態
         let track = tracking.entry(entity).or_default();
-
-        // 檢查玩家是否在觸發區域內
-        let in_range = trigger.shape.contains(transform.translation, player_pos);
-        let just_entered = in_range && !track.was_inside;
-        let just_exited = !in_range && track.was_inside;
-
-        // 更新追蹤狀態
-        track.was_inside = in_range;
-
-        // 如果已觸發且是 one_shot，跳過
-        if trigger.triggered && trigger.one_shot {
-            continue;
-        }
+        let ctx = TriggerContext::new(entity, transform.translation, player_pos, &trigger.shape, track.was_inside);
+        track.was_inside = ctx.in_range;
 
         match trigger.trigger_type {
             TriggerType::OnEnter => {
-                if just_entered {
-                    trigger.triggered = trigger.one_shot;
-                    events.write(TriggerEvent::PlayerEntered {
-                        entity,
-                        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-                    });
-                    start_dialogue_from_trigger(trigger.dialogue_id, &mut dialogue_events);
-                }
+                handle_dialogue_on_enter(&ctx, &mut trigger, &mut events, &mut dialogue_events);
             }
             TriggerType::OnInteract => {
-                if in_range && keyboard.just_pressed(KeyCode::KeyF) {
-                    trigger.triggered = trigger.one_shot;
-                    events.write(TriggerEvent::PlayerInteracted {
-                        entity,
-                        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-                    });
-                    start_dialogue_from_trigger(trigger.dialogue_id, &mut dialogue_events);
-                }
+                handle_dialogue_on_interact(&ctx, &mut trigger, &keyboard, &mut events, &mut dialogue_events);
             }
             TriggerType::OnEnterDelayed { delay } => {
-                if just_entered {
-                    track.timer = 0.0;
-                    track.triggered = false;
-                }
-
-                if in_range && !track.triggered {
-                    track.timer += time.delta_secs() * 1000.0;
-                    if track.timer >= delay as f32 {
-                        track.triggered = true;
-                        trigger.triggered = trigger.one_shot;
-                        events.write(TriggerEvent::PlayerEntered {
-                            entity,
-                            trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-                        });
-                        start_dialogue_from_trigger(trigger.dialogue_id, &mut dialogue_events);
-                    }
-                }
+                handle_dialogue_on_enter_delayed(&ctx, &mut trigger, track, delay, delta_ms, &mut events, &mut dialogue_events);
             }
             TriggerType::OnExit => {
-                if just_exited {
-                    trigger.triggered = trigger.one_shot;
-                    events.write(TriggerEvent::PlayerExited {
-                        entity,
-                        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-                    });
-                    start_dialogue_from_trigger(trigger.dialogue_id, &mut dialogue_events);
-                }
+                handle_dialogue_on_exit(&ctx, &mut trigger, &mut events, &mut dialogue_events);
             }
             TriggerType::OnStay { duration } => {
-                if just_entered {
-                    track.timer = 0.0;
-                    track.triggered = false;
-                }
-
-                if in_range && !track.triggered {
-                    track.timer += time.delta_secs() * 1000.0;
-                    if track.timer >= duration as f32 {
-                        track.triggered = true;
-                        trigger.triggered = trigger.one_shot;
-                        events.write(TriggerEvent::PlayerStayed {
-                            entity,
-                            trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-                            duration: track.timer / 1000.0,
-                        });
-                        start_dialogue_from_trigger(trigger.dialogue_id, &mut dialogue_events);
-                    }
-                } else if !in_range {
-                    track.timer = 0.0;
-                    track.triggered = false;
-                }
+                handle_dialogue_on_stay(&ctx, &mut trigger, track, duration, delta_ms, &mut events, &mut dialogue_events);
             }
         }
     }
@@ -348,12 +472,12 @@ fn dialogue_trigger_system(
 
 /// 從觸發器開始對話
 fn start_dialogue_from_trigger(
-    dialogue_id: super::story_data::DialogueId,
+    dialogue_id: DialogueId,
     events: &mut MessageWriter<DialogueEvent>,
 ) {
     events.write(DialogueEvent::Start {
         dialogue_id,
-        participants: std::collections::HashMap::new(),
+        participants: HashMap::new(),
     });
     info!("對話觸發: 開始對話 {}", dialogue_id);
 }
@@ -369,6 +493,54 @@ fn try_start_mission(
     }
 }
 
+// === NPC 互動輔助函數 ===
+
+/// 嘗試透過 NPC 開始任務
+fn try_start_npc_mission(
+    mission_id: StoryMissionId,
+    manager: &StoryMissionManager,
+    database: &StoryMissionDatabase,
+    mission_events: &mut MessageWriter<StoryMissionEvent>,
+    dialogue_events: &mut MessageWriter<DialogueEvent>,
+) -> bool {
+    let status = manager.get_mission_status(mission_id);
+    if status != StoryMissionStatus::Available {
+        return false;
+    }
+
+    mission_events.write(StoryMissionEvent::Started(mission_id));
+
+    // 播放任務開場對話（如果有）
+    if let Some(dialogue_id) = get_mission_start_dialogue(mission_id, database) {
+        dialogue_events.write(DialogueEvent::Start {
+            dialogue_id,
+            participants: HashMap::new(),
+        });
+    }
+    true
+}
+
+/// 取得任務開場對話 ID
+fn get_mission_start_dialogue(
+    mission_id: StoryMissionId,
+    database: &StoryMissionDatabase,
+) -> Option<DialogueId> {
+    let mission = database.get(mission_id)?;
+    let first_phase = mission.phases.first()?;
+    first_phase.start_dialogue
+}
+
+/// 播放 NPC 閒聊對話
+fn play_npc_idle_dialogue(
+    dialogue_id: DialogueId,
+    dialogue_events: &mut MessageWriter<DialogueEvent>,
+) {
+    dialogue_events.write(DialogueEvent::Start {
+        dialogue_id,
+        participants: HashMap::new(),
+    });
+}
+
 /// NPC 互動系統
 fn mission_npc_interaction_system(
     npc_query: Query<(Entity, &Transform, &MissionNpc)>,
@@ -380,7 +552,6 @@ fn mission_npc_interaction_system(
     mut dialogue_events: MessageWriter<DialogueEvent>,
     mut mission_events: MessageWriter<StoryMissionEvent>,
 ) {
-    // 如果已有對話進行中，不處理
     if is_dialogue_active(&dialogue_state) {
         return;
     }
@@ -388,7 +559,6 @@ fn mission_npc_interaction_system(
     let Ok(player_transform) = player_query.single() else {
         return;
     };
-
     let player_pos = player_transform.translation;
 
     for (_entity, transform, npc) in &npc_query {
@@ -396,45 +566,22 @@ fn mission_npc_interaction_system(
             continue;
         }
 
-        // 檢查距離 (使用 distance_squared 避免 sqrt)
         let distance_sq = player_pos.distance_squared(transform.translation);
         let radius_sq = npc.interaction_radius * npc.interaction_radius;
-        if distance_sq > radius_sq {
+        if distance_sq > radius_sq || !keyboard.just_pressed(KeyCode::KeyF) {
             continue;
         }
 
-        // 按 F 互動
-        if keyboard.just_pressed(KeyCode::KeyF) {
-            // 優先檢查是否有任務可提供
-            if let Some(mission_id) = npc.offers_mission {
-                let status = manager.get_mission_status(mission_id);
-
-                if status == StoryMissionStatus::Available {
-                    // 開始任務
-                    mission_events.write(StoryMissionEvent::Started(mission_id));
-
-                    // 播放任務開場對話（如果有）
-                    if let Some(mission) = database.get(mission_id) {
-                        if let Some(first_phase) = mission.phases.first() {
-                            if let Some(dialogue_id) = first_phase.start_dialogue {
-                                dialogue_events.write(DialogueEvent::Start {
-                                    dialogue_id,
-                                    participants: std::collections::HashMap::new(),
-                                });
-                            }
-                        }
-                    }
-                    return;
-                }
+        // 優先嘗試開始任務
+        if let Some(mission_id) = npc.offers_mission {
+            if try_start_npc_mission(mission_id, &manager, &database, &mut mission_events, &mut dialogue_events) {
+                return;
             }
+        }
 
-            // 否則播放閒聊對話
-            if let Some(dialogue_id) = npc.idle_dialogue {
-                dialogue_events.write(DialogueEvent::Start {
-                    dialogue_id,
-                    participants: std::collections::HashMap::new(),
-                });
-            }
+        // 否則播放閒聊對話
+        if let Some(dialogue_id) = npc.idle_dialogue {
+            play_npc_idle_dialogue(dialogue_id, &mut dialogue_events);
         }
     }
 }
@@ -442,6 +589,68 @@ fn mission_npc_interaction_system(
 // ============================================================================
 // 目標追蹤系統
 // ============================================================================
+
+// === 目標追蹤輔助函數 ===
+
+/// 檢查跟隨目標是否完成（目標到達終點）
+fn check_follow_target_complete(
+    target_id: &str,
+    mission_id: StoryMissionId,
+    target_query: &Query<(&Transform, &MissionTargetEntity)>,
+) -> bool {
+    for (_transform, target_entity) in target_query {
+        if &target_entity.target_id == target_id && target_entity.mission_id == mission_id {
+            // 如果目標已到達終點（路徑走完），任務完成
+            let reached = !target_entity.waypoints.is_empty()
+                && target_entity.current_waypoint >= target_entity.waypoints.len();
+            return reached;
+        }
+    }
+    false
+}
+
+/// 檢查護送 NPC 是否完成（NPC 到達目的地）
+fn check_escort_npc_complete(
+    target_id: &str,
+    mission_id: StoryMissionId,
+    target_query: &Query<(&Transform, &MissionTargetEntity)>,
+) -> bool {
+    for (_transform, target_entity) in target_query {
+        if &target_entity.target_id == target_id
+            && target_entity.mission_id == mission_id
+            && target_entity.target_type == MissionTargetType::Escort
+        {
+            let reached = !target_entity.waypoints.is_empty()
+                && target_entity.current_waypoint >= target_entity.waypoints.len();
+            return reached;
+        }
+    }
+    false
+}
+
+/// 檢查目標是否完成
+fn check_objective_complete(
+    objective: &MissionObjective,
+    player_pos: Vec3,
+    phase_timer: f32,
+    mission_id: StoryMissionId,
+    target_query: &Query<(&Transform, &MissionTargetEntity)>,
+) -> bool {
+    match &objective.objective_type {
+        ObjectiveType::ReachLocation(target_pos, radius) => {
+            player_pos.distance_squared(*target_pos) <= radius * radius
+        }
+        ObjectiveType::KillCount(required) => objective.current_count >= *required,
+        ObjectiveType::SurviveTime(duration) => phase_timer >= *duration,
+        ObjectiveType::FollowTarget(target_id, _max_distance) => {
+            check_follow_target_complete(target_id, mission_id, target_query)
+        }
+        ObjectiveType::EscortNpc(target_id) => {
+            check_escort_npc_complete(target_id, mission_id, target_query)
+        }
+        _ => false,
+    }
+}
 
 /// 任務目標追蹤系統
 fn mission_objective_tracking_system(
@@ -460,69 +669,18 @@ fn mission_objective_tracking_system(
 
     let player_pos = player_transform.translation;
     let mission_id = active.mission_id;
+    let phase_timer = active.phase_timer;
 
-    // 檢查每個目標
     for (index, objective) in active.objectives.iter_mut().enumerate() {
         if objective.is_completed {
             continue;
         }
 
-        let completed = match &objective.objective_type {
-            ObjectiveType::ReachLocation(target_pos, radius) => {
-                // 使用 distance_squared 避免 sqrt
-                player_pos.distance_squared(*target_pos) <= radius * radius
-            }
-            ObjectiveType::KillCount(required) => {
-                objective.current_count >= *required
-            }
-            ObjectiveType::SurviveTime(duration) => {
-                active.phase_timer >= *duration
-            }
-            ObjectiveType::FollowTarget(target_id, _max_distance) => {
-                // 查找目標實體並檢查玩家是否保持在範圍內
-                let mut target_reached_destination = false;
-                for (target_transform, target_entity) in &target_query {
-                    if &target_entity.target_id == target_id && target_entity.mission_id == mission_id {
-                        let _distance = player_pos.distance(target_transform.translation);
-                        // 如果目標已到達終點（路徑走完），任務完成
-                        if !target_entity.waypoints.is_empty()
-                            && target_entity.current_waypoint >= target_entity.waypoints.len()
-                        {
-                            target_reached_destination = true;
-                        }
-                        // 注意：如果玩家距離太遠，會由 mission_fail_check_system 處理失敗
-                        break;
-                    }
-                }
-                target_reached_destination
-            }
-            ObjectiveType::EscortNpc(target_id) => {
-                // 護送任務：檢查 NPC 是否到達目的地
-                let mut escort_complete = false;
-                for (_target_transform, target_entity) in &target_query {
-                    if &target_entity.target_id == target_id
-                        && target_entity.mission_id == mission_id
-                        && target_entity.target_type == MissionTargetType::Escort
-                    {
-                        // NPC 到達終點
-                        if !target_entity.waypoints.is_empty()
-                            && target_entity.current_waypoint >= target_entity.waypoints.len()
-                        {
-                            escort_complete = true;
-                        }
-                        break;
-                    }
-                }
-                escort_complete
-            }
-            // 其他目標類型由專門的系統更新
-            _ => false,
-        };
+        let completed = check_objective_complete(objective, player_pos, phase_timer, mission_id, &target_query);
 
-        if completed && !objective.is_completed {
+        if completed {
             objective.is_completed = true;
             objective.current_count = objective.target_count;
-
             events.write(StoryMissionEvent::ObjectiveCompleted {
                 mission_id,
                 objective_index: index,
@@ -534,6 +692,34 @@ fn mission_objective_tracking_system(
 // ============================================================================
 // 階段系統
 // ============================================================================
+
+// === 階段系統輔助函數 ===
+
+/// 播放階段開始的對話和過場動畫
+fn play_phase_start_events(
+    phase: &MissionPhase,
+    dialogue_events: &mut MessageWriter<DialogueEvent>,
+    cutscene_events: &mut MessageWriter<CutsceneEvent>,
+) {
+    if let Some(dialogue_id) = phase.start_dialogue {
+        dialogue_events.write(DialogueEvent::Start {
+            dialogue_id,
+            participants: HashMap::new(),
+        });
+    }
+    if let Some(cutscene_id) = phase.cutscene {
+        cutscene_events.write(CutsceneEvent::Start(cutscene_id));
+    }
+}
+
+/// 清理任務生成的實體
+fn cleanup_mission_entities(commands: &mut Commands, spawned_entities: Vec<Entity>) {
+    for entity in spawned_entities {
+        if let Ok(mut cmd) = commands.get_entity(entity) {
+            cmd.despawn();
+        }
+    }
+}
 
 /// 任務階段切換系統
 fn mission_phase_system(
@@ -547,7 +733,6 @@ fn mission_phase_system(
     mut cutscene_events: MessageWriter<CutsceneEvent>,
     mut mission_events: MessageWriter<StoryMissionEvent>,
 ) {
-    // 如果有對話或過場進行中，不切換階段
     if is_dialogue_active(&dialogue_state) || is_cutscene_active(&cutscene_state) {
         return;
     }
@@ -556,78 +741,49 @@ fn mission_phase_system(
         return;
     };
 
-    // 更新計時器
     active.tick(time.delta_secs());
 
-    // 檢查當前階段是否完成
     if !active.is_phase_complete() {
         return;
     }
 
     let mission_id = active.mission_id;
     let current_phase = active.current_phase;
-
     let Some(mission) = database.get(mission_id) else {
         return;
     };
 
-    // 播放階段完成過場動畫
-    if let Some(phase) = mission.get_phase(current_phase) {
-        if let Some(end_dialogue) = phase.end_dialogue {
-            dialogue_events.write(DialogueEvent::Start {
-                dialogue_id: end_dialogue,
-                participants: std::collections::HashMap::new(),
-            });
-            return; // 等待對話完成
-        }
+    // 播放階段完成對話（如果有）
+    if let Some(end_dialogue) = mission.get_phase(current_phase).and_then(|p| p.end_dialogue) {
+        dialogue_events.write(DialogueEvent::Start {
+            dialogue_id: end_dialogue,
+            participants: HashMap::new(),
+        });
+        return;
     }
 
-    // 嘗試前進到下一階段
     let next_phase_index = current_phase + 1;
 
     if let Some(next_phase) = mission.get_phase(next_phase_index) {
+        // 前進到下一階段
         active.advance_phase(next_phase);
-
         mission_events.write(StoryMissionEvent::PhaseChanged {
             mission_id,
             new_phase: next_phase_index as u32,
         });
-
-        // 播放新階段開場對話
-        if let Some(dialogue_id) = next_phase.start_dialogue {
-            dialogue_events.write(DialogueEvent::Start {
-                dialogue_id,
-                participants: std::collections::HashMap::new(),
-            });
-        }
-
-        // 播放新階段過場動畫
-        if let Some(cutscene_id) = next_phase.cutscene {
-            cutscene_events.write(CutsceneEvent::Start(cutscene_id));
-        }
-
+        play_phase_start_events(next_phase, &mut dialogue_events, &mut cutscene_events);
         info!("任務 {} 進入階段 {}", mission_id, next_phase_index);
     } else {
         // 任務完成
         let rewards = mission.rewards.clone();
-
-        // 發放獎勵
         manager.grant_rewards(&rewards);
 
-        // 清除當前任務並清理生成的實體
         if let Some((completed_id, spawned_entities)) = manager.complete_current_mission() {
-            // 清理任務生成的實體
-            for entity in spawned_entities {
-                if let Ok(mut cmd) = commands.get_entity(entity) {
-                    cmd.despawn();
-                }
-            }
-
+            cleanup_mission_entities(&mut commands, spawned_entities);
             mission_events.write(StoryMissionEvent::Completed {
                 mission_id: completed_id,
                 rewards,
             });
-
             info!("任務完成: {}", completed_id);
         }
     }
@@ -636,6 +792,22 @@ fn mission_phase_system(
 // ============================================================================
 // 失敗檢查系統
 // ============================================================================
+
+// === 失敗檢查輔助函數 ===
+
+/// 檢查是否滿足失敗條件
+fn check_fail_condition(
+    condition: &FailCondition,
+    player_health: Option<&crate::combat::Health>,
+    phase_timer: f32,
+    time_limit: Option<f32>,
+) -> bool {
+    match condition {
+        FailCondition::PlayerDeath => player_health.is_some_and(|h| h.current <= 0.0),
+        FailCondition::TimeExpired => time_limit.is_some_and(|limit| phase_timer >= limit),
+        _ => false,
+    }
+}
 
 /// 任務失敗檢查系統
 fn mission_fail_check_system(
@@ -650,53 +822,30 @@ fn mission_fail_check_system(
     };
 
     let mission_id = active.mission_id;
-    let current_phase = active.current_phase;
-
+    let phase_timer = active.phase_timer;
     let Some(mission) = database.get(mission_id) else {
         return;
     };
-
-    let Some(phase) = mission.get_phase(current_phase) else {
+    let Some(phase) = mission.get_phase(active.current_phase) else {
         return;
     };
 
-    // 檢查每個失敗條件
+    let player_health = player_query.single().ok();
+
     for fail_condition in &phase.fail_conditions {
-        let failed = match fail_condition {
-            FailCondition::PlayerDeath => {
-                if let Ok(health) = player_query.single() {
-                    health.current <= 0.0
-                } else {
-                    false
-                }
-            }
-            FailCondition::TimeExpired => {
-                if let Some(limit) = phase.time_limit {
-                    active.phase_timer >= limit
-                } else {
-                    false
-                }
-            }
-            // 其他失敗條件
-            _ => false,
-        };
-
-        if failed {
-            let reason = fail_condition.clone();
-            events.write(StoryMissionEvent::Failed {
-                mission_id,
-                reason: reason.clone(),
-            });
-
-            // 清理任務生成的實體
-            let entities_to_despawn = manager.fail_current_mission(reason);
-            for entity in entities_to_despawn {
-                if let Ok(mut cmd) = commands.get_entity(entity) {
-                    cmd.despawn();
-                }
-            }
-            return;
+        if !check_fail_condition(fail_condition, player_health, phase_timer, phase.time_limit) {
+            continue;
         }
+
+        let reason = fail_condition.clone();
+        events.write(StoryMissionEvent::Failed {
+            mission_id,
+            reason: reason.clone(),
+        });
+
+        let entities_to_despawn = manager.fail_current_mission(reason);
+        cleanup_mission_entities(&mut commands, entities_to_despawn);
+        return;
     }
 }
 
@@ -748,8 +897,8 @@ fn objective_marker_system(
     for (mut marker, mut transform) in &mut marker_query {
         // 脈衝動畫
         marker.pulse_phase += time.delta_secs() * 2.0;
-        if marker.pulse_phase > std::f32::consts::TAU {
-            marker.pulse_phase -= std::f32::consts::TAU;
+        if marker.pulse_phase > TAU {
+            marker.pulse_phase -= TAU;
         }
 
         // 上下浮動
@@ -922,8 +1071,8 @@ pub fn setup_mission_trigger_visuals(
         marker_mesh: meshes.add(Cylinder::new(0.8, 8.0)),
         marker_material: materials.add(StandardMaterial {
             base_color: Color::srgba(1.0, 0.9, 0.0, 0.6),
-            emissive: bevy::color::LinearRgba::new(1.0, 0.8, 0.0, 1.0),
-            alpha_mode: bevy::prelude::AlphaMode::Blend,
+            emissive: LinearRgba::new(1.0, 0.8, 0.0, 1.0),
+            alpha_mode: AlphaMode::Blend,
             unlit: true,
             ..default()
         }),
@@ -931,8 +1080,8 @@ pub fn setup_mission_trigger_visuals(
         ring_mesh: meshes.add(Torus::new(1.5, 0.15)),
         ring_material: materials.add(StandardMaterial {
             base_color: Color::srgba(1.0, 0.9, 0.0, 0.4),
-            emissive: bevy::color::LinearRgba::new(1.0, 0.7, 0.0, 1.0),
-            alpha_mode: bevy::prelude::AlphaMode::Blend,
+            emissive: LinearRgba::new(1.0, 0.7, 0.0, 1.0),
+            alpha_mode: AlphaMode::Blend,
             unlit: true,
             ..default()
         }),
@@ -950,7 +1099,7 @@ pub fn spawn_mission_triggers(
     mut mission_events: MessageReader<StoryMissionEvent>,
 ) {
     // 收集需要移除觸發點的任務 ID（避免重複遍歷）
-    let mut missions_to_remove = std::collections::HashSet::new();
+    let mut missions_to_remove = HashSet::new();
     for event in mission_events.read() {
         match event {
             StoryMissionEvent::Started(mission_id)
@@ -1044,7 +1193,7 @@ fn spawn_mission_trigger_marker(
                 Mesh3d(visuals.ring_mesh.clone()),
                 MeshMaterial3d(visuals.ring_material.clone()),
                 Transform::from_translation(Vec3::Y * -TRIGGER_HEIGHT_OFFSET)
-                    .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    .with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
                 MissionMarkerRing::default(),
                 Name::new(format!("MissionTriggerRing_{}", mission_id)),
             ));

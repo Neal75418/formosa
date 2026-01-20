@@ -119,6 +119,226 @@ const BLOOD_PARTICLE_MIN_SCALE: f32 = 0.03;
 /// 血液粒子最大縮放
 const BLOOD_PARTICLE_MAX_SCALE: f32 = 0.06;
 
+// === 傷害系統輔助函數 ===
+
+/// 計算掩體傷害減免
+#[inline]
+fn calculate_cover_reduction(
+    seeker: Option<&CoverSeeker>,
+    cover_point_query: &Query<&CoverPoint>,
+) -> f32 {
+    let Some(seeker) = seeker else { return 0.0 };
+    if !seeker.is_in_cover || seeker.is_peeking {
+        return 0.0;
+    }
+    let Some(cover_entity) = seeker.target_cover else { return 0.0 };
+    let Ok(cover) = cover_point_query.get(cover_entity) else { return 0.0 };
+    cover.damage_reduction
+}
+
+/// 護甲吸收結果
+struct ArmorAbsorptionResult {
+    damage_after_armor: f32,
+    was_hit: bool,
+    was_broken: bool,
+}
+
+/// 處理護甲傷害吸收
+#[inline]
+fn process_armor_absorption(armor: &mut Option<Mut<Armor>>, damage: f32) -> ArmorAbsorptionResult {
+    let Some(ref mut armor) = armor else {
+        return ArmorAbsorptionResult {
+            damage_after_armor: damage,
+            was_hit: false,
+            was_broken: false,
+        };
+    };
+
+    let armor_before = armor.current;
+    let damage_after = armor.absorb_damage(damage);
+
+    ArmorAbsorptionResult {
+        damage_after_armor: damage_after,
+        was_hit: armor_before > 0.0,
+        was_broken: armor_before > 0.0 && armor.current <= 0.0,
+    }
+}
+
+/// 發送護甲破碎事件
+#[inline]
+fn send_armor_break_event(
+    armor_result: &ArmorAbsorptionResult,
+    target: Entity,
+    hit_position: Option<Vec3>,
+    transform_query: &Query<&Transform>,
+    armor_break_events: &mut MessageWriter<ArmorBreakEvent>,
+) {
+    if !armor_result.was_hit {
+        return;
+    }
+    let Ok(target_transform) = transform_query.get(target) else { return };
+
+    let hit_pos = hit_position.unwrap_or(target_transform.translation + Vec3::Y * DEFAULT_HIT_POSITION_Y_OFFSET);
+    armor_break_events.write(ArmorBreakEvent {
+        entity: target,
+        position: hit_pos,
+        is_full_break: armor_result.was_broken,
+    });
+}
+
+/// 計算擊中方向
+#[inline]
+fn calculate_hit_direction(
+    attacker: Option<Entity>,
+    target: Entity,
+    transform_query: &Query<&Transform>,
+) -> Vec3 {
+    let Some(attacker) = attacker else { return Vec3::NEG_Z };
+    let Ok(target_transform) = transform_query.get(target) else { return Vec3::NEG_Z };
+    let Ok(attacker_transform) = transform_query.get(attacker) else { return Vec3::NEG_Z };
+
+    (target_transform.translation - attacker_transform.translation).normalize_or_zero()
+}
+
+/// 觸發受傷反應
+#[inline]
+fn trigger_hit_reaction(
+    hit_reaction: &mut Option<Mut<HitReaction>>,
+    damage_dealt: f32,
+    attacker: Option<Entity>,
+    target: Entity,
+    is_headshot: bool,
+    transform_query: &Query<&Transform>,
+) {
+    let Some(ref mut reaction) = hit_reaction else { return };
+    let hit_direction = calculate_hit_direction(attacker, target, transform_query);
+    reaction.trigger(damage_dealt, hit_direction, is_headshot);
+}
+
+/// 處理玩家受傷通知
+#[inline]
+fn handle_player_damage_notification(
+    target: Entity,
+    damage_dealt: f32,
+    player_query: &Query<Entity, With<Player>>,
+    notifications: &mut NotificationQueue,
+    damage_indicator: &mut DamageIndicatorState,
+) {
+    if player_query.get(target).is_err() {
+        return;
+    }
+    notifications.warning(format!("-{:.0} HP", damage_dealt));
+    trigger_damage_indicator(damage_indicator, damage_dealt);
+}
+
+/// 處理命中標記和音效
+#[inline]
+fn handle_hit_marker_and_sound(
+    is_headshot: bool,
+    combat_state: &mut CombatState,
+    commands: &mut Commands,
+    weapon_sounds: &Option<Res<WeaponSounds>>,
+    audio_manager: &AudioManager,
+) {
+    combat_state.hit_marker_timer = HIT_MARKER_DURATION;
+    combat_state.hit_marker_headshot = is_headshot;
+
+    if let Some(ref sounds) = weapon_sounds {
+        play_hit_sound(commands, sounds, audio_manager, is_headshot);
+    }
+}
+
+/// 計算浮動傷害數字位置
+#[inline]
+fn get_floating_damage_position(
+    hit_position: Option<Vec3>,
+    target: Entity,
+    transform_query: &Query<&Transform>,
+) -> Option<Vec3> {
+    if let Some(hit_pos) = hit_position {
+        return Some(hit_pos + Vec3::Y * 0.3);
+    }
+    transform_query.get(target).ok()
+        .map(|t| t.translation + Vec3::Y * FLOATING_DAMAGE_HEAD_OFFSET)
+}
+
+/// 生成浮動傷害數字
+#[inline]
+fn spawn_floating_damage_if_possible(
+    commands: &mut Commands,
+    damage_pos: Vec3,
+    damage_dealt: f32,
+    is_headshot: bool,
+    damage_tracker: &mut FloatingDamageTracker,
+    font: &Option<Res<ChineseFont>>,
+) {
+    if damage_tracker.active_count >= damage_tracker.max_count {
+        return;
+    }
+    let Some(ref chinese_font) = font else { return };
+
+    let offset = damage_tracker.next_offset();
+    let floating_damage = FloatingDamageNumber::new(damage_pos, damage_dealt, is_headshot)
+        .with_offset(offset);
+
+    spawn_floating_damage_number(commands, floating_damage, chinese_font);
+    damage_tracker.active_count += 1;
+}
+
+/// 處理玩家攻擊敵人的效果（命中標記、音效、浮動傷害）
+fn handle_player_hit_enemy(
+    event: &DamageEvent,
+    damage_dealt: f32,
+    player_entity: Option<Entity>,
+    enemy_query: &Query<Entity, With<Enemy>>,
+    transform_query: &Query<&Transform>,
+    res: &mut DamageSystemResources,
+    commands: &mut Commands,
+) {
+    let Some(player) = player_entity else { return };
+    if event.attacker != Some(player) || enemy_query.get(event.target).is_err() {
+        return;
+    }
+
+    handle_hit_marker_and_sound(
+        event.is_headshot,
+        &mut res.combat_state,
+        commands,
+        &res.weapon_sounds,
+        &res.audio_manager,
+    );
+
+    let Some(damage_pos) = get_floating_damage_position(event.hit_position, event.target, transform_query) else {
+        return;
+    };
+
+    spawn_floating_damage_if_possible(
+        commands,
+        damage_pos,
+        damage_dealt,
+        event.is_headshot,
+        &mut res.damage_tracker,
+        &res.font,
+    );
+}
+
+/// 計算死亡時的擊中方向
+#[inline]
+fn calculate_death_hit_direction(
+    attacker: Option<Entity>,
+    target: Entity,
+    transform_query: &Query<&Transform>,
+) -> Option<Vec3> {
+    let default_dir = Some(Vec3::new(0.0, 0.2, -1.0).normalize());
+
+    let Some(attacker) = attacker else { return default_dir };
+    let Ok(target_transform) = transform_query.get(target) else { return default_dir };
+    let Ok(attacker_transform) = transform_query.get(attacker) else { return default_dir };
+
+    let dir = target_transform.translation - attacker_transform.translation;
+    Some(Vec3::new(dir.x, 0.3, dir.z).normalize_or_zero())
+}
+
 /// 傷害處理系統
 #[allow(clippy::too_many_arguments)]
 pub fn damage_system(
@@ -139,132 +359,33 @@ pub fn damage_system(
     let player_entity = player_query.single().ok();
 
     for event in damage_events.read() {
-        // 取得目標的生命值、護甲、掩體狀態、受傷反應（合併查詢）
         let Ok((mut health, mut armor, cover_seeker, mut hit_reaction)) = health_query.get_mut(event.target) else {
             continue;
         };
 
-        // === 掩體傷害減免 ===
-        let mut actual_damage = event.amount;
-        if let Some(seeker) = cover_seeker {
-            if seeker.is_in_cover && !seeker.is_peeking {
-                if let Some(cover_entity) = seeker.target_cover {
-                    if let Ok(cover) = cover_point_query.get(cover_entity) {
-                        actual_damage *= 1.0 - cover.damage_reduction;
-                    }
-                }
-            }
-        }
+        // 計算掩體傷害減免
+        let cover_reduction = calculate_cover_reduction(cover_seeker, &cover_point_query);
+        let actual_damage = event.amount * (1.0 - cover_reduction);
 
-        // 計算實際傷害（護甲吸收）
-        let mut armor_was_hit = false;
-        let mut armor_was_broken = false;
-        if let Some(ref mut armor) = armor {
-            let armor_before = armor.current;
-            actual_damage = armor.absorb_damage(actual_damage);
-
-            // 檢查護甲是否受擊或破碎
-            if armor_before > 0.0 {
-                armor_was_hit = true;
-                if armor.current <= 0.0 {
-                    armor_was_broken = true;
-                }
-            }
-        }
-
-        // 發送護甲破碎事件（如果有護甲被擊中）
-        if armor_was_hit {
-            if let Ok(target_transform) = transform_query.get(event.target) {
-                let hit_pos = event.hit_position.unwrap_or(target_transform.translation + Vec3::Y * 1.2);
-                armor_break_events.write(ArmorBreakEvent {
-                    entity: event.target,
-                    position: hit_pos,
-                    is_full_break: armor_was_broken,
-                });
-            }
-        }
+        // 處理護甲吸收
+        let armor_result = process_armor_absorption(&mut armor, actual_damage);
+        send_armor_break_event(&armor_result, event.target, event.hit_position, &transform_query, &mut armor_break_events);
 
         // 扣血
-        let damage_dealt = health.take_damage(actual_damage, current_time);
+        let damage_dealt = health.take_damage(armor_result.damage_after_armor, current_time);
 
-        // === 觸發受傷反應 ===
-        if let Some(ref mut hit_reaction) = hit_reaction {
-            // 計算擊中方向
-            let hit_direction = if let Some(attacker) = event.attacker {
-                if let (Ok(target_transform), Ok(attacker_transform)) =
-                    (transform_query.get(event.target), transform_query.get(attacker))
-                {
-                    (target_transform.translation - attacker_transform.translation).normalize_or_zero()
-                } else {
-                    Vec3::NEG_Z
-                }
-            } else {
-                Vec3::NEG_Z
-            };
+        // 觸發受傷反應
+        trigger_hit_reaction(&mut hit_reaction, damage_dealt, event.attacker, event.target, event.is_headshot, &transform_query);
 
-            hit_reaction.trigger(damage_dealt, hit_direction, event.is_headshot);
-        }
+        // 玩家受傷通知
+        handle_player_damage_notification(event.target, damage_dealt, &player_query, &mut res.notifications, &mut res.damage_indicator);
 
-        // 如果是玩家，顯示傷害提示並觸發受傷指示器
-        if player_query.get(event.target).is_ok() {
-            res.notifications.warning(format!("-{:.0} HP", damage_dealt));
-            trigger_damage_indicator(&mut res.damage_indicator, damage_dealt);
-        }
-
-        // 如果玩家攻擊敵人，顯示命中標記並播放命中音效
-        if let Some(player) = player_entity {
-            if event.attacker == Some(player) && enemy_query.get(event.target).is_ok() {
-                res.combat_state.hit_marker_timer = HIT_MARKER_DURATION;
-                res.combat_state.hit_marker_headshot = event.is_headshot;
-                // 播放命中音效
-                if let Some(ref sounds) = res.weapon_sounds {
-                    play_hit_sound(&mut commands, sounds, &res.audio_manager, event.is_headshot);
-                }
-
-                // === GTA 5 風格浮動傷害數字 ===
-                if res.damage_tracker.active_count < res.damage_tracker.max_count {
-                    // 取得傷害位置（使用擊中位置或敵人位置）
-                    let damage_pos = if let Some(hit_pos) = event.hit_position {
-                        hit_pos + Vec3::Y * 0.3
-                    } else if let Ok(enemy_transform) = transform_query.get(event.target) {
-                        enemy_transform.translation + Vec3::Y * FLOATING_DAMAGE_HEAD_OFFSET
-                    } else {
-                        continue;
-                    };
-
-                    // 生成浮動傷害數字
-                    let offset = res.damage_tracker.next_offset();
-                    let floating_damage = FloatingDamageNumber::new(damage_pos, damage_dealt, event.is_headshot)
-                        .with_offset(offset);
-
-                    // 創建世界空間文字實體
-                    if let Some(ref chinese_font) = res.font {
-                        spawn_floating_damage_number(&mut commands, floating_damage, chinese_font);
-                        res.damage_tracker.active_count += 1;
-                    }
-                }
-            }
-        }
+        // 玩家攻擊敵人的效果
+        handle_player_hit_enemy(event, damage_dealt, player_entity, &enemy_query, &transform_query, &mut res, &mut commands);
 
         // 檢查死亡
         if health.is_dead() {
-            // 計算擊中方向（從攻擊者指向目標）
-            let hit_direction = if let (Some(attacker), Ok(target_transform)) =
-                (event.attacker, transform_query.get(event.target))
-            {
-                if let Ok(attacker_transform) = transform_query.get(attacker) {
-                    // 從攻擊者指向目標的水平方向
-                    let dir = target_transform.translation - attacker_transform.translation;
-                    Some(Vec3::new(dir.x, 0.3, dir.z).normalize_or_zero())
-                } else {
-                    // 無法取得攻擊者位置，使用預設方向
-                    Some(Vec3::new(0.0, 0.2, -1.0).normalize())
-                }
-            } else {
-                // 無攻擊者或無法取得位置
-                Some(Vec3::new(0.0, 0.2, -1.0).normalize())
-            };
-
+            let hit_direction = calculate_death_hit_direction(event.attacker, event.target, &transform_query);
             death_events.write(DeathEvent {
                 entity: event.target,
                 killer: event.attacker,
@@ -276,6 +397,240 @@ pub fn damage_system(
     }
 }
 
+// === 死亡系統輔助函數 ===
+
+/// 處理玩家死亡，返回 true 表示是玩家死亡事件（應跳過後續處理）
+#[inline]
+fn handle_player_death(
+    entity: Entity,
+    player_query: &Query<(Entity, &Transform), With<Player>>,
+    respawn_state: &mut RespawnState,
+    notifications: &mut NotificationQueue,
+) -> bool {
+    let Ok((_, transform)) = player_query.get(entity) else { return false };
+
+    if respawn_state.is_dead {
+        return true;
+    }
+
+    notifications.error("💀 你死了！3 秒後重生...");
+    respawn_state.is_dead = true;
+    respawn_state.respawn_timer = RESPAWN_TIMER_DURATION;
+    respawn_state.death_position = transform.translation;
+    true
+}
+
+/// 處理警察死亡犯罪事件
+#[inline]
+fn handle_police_death_crime(
+    entity: Entity,
+    killer: Option<Entity>,
+    player_entity: Option<Entity>,
+    police_query: &Query<&Transform, (With<PoliceOfficer>, Without<Player>, Without<Enemy>)>,
+    crime_events: &mut MessageWriter<CrimeEvent>,
+    notifications: &mut NotificationQueue,
+) {
+    let Ok(police_transform) = police_query.get(entity) else { return };
+    if killer != player_entity {
+        return;
+    }
+
+    crime_events.write(CrimeEvent::PoliceKilled {
+        victim: entity,
+        position: police_transform.translation,
+    });
+    notifications.warning("⚠️ 擊殺警察！通緝等級大幅上升！");
+}
+
+/// 處理行人死亡犯罪事件
+#[inline]
+fn handle_pedestrian_death_crime(
+    entity: Entity,
+    killer: Option<Entity>,
+    player_entity: Option<Entity>,
+    pedestrian_query: &Query<&Transform, (With<Pedestrian>, Without<Player>, Without<Enemy>)>,
+    crime_events: &mut MessageWriter<CrimeEvent>,
+) {
+    let Ok(ped_transform) = pedestrian_query.get(entity) else { return };
+    if killer != player_entity {
+        return;
+    }
+
+    crime_events.write(CrimeEvent::Murder {
+        victim: entity,
+        position: ped_transform.translation,
+    });
+}
+
+/// 判斷 Kill Cam 觸發類型
+#[inline]
+fn determine_killcam_trigger(
+    event: &DeathEvent,
+    enemy_pos: Vec3,
+    remaining_enemies: usize,
+    killcam: &KillCamState,
+) -> Option<KillCamTrigger> {
+    if event.cause != DamageSource::Bullet {
+        return None;
+    }
+
+    // 檢查擊殺條件（優先順序：爆頭 > 最後敵人 > 連殺）
+    let is_headshot = event.hit_position
+        .map(|p| p.y > enemy_pos.y + HEADSHOT_HEIGHT_THRESHOLD)
+        .unwrap_or(false);
+
+    if is_headshot {
+        Some(KillCamTrigger::Headshot)
+    } else if remaining_enemies == 0 {
+        Some(KillCamTrigger::LastEnemy)
+    } else if killcam.should_trigger_multi_kill() {
+        Some(KillCamTrigger::MultiKill(killcam.get_kill_streak()))
+    } else {
+        None
+    }
+}
+
+/// 處理 Kill Cam 邏輯
+#[inline]
+fn handle_killcam(
+    event: &DeathEvent,
+    enemy_pos: Vec3,
+    player_entity: Option<Entity>,
+    all_enemies_query: &Query<Entity, (With<Enemy>, Without<Ragdoll>)>,
+    killcam: &mut KillCamState,
+    current_time: f32,
+) {
+    if event.killer != player_entity {
+        return;
+    }
+
+    killcam.record_kill(current_time);
+
+    let remaining_enemies = all_enemies_query.iter().count().saturating_sub(1);
+    let trigger_type = determine_killcam_trigger(event, enemy_pos, remaining_enemies, killcam);
+
+    if let Some(trigger) = trigger_type {
+        killcam.trigger(trigger, event.entity, enemy_pos, current_time);
+    }
+}
+
+/// 取得傷害來源的衝量強度
+#[inline]
+fn get_impulse_strength(cause: DamageSource) -> f32 {
+    match cause {
+        DamageSource::Bullet => IMPULSE_BULLET,
+        DamageSource::Explosion => IMPULSE_EXPLOSION,
+        DamageSource::Vehicle => IMPULSE_VEHICLE,
+        DamageSource::Melee => IMPULSE_MELEE,
+        DamageSource::Fall => IMPULSE_FALL,
+        DamageSource::Fire => IMPULSE_FIRE,
+        DamageSource::Environment => IMPULSE_ENVIRONMENT,
+    }
+}
+
+/// 取得傷害來源的傾斜強度
+#[inline]
+fn get_tilt_strength(cause: DamageSource) -> f32 {
+    match cause {
+        DamageSource::Bullet => TILT_BULLET,
+        DamageSource::Explosion => TILT_EXPLOSION,
+        DamageSource::Vehicle => TILT_VEHICLE,
+        DamageSource::Melee => TILT_MELEE,
+        _ => TILT_DEFAULT,
+    }
+}
+
+/// 管理屍體數量限制
+#[inline]
+fn manage_ragdoll_limit(
+    commands: &mut Commands,
+    ragdoll_tracker: &mut RagdollTracker,
+    new_entity: Entity,
+    current_time: f32,
+) {
+    if ragdoll_tracker.ragdolls.len() >= ragdoll_tracker.max_count {
+        if let Some((oldest_entity, _)) = ragdoll_tracker.ragdolls.first().copied() {
+            if let Ok(mut entity_commands) = commands.get_entity(oldest_entity) {
+                entity_commands.despawn();
+            }
+            ragdoll_tracker.ragdolls.remove(0);
+        }
+    }
+    ragdoll_tracker.ragdolls.push((new_entity, current_time));
+}
+
+/// 設置布娃娃物理組件
+fn setup_ragdoll_physics(
+    commands: &mut Commands,
+    entity: Entity,
+    impulse_dir: Vec3,
+    impulse_strength: f32,
+    tilt_strength: f32,
+) {
+    let tilt_axis = Vec3::new(impulse_dir.z, 0.0, -impulse_dir.x).normalize_or_zero();
+
+    let Ok(mut entity_commands) = commands.get_entity(entity) else { return };
+
+    entity_commands
+        .insert(Ragdoll::with_impulse(impulse_dir, impulse_strength))
+        .remove::<KinematicCharacterController>()
+        .remove::<AiBehavior>()
+        .remove::<AiMovement>()
+        .remove::<AiPerception>()
+        .remove::<AiCombat>()
+        .insert(RigidBody::Dynamic)
+        .insert(GravityScale(RAGDOLL_GRAVITY_SCALE))
+        .insert(Velocity::default())
+        .insert(ExternalImpulse {
+            impulse: Vec3::new(
+                impulse_dir.x * impulse_strength,
+                impulse_strength * RAGDOLL_UPWARD_PUSH_FACTOR,
+                impulse_dir.z * impulse_strength,
+            ),
+            torque_impulse: tilt_axis * tilt_strength,
+        })
+        .insert(Damping {
+            linear_damping: RAGDOLL_LINEAR_DAMPING,
+            angular_damping: RAGDOLL_ANGULAR_DAMPING,
+        })
+        .insert(CollisionGroups::new(Group::GROUP_10, Group::GROUP_1));
+}
+
+/// 處理敵人死亡效果
+fn handle_enemy_death(
+    commands: &mut Commands,
+    event: &DeathEvent,
+    enemy_transform: &Transform,
+    player_entity: Option<Entity>,
+    all_enemies_query: &Query<Entity, (With<Enemy>, Without<Ragdoll>)>,
+    killcam: &mut KillCamState,
+    ragdoll_tracker: &mut RagdollTracker,
+    blood_visuals: &Option<Res<BloodVisuals>>,
+    current_time: f32,
+) {
+    let enemy_pos = enemy_transform.translation;
+
+    // Kill Cam 邏輯
+    handle_killcam(event, enemy_pos, player_entity, all_enemies_query, killcam, current_time);
+
+    // 計算物理參數
+    let impulse_dir = event.hit_direction.unwrap_or(Vec3::new(0.0, 0.2, -1.0).normalize());
+    let impulse_strength = get_impulse_strength(event.cause);
+    let tilt_strength = get_tilt_strength(event.cause);
+
+    // 屍體數量管理
+    manage_ragdoll_limit(commands, ragdoll_tracker, event.entity, current_time);
+
+    // 生成血液粒子
+    let blood_pos = enemy_pos + Vec3::Y * CHEST_HEIGHT;
+    if let Some(ref blood) = blood_visuals {
+        spawn_blood_particles(commands, blood_pos, impulse_dir, blood);
+    }
+
+    // 設置布娃娃物理
+    setup_ragdoll_physics(commands, event.entity, impulse_dir, impulse_strength, tilt_strength);
+}
+
 /// 死亡處理系統
 #[allow(clippy::too_many_arguments)]
 pub fn death_system(
@@ -284,7 +639,6 @@ pub fn death_system(
     player_query: Query<(Entity, &Transform), With<Player>>,
     enemy_query: Query<(Entity, &Transform), (With<Enemy>, Without<Ragdoll>)>,
     all_enemies_query: Query<Entity, (With<Enemy>, Without<Ragdoll>)>,
-    // 行人和警察查詢（用於犯罪事件）
     pedestrian_query: Query<&Transform, (With<Pedestrian>, Without<Player>, Without<Enemy>)>,
     police_query: Query<&Transform, (With<PoliceOfficer>, Without<Player>, Without<Enemy>)>,
     mut crime_events: MessageWriter<CrimeEvent>,
@@ -299,167 +653,29 @@ pub fn death_system(
     let player_entity = player_query.single().ok().map(|(e, _)| e);
 
     for event in death_events.read() {
-        // 檢查是否為玩家死亡
-        if let Ok((_, transform)) = player_query.get(event.entity) {
-            if !respawn_state.is_dead {
-                notifications.error("💀 你死了！3 秒後重生...");
-                respawn_state.is_dead = true;
-                respawn_state.respawn_timer = RESPAWN_TIMER_DURATION;
-                respawn_state.death_position = transform.translation;
-            }
+        // 玩家死亡
+        if handle_player_death(event.entity, &player_query, &mut respawn_state, &mut notifications) {
             continue;
         }
 
-        // === 檢查是否為警察死亡 - 嚴重犯罪！ ===
-        if let Ok(police_transform) = police_query.get(event.entity) {
-            // 只有玩家擊殺警察才算犯罪
-            if event.killer == player_entity {
-                crime_events.write(CrimeEvent::PoliceKilled {
-                    victim: event.entity,
-                    position: police_transform.translation,
-                });
-                notifications.warning("⚠️ 擊殺警察！通緝等級大幅上升！");
-            }
-        }
+        // 犯罪事件
+        handle_police_death_crime(event.entity, event.killer, player_entity, &police_query, &mut crime_events, &mut notifications);
+        handle_pedestrian_death_crime(event.entity, event.killer, player_entity, &pedestrian_query, &mut crime_events);
 
-        // === 檢查是否為行人死亡 - 謀殺 ===
-        if let Ok(ped_transform) = pedestrian_query.get(event.entity) {
-            // 只有玩家擊殺行人才算犯罪
-            if event.killer == player_entity {
-                crime_events.write(CrimeEvent::Murder {
-                    victim: event.entity,
-                    position: ped_transform.translation,
-                });
-            }
-        }
-
-        // 敵人死亡 - 啟動布娃娃效果
+        // 敵人死亡 - 布娃娃效果
         if let Ok((_, enemy_transform)) = enemy_query.get(event.entity) {
             notifications.success("擊殺敵人！");
-
-            // === Kill Cam 觸發邏輯 ===
-            // 只有玩家擊殺敵人才觸發
-            if event.killer == player_entity {
-                // 記錄擊殺（用於連殺計數）
-                killcam.record_kill(current_time);
-
-                // 計算剩餘敵人數量（不包括當前被擊殺的）
-                let remaining_enemies = all_enemies_query.iter().count().saturating_sub(1);
-                let target_pos = enemy_transform.translation;
-
-                // 判斷是否觸發 Kill Cam
-                let trigger_type = if event.cause == DamageSource::Bullet {
-                    // 檢查擊殺條件（優先順序：爆頭 > 最後敵人 > 連殺）
-                    if event.hit_position.map(|p| p.y > enemy_transform.translation.y + 1.5).unwrap_or(false) {
-                        // 爆頭擊殺（擊中位置高於肩膀）
-                        Some(KillCamTrigger::Headshot)
-                    } else if remaining_enemies == 0 {
-                        // 最後一個敵人
-                        Some(KillCamTrigger::LastEnemy)
-                    } else if killcam.should_trigger_multi_kill() {
-                        // 連殺 (3+)
-                        Some(KillCamTrigger::MultiKill(killcam.get_kill_streak()))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-                // 觸發 Kill Cam
-                if let Some(trigger) = trigger_type {
-                    killcam.trigger(trigger, event.entity, target_pos, current_time);
-                }
-            }
-
-            // 取得敵人位置用於生成血液粒子
-            let enemy_pos = enemy_transform.translation + Vec3::Y * CHEST_HEIGHT;
-
-            // 計算衝擊力方向和強度
-            let impulse_dir = event.hit_direction.unwrap_or(Vec3::new(0.0, 0.2, -1.0).normalize());
-
-            // 根據傷害來源調整衝擊力
-            let impulse_strength = match event.cause {
-                DamageSource::Bullet => IMPULSE_BULLET,
-                DamageSource::Explosion => IMPULSE_EXPLOSION,
-                DamageSource::Vehicle => IMPULSE_VEHICLE,
-                DamageSource::Melee => IMPULSE_MELEE,
-                DamageSource::Fall => IMPULSE_FALL,
-                DamageSource::Fire => IMPULSE_FIRE,
-                DamageSource::Environment => IMPULSE_ENVIRONMENT,
-            };
-
-            // 計算傾倒軸（垂直於衝擊方向，讓身體往後倒）
-            let tilt_axis = Vec3::new(impulse_dir.z, 0.0, -impulse_dir.x).normalize_or_zero();
-            // 根據傷害來源調整傾倒力度
-            let tilt_strength = match event.cause {
-                DamageSource::Bullet => TILT_BULLET,
-                DamageSource::Explosion => TILT_EXPLOSION,
-                DamageSource::Vehicle => TILT_VEHICLE,
-                DamageSource::Melee => TILT_MELEE,
-                _ => TILT_DEFAULT,
-            };
-
-            // === 屍體數量限制 ===
-            if ragdoll_tracker.ragdolls.len() >= ragdoll_tracker.max_count {
-                // 移除最舊的屍體
-                if let Some((oldest_entity, _)) = ragdoll_tracker.ragdolls.first().copied() {
-                    if let Ok(mut entity_commands) = commands.get_entity(oldest_entity) {
-                        entity_commands.despawn();
-                    }
-                    ragdoll_tracker.ragdolls.remove(0);
-                }
-            }
-            // 追蹤新屍體
-            ragdoll_tracker.ragdolls.push((event.entity, time.elapsed_secs()));
-
-            // === 生成血液粒子 ===
-            if let Some(ref blood) = blood_visuals {
-                spawn_blood_particles(&mut commands, enemy_pos, impulse_dir, blood);
-            }
-
-            // 添加 Ragdoll 組件並移除 AI 相關組件
-            if let Ok(mut entity_commands) = commands.get_entity(event.entity) {
-                entity_commands
-                    // 添加布娃娃組件
-                    .insert(Ragdoll::with_impulse(impulse_dir, impulse_strength))
-                    // 移除運動學控制器，改用動態物理
-                    .remove::<KinematicCharacterController>()
-                    // 移除 AI 組件（停止 AI 行為）
-                    .remove::<AiBehavior>()
-                    .remove::<AiMovement>()
-                    .remove::<AiPerception>()
-                    .remove::<AiCombat>()
-                    // 切換到動態剛體
-                    .insert(RigidBody::Dynamic)
-                    // 添加重力（確保掉落）
-                    .insert(GravityScale(RAGDOLL_GRAVITY_SCALE))
-                    // 添加速度組件
-                    .insert(Velocity::default())
-                    // 添加外部衝擊力（增強傾倒效果）
-                    .insert(ExternalImpulse {
-                        // 衝擊力：水平方向 + 輕微向上
-                        impulse: Vec3::new(
-                            impulse_dir.x * impulse_strength,
-                            impulse_strength * RAGDOLL_UPWARD_PUSH_FACTOR,
-                            impulse_dir.z * impulse_strength,
-                        ),
-                        // 旋轉力矩：讓身體往後傾倒
-                        torque_impulse: tilt_axis * tilt_strength,
-                    })
-                    // 添加阻尼讓物理更自然
-                    .insert(Damping {
-                        linear_damping: RAGDOLL_LINEAR_DAMPING,
-                        angular_damping: RAGDOLL_ANGULAR_DAMPING,
-                    })
-                    // 屍體碰撞組：只與地面碰撞，不阻擋玩家
-                    .insert(CollisionGroups::new(
-                        Group::GROUP_10,  // 屍體專用組
-                        Group::GROUP_1,   // 只與地面/靜態物碰撞
-                    ));
-            }
-
-            // TODO: 掉落物品、經驗值等
+            handle_enemy_death(
+                &mut commands,
+                event,
+                enemy_transform,
+                player_entity,
+                &all_enemies_query,
+                &mut killcam,
+                &mut ragdoll_tracker,
+                &blood_visuals,
+                current_time,
+            );
         }
     }
 }
@@ -592,6 +808,37 @@ pub fn ragdoll_update_system(
     }
 }
 
+// === 布娃娃視覺輔助函數 ===
+
+/// 計算布娃娃閃爍可見性
+#[inline]
+fn calculate_ragdoll_blink_visibility(ragdoll: &Ragdoll) -> Option<bool> {
+    let fade_start = ragdoll.max_lifetime - RAGDOLL_FADE_OFFSET;
+    if ragdoll.lifetime <= fade_start {
+        return None;
+    }
+
+    let fade_progress = (ragdoll.lifetime - fade_start) / RAGDOLL_FADE_OFFSET;
+    let blink_rate = RAGDOLL_BLINK_BASE_RATE + fade_progress * RAGDOLL_BLINK_ACCELERATION;
+    Some((ragdoll.lifetime * blink_rate).sin() > 0.0)
+}
+
+/// 設置子實體可見性
+#[inline]
+fn set_children_visibility(
+    children: &Children,
+    visible: bool,
+    material_query: &mut Query<&mut Visibility>,
+) {
+    let visibility_value = if visible { Visibility::Inherited } else { Visibility::Hidden };
+
+    for child in children.iter() {
+        if let Ok(mut visibility) = material_query.get_mut(child) {
+            *visibility = visibility_value;
+        }
+    }
+}
+
 /// 布娃娃視覺效果系統
 /// 處理布娃娃的視覺淡出效果
 pub fn ragdoll_visual_system(
@@ -599,25 +846,8 @@ pub fn ragdoll_visual_system(
     mut material_query: Query<&mut Visibility>,
 ) {
     for (ragdoll, children) in ragdoll_query.iter() {
-        // 在最後一段時間開始淡出（通過閃爍實現）
-        let fade_start = ragdoll.max_lifetime - RAGDOLL_FADE_OFFSET;
-        if ragdoll.lifetime > fade_start {
-            let fade_progress = (ragdoll.lifetime - fade_start) / RAGDOLL_FADE_OFFSET;
-            // 閃爍頻率隨時間增加
-            let blink_rate = RAGDOLL_BLINK_BASE_RATE + fade_progress * RAGDOLL_BLINK_ACCELERATION;
-            let visible = (ragdoll.lifetime * blink_rate).sin() > 0.0;
-
-            // 遍歷所有子實體設置可見性
-            for child in children.iter() {
-                if let Ok(mut visibility) = material_query.get_mut(child) {
-                    *visibility = if visible {
-                        Visibility::Inherited
-                    } else {
-                        Visibility::Hidden
-                    };
-                }
-            }
-        }
+        let Some(visible) = calculate_ragdoll_blink_visibility(ragdoll) else { continue };
+        set_children_visibility(children, visible, &mut material_query);
     }
 }
 
@@ -723,6 +953,33 @@ fn spawn_floating_damage_number(
 #[derive(Component)]
 pub struct DamageNumberBillboard;
 
+// === 浮動傷害數字輔助函數 ===
+
+/// 計算 Billboard 旋轉
+#[inline]
+fn calculate_billboard_rotation(transform_pos: Vec3, camera_pos: Option<Vec3>) -> Option<Quat> {
+    let cam_pos = camera_pos?;
+    let direction = cam_pos - transform_pos;
+
+    if direction.length_squared() <= 0.001 {
+        return None;
+    }
+
+    Some(Quat::from_rotation_arc(Vec3::NEG_Z, direction.normalize()))
+}
+
+/// 取得傷害數字的基礎顏色
+#[inline]
+fn get_damage_number_color(is_headshot: bool, damage: f32) -> Color {
+    if is_headshot {
+        HEADSHOT_NUMBER_COLOR
+    } else if damage >= 50.0 {
+        CRITICAL_NUMBER_COLOR
+    } else {
+        DAMAGE_NUMBER_COLOR
+    }
+}
+
 /// 浮動傷害數字更新系統
 /// 處理上浮動畫、縮放變化和淡出效果
 pub fn floating_damage_number_update_system(
@@ -738,12 +995,9 @@ pub fn floating_damage_number_update_system(
     mut damage_tracker: ResMut<FloatingDamageTracker>,
 ) {
     let dt = time.delta_secs();
-
-    // 取得攝影機位置（用於 Billboard 效果）
     let camera_pos = camera_query.single().map(|t| t.translation).ok();
 
     for (entity, mut damage, mut transform, mut text_color) in damage_query.iter_mut() {
-        // 更新生命時間
         damage.lifetime += dt;
 
         // 檢查是否過期
@@ -755,39 +1009,21 @@ pub fn floating_damage_number_update_system(
             continue;
         }
 
-        // 更新位置（向上漂浮）
+        // 更新位置
         let y_offset = damage.y_offset();
-        transform.translation = damage.start_position
-            + Vec3::new(damage.horizontal_offset, y_offset, 0.0);
+        transform.translation = damage.start_position + Vec3::new(damage.horizontal_offset, y_offset, 0.0);
 
-        // Billboard 效果：讓文字面向攝影機
-        if let Some(cam_pos) = camera_pos {
-            let direction = cam_pos - transform.translation;
-            if direction.length_squared() > 0.001 {
-                let look_rotation = Quat::from_rotation_arc(
-                    Vec3::NEG_Z,
-                    direction.normalize(),
-                );
-                transform.rotation = look_rotation;
-            }
+        // Billboard 效果
+        if let Some(rotation) = calculate_billboard_rotation(transform.translation, camera_pos) {
+            transform.rotation = rotation;
         }
 
-        // 更新縮放（彈出效果）
-        let scale = damage.scale() * 0.02;  // 基礎縮放 0.02
-        transform.scale = Vec3::splat(scale);
+        // 更新縮放
+        transform.scale = Vec3::splat(damage.scale() * 0.02);
 
-        // 更新透明度（淡出效果）
-        let alpha = damage.alpha();
-        let base_color = if damage.is_headshot {
-            HEADSHOT_NUMBER_COLOR
-        } else if damage.damage >= 50.0 {
-            CRITICAL_NUMBER_COLOR
-        } else {
-            DAMAGE_NUMBER_COLOR
-        };
-
-        // 創建帶透明度的顏色
-        text_color.0 = base_color.with_alpha(alpha);
+        // 更新顏色和透明度
+        let base_color = get_damage_number_color(damage.is_headshot, damage.damage);
+        text_color.0 = base_color.with_alpha(damage.alpha());
     }
 }
 
@@ -855,23 +1091,29 @@ pub fn hit_reaction_knockback_system(
     }
 }
 
-/// 敵人受傷反應擊退系統（使用 AiMovement）
+/// 應用擊退效果到 Transform（共用邏輯）
+#[inline]
+fn apply_knockback_to_transform(reaction: &HitReaction, transform: &mut Transform, delta: f32) {
+    let knockback = reaction.get_knockback_velocity();
+    if knockback.length_squared() <= 0.001 {
+        return;
+    }
+
+    transform.translation += knockback * delta;
+    // 確保不會掉到地面以下
+    if transform.translation.y < 0.0 {
+        transform.translation.y = 0.0;
+    }
+}
+
+/// 敵人受傷反應擊退系統
 pub fn enemy_hit_reaction_knockback_system(
     time: Res<Time>,
     mut query: Query<(&HitReaction, &mut Transform), (With<Enemy>, Without<Ragdoll>)>,
 ) {
     let delta = time.delta_secs();
-
     for (reaction, mut transform) in query.iter_mut() {
-        let knockback = reaction.get_knockback_velocity();
-        if knockback.length_squared() > 0.001 {
-            // 直接移動位置
-            transform.translation += knockback * delta;
-            // 確保不會掉到地面以下
-            if transform.translation.y < 0.0 {
-                transform.translation.y = 0.0;
-            }
-        }
+        apply_knockback_to_transform(reaction, &mut transform, delta);
     }
 }
 
@@ -881,17 +1123,8 @@ pub fn pedestrian_hit_reaction_knockback_system(
     mut query: Query<(&HitReaction, &mut Transform), (With<Pedestrian>, Without<Ragdoll>)>,
 ) {
     let delta = time.delta_secs();
-
     for (reaction, mut transform) in query.iter_mut() {
-        let knockback = reaction.get_knockback_velocity();
-        if knockback.length_squared() > 0.001 {
-            // 直接移動位置
-            transform.translation += knockback * delta;
-            // 確保不會掉到地面以下
-            if transform.translation.y < 0.0 {
-                transform.translation.y = 0.0;
-            }
-        }
+        apply_knockback_to_transform(reaction, &mut transform, delta);
     }
 }
 
@@ -1038,7 +1271,7 @@ pub fn armor_shard_update_system(
 
         // 更新旋轉
         let rotation_delta = Quat::from_euler(
-            bevy::math::EulerRot::XYZ,
+            EulerRot::XYZ,
             shard.angular_velocity.x * dt,
             shard.angular_velocity.y * dt,
             shard.angular_velocity.z * dt,

@@ -18,6 +18,19 @@ fn wanted_level_with_heat(heat: f32) -> WantedLevel {
     level
 }
 
+/// 驗證切片中所有變體相等性（自身相等，其他不相等）
+fn assert_variants_distinct<T: PartialEq + std::fmt::Debug>(variants: &[T]) {
+    for (i, v1) in variants.iter().enumerate() {
+        for (j, v2) in variants.iter().enumerate() {
+            if i == j {
+                assert_eq!(v1, v2);
+            } else {
+                assert_ne!(v1, v2);
+            }
+        }
+    }
+}
+
 // ============================================================================
 // WantedLevel 測試
 // ============================================================================
@@ -106,8 +119,8 @@ fn test_cooldown_duration() {
     assert_eq!(wanted_level_with_heat(20.0).cooldown_duration(), 10.0);
     assert_eq!(wanted_level_with_heat(40.0).cooldown_duration(), 15.0);
     assert_eq!(wanted_level_with_heat(60.0).cooldown_duration(), 20.0);
-    assert_eq!(wanted_level_with_heat(80.0).cooldown_duration(), 30.0);
-    assert_eq!(wanted_level_with_heat(100.0).cooldown_duration(), 45.0);
+    assert_eq!(wanted_level_with_heat(80.0).cooldown_duration(), 40.0);  // 4星：提高消退時間
+    assert_eq!(wanted_level_with_heat(100.0).cooldown_duration(), 60.0); // 5星：提高消退時間
 }
 
 // ============================================================================
@@ -128,7 +141,7 @@ fn test_police_config_default() {
     assert_eq!(config.run_speed, 6.0);
     assert_eq!(config.damage, 15.0);
     assert_eq!(config.attack_cooldown, 1.5);
-    assert_eq!(config.base_hit_chance, 0.5);
+    assert_eq!(config.base_hit_chance, 0.28);
 }
 
 #[test]
@@ -180,16 +193,7 @@ fn test_police_state_variants() {
         PoliceState::Returning,
     ];
 
-    // 確保所有狀態都不相等（除了自身）
-    for (i, s1) in states.iter().enumerate() {
-        for (j, s2) in states.iter().enumerate() {
-            if i == j {
-                assert_eq!(s1, s2);
-            } else {
-                assert_ne!(s1, s2);
-            }
-        }
-    }
+    assert_variants_distinct(&states);
 }
 
 // ============================================================================
@@ -210,15 +214,7 @@ fn test_police_type_variants() {
         PoliceType::Vehicular,
     ];
 
-    for (i, t1) in types.iter().enumerate() {
-        for (j, t2) in types.iter().enumerate() {
-            if i == j {
-                assert_eq!(t1, t2);
-            } else {
-                assert_ne!(t1, t2);
-            }
-        }
-    }
+    assert_variants_distinct(&types);
 }
 
 // ============================================================================

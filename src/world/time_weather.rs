@@ -820,6 +820,40 @@ pub fn spawn_rain_puddles(
     });
 }
 
+/// 處理水坑乾涸邏輯，回傳是否應該移除
+fn handle_puddle_drying(
+    puddle: &mut RainPuddle,
+    transform: &mut Transform,
+    dt: f32,
+) -> bool {
+    puddle.lifetime += dt;
+
+    // 根據生命時間縮小水坑
+    let half_lifetime = puddle.max_lifetime * 0.5;
+    if puddle.lifetime > half_lifetime {
+        let shrink_progress = (puddle.lifetime - half_lifetime) / half_lifetime;
+        let scale_factor = (1.0 - shrink_progress).max(0.1);
+        transform.scale.x = puddle.size * scale_factor;
+        transform.scale.z = puddle.size * scale_factor * 0.8;
+    }
+
+    // 回傳是否應該消失
+    puddle.lifetime >= puddle.max_lifetime
+}
+
+/// 清理水坑父實體
+fn cleanup_puddle_system(
+    commands: &mut Commands,
+    puddle_system_query: &Query<Entity, With<PuddleSystem>>,
+) {
+    for entity in puddle_system_query.iter() {
+        if let Ok(mut entity_commands) = commands.get_entity(entity) {
+            entity_commands.despawn();
+            info!("💧 水坑已乾涸");
+        }
+    }
+}
+
 /// 更新雨水積水（雨停後漸漸消失）
 pub fn update_rain_puddles(
     mut commands: Commands,
@@ -833,37 +867,17 @@ pub fn update_rain_puddles(
 
     for (entity, mut puddle, mut transform) in puddle_query.iter_mut() {
         if is_raining {
-            // 雨天：重置生命時間
             puddle.lifetime = 0.0;
-        } else {
-            // 非雨天：開始計時消失
-            puddle.lifetime += dt;
-
-            // 根據生命時間縮小水坑
-            if puddle.lifetime > puddle.max_lifetime * 0.5 {
-                let shrink_progress = (puddle.lifetime - puddle.max_lifetime * 0.5) / (puddle.max_lifetime * 0.5);
-                let scale_factor = (1.0 - shrink_progress).max(0.1);
-                transform.scale.x = puddle.size * scale_factor;
-                transform.scale.z = puddle.size * scale_factor * 0.8;
-            }
-
-            // 完全消失
-            if puddle.lifetime >= puddle.max_lifetime {
-                if let Ok(mut entity_commands) = commands.get_entity(entity) {
-                    entity_commands.despawn();
-                }
+        } else if handle_puddle_drying(&mut puddle, &mut transform, dt) {
+            if let Ok(mut entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn();
             }
         }
     }
 
     // 如果所有水坑都消失了，清理父實體
     if puddle_query.is_empty() && !is_raining {
-        for entity in puddle_system_query.iter() {
-            if let Ok(mut entity_commands) = commands.get_entity(entity) {
-                entity_commands.despawn();
-                info!("💧 水坑已乾涸");
-            }
-        }
+        cleanup_puddle_system(&mut commands, &puddle_system_query);
     }
 }
 

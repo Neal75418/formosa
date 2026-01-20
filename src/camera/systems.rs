@@ -16,6 +16,58 @@ const CAMERA_FOLLOW_SPEED: f32 = 3.0;
 #[derive(Component)]
 pub struct GameCamera;
 
+// === 攝影機輸入輔助函數 ===
+
+/// 處理鍵盤旋轉（目前未使用，Q/E 改為斜向移動）
+#[inline]
+fn handle_keyboard_rotation(_keyboard: &ButtonInput<KeyCode>, _camera_settings: &mut CameraSettings, _delta_secs: f32) {
+    // Q/E 已改為玩家斜向移動，不再旋轉攝影機
+    // 保留函數以維持 API 相容性
+}
+
+/// 檢查當前武器是否為拳頭（拳頭不能瞄準）
+#[inline]
+fn check_is_fist_weapon(player_query: &Query<&WeaponInventory, With<Player>>) -> bool {
+    player_query
+        .single()
+        .ok()
+        .and_then(|inv| inv.current_weapon())
+        .map(|w| w.stats.weapon_type == WeaponType::Fist)
+        .unwrap_or(false)
+}
+
+/// 處理滑鼠 Y 軸移動（pitch 或距離調整）
+#[inline]
+fn handle_mouse_y_axis(camera_settings: &mut CameraSettings, delta_y: f32, is_aiming: bool) {
+    if is_aiming {
+        // 瞄準時：上下移動 = pitch 俯仰角
+        camera_settings.pitch += delta_y * camera_settings.sensitivity;
+    } else {
+        // 非瞄準時：上下移動 = 調整距離
+        camera_settings.distance += delta_y * 0.1;
+        camera_settings.distance = camera_settings.distance.clamp(5.0, 80.0);
+    }
+}
+
+/// 處理滑鼠移動事件
+#[inline]
+fn handle_mouse_motion(
+    mouse_motion: &mut MessageReader<bevy::input::mouse::MouseMotion>,
+    camera_settings: &mut CameraSettings,
+    is_aiming: bool,
+    both_mouse_buttons: bool,
+) {
+    for event in mouse_motion.read() {
+        // 左右移動 = yaw 旋轉（始終有效）
+        camera_settings.yaw -= event.delta.x * camera_settings.sensitivity;
+
+        // 雙鍵模式（直走）時，不處理 Y 軸
+        if !both_mouse_buttons {
+            handle_mouse_y_axis(camera_settings, event.delta.y, is_aiming);
+        }
+    }
+}
+
 /// 攝影機輸入
 pub fn camera_input(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -27,60 +79,30 @@ pub fn camera_input(
     time: Res<Time>,
     player_query: Query<&WeaponInventory, With<Player>>,
 ) {
-    // Q = 左旋視角，E = 右旋視角
-    let rotation_speed = 2.5;
-    if keyboard.pressed(KeyCode::KeyQ) {
-        camera_settings.yaw += rotation_speed * time.delta_secs();
-    }
-    if keyboard.pressed(KeyCode::KeyE) {
-        camera_settings.yaw -= rotation_speed * time.delta_secs();
-    }
+    // 鍵盤旋轉
+    handle_keyboard_rotation(&keyboard, &mut camera_settings, time.delta_secs());
 
-    // 檢查當前武器是否為拳頭（拳頭不能瞄準）
-    let is_fist = player_query
-        .single()
-        .ok()
-        .and_then(|inv| inv.current_weapon())
-        .map(|w| w.stats.weapon_type == WeaponType::Fist)
-        .unwrap_or(false);
-
-    // 右鍵 = 瞄準模式（拳頭狀態下禁用）
+    // 檢查武器和瞄準狀態
+    let is_fist = check_is_fist_weapon(&player_query);
     let is_aiming = !is_fist && mouse_button.pressed(MouseButton::Right);
     combat_state.is_aiming = is_aiming;
 
     // 滑鼠按鍵狀態
     let left_pressed = mouse_button.pressed(MouseButton::Left);
     let right_pressed = mouse_button.pressed(MouseButton::Right);
-    let any_mouse_button = left_pressed || right_pressed;
-    let both_mouse_buttons = left_pressed && right_pressed;
 
-    if any_mouse_button {
-        for event in mouse_motion.read() {
-            // 左右移動 = yaw 旋轉（始終有效）
-            camera_settings.yaw -= event.delta.x * camera_settings.sensitivity;
-
-            // 雙鍵模式（直走）時，不處理 Y 軸，避免誤觸縮放
-            if !both_mouse_buttons {
-                if is_aiming {
-                    // 瞄準時：上下移動 = pitch 俯仰角
-                    camera_settings.pitch += event.delta.y * camera_settings.sensitivity;
-                } else {
-                    // 非瞄準時：上下移動 = 調整距離
-                    camera_settings.distance += event.delta.y * 0.1;
-                    camera_settings.distance = camera_settings.distance.clamp(5.0, 80.0);
-                }
-            }
-        }
+    if left_pressed || right_pressed {
+        handle_mouse_motion(&mut mouse_motion, &mut camera_settings, is_aiming, left_pressed && right_pressed);
     } else {
         mouse_motion.clear();
     }
 
-    // 限制俯仰角範圍（避免翻轉）
+    // 限制俯仰角範圍
     camera_settings.pitch = camera_settings.pitch.clamp(-0.3, 1.2);
 
-    // 滾輪縮放（更精細控制）
+    // 滾輪縮放
     for event in scroll.read() {
-        camera_settings.distance -= event.y * 0.4;  // 從 0.8 降低到 0.4
+        camera_settings.distance -= event.y * 0.4;
         camera_settings.distance = camera_settings.distance.clamp(5.0, 80.0);
     }
 }
@@ -170,7 +192,7 @@ pub fn recoil_and_shake_update_system(
     time: Res<Time>,
     mut recoil_state: ResMut<RecoilState>,
     mut camera_shake: ResMut<CameraShake>,
-    player_query: Query<&crate::combat::WeaponInventory, With<Player>>,
+    player_query: Query<&WeaponInventory, With<Player>>,
 ) {
     let dt = time.delta_secs();
 

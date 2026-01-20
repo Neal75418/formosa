@@ -584,6 +584,85 @@ pub fn handle_throw_event_system(
     }
 }
 
+// === 爆炸物更新輔助函數 ===
+
+/// 更新手榴彈：倒數計時並引爆
+/// 返回 true 表示已引爆需要銷毀實體
+#[inline]
+fn update_grenade(
+    explosive: &mut Explosive,
+    delta_secs: f32,
+    position: Vec3,
+    explosion_events: &mut MessageWriter<ExplosionEvent>,
+) -> bool {
+    if !explosive.armed {
+        return false;
+    }
+
+    explosive.fuse_timer -= delta_secs;
+    if explosive.fuse_timer > 0.0 {
+        return false;
+    }
+
+    // 引爆
+    explosion_events.write(ExplosionEvent {
+        position,
+        radius: GRENADE_EXPLOSION_RADIUS,
+        max_damage: GRENADE_DAMAGE,
+        explosive_type: ExplosiveType::Grenade,
+        source: explosive.thrower,
+    });
+    true
+}
+
+/// 更新燃燒瓶：撞擊即爆
+/// 返回 true 表示已引爆需要銷毀實體
+#[inline]
+fn update_molotov(
+    explosive: &Explosive,
+    colliding: Option<&CollidingEntities>,
+    position: Vec3,
+    explosion_events: &mut MessageWriter<ExplosionEvent>,
+) -> bool {
+    if !explosive.armed {
+        return false;
+    }
+
+    let Some(colliding) = colliding else { return false };
+    if colliding.is_empty() {
+        return false;
+    }
+
+    // 撞擊地面或物體
+    explosion_events.write(ExplosionEvent {
+        position,
+        radius: MOLOTOV_FIRE_RADIUS,
+        max_damage: MOLOTOV_DPS,
+        explosive_type: ExplosiveType::Molotov,
+        source: explosive.thrower,
+    });
+    true
+}
+
+/// 更新黏性炸彈：檢查並附著到目標
+/// 返回 true 表示已附著，需要移除物理組件
+#[inline]
+fn update_sticky_bomb(
+    explosive: &mut Explosive,
+    colliding: Option<&CollidingEntities>,
+) -> bool {
+    if explosive.attached {
+        return false;
+    }
+
+    let Some(colliding) = colliding else { return false };
+    let Some(attached_entity) = colliding.iter().next() else { return false };
+
+    explosive.attached = true;
+    explosive.attached_to = Some(attached_entity);
+    true
+}
+
 /// 爆炸物更新系統
 pub fn explosive_update_system(
     mut commands: Commands,
@@ -591,56 +670,28 @@ pub fn explosive_update_system(
     mut explosive_query: Query<(Entity, &Transform, &mut Explosive, Option<&CollidingEntities>)>,
     mut explosion_events: MessageWriter<ExplosionEvent>,
 ) {
+    let delta_secs = time.delta_secs();
+
     for (entity, transform, mut explosive, colliding) in &mut explosive_query {
+        let position = transform.translation;
+
         match explosive.explosive_type {
             ExplosiveType::Grenade => {
-                // 倒數計時
-                if explosive.armed {
-                    explosive.fuse_timer -= time.delta_secs();
-                    if explosive.fuse_timer <= 0.0 {
-                        // 引爆
-                        explosion_events.write(ExplosionEvent {
-                            position: transform.translation,
-                            radius: GRENADE_EXPLOSION_RADIUS,
-                            max_damage: GRENADE_DAMAGE,
-                            explosive_type: ExplosiveType::Grenade,
-                            source: explosive.thrower,
-                        });
-                        commands.entity(entity).despawn();
-                    }
+                if update_grenade(&mut explosive, delta_secs, position, &mut explosion_events) {
+                    commands.entity(entity).despawn();
                 }
             }
             ExplosiveType::Molotov => {
-                // 燃燒瓶撞擊即爆
-                if explosive.armed {
-                    if let Some(colliding) = colliding {
-                        if !colliding.is_empty() {
-                            // 撞擊地面或物體
-                            explosion_events.write(ExplosionEvent {
-                                position: transform.translation,
-                                radius: MOLOTOV_FIRE_RADIUS,
-                                max_damage: MOLOTOV_DPS,
-                                explosive_type: ExplosiveType::Molotov,
-                                source: explosive.thrower,
-                            });
-                            commands.entity(entity).despawn();
-                        }
-                    }
+                if update_molotov(&explosive, colliding, position, &mut explosion_events) {
+                    commands.entity(entity).despawn();
                 }
             }
             ExplosiveType::StickyBomb => {
-                // 黏性炸彈：檢查附著
-                if !explosive.attached {
-                    if let Some(colliding) = colliding {
-                        if let Some(attached_entity) = colliding.iter().next() {
-                            explosive.attached = true;
-                            explosive.attached_to = Some(attached_entity);
-                            // 移除物理，附著到目標
-                            commands.entity(entity)
-                                .remove::<RigidBody>()
-                                .remove::<ExternalImpulse>();
-                        }
-                    }
+                if update_sticky_bomb(&mut explosive, colliding) {
+                    // 移除物理，附著到目標
+                    commands.entity(entity)
+                        .remove::<RigidBody>()
+                        .remove::<ExternalImpulse>();
                 }
             }
         }
@@ -714,8 +765,8 @@ pub fn handle_explosion_event_system(
 
                 // 只有沒有障礙物時才造成傷害
                 if !has_obstacle {
-                    // 傷害隨距離衰減
-                    let damage_ratio = 1.0 - (distance / event.radius);
+                    // 傷害隨距離衰減（確保不會為負）
+                    let damage_ratio = (1.0 - (distance / event.radius)).max(0.0);
                     let damage = event.max_damage * damage_ratio;
 
                     damage_events.write(DamageEvent {

@@ -15,6 +15,6 @@ pub enum GameEvent {
 }
 
 /// 事件處理（預留）
-pub fn handle_game_events(mut _events: MessageReader<GameEvent>) {
+pub fn handle_game_events(_events: MessageReader<GameEvent>) {
     // 未來：處理從伺服器來的事件
 }

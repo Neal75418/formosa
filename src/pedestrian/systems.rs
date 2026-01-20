@@ -12,7 +12,7 @@ use std::f32::consts::PI;
 
 use crate::ai::{PatrolPath, AiMovement};
 use crate::player::Player;
-use crate::core::{COLLISION_GROUP_CHARACTER, VehicleSpatialHash, PedestrianSpatialHash};
+use crate::core::{COLLISION_GROUP_CHARACTER, VehicleSpatialHash, PedestrianSpatialHash, GameState, WeatherState, WeatherType};
 use crate::combat::{CombatState, WeaponInventory, WeaponType, Health, Damageable, HitReaction};
 use crate::vehicle::Vehicle;
 use crate::wanted::{CrimeEvent, WitnessReport};
@@ -23,7 +23,7 @@ use super::components::{
     HitByVehicle, PathfindingGrid, AStarPath, DailyBehavior, BehaviorType,
     PointsOfInterest, PointOfInterestType,
     WitnessState, WitnessedCrime, ShelterSeeker,
-    PanicWaveManager, PanicState,
+    PanicWaveManager, PanicState, PanicWave,
 };
 
 // ============================================================================
@@ -391,6 +391,40 @@ fn spawn_pedestrian(
 // 移動系統
 // ============================================================================
 
+// === 移動輔助函數 ===
+
+/// 根據狀態獲取移動速度
+fn get_pedestrian_speed(state: PedState, config: &PedestrianConfig) -> f32 {
+    match state {
+        PedState::Fleeing => config.flee_speed,
+        PedState::Walking => config.walk_speed,
+        PedState::Idle | PedState::CallingPolice => 0.0,
+    }
+}
+
+/// 根據狀態獲取移動目標
+fn get_movement_target(
+    state: &PedestrianState,
+    current_pos: Vec3,
+    patrol: &PatrolPath,
+) -> Option<Vec3> {
+    if state.state == PedState::Fleeing {
+        if let Some(threat_pos) = state.last_threat_pos {
+            let away_dir = (current_pos - threat_pos).normalize_or_zero();
+            let flee_target = current_pos + away_dir * 20.0;
+            // 將逃跑目標限制在市區範圍內
+            // 地圖邊界：X: -100 ~ 80, Z: -80 ~ 50
+            let clamped = Vec3::new(
+                flee_target.x.clamp(-95.0, 75.0),  // 留5公尺邊界緩衝
+                flee_target.y,
+                flee_target.z.clamp(-75.0, 45.0),  // 留5公尺邊界緩衝
+            );
+            return Some(clamped);
+        }
+    }
+    patrol.current_waypoint()
+}
+
 /// 行人移動系統
 pub fn pedestrian_movement_system(
     time: Res<Time>,
@@ -407,39 +441,15 @@ pub fn pedestrian_movement_system(
     let dt = time.delta_secs();
 
     for (_ped, state, mut transform, mut patrol, movement, mut controller) in ped_query.iter_mut() {
-        // 根據狀態決定速度
-        let speed = match state.state {
-            PedState::Fleeing => config.flee_speed,
-            PedState::Walking => config.walk_speed,
-            PedState::Idle => 0.0,
-            PedState::CallingPolice => 0.0,  // 報警時站立不動
-        };
-
+        let speed = get_pedestrian_speed(state.state, &config);
         if speed <= 0.0 {
             continue;
         }
 
-        // 取得目標點
-        let target = match state.state {
-            PedState::Fleeing => {
-                // 逃跑時朝遠離威脅的方向跑
-                if let Some(threat_pos) = state.last_threat_pos {
-                    let away_dir = (transform.translation - threat_pos).normalize_or_zero();
-                    Some(transform.translation + away_dir * 20.0)
-                } else {
-                    patrol.current_waypoint()
-                }
-            }
-            _ => patrol.current_waypoint(),
-        };
-
-        let Some(target_pos) = target else { continue };
-
-        // 計算移動方向
         let current_pos = transform.translation;
-        let direction = (target_pos - current_pos).normalize_or_zero();
+        let Some(target_pos) = get_movement_target(state, current_pos, &patrol) else { continue };
 
-        // 忽略 Y 軸差異（只在水平面移動）
+        let direction = (target_pos - current_pos).normalize_or_zero();
         let flat_direction = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
 
         if flat_direction.length_squared() < 0.001 {
@@ -450,18 +460,13 @@ pub fn pedestrian_movement_system(
         let target_rotation = Quat::from_rotation_y((-flat_direction.x).atan2(-flat_direction.z));
         transform.rotation = transform.rotation.slerp(target_rotation, dt * 5.0);
 
-        // 移動
+        // 移動（加重力）
         let velocity = flat_direction * speed;
-        controller.translation = Some(velocity * dt + Vec3::new(0.0, -9.8 * dt, 0.0)); // 加重力
+        controller.translation = Some(velocity * dt + Vec3::new(0.0, -9.8 * dt, 0.0));
 
         // 檢查是否到達目標
-        let flat_dist = Vec3::new(
-            target_pos.x - current_pos.x,
-            0.0,
-            target_pos.z - current_pos.z,
-        ).length();
-
-        if flat_dist < movement.arrival_threshold && state.state != PedState::Fleeing {
+        let flat_dist_sq = (target_pos.x - current_pos.x).powi(2) + (target_pos.z - current_pos.z).powi(2);
+        if flat_dist_sq < movement.arrival_threshold.powi(2) && state.state != PedState::Fleeing {
             patrol.advance();
         }
     }
@@ -580,23 +585,63 @@ pub fn gunshot_tracking_system(
 // 清理系統
 // ============================================================================
 
-/// 行人消失系統（距離玩家太遠時移除）
+/// 卡住判定的移動閾值（小於此距離視為沒有移動）
+const STUCK_MOVEMENT_THRESHOLD_SQ: f32 = 0.25; // 0.5² 公尺
+/// 卡住超時時間（秒）
+const STUCK_TIMEOUT: f32 = 5.0;
+
+/// 行人消失系統（距離玩家太遠或卡住時移除）
 pub fn pedestrian_despawn_system(
     mut commands: Commands,
+    time: Res<Time>,
     config: Res<PedestrianConfig>,
     player_query: Query<&Transform, With<Player>>,
-    ped_query: Query<(Entity, &Transform), With<Pedestrian>>,
+    mut ped_query: Query<(Entity, &Transform, &mut PedestrianState), With<Pedestrian>>,
 ) {
     let Ok(player_transform) = player_query.single() else { return };
     let player_pos = player_transform.translation;
+    let dt = time.delta_secs();
+
+    // 地圖邊界常數（與 setup.rs 一致）
+    const MAP_MIN_X: f32 = -100.0;  // X_KANGDING
+    const MAP_MAX_X: f32 = 80.0;    // X_ZHONGHUA
+    const MAP_MIN_Z: f32 = -80.0;   // Z_HANKOU
+    const MAP_MAX_Z: f32 = 50.0;    // Z_CHENGDU
 
     // 使用 distance_squared 避免 sqrt
     let despawn_radius_sq = config.despawn_radius * config.despawn_radius;
-    for (entity, transform) in ped_query.iter() {
-        let dist_sq = transform.translation.distance_squared(player_pos);
-        if dist_sq > despawn_radius_sq {
-            // Bevy 0.17: despawn() 會自動移除子實體
+    for (entity, transform, mut state) in ped_query.iter_mut() {
+        let current_pos = transform.translation;
+
+        // 超出地圖邊界，立即移除
+        if current_pos.x < MAP_MIN_X || current_pos.x > MAP_MAX_X
+            || current_pos.z < MAP_MIN_Z || current_pos.z > MAP_MAX_Z
+        {
             commands.entity(entity).despawn();
+            continue;
+        }
+
+        let dist_sq = current_pos.distance_squared(player_pos);
+
+        // 距離太遠，移除
+        if dist_sq > despawn_radius_sq {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        // 卡住檢測：檢查是否在同一位置停留太久
+        let movement_sq = current_pos.distance_squared(state.last_recorded_pos);
+        if movement_sq < STUCK_MOVEMENT_THRESHOLD_SQ {
+            state.stuck_timer += dt;
+            if state.stuck_timer > STUCK_TIMEOUT {
+                // 卡住太久，移除
+                commands.entity(entity).despawn();
+                continue;
+            }
+        } else {
+            // 有移動，重置計時器並更新位置
+            state.stuck_timer = 0.0;
+            state.last_recorded_pos = current_pos;
         }
     }
 }
@@ -604,6 +649,51 @@ pub fn pedestrian_despawn_system(
 // ============================================================================
 // 行走動畫系統
 // ============================================================================
+
+// === 動畫輔助函數 ===
+
+/// 計算行人動畫目標速度
+fn get_animation_target_speed(state: PedState) -> f32 {
+    match state {
+        PedState::Fleeing => 12.0,
+        PedState::Walking => 6.0,
+        PedState::Idle | PedState::CallingPolice => 0.0,
+    }
+}
+
+/// 更新腿部動畫
+fn update_leg_transform(transform: &mut Transform, anim: &WalkingAnimation, is_left: bool) {
+    let base_x = if is_left { -0.08 } else { 0.08 };
+    let base_y = -0.25 - 0.225; // torso_height/2 + leg_height/2
+
+    if anim.speed > 0.1 {
+        let phase_offset = if is_left { 0.0 } else { PI };
+        let swing = (anim.phase + phase_offset).sin() * 0.4;
+
+        transform.translation = Vec3::new(base_x, base_y, swing * 0.15);
+        transform.rotation = Quat::from_rotation_x(swing);
+    } else {
+        transform.translation = Vec3::new(base_x, base_y, 0.0);
+        transform.rotation = Quat::IDENTITY;
+    }
+}
+
+/// 更新手臂動畫
+fn update_arm_transform(transform: &mut Transform, anim: &WalkingAnimation, is_left: bool) {
+    let base_x = if is_left { -0.22 } else { 0.22 };
+    let base_z_rot = if is_left { 0.15 } else { -0.15 };
+
+    if anim.speed > 0.1 {
+        let phase_offset = if is_left { PI } else { 0.0 };
+        let swing = (anim.phase + phase_offset).sin() * 0.3;
+
+        transform.translation = Vec3::new(base_x, 0.125, swing * 0.1);
+        transform.rotation = Quat::from_rotation_z(base_z_rot) * Quat::from_rotation_x(swing * 0.5);
+    } else {
+        transform.translation = Vec3::new(base_x, 0.125, 0.0);
+        transform.rotation = Quat::from_rotation_z(base_z_rot);
+    }
+}
 
 /// 行走動畫更新系統
 pub fn pedestrian_walking_animation_system(
@@ -616,13 +706,7 @@ pub fn pedestrian_walking_animation_system(
 
     // 更新每個行人的動畫相位
     for (state, mut anim) in ped_query.iter_mut() {
-        // 根據狀態決定動畫速度
-        let target_speed = match state.state {
-            PedState::Fleeing => 12.0,        // 快速擺動
-            PedState::Walking => 6.0,         // 正常擺動
-            PedState::Idle => 0.0,            // 不動
-            PedState::CallingPolice => 0.0,   // 報警時站立不動
-        };
+        let target_speed = get_animation_target_speed(state.state);
 
         // 平滑過渡動畫速度
         anim.speed = anim.speed + (target_speed - anim.speed) * dt * 5.0;
@@ -636,56 +720,14 @@ pub fn pedestrian_walking_animation_system(
 
     // 更新腿部擺動
     for (parent, leg, mut transform) in leg_query.iter_mut() {
-        if let Ok((_, anim)) = ped_query.get(parent.get()) {
-            if anim.speed > 0.1 {
-                // 左右腿相位相反
-                let phase_offset = if leg.is_left { 0.0 } else { PI };
-                let swing = (anim.phase + phase_offset).sin() * 0.4; // 擺動幅度約 23 度
-
-                // 基礎位置
-                let base_x = if leg.is_left { -0.08 } else { 0.08 };
-                let base_y = -0.25 - 0.225; // torso_height/2 + leg_height/2
-
-                // 應用擺動
-                transform.translation.z = swing * 0.15;  // 前後移動
-                transform.rotation = Quat::from_rotation_x(swing);
-                transform.translation.x = base_x;
-                transform.translation.y = base_y;
-            } else {
-                // 停止時恢復原位
-                let base_x = if leg.is_left { -0.08 } else { 0.08 };
-                transform.translation = Vec3::new(base_x, -0.25 - 0.225, 0.0);
-                transform.rotation = Quat::IDENTITY;
-            }
-        }
+        let Ok((_, anim)) = ped_query.get(parent.get()) else { continue };
+        update_leg_transform(&mut transform, anim, leg.is_left);
     }
 
     // 更新手臂擺動（與腿相反）
     for (parent, arm, mut transform) in arm_query.iter_mut() {
-        if let Ok((_, anim)) = ped_query.get(parent.get()) {
-            if anim.speed > 0.1 {
-                // 手臂與同側腿相反
-                let phase_offset = if arm.is_left { PI } else { 0.0 };
-                let swing = (anim.phase + phase_offset).sin() * 0.3; // 手臂擺動幅度較小
-
-                // 基礎位置和旋轉
-                let base_x = if arm.is_left { -0.22 } else { 0.22 };
-                let base_z_rot = if arm.is_left { 0.15 } else { -0.15 };
-
-                // 應用擺動
-                transform.translation.z = swing * 0.1;  // 前後移動
-                transform.rotation = Quat::from_rotation_z(base_z_rot)
-                    * Quat::from_rotation_x(swing * 0.5);
-                transform.translation.x = base_x;
-                transform.translation.y = 0.125; // torso_height/4
-            } else {
-                // 停止時恢復原位
-                let base_x = if arm.is_left { -0.22 } else { 0.22 };
-                let base_z_rot = if arm.is_left { 0.15 } else { -0.15 };
-                transform.translation = Vec3::new(base_x, 0.125, 0.0);
-                transform.rotation = Quat::from_rotation_z(base_z_rot);
-            }
-        }
+        let Ok((_, anim)) = ped_query.get(parent.get()) else { continue };
+        update_arm_transform(&mut transform, anim, arm.is_left);
     }
 }
 
@@ -735,6 +777,48 @@ pub fn update_pedestrian_spatial_hash_system(
 // 車輛碰撞系統（使用空間哈希優化）
 // ============================================================================
 
+// === 車輛碰撞輔助函數 ===
+
+/// 處理行人被車輛撞擊
+fn apply_vehicle_hit(
+    commands: &mut Commands,
+    ped_entity: Entity,
+    state: &mut PedestrianState,
+    ped_pos: Vec3,
+    vehicle_pos: Vec3,
+    speed: f32,
+    current_time: f32,
+) {
+    let impact_dir = (ped_pos - vehicle_pos).normalize_or_zero();
+
+    commands.entity(ped_entity).insert(HitByVehicle {
+        impact_direction: impact_dir,
+        impact_force: speed * 50.0,
+        hit_time: current_time,
+    });
+
+    state.fear_level = 1.0;
+    state.state = PedState::Fleeing;
+    state.flee_timer = 10.0;
+    state.last_threat_pos = Some(vehicle_pos);
+}
+
+/// 發送車輛撞人犯罪事件
+fn send_vehicle_hit_crime(
+    crime_events: &mut MessageWriter<CrimeEvent>,
+    ped_entity: Entity,
+    ped_pos: Vec3,
+    speed: f32,
+    health: &Health,
+) {
+    let fatal = speed > 15.0 || health.current < speed * 5.0;
+    crime_events.write(CrimeEvent::VehicleHit {
+        victim: ped_entity,
+        position: ped_pos,
+        fatal,
+    });
+}
+
 /// 車輛碰撞偵測系統（O(n) 優化版）
 ///
 /// 使用空間哈希將 O(行人×車輛) 降為 O(行人)。
@@ -742,67 +826,42 @@ pub fn update_pedestrian_spatial_hash_system(
 pub fn pedestrian_vehicle_collision_system(
     mut commands: Commands,
     time: Res<Time>,
-    game_state: Res<crate::core::GameState>,
+    game_state: Res<GameState>,
     vehicle_hash: Res<VehicleSpatialHash>,
     vehicle_velocity_query: Query<&Velocity, With<Vehicle>>,
-    // Without<HitByVehicle> 過濾已經被撞的行人，防止重複處理
     mut ped_query: Query<
-        (Entity, &Transform, &mut PedestrianState, &crate::combat::Health),
+        (Entity, &Transform, &mut PedestrianState, &Health),
         (With<Pedestrian>, Without<HitByVehicle>),
     >,
     mut crime_events: MessageWriter<CrimeEvent>,
 ) {
     let current_time = time.elapsed_secs();
     let player_vehicle = game_state.current_vehicle;
-
-    // 碰撞檢測半徑（略大於實際碰撞距離以確保精確性）
     const QUERY_RADIUS: f32 = 3.0;
+    const MIN_HIT_SPEED: f32 = 3.0;
 
     for (ped_entity, ped_transform, mut state, health) in ped_query.iter_mut() {
         let ped_pos = ped_transform.translation;
 
-        // 使用空間哈希查詢附近車輛（O(1) 查詢）
         for (vehicle_entity, vehicle_pos, dist_sq) in vehicle_hash.query_radius(ped_pos, QUERY_RADIUS) {
-            // 檢查是否在碰撞範圍內
-            if dist_sq < VEHICLE_COLLISION_SQ {
-                // 取得車輛速度
-                let Ok(velocity) = vehicle_velocity_query.get(vehicle_entity) else {
-                    continue;
-                };
-                let speed = velocity.linvel.length();
-
-                // 只有在車輛有足夠速度時才算撞擊
-                if speed > 3.0 {
-                    // 計算撞擊方向
-                    let impact_dir = (ped_pos - vehicle_pos).normalize_or_zero();
-
-                    // 添加被撞標記
-                    commands.entity(ped_entity).insert(HitByVehicle {
-                        impact_direction: impact_dir,
-                        impact_force: speed * 50.0,
-                        hit_time: current_time,
-                    });
-
-                    // 立即進入恐慌狀態
-                    state.fear_level = 1.0;
-                    state.state = PedState::Fleeing;
-                    state.flee_timer = 10.0;
-                    state.last_threat_pos = Some(vehicle_pos);
-
-                    // === 犯罪事件：如果是玩家駕駛的車輛撞人 ===
-                    if Some(vehicle_entity) == player_vehicle {
-                        let fatal = speed > 15.0 || health.current < speed * 5.0;
-                        crime_events.write(CrimeEvent::VehicleHit {
-                            victim: ped_entity,
-                            position: ped_pos,
-                            fatal,
-                        });
-                    }
-
-                    // 已被撞，跳出內層迴圈
-                    break;
-                }
+            if dist_sq >= VEHICLE_COLLISION_SQ {
+                continue;
             }
+
+            let Ok(velocity) = vehicle_velocity_query.get(vehicle_entity) else { continue };
+            let speed = velocity.linvel.length();
+
+            if speed <= MIN_HIT_SPEED {
+                continue;
+            }
+
+            apply_vehicle_hit(&mut commands, ped_entity, &mut state, ped_pos, vehicle_pos, speed, current_time);
+
+            if Some(vehicle_entity) == player_vehicle {
+                send_vehicle_hit_crime(&mut crime_events, ped_entity, ped_pos, speed, health);
+            }
+
+            break;
         }
     }
 }
@@ -851,57 +910,75 @@ pub fn pedestrian_hit_response_system(
 // A* 尋路系統
 // ============================================================================
 
-/// 初始化 A* 尋路網格
-pub fn setup_pathfinding_grid(mut commands: Commands) {
-    let mut grid = PathfindingGrid::default();
+// === 尋路網格輔助函數 ===
 
-    // 設定建築物區域為不可通行
-    // 這些是大致的建築物位置，需要根據地圖調整
-    let buildings = [
-        // 漢中街兩側建築
-        ((-15, -60), (15, 55)),    // 中央徒步區（可通行）
-        // 西側建築
-        ((-70, -70), (-20, -50)),
-        ((-70, -45), (-20, -25)),
-        ((-70, -20), (-20, 0)),
-        ((-70, 5), (-20, 25)),
-        ((-70, 30), (-20, 60)),
-        // 東側建築
-        ((20, -70), (50, -50)),
-        ((20, -45), (50, -25)),
-        ((20, -20), (50, 0)),
-        ((20, 5), (50, 25)),
-        ((20, 30), (50, 60)),
-    ];
+/// 將世界座標轉換為網格座標
+fn world_to_grid_coords(x: i32, z: i32) -> (usize, usize) {
+    (((x + 70) / 2) as usize, ((z + 70) / 2) as usize)
+}
 
-    // 先將徒步區設為可通行
-    // 然後將建築區域設為不可通行
-    for ((x1, z1), (x2, z2)) in buildings.iter() {
-        for x in *x1..*x2 {
-            for z in *z1..*z2 {
-                let gx = ((x + 70) / 2) as usize;
-                let gz = ((z + 70) / 2) as usize;
-                if gx < grid.width && gz < grid.height {
-                    grid.set_walkable(gx, gz, false);
-                }
+/// 將矩形區域標記為不可通行
+fn mark_area_unwalkable(grid: &mut PathfindingGrid, x1: i32, z1: i32, x2: i32, z2: i32) {
+    for x in x1..x2 {
+        for z in z1..z2 {
+            let (gx, gz) = world_to_grid_coords(x, z);
+            if gx < grid.width && gz < grid.height {
+                grid.set_walkable(gx, gz, false);
             }
         }
     }
+}
 
-    // 設定道路為可通行
-    // 漢中街徒步區 (X: -15 ~ 15)
-    for x in 27..43 { // (-15+70)/2 ~ (15+70)/2
+/// 將橫向道路標記為可通行
+fn mark_horizontal_road(grid: &mut PathfindingGrid, grid_x_start: usize, grid_x_end: usize) {
+    for x in grid_x_start..grid_x_end {
         for z in 0..grid.height {
             grid.set_walkable(x, z, true);
         }
     }
+}
 
-    // 峨嵋街 (Z: -15 ~ 15)
+/// 將縱向道路標記為可通行
+fn mark_vertical_road(grid: &mut PathfindingGrid, grid_z_start: usize, grid_z_end: usize) {
     for x in 0..grid.width {
-        for z in 27..43 {
+        for z in grid_z_start..grid_z_end {
             grid.set_walkable(x, z, true);
         }
     }
+}
+
+/// 初始化 A* 尋路網格
+pub fn setup_pathfinding_grid(mut commands: Commands) {
+    let mut grid = PathfindingGrid::default();
+
+    // 建築物區域座標 (世界座標)
+    let buildings: &[(i32, i32, i32, i32)] = &[
+        // 漢中街兩側建築（中央徒步區）
+        (-15, -60, 15, 55),
+        // 西側建築
+        (-70, -70, -20, -50),
+        (-70, -45, -20, -25),
+        (-70, -20, -20, 0),
+        (-70, 5, -20, 25),
+        (-70, 30, -20, 60),
+        // 東側建築
+        (20, -70, 50, -50),
+        (20, -45, 50, -25),
+        (20, -20, 50, 0),
+        (20, 5, 50, 25),
+        (20, 30, 50, 60),
+    ];
+
+    // 將建築區域設為不可通行
+    for &(x1, z1, x2, z2) in buildings {
+        mark_area_unwalkable(&mut grid, x1, z1, x2, z2);
+    }
+
+    // 漢中街徒步區 (X: -15 ~ 15) → 網格 27..43
+    mark_horizontal_road(&mut grid, 27, 43);
+
+    // 峨嵋街 (Z: -15 ~ 15) → 網格 27..43
+    mark_vertical_road(&mut grid, 27, 43);
 
     commands.insert_resource(grid);
     commands.insert_resource(PointsOfInterest::setup_ximending());
@@ -1060,11 +1137,201 @@ pub fn daily_behavior_init_system(
     }
 }
 
+// === 日常行為輔助函數 ===
+
+/// 處理逃跑中的行人（釋放庇護點）
+fn handle_fleeing_state(
+    behavior: &mut DailyBehavior,
+    shelter_seeker: &mut ShelterSeeker,
+    pois: &mut PointsOfInterest,
+) {
+    behavior.behavior = BehaviorType::Walking;
+    if shelter_seeker.is_sheltered {
+        if let Some(target) = shelter_seeker.target_shelter {
+            pois.release_shelter(target);
+        }
+        *shelter_seeker = ShelterSeeker::default();
+    }
+}
+
+/// 檢查是否到達庇護點並處理
+fn handle_shelter_arrival(
+    pos: Vec3,
+    shelter_seeker: &mut ShelterSeeker,
+    astar_path: Option<&mut AStarPath>,
+    pois: &mut PointsOfInterest,
+    current_time: f32,
+) {
+    if shelter_seeker.is_sheltered {
+        return;
+    }
+
+    let Some(target) = shelter_seeker.target_shelter else { return };
+    let dist_sq = pos.distance_squared(target);
+
+    if dist_sq >= SHELTER_ARRIVAL_SQ {
+        return;
+    }
+
+    if pois.occupy_shelter(target) {
+        shelter_seeker.arrive_at_shelter(current_time);
+    } else if let Some(new_shelter) = pois.find_nearest_shelter(pos, SHELTER_SEARCH_RADIUS) {
+        shelter_seeker.target_shelter = Some(new_shelter);
+        if let Some(path) = astar_path {
+            path.goal = new_shelter;
+            path.needs_recalc = true;
+        }
+    }
+}
+
+/// 處理雨停的情況
+fn handle_rain_stopped(
+    behavior: &mut DailyBehavior,
+    shelter_seeker: &mut ShelterSeeker,
+    pois: &mut PointsOfInterest,
+    rng: &mut impl Rng,
+) {
+    if let Some(target) = shelter_seeker.target_shelter {
+        if shelter_seeker.is_sheltered {
+            pois.release_shelter(target);
+        }
+    }
+    behavior.behavior = shelter_seeker.previous_behavior;
+    behavior.timer = 0.0;
+    behavior.duration = rng.random_range(5.0..15.0);
+    *shelter_seeker = ShelterSeeker::default();
+}
+
+/// 嘗試開始尋找庇護點
+fn try_start_shelter_seeking(
+    pos: Vec3,
+    behavior: &mut DailyBehavior,
+    shelter_seeker: &mut ShelterSeeker,
+    astar_path: Option<&mut AStarPath>,
+    pois: &PointsOfInterest,
+) -> bool {
+    let shelter_target = pois
+        .find_nearest_shelter(pos, SHELTER_SEARCH_RADIUS)
+        .or_else(|| pois.find_nearest(pos, PointOfInterestType::ShopWindow, SHOP_FALLBACK_SEARCH_RADIUS));
+
+    let Some(target) = shelter_target else { return false };
+
+    shelter_seeker.start_seeking(target, behavior.behavior);
+    behavior.behavior = BehaviorType::SeekingShelter;
+    behavior.duration = 120.0;
+    behavior.timer = 0.0;
+
+    if let Some(path) = astar_path {
+        path.goal = target;
+        path.needs_recalc = true;
+    }
+    true
+}
+
+/// 選擇雨天行為
+fn select_rainy_behavior(rng: &mut impl Rng) -> BehaviorType {
+    let roll: f32 = rng.random();
+    if roll < 0.6 {
+        BehaviorType::SeekingShelter
+    } else if roll < 0.8 {
+        BehaviorType::PhoneWatching
+    } else {
+        BehaviorType::Resting
+    }
+}
+
+/// 根據新行為更新 A* 路徑
+fn update_path_for_new_behavior(
+    pos: Vec3,
+    new_behavior: BehaviorType,
+    path: &mut AStarPath,
+    pois: &PointsOfInterest,
+) {
+    let poi_target = match new_behavior {
+        BehaviorType::WindowShopping => pois.find_nearest(pos, PointOfInterestType::ShopWindow, 20.0),
+        BehaviorType::Resting => pois.find_nearest(pos, PointOfInterestType::Bench, 30.0),
+        BehaviorType::TakingPhoto => pois.find_nearest(pos, PointOfInterestType::PhotoSpot, 40.0),
+        BehaviorType::SeekingShelter => pois.find_nearest(pos, PointOfInterestType::Shelter, SHELTER_SEARCH_RADIUS),
+        _ => None,
+    };
+
+    if let Some(target) = poi_target {
+        path.goal = target;
+        path.needs_recalc = true;
+    }
+}
+
+/// 處理單一行人的躲雨行為
+fn process_shelter_behavior(
+    pos: Vec3,
+    is_raining: bool,
+    current_time: f32,
+    behavior: &mut DailyBehavior,
+    shelter_seeker: &mut ShelterSeeker,
+    astar_path: Option<&mut AStarPath>,
+    pois: &mut PointsOfInterest,
+    rng: &mut impl Rng,
+) -> bool {
+    handle_shelter_arrival(pos, shelter_seeker, astar_path, pois, current_time);
+    if !is_raining {
+        handle_rain_stopped(behavior, shelter_seeker, pois, rng);
+    }
+    true // 表示已處理，主迴圈應 continue
+}
+
+/// 嘗試在雨中開始躲雨
+fn try_rain_shelter(
+    pos: Vec3,
+    rain_intensity: f32,
+    behavior: &mut DailyBehavior,
+    shelter_seeker: &mut ShelterSeeker,
+    astar_path: Option<&mut AStarPath>,
+    pois: &PointsOfInterest,
+    rng: &mut impl Rng,
+) -> bool {
+    let shelter_chance = rain_intensity * SHELTER_SEEK_PROBABILITY_FACTOR;
+    if rng.random::<f32>() >= shelter_chance {
+        return false;
+    }
+    try_start_shelter_seeking(pos, behavior, shelter_seeker, astar_path, pois)
+}
+
+/// 更新行為計時並檢查是否需要切換
+fn update_behavior_timer(
+    dt: f32,
+    is_raining: bool,
+    pos: Vec3,
+    behavior: &mut DailyBehavior,
+    astar_path: Option<&mut AStarPath>,
+    pois: &PointsOfInterest,
+    rng: &mut impl Rng,
+) {
+    behavior.timer += dt;
+    if behavior.timer < behavior.duration {
+        return;
+    }
+
+    let new_behavior = if is_raining {
+        select_rainy_behavior(rng)
+    } else {
+        select_next_behavior(rng, pos, pois)
+    };
+
+    let (min_dur, max_dur) = new_behavior.duration_range();
+    behavior.behavior = new_behavior;
+    behavior.duration = rng.random_range(min_dur..max_dur);
+    behavior.timer = 0.0;
+
+    if let Some(path) = astar_path {
+        update_path_for_new_behavior(pos, new_behavior, path, pois);
+    }
+}
+
 /// 日常行為更新系統（包含天氣反應）
 pub fn daily_behavior_update_system(
     time: Res<Time>,
     mut pois: Option<ResMut<PointsOfInterest>>,
-    weather: Res<crate::core::WeatherState>,
+    weather: Res<WeatherState>,
     mut ped_query: Query<(
         Entity,
         &Transform,
@@ -1080,170 +1347,33 @@ pub fn daily_behavior_update_system(
 
     let Some(ref mut pois) = pois else { return };
 
-    // 判斷是否下雨（GTA5 風格：行人會躲雨）
-    let is_raining = weather.weather_type == crate::core::WeatherType::Rainy;
+    let is_raining = weather.weather_type == WeatherType::Rainy;
     let rain_intensity = if is_raining { weather.intensity } else { 0.0 };
 
-    for (_entity, transform, state, mut behavior, mut shelter_seeker, astar_path) in ped_query.iter_mut() {
-        // 逃跑時不執行日常行為，並釋放庇護點
+    for (_entity, transform, state, mut behavior, mut shelter_seeker, mut astar_path) in ped_query.iter_mut() {
+        let pos = transform.translation;
+
         if state.state == PedState::Fleeing {
-            behavior.behavior = BehaviorType::Walking;
-            if shelter_seeker.is_sheltered {
-                if let Some(target) = shelter_seeker.target_shelter {
-                    pois.release_shelter(target);
-                }
-                *shelter_seeker = ShelterSeeker::default();
-            }
+            handle_fleeing_state(&mut behavior, &mut shelter_seeker, pois);
             continue;
         }
 
-        // === GTA5 風格：雨天躲雨邏輯 ===
-
-        // 已經在躲雨中
         if behavior.behavior == BehaviorType::SeekingShelter {
-            // 檢查是否已到達庇護點（使用 let-else 扁平化）- 使用 distance_squared
-            if !shelter_seeker.is_sheltered {
-                if let Some(target) = shelter_seeker.target_shelter {
-                    let dist_sq = transform.translation.distance_squared(target);
-                    if dist_sq < SHELTER_ARRIVAL_SQ {
-                        if pois.occupy_shelter(target) {
-                            shelter_seeker.arrive_at_shelter(current_time);
-                        } else if let Some(new_shelter) = pois.find_nearest_shelter(
-                            transform.translation,
-                            SHELTER_SEARCH_RADIUS,
-                        ) {
-                            // 庇護點已滿，尋找其他庇護點
-                            shelter_seeker.target_shelter = Some(new_shelter);
-                            if let Some(mut path) = astar_path {
-                                path.goal = new_shelter;
-                                path.needs_recalc = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 雨停了，離開庇護點恢復正常行為
-            if !is_raining {
-                if let Some(target) = shelter_seeker.target_shelter {
-                    if shelter_seeker.is_sheltered {
-                        pois.release_shelter(target);
-                    }
-                }
-                behavior.behavior = shelter_seeker.previous_behavior;
-                behavior.timer = 0.0;
-                behavior.duration = rng.random_range(5.0..15.0);
-                *shelter_seeker = ShelterSeeker::default();
-            }
+            process_shelter_behavior(pos, is_raining, current_time, &mut behavior, &mut shelter_seeker, astar_path.as_deref_mut(), pois, &mut rng);
             continue;
         }
 
-        // 還沒躲雨，檢查是否要開始躲雨
-        if is_raining {
-            let shelter_chance = rain_intensity * SHELTER_SEEK_PROBABILITY_FACTOR;
-            if rng.random::<f32>() < shelter_chance {
-                // 優先尋找庇護點，否則找商店櫥窗
-                let shelter_target = pois
-                    .find_nearest_shelter(transform.translation, SHELTER_SEARCH_RADIUS)
-                    .or_else(|| pois.find_nearest(
-                        transform.translation,
-                        PointOfInterestType::ShopWindow,
-                        SHOP_FALLBACK_SEARCH_RADIUS,
-                    ));
-
-                if let Some(target) = shelter_target {
-                    shelter_seeker.start_seeking(target, behavior.behavior);
-                    behavior.behavior = BehaviorType::SeekingShelter;
-                    behavior.duration = 120.0; // 一直躲到雨停
-                    behavior.timer = 0.0;
-
-                    if let Some(mut path) = astar_path {
-                        path.goal = target;
-                        path.needs_recalc = true;
-                    }
-                }
-                continue;
-            }
+        if is_raining && try_rain_shelter(pos, rain_intensity, &mut behavior, &mut shelter_seeker, astar_path.as_deref_mut(), pois, &mut rng) {
+            continue;
         }
 
-        // 更新行為計時器
-        behavior.timer += dt;
-
-        // 檢查是否需要切換行為
-        if behavior.timer >= behavior.duration {
-            // 隨機選擇新行為（雨天時不會選到戶外行為）
-            let new_behavior = if is_raining {
-                // 雨天只能選擇室內/遮蔽行為
-                let roll: f32 = rng.random();
-                if roll < 0.6 {
-                    BehaviorType::SeekingShelter
-                } else if roll < 0.8 {
-                    BehaviorType::PhoneWatching // 躲雨時滑手機
-                } else {
-                    BehaviorType::Resting // 躲雨時休息
-                }
-            } else {
-                select_next_behavior(&mut rng, transform.translation, &pois)
-            };
-            let (min_dur, max_dur) = new_behavior.duration_range();
-
-            behavior.behavior = new_behavior;
-            behavior.duration = rng.random_range(min_dur..max_dur);
-            behavior.timer = 0.0;
-
-            // 如果新行為需要移動到特定位置，更新 A* 路徑
-            if let Some(mut path) = astar_path {
-                match new_behavior {
-                    BehaviorType::WindowShopping => {
-                        if let Some(shop) = pois.find_nearest(
-                            transform.translation,
-                            PointOfInterestType::ShopWindow,
-                            20.0,
-                        ) {
-                            path.goal = shop;
-                            path.needs_recalc = true;
-                        }
-                    }
-                    BehaviorType::Resting => {
-                        if let Some(bench) = pois.find_nearest(
-                            transform.translation,
-                            PointOfInterestType::Bench,
-                            30.0,
-                        ) {
-                            path.goal = bench;
-                            path.needs_recalc = true;
-                        }
-                    }
-                    BehaviorType::TakingPhoto => {
-                        if let Some(spot) = pois.find_nearest(
-                            transform.translation,
-                            PointOfInterestType::PhotoSpot,
-                            40.0,
-                        ) {
-                            path.goal = spot;
-                            path.needs_recalc = true;
-                        }
-                    }
-                    BehaviorType::SeekingShelter => {
-                        if let Some(shelter) = pois.find_nearest(
-                            transform.translation,
-                            PointOfInterestType::Shelter,
-                            SHELTER_SEARCH_RADIUS,
-                        ) {
-                            path.goal = shelter;
-                            path.needs_recalc = true;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
+        update_behavior_timer(dt, is_raining, pos, &mut behavior, astar_path.as_deref_mut(), pois, &mut rng);
     }
 }
 
 /// 選擇下一個行為
 fn select_next_behavior(
-    rng: &mut impl rand::Rng,
+    rng: &mut impl Rng,
     pos: Vec3,
     pois: &PointsOfInterest,
 ) -> BehaviorType {
@@ -1350,6 +1480,71 @@ mod witness_constants {
     pub const ARMED_INTIMIDATION_DISTANCE: f32 = 10.0;
 }
 
+// === 目擊系統輔助函數 ===
+
+/// 將犯罪事件轉換為目擊類型
+fn crime_event_to_witnessed_crime(crime: &CrimeEvent) -> WitnessedCrime {
+    match crime {
+        CrimeEvent::Shooting { .. } => WitnessedCrime::Gunshot,
+        CrimeEvent::Assault { .. } => WitnessedCrime::Assault,
+        CrimeEvent::Murder { .. } => WitnessedCrime::Murder,
+        CrimeEvent::VehicleTheft { .. } => WitnessedCrime::VehicleTheft,
+        CrimeEvent::VehicleHit { .. } => WitnessedCrime::VehicleHit,
+        CrimeEvent::PoliceKilled { .. } => WitnessedCrime::Murder,
+    }
+}
+
+/// 檢查行人是否能目擊犯罪
+fn can_witness_crime(
+    ped_transform: &Transform,
+    crime_pos: Vec3,
+    witness_range_sq: f32,
+    fov_cos: f32,
+    witnessed_crime: WitnessedCrime,
+) -> bool {
+    let ped_pos = ped_transform.translation;
+    let distance_sq = ped_pos.distance_squared(crime_pos);
+
+    if distance_sq > witness_range_sq {
+        return false;
+    }
+
+    // 槍聲是聽覺，不需要視野檢查
+    if witnessed_crime == WitnessedCrime::Gunshot {
+        return true;
+    }
+
+    let to_crime = (crime_pos - ped_pos).normalize_or_zero();
+    let forward = ped_transform.forward().as_vec3();
+    forward.dot(to_crime) >= fov_cos
+}
+
+/// 處理行人對犯罪的反應
+fn apply_witness_reaction(
+    state: &mut PedestrianState,
+    witness: &mut WitnessState,
+    witnessed_crime: WitnessedCrime,
+    crime_pos: Vec3,
+    player_pos: Vec3,
+    flee_chance: f32,
+    base_call_duration: f32,
+) {
+    let mut rng = rand::rng();
+
+    if rng.random::<f32>() < flee_chance {
+        state.state = PedState::Fleeing;
+        state.flee_timer = 10.0;
+        state.fear_level = 1.0;
+        state.last_threat_pos = Some(player_pos);
+    } else {
+        witness.witness_crime(witnessed_crime, crime_pos);
+        state.state = PedState::CallingPolice;
+        state.fear_level = 0.8;
+        state.last_threat_pos = Some(player_pos);
+        witness.call_duration = base_call_duration / witnessed_crime.severity();
+    }
+}
+
 /// 行人目擊犯罪偵測系統
 /// 當玩家犯罪時，通知範圍內的行人
 pub fn witness_crime_detection_system(
@@ -1366,70 +1561,76 @@ pub fn witness_crime_detection_system(
 
     let Ok(player_transform) = player_query.single() else { return };
     let player_pos = player_transform.translation;
+    let fov_cos = (WITNESS_FOV_DEGREES / 2.0).to_radians().cos();
 
-    // 處理犯罪事件
     for crime in crime_events.read() {
         let crime_pos = crime.position();
-        let witnessed_crime = match crime {
-            CrimeEvent::Shooting { .. } => WitnessedCrime::Gunshot,
-            CrimeEvent::Assault { .. } => WitnessedCrime::Assault,
-            CrimeEvent::Murder { .. } => WitnessedCrime::Murder,
-            CrimeEvent::VehicleTheft { .. } => WitnessedCrime::VehicleTheft,
-            CrimeEvent::VehicleHit { .. } => WitnessedCrime::VehicleHit,
-            CrimeEvent::PoliceKilled { .. } => WitnessedCrime::Murder, // 警察被殺視為謀殺
-        };
+        let witnessed_crime = crime_event_to_witnessed_crime(crime);
+        let witness_range_sq = witnessed_crime.witness_range().powi(2);
+        let flee_chance = FLEE_INSTEAD_OF_CALL_CHANCE * (1.0 - witnessed_crime.severity());
 
-        let witness_range = witnessed_crime.witness_range();
-        let fov_cos = (WITNESS_FOV_DEGREES / 2.0).to_radians().cos();
-
-        // 通知範圍內的行人
         for (ped_transform, mut state, mut witness) in ped_query.iter_mut() {
             // 跳過已經在逃跑或報警的行人
             if state.state == PedState::Fleeing || state.state == PedState::CallingPolice {
                 continue;
             }
 
-            let ped_pos = ped_transform.translation;
-            let distance_sq = ped_pos.distance_squared(crime_pos);
-            let witness_range_sq = witness_range * witness_range;
-
-            // 距離檢查 (使用 distance_squared 避免 sqrt)
-            if distance_sq > witness_range_sq {
+            if !can_witness_crime(ped_transform, crime_pos, witness_range_sq, fov_cos, witnessed_crime) {
                 continue;
             }
 
-            // 視野檢查（槍聲是聽覺，不需要視野檢查）
-            if witnessed_crime != WitnessedCrime::Gunshot {
-                let to_crime = (crime_pos - ped_pos).normalize_or_zero();
-                let forward = ped_transform.forward().as_vec3();
-                let dot = forward.dot(to_crime);
-                if dot < fov_cos {
-                    continue; // 不在視野內
-                }
-            }
-
-            // 決定行人反應：逃跑或報警
-            let mut rng = rand::rng();
-            let flee_chance = FLEE_INSTEAD_OF_CALL_CHANCE * (1.0 - witnessed_crime.severity());
-
-            if rng.random::<f32>() < flee_chance {
-                // 選擇逃跑
-                state.state = PedState::Fleeing;
-                state.flee_timer = 10.0;
-                state.fear_level = 1.0;
-                state.last_threat_pos = Some(player_pos);
-            } else {
-                // 選擇報警
-                witness.witness_crime(witnessed_crime, crime_pos);
-                state.state = PedState::CallingPolice;
-                state.fear_level = 0.8;
-                state.last_threat_pos = Some(player_pos);
-
-                // 根據犯罪嚴重程度調整報警時間
-                witness.call_duration = BASE_CALL_DURATION / witnessed_crime.severity();
-            }
+            apply_witness_reaction(
+                &mut state,
+                &mut witness,
+                witnessed_crime,
+                crime_pos,
+                player_pos,
+                flee_chance,
+                BASE_CALL_DURATION,
+            );
         }
     }
+}
+
+/// 檢查玩家是否持武器
+fn is_player_armed(weapon_inventory: Option<&WeaponInventory>) -> bool {
+    weapon_inventory
+        .and_then(|inv| inv.current_weapon())
+        .map(|w| w.stats.weapon_type != WeaponType::Fist)
+        .unwrap_or(false)
+}
+
+/// 獲取目擊犯罪的描述
+fn get_witnessed_crime_description(crime_type: WitnessedCrime) -> &'static str {
+    match crime_type {
+        WitnessedCrime::Gunshot => "槍擊",
+        WitnessedCrime::Assault => "攻擊",
+        WitnessedCrime::Murder => "謀殺",
+        WitnessedCrime::VehicleTheft => "搶車",
+        WitnessedCrime::VehicleHit => "撞人",
+    }
+}
+
+/// 處理被恐嚇的情況（重置報警並逃跑）
+fn handle_witness_intimidation(state: &mut PedestrianState, witness: &mut WitnessState) {
+    witness.reset();
+    state.state = PedState::Fleeing;
+    state.flee_timer = 8.0;
+    state.fear_level = 1.0;
+}
+
+/// 處理報警完成
+fn handle_call_completion(
+    witness: &WitnessState,
+    state: &mut PedestrianState,
+    witness_reports: &mut MessageWriter<WitnessReport>,
+) {
+    if let (Some(crime_type), Some(crime_pos)) = (witness.crime_type, witness.crime_position) {
+        let description = get_witnessed_crime_description(crime_type);
+        witness_reports.write(WitnessReport::new(crime_pos, description));
+    }
+    state.state = PedState::Walking;
+    state.fear_level = 0.3;
 }
 
 /// 行人報警進度系統
@@ -1452,63 +1653,31 @@ pub fn witness_phone_call_system(
     let Ok((player_transform, weapon_inventory)) = player_query.single() else { return };
     let player_pos = player_transform.translation;
 
-    // 檢查玩家是否持槍（影響恐嚇距離）
-    let player_armed = weapon_inventory
-        .map(|inv| inv.current_weapon()
-            .map(|w| w.stats.weapon_type != WeaponType::Fist)
-            .unwrap_or(false))
-        .unwrap_or(false);
-
-    let intimidation_dist = if player_armed {
+    let intimidation_dist = if is_player_armed(weapon_inventory) {
         ARMED_INTIMIDATION_DISTANCE
     } else {
         INTIMIDATION_DISTANCE
     };
+    let intimidation_dist_sq = intimidation_dist * intimidation_dist;
 
     for (_entity, ped_transform, mut state, mut witness) in ped_query.iter_mut() {
         // 只處理正在報警的行人
         if state.state != PedState::CallingPolice {
-            // 更新冷卻計時器
             witness.tick(dt);
             continue;
         }
 
-        let ped_pos = ped_transform.translation;
-        let dist_to_player_sq = ped_pos.distance_squared(player_pos);
-        let intimidation_dist_sq = intimidation_dist * intimidation_dist;
+        let dist_to_player_sq = ped_transform.translation.distance_squared(player_pos);
 
-        // 玩家靠近時被恐嚇，中斷報警並逃跑 (使用 distance_squared 避免 sqrt)
+        // 玩家靠近時被恐嚇，中斷報警並逃跑
         if dist_to_player_sq < intimidation_dist_sq {
-            witness.reset();
-            state.state = PedState::Fleeing;
-            state.flee_timer = 8.0;
-            state.fear_level = 1.0;
+            handle_witness_intimidation(&mut state, &mut witness);
             continue;
         }
 
         // 更新報警進度
-        let call_completed = witness.tick(dt);
-
-        if call_completed {
-            // 報警完成！發送 WitnessReport 事件（而非重複的 CrimeEvent）
-            // 這樣可以避免通緝等級重複計算
-            if let Some(crime_type) = witness.crime_type {
-                if let Some(crime_pos) = witness.crime_position {
-                    // 使用 WitnessReport 而非 CrimeEvent
-                    let description = match crime_type {
-                        WitnessedCrime::Gunshot => "槍擊",
-                        WitnessedCrime::Assault => "攻擊",
-                        WitnessedCrime::Murder => "謀殺",
-                        WitnessedCrime::VehicleTheft => "搶車",
-                        WitnessedCrime::VehicleHit => "撞人",
-                    };
-                    witness_reports.write(WitnessReport::new(crime_pos, description));
-                }
-            }
-
-            // 報警完成後恢復行走
-            state.state = PedState::Walking;
-            state.fear_level = 0.3;
+        if witness.tick(dt) {
+            handle_call_completion(&witness, &mut state, &mut witness_reports);
         }
     }
 }
@@ -1646,6 +1815,89 @@ mod panic_constants {
     pub const ROTATION_SLERP_SPEED: f32 = 8.0;
 }
 
+// === 恐慌傳播輔助函數 ===
+
+/// 收集被恐慌波影響的行人
+fn collect_panic_triggers(
+    waves: &[PanicWave],
+    ped_hash: &PedestrianSpatialHash,
+    wave_front_width: f32,
+) -> Vec<(Entity, f32, Vec3)> {
+    let mut panic_triggers: Vec<(Entity, f32, Vec3)> = Vec::new();
+
+    for wave in waves {
+        if wave.current_radius < 0.1 {
+            continue;
+        }
+
+        for (entity, _, dist_sq) in ped_hash.query_radius(wave.origin, wave.current_radius) {
+            let dist = dist_sq.sqrt();
+            // 檢查是否在波前緣
+            if dist <= wave.current_radius && dist > wave.current_radius - wave_front_width {
+                update_panic_trigger(&mut panic_triggers, entity, wave.intensity, wave.origin);
+            }
+        }
+    }
+
+    panic_triggers
+}
+
+/// 更新或添加恐慌觸發記錄
+fn update_panic_trigger(
+    triggers: &mut Vec<(Entity, f32, Vec3)>,
+    entity: Entity,
+    intensity: f32,
+    source: Vec3,
+) {
+    if let Some(existing) = triggers.iter_mut().find(|(e, _, _)| *e == entity) {
+        if intensity > existing.1 {
+            existing.1 = intensity;
+            existing.2 = source;
+        }
+    } else {
+        triggers.push((entity, intensity, source));
+    }
+}
+
+/// 對單個行人應用恐慌觸發
+fn apply_panic_to_pedestrian(
+    ped_state: &mut PedestrianState,
+    panic_state: &mut PanicState,
+    intensity: f32,
+    source: Vec3,
+    flee_timer_base: f32,
+    flee_timer_panic_mul: f32,
+) {
+    panic_state.trigger_panic(intensity, source);
+
+    if panic_state.is_panicked() && ped_state.state != PedState::Fleeing {
+        ped_state.state = PedState::Fleeing;
+        ped_state.fear_level = panic_state.panic_level;
+        ped_state.flee_timer = flee_timer_base + panic_state.panic_level * flee_timer_panic_mul;
+        ped_state.last_threat_pos = Some(source);
+    }
+}
+
+/// 處理恐慌消退
+fn handle_panic_fade(
+    ped_state: &mut PedestrianState,
+    panic_state: &mut PanicState,
+    still_in_wave: bool,
+    calm_down_rate: f32,
+    dt: f32,
+) {
+    if still_in_wave {
+        return;
+    }
+
+    panic_state.calm_down(calm_down_rate, dt);
+
+    if !panic_state.is_panicked() && ped_state.state == PedState::Fleeing && ped_state.flee_timer <= 0.0 {
+        ped_state.state = PedState::Walking;
+        ped_state.fear_level = 0.0;
+    }
+}
+
 /// 恐慌波傳播系統（空間哈希優化版）
 ///
 /// 使用 PedestrianSpatialHash 將 O(行人×波數) 降為 O(波數×附近行人)。
@@ -1662,86 +1914,40 @@ pub fn panic_wave_propagation_system(
 ) {
     use panic_constants::*;
     let dt = time.delta_secs();
+    const WAVE_FRONT_WIDTH: f32 = 2.0;
 
     // 更新所有恐慌波（擴展半徑、清理過期）
     panic_manager.update(dt);
 
-    // 恐慌波前緣寬度（與 components.rs 中的 PANIC_WAVE_FRONT_WIDTH 一致）
-    const WAVE_FRONT_WIDTH: f32 = 2.0;
+    // 階段 1：使用空間哈希找出被恐慌波影響的行人
+    let panic_triggers = collect_panic_triggers(&panic_manager.active_waves, &ped_hash, WAVE_FRONT_WIDTH);
 
-    // === 階段 1：使用空間哈希找出被恐慌波影響的行人 ===
-    // 收集需要觸發恐慌的 (entity, intensity, source) 資訊
-    let mut panic_triggers: Vec<(Entity, f32, Vec3)> = Vec::new();
-
-    for wave in &panic_manager.active_waves {
-        // 只查詢波前緣範圍內的行人（current_radius - FRONT_WIDTH 到 current_radius）
-        // 為了確保不漏掉，查詢 current_radius 範圍
-        if wave.current_radius < 0.1 {
-            continue; // 波還沒開始傳播
-        }
-
-        // 使用空間哈希查詢該半徑內的所有行人
-        for (entity, _, dist_sq) in ped_hash.query_radius(wave.origin, wave.current_radius) {
-            let dist = dist_sq.sqrt();
-            // 檢查是否在波前緣
-            if dist <= wave.current_radius && dist > wave.current_radius - WAVE_FRONT_WIDTH {
-                // 檢查是否已有更強的恐慌源
-                if let Some(existing) = panic_triggers.iter_mut().find(|(e, _, _)| *e == entity) {
-                    if wave.intensity > existing.1 {
-                        existing.1 = wave.intensity;
-                        existing.2 = wave.origin;
-                    }
-                } else {
-                    panic_triggers.push((entity, wave.intensity, wave.origin));
-                }
-            }
-        }
-    }
-
-    // === 階段 2：處理所有行人（更新計時器） ===
+    // 階段 2：處理所有行人（更新計時器）
     for (_, _, mut panic_state) in ped_query.iter_mut() {
-        // 更新恐慌狀態的冷卻計時器
         panic_state.update(dt);
     }
 
-    // === 階段 3：應用恐慌觸發 ===
+    // 階段 3：應用恐慌觸發
     for (entity, intensity, source) in panic_triggers {
-        if let Ok((_, mut ped_state, mut panic_state)) = ped_query.get_mut(entity) {
-            // 觸發恐慌
-            panic_state.trigger_panic(intensity, source);
-
-            // 如果恐慌程度足夠高，開始逃跑
-            if panic_state.is_panicked() && ped_state.state != PedState::Fleeing {
-                ped_state.state = PedState::Fleeing;
-                ped_state.fear_level = panic_state.panic_level;
-                ped_state.flee_timer = FLEE_TIMER_BASE + panic_state.panic_level * FLEE_TIMER_PANIC_MULTIPLIER;
-                ped_state.last_threat_pos = Some(source);
-            }
-        }
+        let Ok((_, mut ped_state, mut panic_state)) = ped_query.get_mut(entity) else { continue };
+        apply_panic_to_pedestrian(
+            &mut ped_state,
+            &mut panic_state,
+            intensity,
+            source,
+            FLEE_TIMER_BASE,
+            FLEE_TIMER_PANIC_MULTIPLIER,
+        );
     }
 
-    // === 階段 4：恐慌消退（僅處理正在恐慌的行人） ===
-    for (_ped_transform, mut ped_state, mut panic_state) in ped_query.iter_mut() {
-        // 只處理有恐慌等級的行人
+    // 階段 4：恐慌消退（僅處理正在恐慌的行人）
+    for (ped_transform, mut ped_state, mut panic_state) in ped_query.iter_mut() {
         if panic_state.panic_level <= 0.0 {
             continue;
         }
 
-        // 檢查是否仍在任何波前緣（使用 check_panic_at，但只對恐慌中的行人）
-        let ped_pos = _ped_transform.translation;
-        let still_in_wave = panic_manager.check_panic_at(ped_pos).is_some();
-
-        if !still_in_wave {
-            panic_state.calm_down(PANIC_CALM_DOWN_RATE, dt);
-
-            // 如果恐慌消退到閾值以下，停止逃跑
-            if !panic_state.is_panicked() && ped_state.state == PedState::Fleeing {
-                if ped_state.flee_timer <= 0.0 {
-                    ped_state.state = PedState::Walking;
-                    ped_state.fear_level = 0.0;
-                }
-            }
-        }
+        let still_in_wave = panic_manager.check_panic_at(ped_transform.translation).is_some();
+        handle_panic_fade(&mut ped_state, &mut panic_state, still_in_wave, PANIC_CALM_DOWN_RATE, dt);
     }
 }
 

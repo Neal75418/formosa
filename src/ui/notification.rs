@@ -207,6 +207,123 @@ pub struct NotificationUI {
     pub index: usize,
 }
 
+// === 輔助函數 ===
+
+/// 計算通知的所有顏色
+struct NotificationColors {
+    text: Color,
+    background: Color,
+    border: Color,
+    glow: Color,
+}
+
+fn calculate_notification_colors(notif_type: NotificationType, alpha: f32) -> NotificationColors {
+    NotificationColors {
+        text: notif_type.text_color().with_alpha(alpha),
+        background: notif_type.bg_color().with_alpha(alpha * 0.92),
+        border: notif_type.border_color().with_alpha(alpha * NOTIF_BORDER_ALPHA),
+        glow: notif_type.glow_color().with_alpha(alpha * NOTIF_GLOW_ALPHA),
+    }
+}
+
+/// 生成文字實體（可選使用自訂字體）
+fn spawn_text_entity(
+    commands: &mut Commands,
+    text: &str,
+    font: Option<&Handle<Font>>,
+    font_size: f32,
+    color: Option<Color>,
+) -> Entity {
+    let text_font = if let Some(font_handle) = font {
+        TextFont {
+            font: font_handle.clone(),
+            font_size,
+            ..default()
+        }
+    } else {
+        TextFont {
+            font_size,
+            ..default()
+        }
+    };
+
+    let mut entity_commands = commands.spawn((Text::new(text), text_font));
+    if let Some(c) = color {
+        entity_commands.insert(TextColor(c));
+    }
+    entity_commands.id()
+}
+
+/// 建立單則通知的 UI 元件
+fn spawn_notification_ui(
+    commands: &mut Commands,
+    notification: &Notification,
+    index: usize,
+    font: Option<&Handle<Font>>,
+) -> Entity {
+    let alpha = notification.alpha();
+    let notif_type = notification.notification_type;
+    let colors = calculate_notification_colors(notif_type, alpha);
+
+    // 外發光層
+    let glow_entity = commands.spawn((
+        Node {
+            padding: UiRect::all(Val::Px(2.0)),
+            ..default()
+        },
+        BackgroundColor(colors.glow),
+        BorderRadius::all(Val::Px(8.0)),
+        NotificationUI { index },
+    )).id();
+
+    // 主通知卡片
+    let notification_entity = commands.spawn((
+        Node {
+            width: Val::Px(NOTIFICATION_WIDTH),
+            min_height: Val::Px(NOTIFICATION_HEIGHT),
+            padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(10.0), Val::Px(10.0)),
+            border: UiRect::all(Val::Px(1.0)),
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(10.0),
+            ..default()
+        },
+        BackgroundColor(colors.background),
+        BorderColor::all(colors.border),
+        BorderRadius::all(Val::Px(6.0)),
+    )).id();
+
+    // 圖示和文字
+    let icon_entity = spawn_text_entity(commands, notif_type.icon(), font, 18.0, None);
+    let text_entity = spawn_text_entity(commands, &notification.message, font, 15.0, Some(colors.text));
+
+    // 組裝層級
+    commands.entity(notification_entity).add_child(icon_entity);
+    commands.entity(notification_entity).add_child(text_entity);
+    commands.entity(glow_entity).add_child(notification_entity);
+
+    glow_entity
+}
+
+/// 更新現有通知的淡出顏色
+fn update_notification_fade(
+    notification: &Notification,
+    bg_color: &mut BackgroundColor,
+    children: &Children,
+    text_colors: &mut Query<&mut TextColor>,
+) {
+    let alpha = notification.alpha();
+    let notif_type = notification.notification_type;
+    let glow_col = notif_type.glow_color().with_alpha(alpha * NOTIF_GLOW_ALPHA);
+    *bg_color = BackgroundColor(glow_col);
+
+    let text_col = notif_type.text_color().with_alpha(alpha);
+    for child in children.iter() {
+        let Ok(mut text_color) = text_colors.get_mut(child) else { continue };
+        *text_color = TextColor(text_col);
+    }
+}
+
 // === 系統 ===
 
 /// 初始化通知容器 UI
@@ -260,12 +377,7 @@ pub fn update_notifications(
     if needs_rebuild {
         *last_version = notification_queue.version;
 
-        // 取得容器
-        let Ok(container) = container_query.single() else {
-            return;
-        };
-
-        // 取得字體（如果有載入）
+        let Ok(container) = container_query.single() else { return };
         let font = chinese_font.as_ref().map(|f| f.font.clone());
 
         // 清除現有的通知 UI
@@ -273,114 +385,16 @@ pub fn update_notifications(
             commands.entity(entity).despawn();
         }
 
-        // 重建通知 UI（GTA 風格）
+        // 重建通知 UI
         for (index, notification) in notification_queue.notifications.iter().enumerate() {
-            let alpha = notification.alpha();
-            let notif_type = notification.notification_type;
-            let text_color = notif_type.text_color().with_alpha(alpha);
-            let bg_color = notif_type.bg_color().with_alpha(alpha * 0.92);
-            let border_color = notif_type.border_color().with_alpha(alpha * NOTIF_BORDER_ALPHA);
-            let glow_color = notif_type.glow_color().with_alpha(alpha * NOTIF_GLOW_ALPHA);
-
-            // 外發光層
-            let glow_entity = commands.spawn((
-                Node {
-                    padding: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BackgroundColor(glow_color),
-                BorderRadius::all(Val::Px(8.0)),
-                NotificationUI { index },
-            )).id();
-
-            // 建立主通知卡片
-            let notification_entity = commands.spawn((
-                Node {
-                    width: Val::Px(NOTIFICATION_WIDTH),
-                    min_height: Val::Px(NOTIFICATION_HEIGHT),
-                    padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(10.0), Val::Px(10.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: Val::Px(10.0),
-                    ..default()
-                },
-                BackgroundColor(bg_color),
-                BorderColor::all(border_color),
-                BorderRadius::all(Val::Px(6.0)),
-            )).id();
-
-            // 建立圖示
-            let icon_entity = if let Some(ref font_handle) = font {
-                commands.spawn((
-                    Text::new(notif_type.icon()),
-                    TextFont {
-                        font: font_handle.clone(),
-                        font_size: 18.0,
-                        ..default()
-                    },
-                )).id()
-            } else {
-                commands.spawn((
-                    Text::new(notif_type.icon()),
-                    TextFont {
-                        font_size: 18.0,
-                        ..default()
-                    },
-                )).id()
-            };
-
-            // 建立文字
-            let text_entity = if let Some(ref font_handle) = font {
-                commands.spawn((
-                    Text::new(&notification.message),
-                    TextFont {
-                        font: font_handle.clone(),
-                        font_size: 15.0,
-                        ..default()
-                    },
-                    TextColor(text_color),
-                )).id()
-            } else {
-                commands.spawn((
-                    Text::new(&notification.message),
-                    TextFont {
-                        font_size: 15.0,
-                        ..default()
-                    },
-                    TextColor(text_color),
-                )).id()
-            };
-
-            // 組裝：圖示 + 文字加入卡片
-            commands.entity(notification_entity).add_child(icon_entity);
-            commands.entity(notification_entity).add_child(text_entity);
-            // 卡片加入發光層
-            commands.entity(glow_entity).add_child(notification_entity);
-
-            // 將發光層（包含卡片）加入容器
+            let glow_entity = spawn_notification_ui(&mut commands, notification, index, font.as_ref());
             commands.entity(container).add_child(glow_entity);
         }
     } else {
         // 只更新現有通知的顏色（用於淡出效果）
-        // 注意：NotificationUI 現在在 glow 層上，需要遍歷子層更新
         for (notif_ui, mut bg_color, _border_color, children) in &mut notification_colors {
-            if let Some(notification) = notification_queue.notifications.get(notif_ui.index) {
-                let alpha = notification.alpha();
-                let notif_type = notification.notification_type;
-                let glow_col = notif_type.glow_color().with_alpha(alpha * NOTIF_GLOW_ALPHA);
-
-                // 更新發光層背景色
-                *bg_color = BackgroundColor(glow_col);
-
-                // 更新子元素（卡片和文字）的顏色
-                for child in children.iter() {
-                    if let Ok(mut text_color) = text_colors.get_mut(child) {
-                        let text_col = notif_type.text_color().with_alpha(alpha);
-                        *text_color = TextColor(text_col);
-                    }
-                }
-            }
+            let Some(notification) = notification_queue.notifications.get(notif_ui.index) else { continue };
+            update_notification_fade(notification, &mut bg_color, children, &mut text_colors);
         }
     }
 }

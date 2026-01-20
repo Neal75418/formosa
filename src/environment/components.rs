@@ -1,6 +1,7 @@
 //! 環境互動組件
 
 use bevy::prelude::*;
+use crate::core::{EntityPool, calculate_fade_alpha};
 
 // ============================================================================
 // 可破壞物件
@@ -180,13 +181,8 @@ impl Debris {
 
     /// 計算當前透明度
     pub fn alpha(&self) -> f32 {
-        let fade_start = 0.7;
         let progress = self.lifetime / self.max_lifetime;
-        if progress < fade_start {
-            1.0
-        } else {
-            1.0 - (progress - fade_start) / (1.0 - fade_start)
-        }
+        calculate_fade_alpha(progress, 0.7)
     }
 }
 
@@ -234,77 +230,79 @@ impl DestructionEvent {
 ///
 /// 避免頻繁的 spawn/despawn 造成記憶體分配開銷。
 /// 碎片結束生命週期時歸還池中重用，而非銷毀。
-#[derive(Resource)]
+///
+/// 使用通用 `EntityPool` 實現，避免重複程式碼。
+#[derive(Resource, Default)]
 pub struct DebrisPool {
-    /// 可用的碎片實體（已隱藏）
-    pub available: Vec<Entity>,
-    /// 正在使用的碎片實體
-    pub in_use: Vec<Entity>,
-    /// 池最大大小
-    pub max_size: usize,
-}
-
-impl Default for DebrisPool {
-    fn default() -> Self {
-        Self::new(150)  // 預設最多 150 個碎片
-    }
+    /// 內部實體池
+    pool: EntityPool,
 }
 
 impl DebrisPool {
     pub fn new(max_size: usize) -> Self {
         Self {
-            available: Vec::with_capacity(max_size),
-            in_use: Vec::with_capacity(max_size),
-            max_size,
+            pool: EntityPool::new(max_size),
         }
     }
 
     /// 從池中取得一個碎片實體（僅標記為候選，需呼叫 confirm_acquire 確認）
+    #[inline]
     pub fn acquire(&mut self) -> Option<Entity> {
-        self.available.pop()
+        self.pool.acquire()
     }
 
     /// 確認取得實體（將實體加入使用中列表）
+    #[inline]
     pub fn confirm_acquire(&mut self, entity: Entity) {
-        self.in_use.push(entity);
+        self.pool.confirm_acquire(entity);
     }
 
     /// 取消取得（將實體退回可用列表）
+    #[inline]
     pub fn cancel_acquire(&mut self, entity: Entity) {
-        self.available.push(entity);
+        self.pool.cancel_acquire(entity);
     }
 
     /// 歸還碎片實體到池中
+    #[inline]
     pub fn release(&mut self, entity: Entity) {
-        // 使用 swap_remove 保持 O(1) 移除，搜索仍為 O(n)
-        // 對於 max_size=150 的池，這是可接受的
-        if let Some(idx) = self.in_use.iter().position(|&e| e == entity) {
-            self.in_use.swap_remove(idx);
-            if self.available.len() < self.max_size {
-                self.available.push(entity);
-            }
-        }
+        self.pool.release(entity);
     }
 
     /// 清理無效實體（當外部系統刪除了池中的實體時使用）
+    #[inline]
     pub fn cleanup_invalid(&mut self, is_valid: impl Fn(Entity) -> bool) {
-        self.in_use.retain(|&e| is_valid(e));
-        self.available.retain(|&e| is_valid(e));
+        self.pool.cleanup_invalid(is_valid);
     }
 
     /// 取得目前使用中的碎片數量
+    #[inline]
     pub fn active_count(&self) -> usize {
-        self.in_use.len()
+        self.pool.active_count()
     }
 
     /// 取得池中可用的碎片數量
+    #[inline]
     pub fn available_count(&self) -> usize {
-        self.available.len()
+        self.pool.available_count()
     }
 
     /// 檢查是否可以生成更多碎片
+    #[inline]
     pub fn can_spawn(&self) -> bool {
-        !self.available.is_empty() || self.in_use.len() < self.max_size
+        self.pool.can_spawn()
+    }
+
+    /// 將新建立的實體加入使用中列表
+    #[inline]
+    pub fn add_new_entity(&mut self, entity: Entity) {
+        self.pool.in_use.push(entity);
+    }
+
+    /// 檢查是否可以創建新實體
+    #[inline]
+    pub fn can_create_new(&self) -> bool {
+        self.pool.in_use.len() + self.pool.available.len() < self.pool.max_size
     }
 }
 
@@ -340,7 +338,7 @@ impl DestructibleVisuals {
             glass_shard_mesh: meshes.add(Cuboid::new(0.1, 0.15, 0.01)),
             glass_shard_material: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.8, 0.9, 1.0, 0.6),
-                alpha_mode: bevy::prelude::AlphaMode::Blend,
+                alpha_mode: AlphaMode::Blend,
                 metallic: 0.1,
                 perceptual_roughness: 0.1,
                 ..default()

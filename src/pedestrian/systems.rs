@@ -1871,6 +1871,10 @@ fn apply_panic_to_pedestrian(
     panic_state.trigger_panic(intensity, source);
 
     if panic_state.is_panicked() && ped_state.state != PedState::Fleeing {
+        // 保存當前狀態以便恐慌結束後恢復
+        if panic_state.previous_state.is_none() {
+            panic_state.previous_state = Some(ped_state.state);
+        }
         ped_state.state = PedState::Fleeing;
         ped_state.fear_level = panic_state.panic_level;
         ped_state.flee_timer = flee_timer_base + panic_state.panic_level * flee_timer_panic_mul;
@@ -1893,7 +1897,8 @@ fn handle_panic_fade(
     panic_state.calm_down(calm_down_rate, dt);
 
     if !panic_state.is_panicked() && ped_state.state == PedState::Fleeing && ped_state.flee_timer <= 0.0 {
-        ped_state.state = PedState::Walking;
+        // 恢復恐慌前的狀態，若無則預設為 Walking
+        ped_state.state = panic_state.previous_state.take().unwrap_or(PedState::Walking);
         ped_state.fear_level = 0.0;
     }
 }

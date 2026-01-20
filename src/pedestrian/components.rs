@@ -1358,6 +1358,8 @@ pub struct PanicState {
     pub can_spread_panic: bool,
     /// 恐慌持續時間（累計被恐慌的時間）
     pub panic_duration: f32,
+    /// 恐慌前的狀態（用於恢復）
+    pub previous_state: Option<PedState>,
 }
 
 impl Default for PanicState {
@@ -1368,6 +1370,7 @@ impl Default for PanicState {
             scream_cooldown: 0.0,
             can_spread_panic: true,
             panic_duration: 0.0,
+            previous_state: None,
         }
     }
 }

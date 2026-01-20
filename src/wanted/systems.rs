@@ -182,7 +182,9 @@ fn process_cooldown(
 
     if wanted.cooldown_timer >= wanted.cooldown_duration() {
         let old_stars = wanted.stars;
-        wanted.reduce_heat(20.0);
+        // 百分比減少熱度，高星級時消退更平滑
+        let heat_reduction = (wanted.heat * 0.2).max(5.0);
+        wanted.reduce_heat(heat_reduction);
         wanted.cooldown_timer = 0.0;
 
         if wanted.stars != old_stars {

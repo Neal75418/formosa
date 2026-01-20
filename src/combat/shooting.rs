@@ -750,10 +750,10 @@ fn fire_bullet(
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
-    // 計算隨機散射偏移
+    // 計算隨機散射偏移（完整散佈範圍 -spread 到 +spread）
     let spread_rad = spread_degrees.to_radians();
-    let spread_x = (rand::random::<f32>() - 0.5) * spread_rad;
-    let spread_y = (rand::random::<f32>() - 0.5) * spread_rad;
+    let spread_x = (rand::random::<f32>() - 0.5) * 2.0 * spread_rad;
+    let spread_y = (rand::random::<f32>() - 0.5) * 2.0 * spread_rad;
 
     fire_bullet_with_offset(
         commands,

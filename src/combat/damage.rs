@@ -50,8 +50,8 @@ const HIT_MARKER_DURATION: f32 = 0.2;
 const FLOATING_DAMAGE_HEAD_OFFSET: f32 = 1.8;
 /// 預設受傷位置 Y 偏移
 const DEFAULT_HIT_POSITION_Y_OFFSET: f32 = 1.2;
-/// 爆頭高度閾值（相對於敵人位置）
-const HEADSHOT_HEIGHT_THRESHOLD: f32 = 1.5;
+/// 爆頭高度閾值（相對於敵人位置，約肩膀以上）
+const HEADSHOT_HEIGHT_THRESHOLD: f32 = 0.85;
 /// 胸口高度（衝量應用點）
 const CHEST_HEIGHT: f32 = 1.0;
 /// 重生計時器時長（秒）
@@ -121,11 +121,14 @@ const BLOOD_PARTICLE_MAX_SCALE: f32 = 0.06;
 
 // === 傷害系統輔助函數 ===
 
-/// 計算掩體傷害減免
+/// 計算掩體傷害減免（含攻擊方向檢測）
 #[inline]
 fn calculate_cover_reduction(
     seeker: Option<&CoverSeeker>,
     cover_point_query: &Query<&CoverPoint>,
+    attacker: Option<Entity>,
+    target_pos: Vec3,
+    transform_query: &Query<&Transform>,
 ) -> f32 {
     let Some(seeker) = seeker else { return 0.0 };
     if !seeker.is_in_cover || seeker.is_peeking {
@@ -133,6 +136,22 @@ fn calculate_cover_reduction(
     }
     let Some(cover_entity) = seeker.target_cover else { return 0.0 };
     let Ok(cover) = cover_point_query.get(cover_entity) else { return 0.0 };
+
+    // 檢查攻擊方向是否與掩體保護方向一致
+    if let Some(attacker_entity) = attacker {
+        if let Ok(attacker_transform) = transform_query.get(attacker_entity) {
+            // 計算攻擊方向（水平面）
+            let attack_dir = target_pos - attacker_transform.translation;
+            let attack_dir_2d = Vec3::new(attack_dir.x, 0.0, attack_dir.z).normalize_or_zero();
+            let cover_dir_2d = Vec3::new(cover.cover_direction.x, 0.0, cover.cover_direction.z).normalize_or_zero();
+
+            // 如果攻擊從掩體背面來（夾角 > 90°），掩體無效
+            if attack_dir_2d.dot(cover_dir_2d) < 0.0 {
+                return 0.0;
+            }
+        }
+    }
+
     cover.damage_reduction
 }
 
@@ -363,8 +382,15 @@ pub fn damage_system(
             continue;
         };
 
-        // 計算掩體傷害減免
-        let cover_reduction = calculate_cover_reduction(cover_seeker, &cover_point_query);
+        // 計算掩體傷害減免（含攻擊方向檢測）
+        let target_pos = transform_query.get(event.target).map(|t| t.translation).unwrap_or(Vec3::ZERO);
+        let cover_reduction = calculate_cover_reduction(
+            cover_seeker,
+            &cover_point_query,
+            event.attacker,
+            target_pos,
+            &transform_query,
+        );
         let actual_damage = event.amount * (1.0 - cover_reduction);
 
         // 處理護甲吸收

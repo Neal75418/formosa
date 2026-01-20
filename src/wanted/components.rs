@@ -140,9 +140,9 @@ impl Default for PoliceConfig {
 pub struct PoliceOfficer {
     /// 警察狀態
     pub state: PoliceState,
-    /// 巡邏路徑
+    /// 巡邏路徑（TODO: 尚未實現，警察目前使用隨機遊走）
     pub patrol_route: Vec<Vec3>,
-    /// 當前巡邏點索引
+    /// 當前巡邏點索引（TODO: 配合 patrol_route 實現）
     pub patrol_index: usize,
     /// 是否正在追捕玩家
     pub target_player: bool,

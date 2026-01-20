@@ -765,8 +765,8 @@ pub fn handle_explosion_event_system(
 
                 // 只有沒有障礙物時才造成傷害
                 if !has_obstacle {
-                    // 傷害隨距離衰減（確保不會為負）
-                    let damage_ratio = (1.0 - (distance / event.radius)).max(0.0);
+                    // 傷害隨距離衰減（平方根曲線，中距離傷害更高）
+                    let damage_ratio = (1.0 - (distance / event.radius).sqrt()).max(0.0);
                     let damage = event.max_damage * damage_ratio;
 
                     damage_events.write(DamageEvent {
@@ -856,10 +856,13 @@ pub fn fire_zone_update_system(
             fire.damage_tick = 0.5;
 
             let fire_pos = fire_transform.translation;
+            let radius_sq = fire.radius * fire.radius;
+            let damage = fire.damage_per_second * 0.5; // 半秒傷害（預計算）
+
             for (target, target_transform) in &damageable_query {
-                let distance = fire_pos.distance(target_transform.translation);
-                if distance < fire.radius {
-                    let damage = fire.damage_per_second * 0.5; // 半秒傷害
+                // 使用距離平方避免 sqrt 計算
+                let distance_sq = fire_pos.distance_squared(target_transform.translation);
+                if distance_sq < radius_sq {
                     damage_events.write(DamageEvent {
                         target,
                         amount: damage,

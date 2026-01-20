@@ -14,30 +14,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libasound2-dev libudev-dev
 
-    - name: Cache cargo registry
-      uses: actions/cache@v4
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
       with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
+        components: clippy
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
 
     - name: Build
       run: cargo build --verbose
 
-    - name: Run tests
+    - name: Test
       run: cargo test --verbose
 
     - name: Clippy

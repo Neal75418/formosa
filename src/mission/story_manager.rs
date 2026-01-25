@@ -6,7 +6,11 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::economy::RespectManager;
+use super::relationship::RelationshipManager;
 use super::story_data::*;
+use super::unlocks::UnlockManager;
+use crate::economy::PlayerWallet;
 
 /// 劇情任務管理器資源
 #[derive(Resource, Serialize, Deserialize)]
@@ -24,17 +28,6 @@ pub struct StoryMissionManager {
     pub completed_count: u32,
     /// 總遊戲時間（秒）
     pub total_play_time: f32,
-    /// 玩家金錢
-    pub player_money: i32,
-    /// 玩家聲望
-    pub player_respect: i32,
-    /// NPC 好感度
-    pub npc_relationships: HashMap<NpcId, i32>,
-    /// 解鎖的物品
-    pub unlocked_items: Vec<String>,
-    /// 解鎖的區域
-    pub unlocked_areas: Vec<AreaId>,
-    /// 檢查點資料
     pub checkpoint: Option<CheckpointData>,
     /// 當前任務表現追蹤
     #[serde(skip)]
@@ -55,11 +48,6 @@ impl Default for StoryMissionManager {
             story_flags: HashMap::new(),
             completed_count: 0,
             total_play_time: 0.0,
-            player_money: 500, // 初始金錢
-            player_respect: 0,
-            npc_relationships: HashMap::new(),
-            unlocked_items: Vec::new(),
-            unlocked_areas: vec![1], // 初始解鎖第一個區域
             checkpoint: None,
             current_performance: None,
             mission_ratings: HashMap::new(),
@@ -99,7 +87,13 @@ impl StoryMissionManager {
     }
 
     /// 開始任務
-    pub fn start_mission(&mut self, mission: &StoryMission) -> Result<(), String> {
+    pub fn start_mission(
+        &mut self,
+        mission: &StoryMission,
+        wallet: &PlayerWallet,
+        respect: &RespectManager,
+        unlocks: &UnlockManager,
+    ) -> Result<(), String> {
         // 檢查是否已有進行中任務
         if self.current_mission.is_some() {
             return Err("已有進行中的任務".to_string());
@@ -112,7 +106,16 @@ impl StoryMissionManager {
         }
 
         // 檢查解鎖條件
-        if !self.check_unlock_conditions(&mission.unlock_conditions) {
+        // 檢查解鎖條件 (Need external managers, so defaulting to true here or changing signature?
+        // Changing signature is hard because this is called by systems that might not have them yet?
+        // Actually, start_mission is usually called from interaction logic.
+        // Let's comment this out for now and require check_unlock_conditions to be called EXTERNALLY before start_mission if strict check needed.
+        // Or update start_mission signature?
+        // Let's update check_unlock_conditions signature first in a separate chunk, and call it here.
+        // Wait, start_mission needs Economy/Unlock managers to check conditions!
+        // So I must update start_mission signature.
+        // pub fn start_mission(&mut self, mission: &StoryMission, economy: &EconomyManager, unlocks: &UnlockManager)
+        if !self.check_unlock_conditions(&mission.unlock_conditions, wallet, respect, unlocks) {
             return Err("不滿足解鎖條件".to_string());
         }
 
@@ -145,7 +148,11 @@ impl StoryMissionManager {
             let rating = performance.calculate_rating(target_time);
 
             // 更新最佳評分
-            let current_best = self.mission_ratings.get(&mission_id).copied().unwrap_or_default();
+            let current_best = self
+                .mission_ratings
+                .get(&mission_id)
+                .copied()
+                .unwrap_or_default();
             if rating.stars() > current_best.stars() {
                 self.mission_ratings.insert(mission_id, rating);
             }
@@ -162,11 +169,19 @@ impl StoryMissionManager {
                 performance,
                 base_reward,
                 final_reward,
-                unlocked_items: Vec::new(),  // TODO: 從任務獎勵取得
+                unlocked_items: Vec::new(), // TODO: 從任務獎勵取得
                 unlocked_missions: Vec::new(),
             });
 
-            self.player_money += final_reward;
+            // self.player_money += final_reward; // Moved to result usage or needs EconomyManager passed in.
+            // complete_current_mission signature update?
+            // Actually, complete_current_mission returns MissionCompletionResult.
+            // The Caller (system) should handle applying rewards to EconomyManager using the result.
+            // But we have `final_reward` calculation here.
+            // I'll leave the money addition to the caller for now, or update signature?
+            // The caller is `mission_event_handler`. It has access to resources.
+            // So I will REMOVE `self.player_money += final_reward;` here.
+            // The caller will use `last_completion_result` to update economy.
         }
 
         self.set_mission_status(mission_id, StoryMissionStatus::Completed);
@@ -207,11 +222,14 @@ impl StoryMissionManager {
     }
 
     /// 從檢查點重試任務
-    pub fn retry_from_checkpoint(&mut self, database: &StoryMissionDatabase) -> Result<Vec3, String> {
-        let checkpoint = self.checkpoint.clone()
-            .ok_or("沒有可用的檢查點")?;
+    pub fn retry_from_checkpoint(
+        &mut self,
+        database: &StoryMissionDatabase,
+    ) -> Result<Vec3, String> {
+        let checkpoint = self.checkpoint.clone().ok_or("沒有可用的檢查點")?;
 
-        let mission = database.get(checkpoint.mission_id)
+        let mission = database
+            .get(checkpoint.mission_id)
             .ok_or("找不到任務資料")?;
 
         // 記錄重試次數
@@ -285,7 +303,10 @@ impl StoryMissionManager {
 
     /// 取得當前任務最佳評分
     pub fn get_best_rating(&self, mission_id: StoryMissionId) -> StoryMissionRating {
-        self.mission_ratings.get(&mission_id).copied().unwrap_or_default()
+        self.mission_ratings
+            .get(&mission_id)
+            .copied()
+            .unwrap_or_default()
     }
 
     /// 清除最近完成結果（UI 已顯示後）
@@ -298,18 +319,32 @@ impl StoryMissionManager {
     // ========================================================================
 
     /// 檢查多個解鎖條件（全部需滿足）
-    pub fn check_unlock_conditions(&self, conditions: &[UnlockCondition]) -> bool {
-        conditions.iter().all(|c| self.check_unlock_condition(c))
+    pub fn check_unlock_conditions(
+        &self,
+        conditions: &[UnlockCondition],
+        wallet: &PlayerWallet,
+        respect: &RespectManager,
+        unlocks: &UnlockManager,
+    ) -> bool {
+        conditions
+            .iter()
+            .all(|c| self.check_unlock_condition(c, wallet, respect, unlocks))
     }
 
     /// 檢查單個解鎖條件
-    pub fn check_unlock_condition(&self, condition: &UnlockCondition) -> bool {
+    pub fn check_unlock_condition(
+        &self,
+        condition: &UnlockCondition,
+        wallet: &PlayerWallet,
+        _respect: &RespectManager,
+        _unlocks: &UnlockManager,
+    ) -> bool {
         match condition {
             UnlockCondition::CompleteMission(id) => {
                 self.get_mission_status(*id) == StoryMissionStatus::Completed
             }
             UnlockCondition::ChapterReached(chapter) => self.current_chapter >= *chapter,
-            UnlockCondition::MoneyAmount(min) => self.player_money >= *min as i32,
+            UnlockCondition::MoneyAmount(min) => wallet.cash >= *min as i32,
             UnlockCondition::TimeOfDay(_start, _end) => {
                 // 需要從外部傳入當前時間
                 // 這裡暫時返回 true
@@ -344,93 +379,34 @@ impl StoryMissionManager {
     // 金錢與聲望
     // ========================================================================
 
-    /// 增加金錢
-    pub fn add_money(&mut self, amount: i32) {
-        self.player_money = (self.player_money + amount).max(0);
-    }
-
-    /// 扣除金錢
-    pub fn spend_money(&mut self, amount: i32) -> bool {
-        if self.player_money >= amount {
-            self.player_money -= amount;
-            true
-        } else {
-            false
-        }
-    }
-
-    /// 增加聲望
-    pub fn add_respect(&mut self, amount: i32) {
-        self.player_respect = (self.player_respect + amount).max(0);
-    }
-
-    // ========================================================================
-    // NPC 好感度
-    // ========================================================================
-
-    /// 取得 NPC 好感度
-    pub fn get_relationship(&self, npc_id: NpcId) -> i32 {
-        self.npc_relationships.get(&npc_id).copied().unwrap_or(0)
-    }
-
-    /// 修改 NPC 好感度
-    pub fn change_relationship(&mut self, npc_id: NpcId, delta: i32) {
-        let current = self.get_relationship(npc_id);
-        let new_value = (current + delta).clamp(-100, 100);
-        self.npc_relationships.insert(npc_id, new_value);
-    }
-
-    // ========================================================================
-    // 解鎖系統
-    // ========================================================================
-
-    /// 解鎖物品
-    pub fn unlock_item(&mut self, item_id: impl Into<String>) {
-        let item = item_id.into();
-        if !self.unlocked_items.contains(&item) {
-            self.unlocked_items.push(item);
-        }
-    }
-
-    /// 檢查物品是否已解鎖
-    pub fn is_item_unlocked(&self, item_id: &str) -> bool {
-        self.unlocked_items.contains(&item_id.to_string())
-    }
-
-    /// 解鎖區域
-    pub fn unlock_area(&mut self, area_id: AreaId) {
-        if !self.unlocked_areas.contains(&area_id) {
-            self.unlocked_areas.push(area_id);
-        }
-    }
-
-    /// 檢查區域是否已解鎖
-    pub fn is_area_unlocked(&self, area_id: AreaId) -> bool {
-        self.unlocked_areas.contains(&area_id)
-    }
-
     // ========================================================================
     // 獎勵發放
     // ========================================================================
 
     /// 發放任務獎勵
-    pub fn grant_rewards(&mut self, rewards: &MissionRewards) {
-        self.add_money(rewards.money as i32);
-        self.add_respect(rewards.respect as i32);
+    pub fn grant_rewards(
+        &mut self,
+        rewards: &MissionRewards,
+        wallet: &mut PlayerWallet,
+        respect: &mut RespectManager,
+        unlocks: &mut UnlockManager,
+    ) {
+        wallet.add_cash(rewards.money as i32);
+        respect.add_respect(rewards.respect as i32);
 
         // 解鎖武器
         for weapon in &rewards.unlock_weapons {
-            self.unlock_item(weapon.clone());
+            unlocks.unlock_item(weapon.clone());
         }
 
         // 解鎖載具
         for vehicle in &rewards.unlock_vehicles {
-            self.unlock_item(vehicle.clone());
+            unlocks.unlock_item(vehicle.clone());
         }
 
         // 解鎖區域
         for &area in &rewards.unlock_areas {
-            self.unlock_area(area);
+            unlocks.unlock_area(area);
         }
 
         // 解鎖任務
@@ -472,11 +448,14 @@ impl StoryMissionManager {
         &self,
         database: &StoryMissionDatabase,
     ) -> Result<CheckpointData, CheckpointError> {
-        let checkpoint = self.checkpoint.as_ref()
+        let checkpoint = self
+            .checkpoint
+            .as_ref()
             .ok_or(CheckpointError::NoCheckpoint)?;
 
         // 驗證任務存在
-        let mission = database.get(checkpoint.mission_id)
+        let mission = database
+            .get(checkpoint.mission_id)
             .ok_or(CheckpointError::MissionNotFound(checkpoint.mission_id))?;
 
         // 驗證階段有效
@@ -573,6 +552,12 @@ pub struct SaveData {
     pub name: String,
     /// 劇情管理器狀態
     pub story_manager: StoryMissionManager,
+    /// 聲望管理器
+    pub respect: RespectManager,
+    /// 關係管理器
+    pub relationship: RelationshipManager,
+    /// 解鎖管理器
+    pub unlocks: UnlockManager,
     /// 玩家位置
     pub player_position: Vec3,
     /// 玩家旋轉
@@ -591,6 +576,9 @@ impl SaveData {
     pub fn new(
         name: impl Into<String>,
         story_manager: &StoryMissionManager,
+        respect: &RespectManager,
+        relationship: &RelationshipManager,
+        unlocks: &UnlockManager,
         player_position: Vec3,
         player_rotation: f32,
     ) -> Self {
@@ -608,16 +596,14 @@ impl SaveData {
                 story_flags: story_manager.story_flags.clone(),
                 completed_count: story_manager.completed_count,
                 total_play_time: story_manager.total_play_time,
-                player_money: story_manager.player_money,
-                player_respect: story_manager.player_respect,
-                npc_relationships: story_manager.npc_relationships.clone(),
-                unlocked_items: story_manager.unlocked_items.clone(),
-                unlocked_areas: story_manager.unlocked_areas.clone(),
                 checkpoint: story_manager.checkpoint.clone(),
                 current_performance: None, // 不保存進行中的表現
                 mission_ratings: story_manager.mission_ratings.clone(),
                 last_completion_result: None, // 不保存最近結果
             },
+            respect: respect.clone(),
+            relationship: relationship.clone(),
+            unlocks: unlocks.clone(),
             player_position,
             player_rotation,
             current_weapon: None,
@@ -637,7 +623,9 @@ impl SaveData {
 
     /// 儲存到檔案
     pub fn save_to_file(&self, path: &std::path::Path) -> Result<(), SaveError> {
-        let json = self.to_json().map_err(|e| SaveError::SerializationError(e.to_string()))?;
+        let json = self
+            .to_json()
+            .map_err(|e| SaveError::SerializationError(e.to_string()))?;
         std::fs::write(path, json).map_err(|e| SaveError::IoError(e.to_string()))?;
         info!("遊戲存檔已儲存到: {:?}", path);
         Ok(())
@@ -646,11 +634,16 @@ impl SaveData {
     /// 從檔案讀取
     pub fn load_from_file(path: &std::path::Path) -> Result<Self, SaveError> {
         let json = std::fs::read_to_string(path).map_err(|e| SaveError::IoError(e.to_string()))?;
-        let data = Self::from_json(&json).map_err(|e| SaveError::DeserializationError(e.to_string()))?;
+        let data =
+            Self::from_json(&json).map_err(|e| SaveError::DeserializationError(e.to_string()))?;
 
         // 版本檢查
         if data.version != Self::CURRENT_VERSION {
-            warn!("存檔版本不符: 預期 {}, 實際 {}", Self::CURRENT_VERSION, data.version);
+            warn!(
+                "存檔版本不符: 預期 {}, 實際 {}",
+                Self::CURRENT_VERSION,
+                data.version
+            );
         }
 
         info!("遊戲存檔已載入: {:?}", path);
@@ -664,8 +657,8 @@ impl SaveData {
 
     /// 確保存檔目錄存在
     pub fn ensure_save_directory() -> Result<std::path::PathBuf, SaveError> {
-        let dir = Self::get_save_directory()
-            .ok_or(SaveError::IoError("無法取得存檔目錄".to_string()))?;
+        let dir =
+            Self::get_save_directory().ok_or(SaveError::IoError("無法取得存檔目錄".to_string()))?;
         std::fs::create_dir_all(&dir).map_err(|e| SaveError::IoError(e.to_string()))?;
         Ok(dir)
     }
@@ -845,29 +838,26 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
         .at_location(Vec3::new(50.0, 0.0, 50.0))
         .with_phase(
             MissionPhase::new(1, StoryMissionType::Dialogue, "找到神秘人")
-                .with_objective(
-                    MissionObjective::new(
-                        1,
-                        ObjectiveType::ReachLocation(Vec3::new(55.0, 0.0, 55.0), 3.0),
-                        "前往酒吧",
-                    )
-                )
-                .with_start_dialogue(1)
+                .with_objective(MissionObjective::new(
+                    1,
+                    ObjectiveType::ReachLocation(Vec3::new(55.0, 0.0, 55.0), 3.0),
+                    "前往酒吧",
+                ))
+                .with_start_dialogue(1),
         )
         .with_phase(
-            MissionPhase::new(2, StoryMissionType::Dialogue, "與老王交談")
-                .with_objective(
-                    MissionObjective::new(
-                        2,
-                        ObjectiveType::TalkToNpc("mysterious_man".to_string()),
-                        "與神秘人交談",
-                    )
-                )
+            MissionPhase::new(2, StoryMissionType::Dialogue, "與老王交談").with_objective(
+                MissionObjective::new(
+                    2,
+                    ObjectiveType::TalkToNpc("mysterious_man".to_string()),
+                    "與神秘人交談",
+                ),
+            ),
         )
         .with_rewards(
             MissionRewards::money(100)
                 .with_respect(10)
-                .unlock_mission(2)
+                .unlock_mission(2),
         );
 
     // 第一章第二個任務：戰鬥任務
@@ -879,40 +869,33 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
         .difficulty(Difficulty::Normal)
         .with_phase(
             MissionPhase::new(1, StoryMissionType::Dialogue, "前往目標地點")
-                .with_objective(
-                    MissionObjective::new(
-                        1,
-                        ObjectiveType::ReachLocation(Vec3::new(150.0, 0.0, 120.0), 5.0),
-                        "前往工業區倉庫",
-                    )
-                )
-                .with_start_dialogue(2)
+                .with_objective(MissionObjective::new(
+                    1,
+                    ObjectiveType::ReachLocation(Vec3::new(150.0, 0.0, 120.0), 5.0),
+                    "前往工業區倉庫",
+                ))
+                .with_start_dialogue(2),
         )
         .with_phase(
             MissionPhase::new(2, StoryMissionType::Elimination, "消滅守衛")
                 .with_objective(
-                    MissionObjective::new(
-                        2,
-                        ObjectiveType::KillCount(3),
-                        "消滅守衛",
-                    ).with_count(3)
+                    MissionObjective::new(2, ObjectiveType::KillCount(3), "消滅守衛").with_count(3),
                 )
-                .with_time_limit(180.0)
+                .with_time_limit(180.0),
         )
         .with_phase(
-            MissionPhase::new(3, StoryMissionType::Dialogue, "找到目標")
-                .with_objective(
-                    MissionObjective::new(
-                        3,
-                        ObjectiveType::TalkToNpc("debtor".to_string()),
-                        "找到欠債人",
-                    )
-                )
+            MissionPhase::new(3, StoryMissionType::Dialogue, "找到目標").with_objective(
+                MissionObjective::new(
+                    3,
+                    ObjectiveType::TalkToNpc("debtor".to_string()),
+                    "找到欠債人",
+                ),
+            ),
         )
         .with_rewards(
             MissionRewards::money(500)
                 .with_respect(25)
-                .unlock_mission(3)
+                .unlock_mission(3),
         );
 
     // 第一章第三個任務：追車任務
@@ -924,42 +907,37 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
         .difficulty(Difficulty::Normal)
         .with_phase(
             MissionPhase::new(1, StoryMissionType::Chase, "等待目標出現")
-                .with_objective(
-                    MissionObjective::new(
-                        1,
-                        ObjectiveType::ReachLocation(Vec3::new(100.0, 0.0, -80.0), 5.0),
-                        "前往監視點",
-                    )
-                )
-                .with_start_dialogue(3)
+                .with_objective(MissionObjective::new(
+                    1,
+                    ObjectiveType::ReachLocation(Vec3::new(100.0, 0.0, -80.0), 5.0),
+                    "前往監視點",
+                ))
+                .with_start_dialogue(3),
         )
         .with_phase(
             MissionPhase::new(2, StoryMissionType::Chase, "追蹤可疑車輛")
-                .with_objective(
-                    MissionObjective::new(
-                        2,
-                        ObjectiveType::FollowTarget("suspect_vehicle".to_string(), 50.0),
-                        "追蹤車輛",
-                    )
-                )
+                .with_objective(MissionObjective::new(
+                    2,
+                    ObjectiveType::FollowTarget("suspect_vehicle".to_string(), 50.0),
+                    "追蹤車輛",
+                ))
                 .with_time_limit(120.0)
-                .with_fail_condition(FailCondition::TargetEscaped)
+                .with_fail_condition(FailCondition::TargetEscaped),
         )
         .with_phase(
-            MissionPhase::new(3, StoryMissionType::Dialogue, "記下地點")
-                .with_objective(
-                    MissionObjective::new(
-                        3,
-                        ObjectiveType::ReachLocation(Vec3::new(200.0, 0.0, -150.0), 5.0),
-                        "到達目的地",
-                    )
-                )
+            MissionPhase::new(3, StoryMissionType::Dialogue, "記下地點").with_objective(
+                MissionObjective::new(
+                    3,
+                    ObjectiveType::ReachLocation(Vec3::new(200.0, 0.0, -150.0), 5.0),
+                    "到達目的地",
+                ),
+            ),
         )
         .with_rewards(
             MissionRewards::money(300)
                 .with_respect(20)
                 .unlock_mission(4)
-                .set_flag("found_hideout".to_string())
+                .set_flag("found_hideout".to_string()),
         );
 
     // 第一章第四個任務：潛入任務
@@ -972,49 +950,41 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
         .difficulty(Difficulty::Hard)
         .with_phase(
             MissionPhase::new(1, StoryMissionType::Stealth, "潛入大樓")
-                .with_objective(
-                    MissionObjective::new(
-                        1,
-                        ObjectiveType::ReachLocation(Vec3::new(210.0, 0.0, -160.0), 3.0),
-                        "找到側門入口",
-                    )
-                )
+                .with_objective(MissionObjective::new(
+                    1,
+                    ObjectiveType::ReachLocation(Vec3::new(210.0, 0.0, -160.0), 3.0),
+                    "找到側門入口",
+                ))
                 .with_start_dialogue(4)
-                .with_fail_condition(FailCondition::Detected)
+                .with_fail_condition(FailCondition::Detected),
         )
         .with_phase(
             MissionPhase::new(2, StoryMissionType::Retrieve, "取得證據")
-                .with_objective(
-                    MissionObjective::new(
-                        2,
-                        ObjectiveType::CollectItem("evidence_files".to_string()),
-                        "找到機密文件",
-                    )
-                )
-                .with_objective(
-                    MissionObjective::new(
-                        3,
-                        ObjectiveType::CollectItem("financial_records".to_string()),
-                        "找到財務記錄",
-                    )
-                )
+                .with_objective(MissionObjective::new(
+                    2,
+                    ObjectiveType::CollectItem("evidence_files".to_string()),
+                    "找到機密文件",
+                ))
+                .with_objective(MissionObjective::new(
+                    3,
+                    ObjectiveType::CollectItem("financial_records".to_string()),
+                    "找到財務記錄",
+                )),
         )
         .with_phase(
             MissionPhase::new(3, StoryMissionType::Stealth, "離開建築")
-                .with_objective(
-                    MissionObjective::new(
-                        4,
-                        ObjectiveType::ReachLocation(Vec3::new(180.0, 0.0, -140.0), 5.0),
-                        "安全撤離",
-                    )
-                )
-                .with_fail_condition(FailCondition::Detected)
+                .with_objective(MissionObjective::new(
+                    4,
+                    ObjectiveType::ReachLocation(Vec3::new(180.0, 0.0, -140.0), 5.0),
+                    "安全撤離",
+                ))
+                .with_fail_condition(FailCondition::Detected),
         )
         .with_rewards(
             MissionRewards::money(800)
                 .with_respect(40)
                 .unlock_mission(5)
-                .set_flag("has_evidence".to_string())
+                .set_flag("has_evidence".to_string()),
         );
 
     // 第一章最終任務：刺殺老闆
@@ -1028,41 +998,33 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
         .with_phase(
             MissionPhase::new(1, StoryMissionType::Elimination, "殺進去")
                 .with_objective(
-                    MissionObjective::new(
-                        1,
-                        ObjectiveType::KillCount(5),
-                        "消滅門衛",
-                    ).with_count(5)
+                    MissionObjective::new(1, ObjectiveType::KillCount(5), "消滅門衛").with_count(5),
                 )
-                .with_start_dialogue(5)
+                .with_start_dialogue(5),
         )
         .with_phase(
             MissionPhase::new(2, StoryMissionType::Assassination, "找到老闆")
-                .with_objective(
-                    MissionObjective::new(
-                        2,
-                        ObjectiveType::KillTarget("boss".to_string()),
-                        "消滅老闆",
-                    )
-                )
-                .with_time_limit(300.0)
+                .with_objective(MissionObjective::new(
+                    2,
+                    ObjectiveType::KillTarget("boss".to_string()),
+                    "消滅老闆",
+                ))
+                .with_time_limit(300.0),
         )
         .with_phase(
             MissionPhase::new(3, StoryMissionType::Dialogue, "任務完成")
-                .with_objective(
-                    MissionObjective::new(
-                        3,
-                        ObjectiveType::ReachLocation(Vec3::new(50.0, 0.0, 50.0), 5.0),
-                        "回去向老王回報",
-                    )
-                )
-                .with_end_dialogue(6)
+                .with_objective(MissionObjective::new(
+                    3,
+                    ObjectiveType::ReachLocation(Vec3::new(50.0, 0.0, 50.0), 5.0),
+                    "回去向老王回報",
+                ))
+                .with_end_dialogue(6),
         )
         .with_rewards(
             MissionRewards::money(2000)
                 .with_respect(100)
                 .unlock_weapon("rifle".to_string())
-                .set_flag("chapter1_complete".to_string())
+                .set_flag("chapter1_complete".to_string()),
         );
 
     database.register(mission1);

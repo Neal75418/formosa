@@ -39,6 +39,14 @@ pub const HELICOPTER_VERTICAL_SPEED: f32 = 10.0;
 
 /// 直升機攻擊範圍
 pub const HELICOPTER_ATTACK_RANGE: f32 = 50.0;
+/// 直升機攻擊範圍平方
+pub const HELICOPTER_ATTACK_RANGE_SQ: f32 = HELICOPTER_ATTACK_RANGE * HELICOPTER_ATTACK_RANGE;
+const HELICOPTER_ATTACK_RANGE_CLOSE: f32 = HELICOPTER_ATTACK_RANGE * 0.8;
+const HELICOPTER_ATTACK_RANGE_FAR: f32 = HELICOPTER_ATTACK_RANGE * 1.2;
+const HELICOPTER_ATTACK_RANGE_CLOSE_SQ: f32 = HELICOPTER_ATTACK_RANGE_CLOSE * HELICOPTER_ATTACK_RANGE_CLOSE;
+const HELICOPTER_ATTACK_RANGE_FAR_SQ: f32 = HELICOPTER_ATTACK_RANGE_FAR * HELICOPTER_ATTACK_RANGE_FAR;
+const HELICOPTER_MOVE_THRESHOLD: f32 = 10.0;
+const HELICOPTER_MOVE_THRESHOLD_SQ: f32 = HELICOPTER_MOVE_THRESHOLD * HELICOPTER_MOVE_THRESHOLD;
 /// 直升機射擊頻率（每秒發射數）
 pub const HELICOPTER_FIRE_RATE: f32 = 8.0;
 /// 直升機子彈傷害
@@ -370,14 +378,14 @@ fn spawn_helicopter(
 // AI 系統
 // ============================================================================
 
-/// 計算水平距離
-fn calc_horizontal_distance(pos1: Vec3, pos2: Vec3) -> f32 {
-    Vec2::new(pos1.x - pos2.x, pos1.z - pos2.z).length()
+/// 計算水平距離平方
+fn calc_horizontal_distance_sq(pos1: Vec3, pos2: Vec3) -> f32 {
+    Vec2::new(pos1.x - pos2.x, pos1.z - pos2.z).length_squared()
 }
 
 /// 處理接近狀態
-fn handle_approaching_state(helicopter: &mut PoliceHelicopter, horizontal_distance: f32) {
-    if horizontal_distance < HELICOPTER_ATTACK_RANGE * 0.8 {
+fn handle_approaching_state(helicopter: &mut PoliceHelicopter, horizontal_distance_sq: f32) {
+    if horizontal_distance_sq < HELICOPTER_ATTACK_RANGE_CLOSE_SQ {
         helicopter.state = HelicopterState::Hovering;
         helicopter.hover_timer = 0.0;
     }
@@ -386,7 +394,7 @@ fn handle_approaching_state(helicopter: &mut PoliceHelicopter, horizontal_distan
 /// 處理懸停狀態
 fn handle_hovering_state(
     helicopter: &mut PoliceHelicopter,
-    horizontal_distance: f32,
+    horizontal_distance_sq: f32,
     player_visible: bool,
     dt: f32,
 ) {
@@ -394,14 +402,14 @@ fn handle_hovering_state(
 
     if helicopter.hover_timer > 2.0 && player_visible {
         helicopter.state = HelicopterState::Attacking;
-    } else if horizontal_distance > HELICOPTER_ATTACK_RANGE * 1.2 {
+    } else if horizontal_distance_sq > HELICOPTER_ATTACK_RANGE_FAR_SQ {
         helicopter.state = HelicopterState::Pursuing;
     }
 }
 
 /// 處理追擊狀態
-fn handle_pursuing_state(helicopter: &mut PoliceHelicopter, horizontal_distance: f32) {
-    if horizontal_distance < HELICOPTER_ATTACK_RANGE * 0.8 {
+fn handle_pursuing_state(helicopter: &mut PoliceHelicopter, horizontal_distance_sq: f32) {
+    if horizontal_distance_sq < HELICOPTER_ATTACK_RANGE_CLOSE_SQ {
         helicopter.state = HelicopterState::Hovering;
         helicopter.hover_timer = 0.0;
     }
@@ -410,11 +418,11 @@ fn handle_pursuing_state(helicopter: &mut PoliceHelicopter, horizontal_distance:
 /// 處理攻擊狀態
 fn handle_attacking_state(
     helicopter: &mut PoliceHelicopter,
-    horizontal_distance: f32,
+    horizontal_distance_sq: f32,
     player_visible: bool,
     dt: f32,
 ) {
-    if horizontal_distance > HELICOPTER_ATTACK_RANGE {
+    if horizontal_distance_sq > HELICOPTER_ATTACK_RANGE_SQ {
         helicopter.state = HelicopterState::Pursuing;
         return;
     }
@@ -463,21 +471,21 @@ pub fn helicopter_ai_system(
             continue;
         }
 
-        let horizontal_distance = calc_horizontal_distance(transform.translation, player_pos);
+        let horizontal_distance_sq = calc_horizontal_distance_sq(transform.translation, player_pos);
         helicopter.target_position = Some(player_pos);
 
         match helicopter.state {
             HelicopterState::Approaching => {
-                handle_approaching_state(&mut helicopter, horizontal_distance);
+                handle_approaching_state(&mut helicopter, horizontal_distance_sq);
             }
             HelicopterState::Hovering => {
-                handle_hovering_state(&mut helicopter, horizontal_distance, wanted.player_visible, dt);
+                handle_hovering_state(&mut helicopter, horizontal_distance_sq, wanted.player_visible, dt);
             }
             HelicopterState::Pursuing => {
-                handle_pursuing_state(&mut helicopter, horizontal_distance);
+                handle_pursuing_state(&mut helicopter, horizontal_distance_sq);
             }
             HelicopterState::Attacking => {
-                handle_attacking_state(&mut helicopter, horizontal_distance, wanted.player_visible, dt);
+                handle_attacking_state(&mut helicopter, horizontal_distance_sq, wanted.player_visible, dt);
             }
             HelicopterState::Evading => {
                 handle_evading_state(&mut helicopter, dt);
@@ -544,8 +552,8 @@ fn handle_normal_flight(
     };
 
     // 水平移動
-    let horizontal_distance = Vec2::new(to_target.x, to_target.z).length();
-    if horizontal_distance > 10.0 || helicopter.state == HelicopterState::Evading {
+    let horizontal_distance_sq = Vec2::new(to_target.x, to_target.z).length_squared();
+    if horizontal_distance_sq > HELICOPTER_MOVE_THRESHOLD_SQ || helicopter.state == HelicopterState::Evading {
         transform.translation += move_dir * HELICOPTER_SPEED * speed_mult * dt;
     }
 
@@ -592,10 +600,10 @@ pub fn helicopter_movement_system(
 // ============================================================================
 
 /// 檢查直升機是否可以射擊
-fn can_helicopter_fire(helicopter: &PoliceHelicopter, distance: f32) -> bool {
+fn can_helicopter_fire(helicopter: &PoliceHelicopter, distance_sq: f32) -> bool {
     helicopter.state == HelicopterState::Attacking
         && helicopter.fire_cooldown <= 0.0
-        && distance <= HELICOPTER_ATTACK_RANGE
+        && distance_sq <= HELICOPTER_ATTACK_RANGE_SQ
 }
 
 /// 計算槍口位置
@@ -624,12 +632,13 @@ pub fn helicopter_combat_system(
 
         let heli_pos = transform.translation;
         let to_player = player_pos - heli_pos;
-        let distance = to_player.length();
+        let distance_sq = to_player.length_squared();
 
-        if !can_helicopter_fire(&helicopter, distance) {
+        if !can_helicopter_fire(&helicopter, distance_sq) {
             continue;
         }
 
+        let distance = distance_sq.sqrt();
         let direction = to_player.normalize();
         let muzzle_pos = calc_muzzle_position(heli_pos, transform.forward());
 

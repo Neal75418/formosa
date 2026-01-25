@@ -83,9 +83,15 @@ fn test_save_data_serialization() {
             current_weapon_index: 0,
             in_vehicle: false,
             current_vehicle_id: None,
+            respect: 100,
         },
         world: WorldSaveData::default(),
-        missions: MissionSaveData::default(),
+        missions: MissionSaveData {
+            flags: vec![("flag1".to_string(), true)],
+            unlocked_items: vec![("item1".to_string())],
+            unlocked_areas: vec![("area1".to_string())],
+            ..Default::default()
+        },
         stats: GameStatistics::default(),
     };
 
@@ -162,19 +168,18 @@ fn test_world_save_data_default() {
 fn test_world_save_data_with_vehicles() {
     let world_data = WorldSaveData {
         owned_vehicles: vec![1, 2, 3],
-        vehicle_modifications: vec![
-            VehicleModificationSaveData {
-                vehicle_index: 1,
-                engine_level: 2,
-                transmission_level: 1,
-                suspension_level: 0,
-                brakes_level: 1,
-                tires_level: 1,
-                armor_level: 0,
-                has_nitro: true,
-                nitro_charge: 0.75,
-            },
-        ],
+        vehicle_modifications: vec![VehicleModificationSaveData {
+            vehicle_id: 1001,
+            engine_level: 2,
+            transmission_level: 1,
+            suspension_level: 0,
+            brakes_level: 1,
+            tires_level: 1,
+            armor_level: 0,
+            has_nitro: true,
+            nitro_charge: 0.75,
+            ..Default::default()
+        }],
         ..Default::default()
     };
 
@@ -206,12 +211,12 @@ fn test_mission_save_data_with_progress() {
         completed_missions: vec!["mission_01".to_string(), "mission_02".to_string()],
         active_mission: Some("mission_03".to_string()),
         mission_progress: vec![("mission_03".to_string(), 2)],
-        mission_ratings: vec![
-            ("mission_01".to_string(), 3),
-            ("mission_02".to_string(), 2),
-        ],
+        mission_ratings: vec![("mission_01".to_string(), 3), ("mission_02".to_string(), 2)],
         unlocked_missions: vec!["mission_03".to_string(), "mission_04".to_string()],
         npc_relationships: vec![("npc_01".to_string(), 50)],
+        flags: vec![],
+        unlocked_items: vec![],
+        unlocked_areas: vec![],
     };
 
     let json = serde_json::to_string(&mission_data).expect("Serialization failed");
@@ -270,7 +275,7 @@ fn test_game_statistics_serialization() {
 fn test_vehicle_modification_save_data_default() {
     let mod_data = VehicleModificationSaveData::default();
 
-    assert_eq!(mod_data.vehicle_index, 0);
+    assert_eq!(mod_data.vehicle_id, 0);
     assert_eq!(mod_data.engine_level, 0);
     assert!(!mod_data.has_nitro);
     assert_eq!(mod_data.nitro_charge, 0.0);

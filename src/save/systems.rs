@@ -12,12 +12,12 @@ use futures_lite::future;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::core::{PlayerStats, WeatherState, WorldTime};
+use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
+use crate::core::{PlayerStats, WeatherState, WeatherType, WorldTime};
 use crate::economy::PlayerWallet;
+use crate::mission::{RelationshipManager, RespectManager, StoryMissionManager, UnlockManager};
 use crate::player::Player;
-use crate::combat::{Health, Armor, WeaponInventory};
-use crate::mission::StoryMissionManager;
-use crate::vehicle::{VehicleModifications, ModLevel, NitroBoost};
+use crate::vehicle::{ModLevel, NitroBoost, VehicleId, VehicleModifications};
 
 use super::components::*;
 
@@ -110,9 +110,12 @@ pub fn handle_save_events(
     world_time: Res<WorldTime>,
     weather_state: Res<WeatherState>,
     story_manager: Res<StoryMissionManager>,
+    respect: Res<RespectManager>,
+    unlocks: Res<UnlockManager>,
+    relationship: Res<RelationshipManager>,
     player_stats: Res<PlayerStats>,
-    // 車輛改裝查詢
-    vehicle_mod_query: Query<(Entity, &VehicleModifications)>,
+    // 車輛改裝查詢（包含穩定 ID）
+    vehicle_mod_query: Query<(Entity, &VehicleId, &VehicleModifications)>,
 ) {
     // 檢查是否已有任務在執行
     if task_tracker.save_task.is_some() {
@@ -130,6 +133,9 @@ pub fn handle_save_events(
             &world_time,
             &weather_state,
             &story_manager,
+            &respect,
+            &unlocks,
+            &relationship,
             &player_stats,
             &vehicle_mod_query,
         );
@@ -164,9 +170,7 @@ pub fn handle_save_events(
         // 在背景執行緒執行 IO
         let task_pool = AsyncComputeTaskPool::get();
         let path = save_path.clone();
-        let task = task_pool.spawn(async move {
-            perform_save_async(json, path).await
-        });
+        let task = task_pool.spawn(async move { perform_save_async(json, path).await });
         task_tracker.save_task = Some(task);
 
         info!("存檔任務已啟動: {:?}", save_path);
@@ -207,8 +211,11 @@ fn collect_save_data(
     world_time: &WorldTime,
     weather_state: &WeatherState,
     story_manager: &StoryMissionManager,
+    respect: &RespectManager,
+    unlocks: &UnlockManager,
+    relationship: &RelationshipManager,
     _player_stats: &PlayerStats,
-    vehicle_mod_query: &Query<(Entity, &VehicleModifications)>,
+    vehicle_mod_query: &Query<(Entity, &VehicleId, &VehicleModifications)>,
 ) -> SaveData {
     let mut save_data = SaveData::default();
 
@@ -236,6 +243,7 @@ fn collect_save_data(
     // 錢包資料
     save_data.player.cash = wallet.cash;
     save_data.player.bank = wallet.bank;
+    save_data.player.respect = respect.respect;
     save_data.stats.total_money_earned = wallet.total_earned;
     save_data.stats.total_money_spent = wallet.total_spent;
 
@@ -264,27 +272,45 @@ fn collect_save_data(
         .iter()
         .map(|id| format!("{:?}", id))
         .collect();
-
-    // 車輛改裝資料
-    save_data.world.vehicle_modifications = vehicle_mod_query
+    save_data.missions.unlocked_items = unlocks.unlocked_items.clone();
+    save_data.missions.unlocked_areas = unlocks
+        .unlocked_areas
         .iter()
-        .enumerate()
-        .map(|(index, (_entity, mods))| VehicleModificationSaveData {
-            vehicle_index: index as u32,
-            engine_level: mod_level_to_u8(mods.engine),
-            transmission_level: mod_level_to_u8(mods.transmission),
-            suspension_level: mod_level_to_u8(mods.suspension),
-            brakes_level: mod_level_to_u8(mods.brakes),
-            tires_level: mod_level_to_u8(mods.tires),
-            armor_level: mod_level_to_u8(mods.armor),
-            has_nitro: mods.has_nitro,
-            nitro_charge: mods.nitro_charge,
-        })
+        .map(|id| id.to_string())
         .collect();
+    save_data.missions.npc_relationships = relationship
+        .relationships
+        .iter()
+        .map(|(k, v)| (format!("{}", k), *v))
+        .collect();
+    save_data.missions.flags = story_manager
+        .story_flags
+        .iter()
+        .map(|(k, v)| (k.clone(), *v))
+        .collect();
+
+    // 車輛改裝資料（使用穩定 VehicleId）
+    #[allow(deprecated)] // vehicle_index 已棄用
+    {
+        save_data.world.vehicle_modifications = vehicle_mod_query
+            .iter()
+            .map(|(_entity, vehicle_id, mods)| VehicleModificationSaveData {
+                vehicle_id: vehicle_id.as_u64(),
+                vehicle_index: 0, // 已棄用，保留向後相容
+                engine_level: mod_level_to_u8(mods.engine),
+                transmission_level: mod_level_to_u8(mods.transmission),
+                suspension_level: mod_level_to_u8(mods.suspension),
+                brakes_level: mod_level_to_u8(mods.brakes),
+                tires_level: mod_level_to_u8(mods.tires),
+                armor_level: mod_level_to_u8(mods.armor),
+                has_nitro: mods.has_nitro,
+                nitro_charge: mods.nitro_charge,
+            })
+            .collect();
+    }
 
     save_data
 }
-
 
 // ============================================================================
 // 讀檔處理
@@ -317,9 +343,7 @@ pub fn handle_load_events(
         // 在背景執行緒執行 IO
         let task_pool = AsyncComputeTaskPool::get();
         let path = load_path.clone();
-        let task = task_pool.spawn(async move {
-            perform_load_async(path).await
-        });
+        let task = task_pool.spawn(async move { perform_load_async(path).await });
         task_tracker.load_task = Some(task);
 
         info!("讀檔任務已啟動: {:?}", load_path);
@@ -354,11 +378,26 @@ pub fn apply_pending_load_data(
     mut commands: Commands,
     mut task_tracker: ResMut<SaveTaskTracker>,
     mut save_manager: ResMut<SaveManager>,
-    mut player_query: Query<(&mut Transform, &mut Player, Option<&mut Health>, Option<&mut Armor>)>,
+    mut player_query: Query<(
+        &mut Transform,
+        &mut Player,
+        Option<&mut Health>,
+        Option<&mut Armor>,
+    )>,
     mut wallet: ResMut<PlayerWallet>,
+    mut weapon_query: Query<&mut WeaponInventory, With<Player>>,
     mut world_time: ResMut<WorldTime>,
     mut weather_state: ResMut<WeatherState>,
-    mut vehicle_mod_query: Query<(Entity, &mut VehicleModifications, Option<&NitroBoost>)>,
+    mut story_manager: ResMut<StoryMissionManager>,
+    mut respect: ResMut<RespectManager>,
+    mut unlocks: ResMut<UnlockManager>,
+    mut relationship: ResMut<RelationshipManager>,
+    mut vehicle_mod_query: Query<(
+        Entity,
+        &VehicleId,
+        &mut VehicleModifications,
+        Option<&NitroBoost>,
+    )>,
 ) {
     if let Some(save_data) = task_tracker.pending_load_data.take() {
         apply_save_data(
@@ -366,8 +405,13 @@ pub fn apply_pending_load_data(
             &save_data,
             &mut player_query,
             &mut wallet,
+            &mut weapon_query,
             &mut world_time,
             &mut weather_state,
+            &mut story_manager,
+            &mut respect,
+            &mut unlocks,
+            &mut relationship,
             &mut vehicle_mod_query,
         );
         save_manager.is_busy = false;
@@ -378,17 +422,28 @@ pub fn apply_pending_load_data(
 /// 非同步執行讀檔 IO
 async fn perform_load_async(path: PathBuf) -> Result<SaveData, SaveError> {
     // 讀取檔案
-    let json = std::fs::read_to_string(&path)
-        .map_err(|e| SaveError::IoError(e.to_string()))?;
+    let json = std::fs::read_to_string(&path).map_err(|e| SaveError::IoError(e.to_string()))?;
+
+    // 檔案大小限制（10MB）
+    if json.len() > 10 * 1024 * 1024 {
+        return Err(SaveError::InvalidValue {
+            field: "file_size".to_string(),
+            value: format!("{} bytes", json.len()),
+            reason: "存檔檔案過大（超過 10MB）".to_string(),
+        });
+    }
 
     // 反序列化
-    let save_data: SaveData = serde_json::from_str(&json)
-        .map_err(|e| SaveError::DeserializeError(e.to_string()))?;
+    let save_data: SaveData =
+        serde_json::from_str(&json).map_err(|e| SaveError::DeserializeError(e.to_string()))?;
 
-    // 版本檢查
-    if save_data.version != SAVE_VERSION {
+    // 驗證存檔資料
+    validate_save_data(&save_data)?;
+
+    // 版本差異警告（舊版本可接受，但提示）
+    if save_data.version < SAVE_VERSION {
         warn!(
-            "存檔版本不匹配: 存檔={}, 當前={}",
+            "存檔版本較舊: 存檔={}, 當前={}，部分功能可能無法還原",
             save_data.version, SAVE_VERSION
         );
     }
@@ -400,11 +455,26 @@ async fn perform_load_async(path: PathBuf) -> Result<SaveData, SaveError> {
 fn apply_save_data(
     commands: &mut Commands,
     save_data: &SaveData,
-    player_query: &mut Query<(&mut Transform, &mut Player, Option<&mut Health>, Option<&mut Armor>)>,
+    player_query: &mut Query<(
+        &mut Transform,
+        &mut Player,
+        Option<&mut Health>,
+        Option<&mut Armor>,
+    )>,
     wallet: &mut PlayerWallet,
+    weapon_query: &mut Query<&mut WeaponInventory, With<Player>>,
     world_time: &mut WorldTime,
     weather_state: &mut WeatherState,
-    vehicle_mod_query: &mut Query<(Entity, &mut VehicleModifications, Option<&NitroBoost>)>,
+    story_manager: &mut StoryMissionManager,
+    respect: &mut RespectManager,
+    unlocks: &mut UnlockManager,
+    relationship: &mut RelationshipManager,
+    vehicle_mod_query: &mut Query<(
+        Entity,
+        &VehicleId,
+        &mut VehicleModifications,
+        Option<&NitroBoost>,
+    )>,
 ) {
     // 玩家資料
     if let Ok((mut transform, mut player, health, armor)) = player_query.single_mut() {
@@ -426,24 +496,85 @@ fn apply_save_data(
     // 錢包資料
     wallet.cash = save_data.player.cash;
     wallet.bank = save_data.player.bank;
+    respect.respect = save_data.player.respect;
+
+    // 武器庫存還原
+    if let Ok(mut inventory) = weapon_query.single_mut() {
+        inventory.weapons.clear();
+        for saved_weapon in &save_data.player.weapons {
+            if let Some(stats) = weapon_stats_from_type_str(&saved_weapon.weapon_type) {
+                let mut weapon = Weapon::new(stats);
+                weapon.current_ammo = saved_weapon.current_ammo;
+                weapon.reserve_ammo = saved_weapon.reserve_ammo;
+                inventory.weapons.push(weapon);
+            } else {
+                warn!("無法解析武器類型: {}, 跳過", saved_weapon.weapon_type);
+            }
+        }
+        // 確保至少有拳頭
+        if inventory.weapons.is_empty() {
+            inventory.weapons.push(Weapon::new(WeaponStats::fist()));
+        }
+        // 恢復當前武器索引（確保在有效範圍內）
+        if save_data.player.current_weapon_index < inventory.weapons.len() {
+            inventory.current_index = save_data.player.current_weapon_index;
+        } else {
+            inventory.current_index = 0;
+        }
+        info!(
+            "還原 {} 把武器，當前武器索引: {}",
+            inventory.weapons.len(),
+            inventory.current_index
+        );
+    }
 
     // 世界資料
     world_time.hour = save_data.world.world_hour;
-    // TODO: 解析天氣類型字串並設定
 
-    // 天氣強度
-    weather_state.intensity = save_data.world.weather_intensity;
+    // 天氣類型還原
+    weather_state.weather_type = parse_weather_type(&save_data.world.weather);
+    weather_state.intensity = save_data.world.weather_intensity.clamp(0.0, 2.0);
+    info!(
+        "還原天氣: {:?}, 強度: {}",
+        weather_state.weather_type, weather_state.intensity
+    );
 
-    // 車輛改裝資料
+    // 任務進度還原
+    story_manager.completed_count = save_data.missions.completed_missions.len() as u32;
+    // Restore unlocks
+    unlocks.unlocked_items = save_data.missions.unlocked_items.clone();
+    unlocks.unlocked_areas = save_data
+        .missions
+        .unlocked_areas
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    // Restore relationships
+    relationship.relationships.clear();
+    for (npc_str, value) in &save_data.missions.npc_relationships {
+        if let Ok(npc_id) = npc_str.parse::<u32>() {
+            relationship.relationships.insert(npc_id, *value);
+        }
+    }
+    // Restore flags
+    story_manager.story_flags = save_data.missions.flags.iter().cloned().collect();
+    info!(
+        "還原任務進度: {} 個已完成任務",
+        story_manager.completed_count
+    );
+
+    // 車輛改裝資料（使用穩定 VehicleId 匹配）
     let vehicles: Vec<_> = vehicle_mod_query.iter_mut().collect();
-    for (index, (entity, mut mods, nitro)) in vehicles.into_iter().enumerate() {
-        // 嘗試從存檔中找到對應的改裝資料
-        if let Some(saved_mods) = save_data
+    for (entity, vehicle_id, mut mods, nitro) in vehicles.into_iter() {
+        // 嘗試從存檔中找到對應的改裝資料（優先使用 vehicle_id，回退到 vehicle_index）
+        #[allow(deprecated)]
+        let saved_mods = save_data
             .world
             .vehicle_modifications
             .iter()
-            .find(|m| m.vehicle_index == index as u32)
-        {
+            .find(|m| m.vehicle_id == vehicle_id.as_u64());
+
+        if let Some(saved_mods) = saved_mods {
             // 恢復改裝等級
             mods.engine = u8_to_mod_level(saved_mods.engine_level);
             mods.transmission = u8_to_mod_level(saved_mods.transmission_level);
@@ -460,8 +591,10 @@ fn apply_save_data(
             }
 
             info!(
-                "恢復車輛 {} 改裝: 引擎={:?}, 氮氣={}",
-                index, mods.engine, mods.has_nitro
+                "恢復車輛 ID={} 改裝: 引擎={:?}, 氮氣={}",
+                vehicle_id.as_u64(),
+                mods.engine,
+                mods.has_nitro
             );
         }
     }
@@ -517,4 +650,143 @@ pub enum SaveError {
     IoError(String),
     SerializeError(String),
     DeserializeError(String),
+    /// 存檔版本來自未來版本
+    FutureVersion {
+        save_version: u32,
+        current_version: u32,
+    },
+    /// 數值超出有效範圍
+    InvalidValue {
+        field: String,
+        value: String,
+        reason: String,
+    },
+}
+
+// ============================================================================
+// 存檔驗證
+// ============================================================================
+
+/// 驗證存檔資料有效性
+fn validate_save_data(data: &SaveData) -> Result<(), SaveError> {
+    // 1. 版本檢查 - 不接受未來版本
+    if data.version > SAVE_VERSION {
+        return Err(SaveError::FutureVersion {
+            save_version: data.version,
+            current_version: SAVE_VERSION,
+        });
+    }
+
+    // 2. 玩家數值驗證
+    if data.player.health < 0.0 || data.player.health > 500.0 {
+        return Err(SaveError::InvalidValue {
+            field: "player.health".to_string(),
+            value: data.player.health.to_string(),
+            reason: "生命值應在 0-500 之間".to_string(),
+        });
+    }
+
+    if data.player.armor < 0.0 || data.player.armor > 200.0 {
+        return Err(SaveError::InvalidValue {
+            field: "player.armor".to_string(),
+            value: data.player.armor.to_string(),
+            reason: "護甲值應在 0-200 之間".to_string(),
+        });
+    }
+
+    // 3. 世界時間驗證
+    if data.world.world_hour < 0.0 || data.world.world_hour > 24.0 {
+        return Err(SaveError::InvalidValue {
+            field: "world.world_hour".to_string(),
+            value: data.world.world_hour.to_string(),
+            reason: "遊戲時間應在 0-24 之間".to_string(),
+        });
+    }
+
+    // 4. 天氣強度驗證
+    if data.world.weather_intensity < 0.0 || data.world.weather_intensity > 2.0 {
+        warn!(
+            "天氣強度 {} 超出正常範圍，將限制在 0-2",
+            data.world.weather_intensity
+        );
+    }
+
+    // 5. 武器類型驗證（僅警告，不阻止讀檔）
+    for weapon in &data.player.weapons {
+        if !is_valid_weapon_type(&weapon.weapon_type) {
+            warn!("未知武器類型: {}, 讀檔時將跳過", weapon.weapon_type);
+        }
+    }
+
+    // 6. 車輛改裝等級驗證
+    for vehicle_mod in &data.world.vehicle_modifications {
+        if vehicle_mod.engine_level > 3
+            || vehicle_mod.transmission_level > 3
+            || vehicle_mod.suspension_level > 3
+            || vehicle_mod.brakes_level > 3
+            || vehicle_mod.tires_level > 3
+            || vehicle_mod.armor_level > 3
+        {
+            warn!(
+                "車輛 ID={} 改裝等級超過最大值 3，將自動限制",
+                vehicle_mod.vehicle_id
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// 檢查武器類型是否有效
+fn is_valid_weapon_type(weapon_type: &str) -> bool {
+    parse_weapon_type(weapon_type).is_some()
+}
+
+/// 解析武器類型字串為 WeaponType
+fn parse_weapon_type(weapon_type: &str) -> Option<WeaponType> {
+    match weapon_type {
+        "Fist" => Some(WeaponType::Fist),
+        "Staff" => Some(WeaponType::Staff),
+        "Knife" => Some(WeaponType::Knife),
+        "Pistol" => Some(WeaponType::Pistol),
+        "SMG" => Some(WeaponType::SMG),
+        "Shotgun" => Some(WeaponType::Shotgun),
+        "Rifle" => Some(WeaponType::Rifle),
+        // 相容舊存檔的別名
+        "AssaultRifle" => Some(WeaponType::Rifle),
+        "Sniper" => Some(WeaponType::Rifle),
+        "RPG" => Some(WeaponType::Shotgun), // 暫時映射
+        "Melee" => Some(WeaponType::Fist),
+        _ => None,
+    }
+}
+
+/// 根據武器類型字串取得 WeaponStats
+fn weapon_stats_from_type_str(weapon_type: &str) -> Option<WeaponStats> {
+    match weapon_type {
+        "Fist" | "Melee" => Some(WeaponStats::fist()),
+        "Staff" => Some(WeaponStats::staff()),
+        "Knife" => Some(WeaponStats::knife()),
+        "Pistol" => Some(WeaponStats::pistol()),
+        "SMG" => Some(WeaponStats::smg()),
+        "Shotgun" | "RPG" => Some(WeaponStats::shotgun()),
+        "Rifle" | "AssaultRifle" | "Sniper" => Some(WeaponStats::rifle()),
+        _ => None,
+    }
+}
+
+/// 解析天氣類型字串為 WeatherType
+fn parse_weather_type(weather: &str) -> WeatherType {
+    match weather {
+        "Clear" => WeatherType::Clear,
+        "Cloudy" => WeatherType::Cloudy,
+        "Rainy" => WeatherType::Rainy,
+        "Foggy" => WeatherType::Foggy,
+        "Stormy" => WeatherType::Stormy,
+        "Sandstorm" => WeatherType::Sandstorm,
+        _ => {
+            warn!("未知天氣類型: {}, 使用預設 Clear", weather);
+            WeatherType::Clear
+        }
+    }
 }

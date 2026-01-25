@@ -5,6 +5,25 @@
 use bevy::prelude::*;
 use rand::Rng;
 
+// ============================================================================
+// 天體系統 (太陽/月亮)
+// ============================================================================
+
+/// 太陽標記組件
+/// 用於識別 DirectionalLight 作為太陽，以便根據時間旋轉
+#[derive(Component)]
+pub struct Sun;
+
+/// 月亮組件
+/// 包含月相資訊，用於視覺效果
+#[derive(Component)]
+pub struct Moon {
+    /// 月相 (0.0 = 新月, 0.5 = 滿月, 1.0 = 新月)
+    pub phase: f32,
+    /// 發光強度
+    pub emissive_intensity: f32,
+}
+
 /// 共用材質快取（減少重複材質創建）
 #[derive(Resource, Clone)]
 #[allow(dead_code)]  // 逐步遷移中，部分材質暫未使用

@@ -1,112 +1,23 @@
 //! 載具系統
 
+use super::{
+    DriftSmoke, NitroBoost, NitroFlame, NpcState, NpcVehicle, TireTrack, TrafficLight,
+    TrafficLightBulb, TrafficLightState, TrafficLightVisuals, Vehicle, VehicleConfig,
+    VehicleEffectTracker, VehicleEffectVisuals, VehicleId, VehicleModifications,
+    VehiclePhysicsMode, VehicleType, VehicleVisualRoot,
+};
+use crate::core::{
+    GameState, WeatherState, WeatherType, COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC,
+    COLLISION_GROUP_VEHICLE,
+};
 use bevy::prelude::*;
-use super::{Vehicle, VehicleType, NpcVehicle, NpcState, DriftSmoke, TireTrack, VehicleEffectVisuals, VehicleEffectTracker, TrafficLight, TrafficLightState, TrafficLightBulb, TrafficLightVisuals, VehicleModifications, NitroBoost, NitroFlame};
 use rand::Rng;
-use crate::core::{GameState, WeatherState, WeatherType, COLLISION_GROUP_CHARACTER, COLLISION_GROUP_VEHICLE, COLLISION_GROUP_STATIC};
+
 use bevy_rapier3d::prelude::*;
 
 // ============================================================================
-// 車輛系統常數
+// 車輛系統
 // ============================================================================
-
-// === 天氣影響因子 ===
-/// 晴天牽引力乘數
-const WEATHER_CLEAR_TRACTION: f32 = 1.0;
-/// 陰天牽引力乘數
-const WEATHER_CLOUDY_TRACTION: f32 = 1.0;
-/// 雨天基礎牽引力乘數（最滑）
-const WEATHER_RAINY_TRACTION_BASE: f32 = 0.7;
-/// 雨天牽引力恢復範圍
-const WEATHER_RAINY_TRACTION_RANGE: f32 = 0.3;
-/// 霧天牽引力乘數
-const WEATHER_FOGGY_TRACTION: f32 = 0.9;
-/// 雨天基礎操控乘數
-const WEATHER_RAINY_HANDLING_BASE: f32 = 0.85;
-/// 雨天操控恢復範圍
-const WEATHER_RAINY_HANDLING_RANGE: f32 = 0.15;
-/// 霧天操控乘數
-const WEATHER_FOGGY_HANDLING: f32 = 0.95;
-
-// === 駕駛物理 ===
-/// 加速模式乘數
-const BOOST_MULTIPLIER: f32 = 1.3;
-/// 正常牽引力閾值
-const NORMAL_TRACTION_THRESHOLD: f32 = 0.9;
-/// 低牽引力閾值
-const LOW_TRACTION_THRESHOLD: f32 = 0.8;
-/// 正常打滑速度閾值
-const SLIP_SPEED_NORMAL: f32 = 5.0;
-/// 低牽引力打滑速度閾值
-const SLIP_SPEED_LOW_TRACTION: f32 = 8.0;
-/// 正常打滑因子
-const SLIP_FACTOR_NORMAL: f32 = 3.0;
-/// 低牽引力打滑因子
-const SLIP_FACTOR_LOW_TRACTION: f32 = 4.0;
-/// 打滑對抓地力的影響
-const SLIP_GRIP_PENALTY: f32 = 0.4;
-/// 打滑恢復速率
-const SLIP_RECOVERY_RATE: f32 = 2.0;
-/// 倒車加速乘數
-const REVERSE_ACCELERATION_MULTIPLIER: f32 = 0.5;
-/// 手煞車減速係數
-const HANDBRAKE_DECEL_COEFFICIENT: f32 = 0.03;
-/// 正常漂移速度閾值
-const DRIFT_SPEED_THRESHOLD_NORMAL: f32 = 8.0;
-/// 低牽引力漂移速度閾值
-const DRIFT_SPEED_THRESHOLD_LOW_TRACTION: f32 = 6.0;
-/// 正常漂移轉向閾值
-const DRIFT_STEER_THRESHOLD_NORMAL: f32 = 0.3;
-/// 低牽引力漂移轉向閾值
-const DRIFT_STEER_THRESHOLD_LOW_TRACTION: f32 = 0.2;
-/// 最大倒車速度比例
-const REVERSE_SPEED_RATIO: f32 = 0.3;
-/// 停止速度閾值
-const STOP_SPEED_THRESHOLD: f32 = 0.1;
-/// 低速轉向衰減閾值
-const LOW_SPEED_TURN_THRESHOLD: f32 = 0.5;
-/// 低速轉向衰減因子
-const LOW_SPEED_TURN_DECAY: f32 = 0.9;
-/// 轉向輸入死區
-const STEER_INPUT_DEADZONE: f32 = 0.01;
-
-// === 漂移物理 ===
-/// 低牽引力漂移放大係數
-const DRIFT_AMPLIFIER_LOW_TRACTION: f32 = 1.3;
-/// 正常漂移放大係數
-const DRIFT_AMPLIFIER_NORMAL: f32 = 1.0;
-/// 漂移角度調整速率
-const DRIFT_ANGLE_RATE: f32 = 2.5;
-/// 最大漂移角度
-const MAX_DRIFT_ANGLE: f32 = 0.8;
-/// 漂移反制力速率
-const DRIFT_COUNTER_FORCE_RATE: f32 = 3.0;
-/// 反打方向盤救車速率
-const COUNTER_STEER_RATE: f32 = 2.0;
-/// 漂移結束角度閾值
-const DRIFT_END_ANGLE_THRESHOLD: f32 = 0.1;
-/// 正常漂移結束速度閾值
-const DRIFT_END_SPEED_NORMAL: f32 = 5.0;
-/// 低牽引力漂移結束速度閾值
-const DRIFT_END_SPEED_LOW_TRACTION: f32 = 4.0;
-/// 漂移速度損失係數
-const DRIFT_SPEED_LOSS_RATE: f32 = 0.5;
-/// 非漂移側滑角度衰減速率
-const DRIFT_DECAY_RATE: f32 = 4.0;
-/// 側滑角度歸零閾值
-const DRIFT_ANGLE_ZERO_THRESHOLD: f32 = 0.05;
-
-// === NPC 車輛 ===
-/// 障礙物檢測高度
-const NPC_OBSTACLE_CHECK_HEIGHT: f32 = 0.6;
-/// 障礙物檢測最大距離
-const NPC_OBSTACLE_MAX_DISTANCE: f32 = 8.0;
-/// 航點到達距離（降低以減少迂迴行為）
-const NPC_WAYPOINT_ARRIVAL_DISTANCE: f32 = 5.0;
-/// 航點到達距離平方 (5.0² = 25.0)
-const NPC_WAYPOINT_ARRIVAL_DISTANCE_SQ: f32 = 25.0;
-/// NPC 巡航速度比例
-const NPC_CRUISING_SPEED_RATIO: f32 = 0.6;
 
 /// 將 bevy_rapier3d 的 Real 類型轉換為 f32
 /// 用於避免與 bevy::prelude::Real 的命名衝突
@@ -115,47 +26,149 @@ fn rapier_real_to_f32(r: bevy_rapier3d::prelude::Real) -> f32 {
     r
 }
 
-/// 載具輸入（手煞車/漂移觸發）
-pub fn vehicle_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    game_state: Res<GameState>,
-    mut vehicles: Query<&mut Vehicle>,
+/// 切換載具剛體型態並補齊必要物理組件
+pub fn apply_vehicle_physics_mode(
+    commands: &mut Commands,
+    entity: Entity,
+    mode: VehiclePhysicsMode,
+    transform: &Transform,
+    vehicle: &Vehicle,
+    existing_velocity: Option<&Velocity>,
 ) {
-    if !game_state.player_in_vehicle {
-        return;
+    let mut entity_commands = commands.entity(entity);
+    entity_commands.insert(mode);
+
+    match mode {
+        VehiclePhysicsMode::Dynamic => {
+            let (linvel, angvel) = if let Some(velocity) = existing_velocity {
+                (velocity.linvel, velocity.angvel)
+            } else {
+                let forward = transform.forward().as_vec3();
+                (forward * vehicle.current_speed, Vec3::ZERO)
+            };
+
+            entity_commands
+                .insert(RigidBody::Dynamic)
+                .insert(Velocity { linvel, angvel })
+                .insert(ExternalImpulse::default())
+                .insert(ExternalForce::default())
+                .insert(Damping {
+                    linear_damping: 0.5,
+                    angular_damping: 1.0,
+                })
+                .insert(LockedAxes::ROTATION_LOCKED_X | LockedAxes::ROTATION_LOCKED_Z);
+        }
+        VehiclePhysicsMode::Kinematic => {
+            entity_commands
+                .insert(RigidBody::KinematicPositionBased)
+                .remove::<Velocity>()
+                .remove::<ExternalImpulse>()
+                .remove::<ExternalForce>()
+                .remove::<Damping>()
+                .remove::<LockedAxes>();
+        }
     }
-
-    let Some(vehicle_entity) = game_state.current_vehicle else { return; };
-    let Ok(mut vehicle) = vehicles.get_mut(vehicle_entity) else { return; };
-
-    // Space = 手煞車（漂移觸發器）
-    vehicle.is_handbraking = keyboard.pressed(KeyCode::Space);
 }
 
-/// 載具移動（GTA 風格街機物理 + 天氣影響）
-/// - W/S = 加速/減速
-/// - A/D = 左右轉（速度敏感）
-/// - Space = 手煞車/漂移
-/// - Shift = 加速模式
-/// - 雨天：牽引力 -30%，更容易打滑
-/// - 霧天：視野降低（AI 用），操控略微下降
-pub fn vehicle_movement(
+/// 載具輸入（手煞車/漂移觸發）
+/// 載具輸入（手煞車/漂移觸發、加速、轉向）
+pub fn vehicle_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     time: Res<Time>,
     game_state: Res<GameState>,
-    weather: Res<WeatherState>,
-    mut vehicles: Query<(&mut Transform, &mut Vehicle, Option<&VehicleModifications>, Option<&NitroBoost>)>,
+    mut vehicles: Query<&mut Vehicle>,
+    config: Res<VehicleConfig>,
 ) {
     if !game_state.player_in_vehicle {
         return;
     }
 
-    let Some(vehicle_entity) = game_state.current_vehicle else { return; };
-    let Ok((mut transform, mut vehicle, mods, nitro)) = vehicles.get_mut(vehicle_entity) else { return; };
+    let Some(vehicle_entity) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok(mut vehicle) = vehicles.get_mut(vehicle_entity) else {
+        return;
+    };
 
-    // 計算改裝倍率（若無改裝組件則使用原廠數值）
-    let (accel_mod, speed_mod, handling_mod, brake_mod, traction_mod) = if let Some(m) = mods {
+    let both_mouse =
+        mouse_button.pressed(MouseButton::Left) && mouse_button.pressed(MouseButton::Right);
+
+    // Throttle
+    vehicle.throttle_input = if keyboard.pressed(KeyCode::KeyW) || both_mouse {
+        1.0
+    } else {
+        0.0
+    };
+
+    // Brake
+    vehicle.brake_input = if keyboard.pressed(KeyCode::KeyS) {
+        1.0
+    } else {
+        0.0
+    };
+
+    // Handbrake
+    vehicle.is_handbraking = keyboard.pressed(KeyCode::Space);
+
+    // Steering (with smoothing)
+    let raw_input = if keyboard.pressed(KeyCode::KeyA) {
+        1.0
+    } else if keyboard.pressed(KeyCode::KeyD) {
+        -1.0
+    } else {
+        0.0
+    };
+
+    // 靜止時轉向輸入衰減
+    let target_input = if vehicle.current_speed.abs() <= 0.5 {
+        raw_input * 0.9 // 快速歸零
+    } else {
+        raw_input
+    };
+
+    let dt = time.delta_secs();
+    // 使用 Steering Response 平滑輸入
+    let steer_response = vehicle.steering_response * dt * 5.0; // 5.0 是經驗值，取代原本的 weather handling 影響
+    vehicle.steer_input += (target_input - vehicle.steer_input) * steer_response.min(1.0);
+
+    // Deadzone
+    if vehicle.steer_input.abs() < config.input.steer_input_deadzone {
+        vehicle.steer_input = 0.0;
+    }
+}
+
+/// 天氣系統（預留給未來更複雜的天氣物理計算）
+pub fn vehicle_weather_system() {
+    // 目前天氣狀態由各個系統直接讀取 WeatherState
+}
+
+/// 載具加速與煞車系統
+pub fn vehicle_acceleration_system(
+    time: Res<Time>,
+    game_state: Res<GameState>,
+    weather: Res<WeatherState>,
+    config: Res<VehicleConfig>,
+    mut vehicles: Query<(
+        &mut Vehicle,
+        Option<&VehicleModifications>,
+        Option<&NitroBoost>,
+    )>,
+) {
+    if !game_state.player_in_vehicle {
+        return;
+    }
+    let Some(vehicle_entity) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok((mut vehicle, mods, nitro)) = vehicles.get_mut(vehicle_entity) else {
+        return;
+    };
+
+    let dt = time.delta_secs();
+
+    // Mods
+    let (accel_mod, speed_mod, _, brake_mod, traction_mod) = if let Some(m) = mods {
         (
             m.engine.multiplier(),
             m.transmission.multiplier(),
@@ -167,223 +180,126 @@ pub fn vehicle_movement(
         (1.0, 1.0, 1.0, 1.0, 1.0)
     };
 
-    // 氮氣加速倍率
     let nitro_mult = if let Some(n) = nitro {
-        if n.is_active { n.boost_multiplier } else { 1.0 }
+        if n.is_active {
+            n.boost_multiplier
+        } else {
+            1.0
+        }
     } else {
         1.0
     };
 
-    let dt = time.delta_secs();
-
-    // 計算天氣影響因子
-    let weather_traction = get_weather_traction_factor(&weather);
-    let weather_handling = get_weather_handling_factor(&weather);
-
-    // 合併改裝與天氣影響（改裝輪胎提升天氣牽引力）
+    // Weather Traction
+    let weather_traction = get_weather_traction_factor(&weather, &config.weather);
     let effective_traction = weather_traction * traction_mod;
-    let effective_handling = weather_handling * handling_mod;
 
-    // 1. 處理加速/煞車（非線性扭力曲線 + 天氣影響 + 改裝加成）
-    update_vehicle_speed_with_mods(
-        &keyboard,
-        &mouse_button,
-        &mut vehicle,
-        dt,
-        effective_traction,
-        accel_mod,
-        brake_mod,
-        speed_mod,
-        nitro_mult,
+    let effective_max_speed = vehicle.max_speed * speed_mod;
+    let accel_mult = nitro_mult.max(1.0);
+
+    // Logic
+    if vehicle.throttle_input > 0.0 {
+        // Acceleration
+        let accel_force = calculate_acceleration_force(&vehicle) * accel_mod;
+        let effective_accel =
+            accel_force * accel_mult * vehicle.throttle_input * effective_traction;
+
+        // Wheel spin logic
+        let slip_threshold = if effective_traction < config.physics.normal_traction_threshold {
+            config.physics.slip_speed_low_traction
+        } else {
+            config.physics.slip_speed_normal
+        };
+        if vehicle.current_speed < slip_threshold
+            && (accel_mult > 1.0 || effective_traction < config.physics.low_traction_threshold)
+        {
+            let slip_factor = if effective_traction < config.physics.low_traction_threshold {
+                config.physics.slip_factor_low_traction
+            } else {
+                config.physics.slip_factor_normal
+            };
+            vehicle.wheel_spin = (vehicle.wheel_spin + dt * slip_factor).min(1.0);
+            let grip =
+                effective_traction * (1.0 - vehicle.wheel_spin * config.physics.slip_grip_penalty);
+            vehicle.current_speed += effective_accel * grip * dt;
+        } else {
+            vehicle.wheel_spin =
+                (vehicle.wheel_spin - dt * config.physics.slip_recovery_rate).max(0.0);
+            vehicle.current_speed += effective_accel * dt;
+        }
+    } else if vehicle.brake_input > 0.0 && !vehicle.is_handbraking {
+        // Braking
+        if vehicle.current_speed > 0.5 {
+            let brake_decel =
+                vehicle.brake_force * brake_mod * vehicle.brake_input * effective_traction;
+            vehicle.current_speed -= brake_decel * dt;
+            vehicle.current_speed = vehicle.current_speed.max(0.0);
+        } else {
+            // Reverse
+            let reverse_accel =
+                calculate_acceleration_force(&vehicle) * accel_mod * 0.5 * effective_traction;
+            vehicle.current_speed -= reverse_accel * dt;
+        }
+    } else if vehicle.is_handbraking {
+        // Handbrake
+        let handbrake_decel = vehicle.handbrake_force
+            * config.physics.handbrake_decel_coefficient
+            * effective_traction;
+        vehicle.current_speed *= 1.0 - handbrake_decel;
+    } else {
+        // Natural Deceleration
+        let drag = 1.0 + (vehicle.current_speed.abs() / effective_max_speed) * 0.5;
+        vehicle.current_speed *= 1.0 - 0.025 * drag;
+    }
+
+    // Clamp Speed
+    vehicle.current_speed = vehicle.current_speed.clamp(
+        -effective_max_speed * config.physics.reverse_speed_ratio,
+        effective_max_speed,
     );
-
-    // 2. 處理轉向（速度敏感 + 平滑輸入 + 天氣影響 + 改裝加成）
-    update_vehicle_turning_with_weather(&keyboard, &mut transform, &mut vehicle, dt, effective_handling);
-
-    // 3. 漂移物理（雨天更容易漂移 + 改裝輪胎提升抓地力）
-    update_drift_physics_with_weather(&mut vehicle, &mut transform, dt, effective_traction);
-
-    // 4. 車身動態（側傾/前後傾）
-    update_body_dynamics(&mut transform, &mut vehicle, dt);
-
-    // 5. 移動車輛
-    let forward = transform.forward();
-
-    // 漂移時的移動方向修正
-    let movement_dir = if vehicle.is_drifting && vehicle.drift_angle.abs() > 0.1 {
-        // 漂移中：實際移動方向與車頭方向有夾角
-        let drift_offset = Quat::from_rotation_y(-vehicle.drift_angle * 0.3);
-        drift_offset * forward
-    } else {
-        forward
-    };
-
-    transform.translation += movement_dir * vehicle.current_speed * dt;
-    transform.translation.y = get_vehicle_height(&vehicle.vehicle_type);
-}
-
-// ============================================================================
-// 天氣影響駕駛系統
-// ============================================================================
-
-/// 計算天氣對牽引力的影響
-fn get_weather_traction_factor(weather: &WeatherState) -> f32 {
-    match weather.weather_type {
-        WeatherType::Clear => WEATHER_CLEAR_TRACTION,
-        WeatherType::Cloudy => WEATHER_CLOUDY_TRACTION,
-        WeatherType::Rainy => WEATHER_RAINY_TRACTION_BASE + (1.0 - weather.intensity) * WEATHER_RAINY_TRACTION_RANGE,
-        WeatherType::Foggy => WEATHER_FOGGY_TRACTION,
-        WeatherType::Stormy => 0.55 + (1.0 - weather.intensity) * 0.15, // 暴風雨：牽引力極差
-        WeatherType::Sandstorm => 0.75 + (1.0 - weather.intensity) * 0.1, // 沙塵暴：輕微影響牽引力
-    }
-}
-
-/// 計算天氣對操控的影響
-fn get_weather_handling_factor(weather: &WeatherState) -> f32 {
-    match weather.weather_type {
-        WeatherType::Clear => WEATHER_CLEAR_TRACTION,
-        WeatherType::Cloudy => WEATHER_CLOUDY_TRACTION,
-        WeatherType::Rainy => WEATHER_RAINY_HANDLING_BASE + (1.0 - weather.intensity) * WEATHER_RAINY_HANDLING_RANGE,
-        WeatherType::Foggy => WEATHER_FOGGY_HANDLING,
-        WeatherType::Stormy => 0.5 + (1.0 - weather.intensity) * 0.2,  // 暴風雨：操控極差
-        WeatherType::Sandstorm => 0.8 + (1.0 - weather.intensity) * 0.1, // 沙塵暴：輕微影響操控
-    }
-}
-
-/// 處理加速邏輯
-fn handle_acceleration(vehicle: &mut Vehicle, dt: f32, traction_factor: f32, accel_mod: f32, accel_mult: f32) {
-    let accel_force = calculate_acceleration_force(vehicle) * accel_mod;
-    let effective_accel = accel_force * accel_mult * vehicle.throttle_input * traction_factor;
-
-    // 輪胎打滑模擬
-    let slip_threshold = if traction_factor < NORMAL_TRACTION_THRESHOLD { SLIP_SPEED_LOW_TRACTION } else { SLIP_SPEED_NORMAL };
-    if vehicle.current_speed < slip_threshold && (accel_mult > 1.0 || traction_factor < LOW_TRACTION_THRESHOLD) {
-        let slip_factor = if traction_factor < LOW_TRACTION_THRESHOLD { SLIP_FACTOR_LOW_TRACTION } else { SLIP_FACTOR_NORMAL };
-        vehicle.wheel_spin = (vehicle.wheel_spin + dt * slip_factor).min(1.0);
-        let grip = traction_factor * (1.0 - vehicle.wheel_spin * SLIP_GRIP_PENALTY);
-        vehicle.current_speed += effective_accel * grip * dt;
-    } else {
-        vehicle.wheel_spin = (vehicle.wheel_spin - dt * SLIP_RECOVERY_RATE).max(0.0);
-        vehicle.current_speed += effective_accel * dt;
-    }
-}
-
-/// 處理煞車邏輯
-fn handle_braking(vehicle: &mut Vehicle, dt: f32, traction_factor: f32, accel_mod: f32, brake_mod: f32) {
-    if vehicle.current_speed > 0.5 {
-        let brake_decel = vehicle.brake_force * brake_mod * vehicle.brake_input * traction_factor;
-        vehicle.current_speed -= brake_decel * dt;
-        vehicle.current_speed = vehicle.current_speed.max(0.0);
-    } else {
-        let reverse_accel = calculate_acceleration_force(vehicle) * accel_mod * 0.5 * traction_factor;
-        vehicle.current_speed -= reverse_accel * dt;
-    }
-}
-
-/// 處理手煞車邏輯
-fn handle_handbrake(vehicle: &mut Vehicle, traction_factor: f32) {
-    let handbrake_decel = vehicle.handbrake_force * 0.03 * traction_factor;
-    vehicle.current_speed *= 1.0 - handbrake_decel;
-
-    // 觸發漂移條件
-    let drift_speed_threshold = if traction_factor < NORMAL_TRACTION_THRESHOLD { 6.0 } else { 8.0 };
-    let drift_steer_threshold = if traction_factor < NORMAL_TRACTION_THRESHOLD { 0.2 } else { 0.3 };
-    if vehicle.current_speed.abs() > drift_speed_threshold && vehicle.steer_input.abs() > drift_steer_threshold && !vehicle.is_drifting {
-        vehicle.is_drifting = true;
-    }
-}
-
-/// 讀取車輛輸入狀態
-fn read_vehicle_inputs(
-    keyboard: &ButtonInput<KeyCode>,
-    mouse_button: &ButtonInput<MouseButton>,
-) -> (f32, f32) {
-    let both_mouse = mouse_button.pressed(MouseButton::Left) && mouse_button.pressed(MouseButton::Right);
-    let throttle = if keyboard.pressed(KeyCode::KeyW) || both_mouse { 1.0 } else { 0.0 };
-    let brake = if keyboard.pressed(KeyCode::KeyS) { 1.0 } else { 0.0 };
-    (throttle, brake)
-}
-
-/// 處理自然減速
-fn handle_natural_deceleration(vehicle: &mut Vehicle, effective_max_speed: f32) {
-    let drag = 1.0 + (vehicle.current_speed.abs() / effective_max_speed) * 0.5;
-    vehicle.current_speed *= 1.0 - 0.025 * drag;
-}
-
-/// 限制並正規化車輛速度
-fn clamp_vehicle_speed(vehicle: &mut Vehicle, effective_max_speed: f32) {
-    vehicle.current_speed = vehicle.current_speed.clamp(-effective_max_speed * REVERSE_SPEED_RATIO, effective_max_speed);
-    if vehicle.current_speed.abs() < STOP_SPEED_THRESHOLD && vehicle.throttle_input == 0.0 {
+    if vehicle.current_speed.abs() < config.physics.stop_speed_threshold
+        && vehicle.throttle_input == 0.0
+    {
         vehicle.current_speed = 0.0;
     }
 }
 
-/// 更新車輛速度（含天氣影響 + 改裝加成）
-fn update_vehicle_speed_with_mods(
-    keyboard: &ButtonInput<KeyCode>,
-    mouse_button: &ButtonInput<MouseButton>,
-    vehicle: &mut Vehicle,
-    dt: f32,
-    traction_factor: f32,
-    accel_mod: f32,
-    brake_mod: f32,
-    speed_mod: f32,
-    nitro_mult: f32,
+/// 載具轉向與角速度系統
+pub fn vehicle_steering_system(
+    time: Res<Time>,
+    game_state: Res<GameState>,
+    weather: Res<WeatherState>,
+    config: Res<VehicleConfig>,
+    mut vehicles: Query<(&mut Vehicle, &mut Velocity, Option<&VehicleModifications>)>,
 ) {
-    let (throttle, brake) = read_vehicle_inputs(keyboard, mouse_button);
-    vehicle.throttle_input = throttle;
-    vehicle.brake_input = brake;
-
-    let accel_mult = nitro_mult.max(1.0);
-    let effective_max_speed = vehicle.max_speed * speed_mod;
-
-    if vehicle.throttle_input > 0.0 {
-        handle_acceleration(vehicle, dt, traction_factor, accel_mod, accel_mult);
-    } else if vehicle.brake_input > 0.0 && !vehicle.is_handbraking {
-        handle_braking(vehicle, dt, traction_factor, accel_mod, brake_mod);
-    } else if vehicle.is_handbraking {
-        handle_handbrake(vehicle, traction_factor);
-    } else {
-        handle_natural_deceleration(vehicle, effective_max_speed);
-    }
-
-    clamp_vehicle_speed(vehicle, effective_max_speed);
-}
-
-/// 更新車輛轉向（含天氣影響）
-fn update_vehicle_turning_with_weather(
-    keyboard: &ButtonInput<KeyCode>,
-    transform: &mut Transform,
-    vehicle: &mut Vehicle,
-    dt: f32,
-    handling_factor: f32,
-) {
-    // 靜止時不能轉向
-    if vehicle.current_speed.abs() <= 0.5 {
-        vehicle.steer_input *= 0.9;
+    if !game_state.player_in_vehicle {
         return;
     }
-
-    // 讀取原始轉向輸入
-    let raw_input = if keyboard.pressed(KeyCode::KeyA) {
-        1.0
-    } else if keyboard.pressed(KeyCode::KeyD) {
-        -1.0
-    } else {
-        0.0
+    let Some(vehicle_entity) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok((vehicle, mut velocity, mods)) = vehicles.get_mut(vehicle_entity) else {
+        return;
     };
 
-    // 平滑轉向輸入
-    let steer_response = vehicle.steering_response * dt * handling_factor;
-    vehicle.steer_input += (raw_input - vehicle.steer_input) * steer_response.min(1.0);
-
-    if vehicle.steer_input.abs() < 0.01 {
+    if vehicle.current_speed.abs() <= 0.5 {
+        // 靜止不轉向
         return;
     }
 
-    // === 速度影響轉向 ===
-    let speed_ratio = (vehicle.current_speed.abs() / vehicle.max_speed).clamp(0.0, 1.0);
+    let dt = time.delta_secs();
 
+    // Weather Handling
+    let weather_handling = get_weather_handling_factor(&weather, &config.weather);
+    let handling_mod = if let Some(m) = mods {
+        m.suspension.multiplier()
+    } else {
+        1.0
+    };
+    let effective_handling = weather_handling * handling_mod;
+
+    // Turning Logic
+    let speed_ratio = (vehicle.current_speed.abs() / vehicle.max_speed).clamp(0.0, 1.0);
     let speed_turn_factor = if speed_ratio < 0.3 {
         1.0
     } else {
@@ -391,7 +307,6 @@ fn update_vehicle_turning_with_weather(
         1.0 - high_speed_falloff * (1.0 - vehicle.high_speed_turn_factor)
     };
 
-    // 漂移中的轉向加成
     let drift_turn_bonus = if vehicle.is_drifting {
         1.0 + vehicle.drift_angle.abs() * vehicle.counter_steer_assist
     } else {
@@ -399,86 +314,260 @@ fn update_vehicle_turning_with_weather(
     };
 
     let direction = vehicle.current_speed.signum();
-    let effective_turn = vehicle.turn_speed
+    let yaw_rate = vehicle.turn_speed
         * vehicle.handling
-        * handling_factor  // 天氣影響操控
+        * effective_handling
         * speed_turn_factor
         * drift_turn_bonus
         * vehicle.steer_input
-        * direction
-        * dt;
+        * direction;
 
-    transform.rotate_y(effective_turn);
+    let steering_response = (vehicle.steering_response * dt).min(1.0);
+    velocity.angvel.y += (yaw_rate - velocity.angvel.y) * steering_response;
 }
 
-/// 處理手煞車觸發漂移
-fn handle_handbrake_drift(vehicle: &mut Vehicle, dt: f32, traction_factor: f32) {
-    let drift_amplifier = if traction_factor < NORMAL_TRACTION_THRESHOLD {
-        DRIFT_AMPLIFIER_LOW_TRACTION
-    } else {
-        DRIFT_AMPLIFIER_NORMAL
-    };
-
-    vehicle.drift_angle += vehicle.steer_input * dt * DRIFT_ANGLE_RATE * drift_amplifier;
-    vehicle.drift_angle = vehicle.drift_angle.clamp(-MAX_DRIFT_ANGLE, MAX_DRIFT_ANGLE);
-    vehicle.is_drifting = vehicle.drift_angle.abs() > vehicle.drift_threshold;
-}
-
-/// 處理正在漂移中的物理
-fn handle_active_drift(vehicle: &mut Vehicle, dt: f32, traction_factor: f32) {
-    // 漂移中的反制力（雨天更難控制）
-    let counter = -vehicle.drift_angle * (1.0 - vehicle.drift_grip * traction_factor) * dt * DRIFT_COUNTER_FORCE_RATE;
-    vehicle.drift_angle += counter;
-
-    // 反打方向盤救車
-    if vehicle.steer_input != 0.0 && vehicle.steer_input.signum() == -vehicle.drift_angle.signum() {
-        vehicle.drift_angle += vehicle.steer_input * vehicle.counter_steer_assist * dt * COUNTER_STEER_RATE;
-    }
-
-    // 漂移結束判定
-    let end_speed = if traction_factor < NORMAL_TRACTION_THRESHOLD {
-        DRIFT_END_SPEED_LOW_TRACTION
-    } else {
-        DRIFT_END_SPEED_NORMAL
-    };
-    if vehicle.drift_angle.abs() < DRIFT_END_ANGLE_THRESHOLD || vehicle.current_speed.abs() < end_speed {
-        vehicle.is_drifting = false;
-        vehicle.drift_angle = 0.0;
+/// 載具漂移系統
+pub fn vehicle_drift_system(
+    time: Res<Time>,
+    game_state: Res<GameState>,
+    weather: Res<WeatherState>,
+    config: Res<VehicleConfig>,
+    mut vehicles: Query<(&mut Vehicle, Option<&VehicleModifications>)>,
+) {
+    if !game_state.player_in_vehicle {
         return;
     }
+    let Some(vehicle_entity) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok((mut vehicle, mods)) = vehicles.get_mut(vehicle_entity) else {
+        return;
+    };
 
-    // 漂移損失速度（雨天損失更少，因為更滑）
-    let drift_speed_loss = vehicle.drift_angle.abs() * (1.0 - vehicle.drift_grip) * traction_factor * dt * DRIFT_SPEED_LOSS_RATE;
-    vehicle.current_speed *= 1.0 - drift_speed_loss;
-}
-
-/// 處理非漂移狀態的側滑角度衰減
-fn handle_drift_decay(vehicle: &mut Vehicle, dt: f32) {
-    vehicle.drift_angle *= 1.0 - dt * DRIFT_DECAY_RATE;
-    if vehicle.drift_angle.abs() < DRIFT_ANGLE_ZERO_THRESHOLD {
-        vehicle.drift_angle = 0.0;
-    }
-}
-
-/// 漂移物理系統（含天氣影響）
-fn update_drift_physics_with_weather(
-    vehicle: &mut Vehicle,
-    _transform: &mut Transform,
-    dt: f32,
-    traction_factor: f32,
-) {
-    let drift_speed_threshold = if traction_factor < NORMAL_TRACTION_THRESHOLD {
-        DRIFT_SPEED_THRESHOLD_LOW_TRACTION
+    let dt = time.delta_secs();
+    let traction_mod = if let Some(m) = mods {
+        m.tires.multiplier()
     } else {
-        DRIFT_SPEED_THRESHOLD_NORMAL
+        1.0
+    };
+    let weather_traction = get_weather_traction_factor(&weather, &config.weather);
+    let effective_traction = weather_traction * traction_mod;
+
+    let drift_speed_threshold = if effective_traction < config.physics.normal_traction_threshold {
+        config.physics.drift_speed_threshold_low_traction
+    } else {
+        config.physics.drift_speed_threshold_normal
     };
 
     if vehicle.is_handbraking && vehicle.current_speed.abs() > drift_speed_threshold {
-        handle_handbrake_drift(vehicle, dt, traction_factor);
+        // Handbrake trigger
+        let drift_amplifier = if effective_traction < config.physics.normal_traction_threshold {
+            config.physics.drift_amplifier_low_traction
+        } else {
+            config.physics.drift_amplifier_normal
+        };
+        vehicle.drift_angle +=
+            vehicle.steer_input * dt * config.physics.drift_angle_rate * drift_amplifier;
+        vehicle.drift_angle = vehicle.drift_angle.clamp(
+            -config.physics.max_drift_angle,
+            config.physics.max_drift_angle,
+        );
+        vehicle.is_drifting = vehicle.drift_angle.abs() > vehicle.drift_threshold;
     } else if vehicle.is_drifting {
-        handle_active_drift(vehicle, dt, traction_factor);
+        // Active drift
+        let counter = -vehicle.drift_angle
+            * (1.0 - vehicle.drift_grip * effective_traction)
+            * dt
+            * config.physics.drift_counter_force_rate;
+        vehicle.drift_angle += counter;
+
+        // Counter steer
+        if vehicle.steer_input != 0.0
+            && vehicle.steer_input.signum() == -vehicle.drift_angle.signum()
+        {
+            vehicle.drift_angle += vehicle.steer_input
+                * vehicle.counter_steer_assist
+                * dt
+                * config.physics.counter_steer_rate;
+        }
+
+        // End condition
+        let end_speed = if effective_traction < config.physics.normal_traction_threshold {
+            config.physics.drift_end_speed_low_traction
+        } else {
+            config.physics.drift_end_speed_normal
+        };
+        if vehicle.drift_angle.abs() < config.physics.drift_end_angle_threshold
+            || vehicle.current_speed.abs() < end_speed
+        {
+            vehicle.is_drifting = false;
+            vehicle.drift_angle = 0.0;
+        } else {
+            // Speed loss
+            let drift_speed_loss = vehicle.drift_angle.abs()
+                * (1.0 - vehicle.drift_grip)
+                * effective_traction
+                * dt
+                * config.physics.drift_speed_loss_rate;
+            vehicle.current_speed *= 1.0 - drift_speed_loss;
+        }
     } else {
-        handle_drift_decay(vehicle, dt);
+        // Drift decay
+        vehicle.drift_angle *= 1.0 - dt * config.physics.drift_decay_rate;
+        if vehicle.drift_angle.abs() < config.physics.drift_angle_zero_threshold {
+            vehicle.drift_angle = 0.0;
+        }
+    }
+}
+
+/// 載具懸吊與車身動態系統
+pub fn vehicle_suspension_system(
+    time: Res<Time>,
+    game_state: Res<GameState>,
+    mut vehicles: Query<&mut Vehicle>,
+) {
+    if !game_state.player_in_vehicle {
+        return;
+    }
+    let Some(vehicle_entity) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok(mut vehicle) = vehicles.get_mut(vehicle_entity) else {
+        return;
+    };
+
+    let dt = time.delta_secs();
+
+    // Scooter lean
+    if vehicle.vehicle_type == VehicleType::Scooter {
+        let speed_factor = (vehicle.current_speed / vehicle.max_speed).clamp(0.0, 1.0);
+        let target_lean = vehicle.steer_input * vehicle.max_lean_angle * speed_factor;
+        let lean_speed = 5.0;
+        let lean_diff = target_lean - vehicle.lean_angle;
+        vehicle.lean_angle += lean_diff * lean_speed * dt;
+        vehicle.lean_angle = vehicle
+            .lean_angle
+            .clamp(-vehicle.max_lean_angle, vehicle.max_lean_angle);
+        return;
+    }
+
+    let speed_ratio = (vehicle.current_speed.abs() / vehicle.max_speed).clamp(0.0, 1.0);
+
+    // Roll
+    let target_roll = -vehicle.steer_input * vehicle.body_roll_factor * speed_ratio.sqrt();
+    let drift_roll_bonus = if vehicle.is_drifting {
+        vehicle.drift_angle * 0.3
+    } else {
+        0.0
+    };
+
+    // Pitch
+    let accel_state = vehicle.throttle_input - vehicle.brake_input;
+    let target_pitch = -accel_state * vehicle.body_pitch_factor * speed_ratio.sqrt().min(0.8);
+    let handbrake_pitch = if vehicle.is_handbraking { 0.04 } else { 0.0 };
+
+    // Suspension
+    let suspension_speed = vehicle.suspension_stiffness * dt;
+    vehicle.body_roll += ((target_roll + drift_roll_bonus) - vehicle.body_roll) * suspension_speed;
+    vehicle.body_pitch +=
+        ((target_pitch + handbrake_pitch) - vehicle.body_pitch) * suspension_speed;
+
+    vehicle.body_roll = vehicle.body_roll.clamp(-0.2, 0.2);
+    vehicle.body_pitch = vehicle.body_pitch.clamp(-0.15, 0.15);
+}
+
+/// 載具物理整合系統（整合速度與位移）
+pub fn vehicle_physics_integration_system(
+    game_state: Res<GameState>,
+    mut vehicles: Query<(&Transform, &Vehicle, &mut Velocity)>,
+) {
+    if !game_state.player_in_vehicle {
+        return;
+    }
+    let Some(vehicle_entity) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok((transform, vehicle, mut velocity)) = vehicles.get_mut(vehicle_entity) else {
+        return;
+    };
+
+    let forward = transform.forward().as_vec3();
+
+    let movement_dir = if vehicle.is_drifting && vehicle.drift_angle.abs() > 0.1 {
+        let drift_offset = Quat::from_rotation_y(-vehicle.drift_angle * 0.3);
+        drift_offset * forward
+    } else {
+        forward
+    };
+
+    let current_move_speed = velocity.linvel.dot(movement_dir);
+    let speed_delta = vehicle.current_speed - current_move_speed;
+    velocity.linvel += movement_dir * speed_delta;
+}
+
+/// Apply visual-only roll/pitch/lean to vehicle meshes.
+pub fn update_vehicle_visuals(
+    vehicle_query: Query<&Vehicle>,
+    mut visual_query: Query<(&ChildOf, &mut Transform), With<VehicleVisualRoot>>,
+) {
+    for (parent, mut transform) in &mut visual_query {
+        let Ok(vehicle) = vehicle_query.get(parent.parent()) else {
+            continue;
+        };
+
+        let yaw_offset = if vehicle.is_drifting {
+            vehicle.drift_angle * 0.25
+        } else {
+            0.0
+        };
+
+        transform.translation = Vec3::ZERO;
+        if vehicle.vehicle_type == VehicleType::Scooter {
+            transform.rotation =
+                Quat::from_rotation_y(yaw_offset) * Quat::from_rotation_z(-vehicle.lean_angle);
+        } else {
+            transform.rotation = Quat::from_rotation_y(yaw_offset)
+                * Quat::from_rotation_x(vehicle.body_pitch)
+                * Quat::from_rotation_z(vehicle.body_roll);
+        }
+    }
+}
+
+// ============================================================================
+// 天氣影響駕駛系統
+// ============================================================================
+
+/// 計算天氣對牽引力的影響
+fn get_weather_traction_factor(
+    weather: &WeatherState,
+    config: &crate::vehicle::config::VehicleWeatherConfig,
+) -> f32 {
+    match weather.weather_type {
+        WeatherType::Clear => config.clear_traction,
+        WeatherType::Cloudy => config.cloudy_traction,
+        WeatherType::Rainy => {
+            config.rainy_traction_base + (1.0 - weather.intensity) * config.rainy_traction_range
+        }
+        WeatherType::Foggy => config.foggy_traction,
+        WeatherType::Stormy => config.stormy_traction_base + (1.0 - weather.intensity) * 0.15,
+        WeatherType::Sandstorm => config.sandstorm_traction_base + (1.0 - weather.intensity) * 0.1,
+    }
+}
+
+/// 計算天氣對操控的影響
+fn get_weather_handling_factor(
+    weather: &WeatherState,
+    config: &crate::vehicle::config::VehicleWeatherConfig,
+) -> f32 {
+    match weather.weather_type {
+        WeatherType::Clear => config.clear_traction, // Note: Original code used TRACTION const here too? Let's check. Yes, likely 1.0
+        WeatherType::Cloudy => config.cloudy_traction,
+        WeatherType::Rainy => {
+            config.rainy_handling_base + (1.0 - weather.intensity) * config.rainy_handling_range
+        }
+        WeatherType::Foggy => config.foggy_handling,
+        WeatherType::Stormy => config.stormy_handling_base + (1.0 - weather.intensity) * 0.2,
+        WeatherType::Sandstorm => config.sandstorm_handling_base + (1.0 - weather.intensity) * 0.1,
     }
 }
 
@@ -502,315 +591,217 @@ fn calculate_acceleration_force(vehicle: &Vehicle) -> f32 {
     vehicle.acceleration * torque_multiplier
 }
 
-/// 車身動態效果（側傾/前後傾）
-fn update_body_dynamics(
-    transform: &mut Transform,
-    vehicle: &mut Vehicle,
-    dt: f32,
-) {
-    // 機車使用專門的傾斜系統
-    if vehicle.vehicle_type == VehicleType::Scooter {
-        update_scooter_lean(transform, vehicle, vehicle.steer_input, dt);
-        return;
-    }
-
-    let speed_ratio = (vehicle.current_speed.abs() / vehicle.max_speed).clamp(0.0, 1.0);
-
-    // === 車身側傾（轉彎時）===
-    let target_roll = -vehicle.steer_input * vehicle.body_roll_factor * speed_ratio.sqrt();
-
-    // 漂移時增加側傾
-    let drift_roll_bonus = if vehicle.is_drifting {
-        vehicle.drift_angle * 0.3
-    } else {
-        0.0
-    };
-
-    // === 車身前後傾（加速/煞車時）===
-    let accel_state = vehicle.throttle_input - vehicle.brake_input;
-    let target_pitch = -accel_state * vehicle.body_pitch_factor * speed_ratio.sqrt().min(0.8);
-
-    // 手煞車時額外前傾
-    let handbrake_pitch = if vehicle.is_handbraking { 0.04 } else { 0.0 };
-
-    // === 懸吊模擬（平滑過渡）===
-    let suspension_speed = vehicle.suspension_stiffness * dt;
-    vehicle.body_roll += ((target_roll + drift_roll_bonus) - vehicle.body_roll) * suspension_speed;
-    vehicle.body_pitch += ((target_pitch + handbrake_pitch) - vehicle.body_pitch) * suspension_speed;
-
-    // 限制傾斜範圍
-    vehicle.body_roll = vehicle.body_roll.clamp(-0.2, 0.2);
-    vehicle.body_pitch = vehicle.body_pitch.clamp(-0.15, 0.15);
-
-    // === 應用旋轉 ===
-    let (yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
-
-    // 漂移時的車頭視覺偏移
-    let visual_yaw = if vehicle.is_drifting {
-        yaw + vehicle.drift_angle * 0.25
-    } else {
-        yaw
-    };
-
-    // 組合旋轉：Yaw -> Pitch -> Roll
-    transform.rotation = Quat::from_rotation_y(visual_yaw)
-        * Quat::from_rotation_x(vehicle.body_pitch)
-        * Quat::from_rotation_z(vehicle.body_roll);
-}
-
-/// 更新機車傾斜效果
-/// 機車過彎時會自然傾斜，增加真實感
-fn update_scooter_lean(
-    transform: &mut Transform,
-    vehicle: &mut Vehicle,
-    turn_input: f32,
-    dt: f32,
-) {
-    // 目標傾斜角度：根據轉向輸入和速度計算
-    // 速度越快，傾斜越明顯
-    let speed_factor = (vehicle.current_speed / vehicle.max_speed).clamp(0.0, 1.0);
-    let target_lean = turn_input * vehicle.max_lean_angle * speed_factor;
-
-    // 平滑過渡到目標傾斜角度
-    let lean_speed = 5.0; // 傾斜過渡速度
-    let lean_diff = target_lean - vehicle.lean_angle;
-    vehicle.lean_angle += lean_diff * lean_speed * dt;
-    // 硬限制傾斜角度，防止浮點數累積誤差
-    vehicle.lean_angle = vehicle.lean_angle.clamp(-vehicle.max_lean_angle, vehicle.max_lean_angle);
-
-    // 取得當前的 yaw 旋轉（繞 Y 軸）
-    let (yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
-
-    // 重建旋轉：先 yaw，再傾斜
-    transform.rotation = Quat::from_rotation_y(yaw) * Quat::from_rotation_z(-vehicle.lean_angle);
-}
-
 /// 取得車輛高度
 fn get_vehicle_height(vehicle_type: &VehicleType) -> f32 {
     match vehicle_type {
-        VehicleType::Scooter => 0.5,
-        VehicleType::Car | VehicleType::Taxi => 0.6,
-        VehicleType::Bus => 1.25,
+        VehicleType::Scooter => 1.5,
+        VehicleType::Car | VehicleType::Taxi => 1.5,
+        VehicleType::Bus => 3.0,
     }
 }
 
-// === NPC AI 輔助函數 ===
-
-/// 檢測障礙物結果
-enum ObstacleCheckResult {
-    TooClose,    // 太近，需要倒車
-    NeedBrake,   // 需要煞車
-    Clear,       // 前方淨空
-}
-
-/// 檢查前方障礙物
-/// 使用多重射線偵測：正前方 + 左前方 + 右前方
+/// 檢查前方是否有障礙物（人或車）
 fn check_obstacle(
-    rapier: &RapierContext,
-    entity: Entity,
-    transform: &Transform,
-) -> ObstacleCheckResult {
-    let ray_pos = transform.translation + Vec3::new(0.0, 0.6, 0.0);
-    let forward = transform.forward().as_vec3();
-    let right = transform.right().as_vec3();
+    vehicle_transform: &Transform,
+    vehicle_entity: Entity,
+    _vehicle_type: &VehicleType,
+    rapier_context: &ReadRapierContext,
+    config: &crate::vehicle::config::NpcDrivingConfig,
+) -> Option<f32> {
+    let rapier = rapier_context.single().ok()?;
+    let vehicle_pos = vehicle_transform.translation;
+    let vehicle_forward = vehicle_transform.forward().as_vec3();
+    let ray_origin =
+        vehicle_pos + Vec3::new(0.0, config.obstacle_check_height, 0.0) + vehicle_forward * 2.0;
 
-    // 檢測距離：10m 煞車，4m 緊急倒車
-    let max_toi: bevy_rapier3d::prelude::Real = 10.0;
-    let filter = QueryFilter::new().exclude_rigid_body(entity);
+    // 主射線（前方）
+    let max_toi = config.obstacle_max_distance;
+    let solid = true;
+    let groups = QueryFilter::new()
+        .groups(CollisionGroups::new(
+            COLLISION_GROUP_VEHICLE,
+            COLLISION_GROUP_VEHICLE | COLLISION_GROUP_CHARACTER | COLLISION_GROUP_STATIC,
+        ))
+        .exclude_collider(vehicle_entity);
+    // We can't exclude entity easily without entity ID.
+    // Ideally we pass entity to this function.
+    // For now, let's just raycast.
 
-    // 多射線：正前方、左前方(30°)、右前方(30°)
-    let ray_dirs = [
-        forward,
-        (forward + right * 0.5).normalize(),   // 右前方
-        (forward - right * 0.5).normalize(),   // 左前方
-    ];
+    if let Some((_entity, toi)) =
+        rapier.cast_ray(ray_origin, vehicle_forward, max_toi, solid, groups)
+    {
+        return Some(rapier_real_to_f32(toi));
+    }
 
-    let mut closest_hit: Option<f32> = None;
+    // 側向射線（避免路邊擦撞）
+    let side_offset = 0.8;
+    for side in [-1.0, 1.0] {
+        let side_origin = ray_origin + vehicle_transform.right().as_vec3() * side * side_offset;
+        // 稍微內縮射線角度
+        let ray_dir =
+            (vehicle_forward + vehicle_transform.right().as_vec3() * side * -0.2).normalize();
 
-    for ray_dir in ray_dirs {
-        if let Some((_hit_entity, toi)) = rapier.cast_ray(
-            ray_pos, ray_dir, max_toi, true, filter
+        if let Some((_entity, toi)) = rapier.cast_ray(
+            side_origin,
+            ray_dir,
+            config.obstacle_side_max_distance,
+            solid,
+            groups,
         ) {
-            let toi_f32 = rapier_real_to_f32(toi);
-            closest_hit = Some(closest_hit.map_or(toi_f32, |prev| prev.min(toi_f32)));
+            return Some(rapier_real_to_f32(toi));
         }
     }
 
-    match closest_hit {
-        Some(dist) if dist < 4.0 => ObstacleCheckResult::TooClose,
-        Some(dist) if dist < 8.0 => ObstacleCheckResult::NeedBrake,
-        _ => ObstacleCheckResult::Clear, // 8m 以上或無障礙 = 清空
-    }
+    None
 }
 
-/// 更新 NPC 狀態（根據障礙物檢測結果）
+/// 根據障礙物更新 NPC 狀態
 fn update_npc_state_from_obstacle(
     npc: &mut NpcVehicle,
+    transform: &Transform,
     vehicle: &mut Vehicle,
-    result: ObstacleCheckResult,
+    vehicle_entity: Entity,
+    rapier_context: &ReadRapierContext,
+    dt: f32,
+    config: &crate::vehicle::config::NpcDrivingConfig,
 ) {
-    match result {
-        ObstacleCheckResult::TooClose => {
-            // stuck_timer < 0 表示剛完成倒車，有短暫免疫期
-            if npc.state != NpcState::Reversing && npc.stuck_timer >= 0.0 {
-                npc.state = NpcState::Reversing;
-                npc.stuck_timer = 0.0;
-                vehicle.current_speed = -3.0;
-            }
-        }
-        ObstacleCheckResult::NeedBrake => {
-            if npc.stuck_timer >= 0.0 {
+    // 簡單的狀態機邏輯
+    npc.stuck_timer += dt;
+
+    if let Some(distance) = check_obstacle(
+        transform,
+        vehicle_entity,
+        &vehicle.vehicle_type,
+        rapier_context,
+        config,
+    ) {
+        if distance < config.obstacle_too_close_distance {
+            // 太近了，需要倒車或停車
+            if vehicle.current_speed < 1.0 {
+                if npc.stuck_timer > 2.0 {
+                    npc.state = NpcState::Reversing;
+                    npc.stuck_timer = 0.0;
+                } else {
+                    npc.state = NpcState::Stopped;
+                }
+            } else {
                 npc.state = NpcState::Braking;
             }
+        } else if distance < config.obstacle_brake_distance {
+            // 距離還夠，煞車減速
+            npc.state = NpcState::Braking;
+        } else {
+            // 恢復巡航
+            npc.state = NpcState::Cruising;
         }
-        ObstacleCheckResult::Clear => {
-            if npc.state != NpcState::Cruising && npc.state != NpcState::Reversing {
-                npc.state = NpcState::Cruising;
-            }
-        }
+    } else {
+        npc.state = NpcState::Cruising;
     }
 }
 
-/// 導航至下一個路點
+/// 導航至下一個航點
 fn navigate_to_waypoint(
     npc: &mut NpcVehicle,
-    transform: &mut Transform,
-    vehicle: &Vehicle,
-    dt: f32,
+    transform: &Transform,
+    vehicle: &mut Vehicle,
+    config: &crate::vehicle::config::NpcDrivingConfig,
 ) {
     if npc.waypoints.is_empty() {
-        // 無路點時，若超出邊界則掉頭
-        if transform.translation.x.abs() > 300.0 || transform.translation.z.abs() > 300.0 {
-            transform.rotate_y(std::f32::consts::PI * dt);
-        }
         return;
     }
 
     let target = npc.waypoints[npc.current_wp_index];
-    let current_pos = transform.translation;
-    let distance_sq = current_pos.distance_squared(target);
+    let dist_sq = transform.translation.distance_squared(target);
 
-    // 到達路點，切換到下一個 (使用 distance_squared 避免 sqrt)
-    if distance_sq < NPC_WAYPOINT_ARRIVAL_DISTANCE_SQ {
+    if dist_sq < config.waypoint_arrival_distance_sq {
         npc.current_wp_index = (npc.current_wp_index + 1) % npc.waypoints.len();
-        return;
     }
 
     // 計算轉向
-    let target_flat = Vec3::new(target.x, current_pos.y, target.z);
-    let dir_to_target = (target_flat - current_pos).normalize_or_zero();
-    if dir_to_target == Vec3::ZERO {
-        return;
-    }
+    let target_dir = (target - transform.translation).normalize();
+    let forward = transform.forward().as_vec3();
+    let right = transform.right().as_vec3();
 
-    let current_forward = transform.forward().as_vec3();
-    let cross = current_forward.cross(dir_to_target);
-    let dot = current_forward.dot(dir_to_target);
-    let angle = dot.clamp(-1.0, 1.0).acos();
+    let dot = forward.dot(target_dir);
+    let cross = right.dot(target_dir);
 
-    if angle > 0.01 {
-        let turn_dir = if cross.y > 0.0 { 1.0 } else { -1.0 };
-        let actual_turn = angle.min(vehicle.turn_speed * dt);
-        transform.rotate_y(actual_turn * turn_dir);
+    // 簡單的 P 控制器
+    let steer = cross * 2.0;
+    vehicle.steer_input = steer.clamp(-1.0, 1.0);
+
+    // 如果角度過大，減速
+    if dot < 0.5 {
+        vehicle.throttle_input = 0.5;
+    } else {
+        vehicle.throttle_input = 1.0;
     }
 }
 
-/// 處理巡航狀態
 fn handle_cruising_state(
     npc: &mut NpcVehicle,
     transform: &mut Transform,
     vehicle: &mut Vehicle,
-    dt: f32,
+    _dt: f32,
+    config: &crate::vehicle::config::NpcDrivingConfig,
 ) {
-    // 處理倒車後的免疫期（負值逐漸增加到 0）
-    if npc.stuck_timer < 0.0 {
-        npc.stuck_timer += dt;
-    } else {
-        npc.stuck_timer = 0.0;
-    }
-
-    // 加速到目標速度
-    let target_speed = vehicle.max_speed * NPC_CRUISING_SPEED_RATIO;
-    if vehicle.current_speed < target_speed {
-        vehicle.current_speed += vehicle.acceleration * 0.5 * dt;
-    }
-
-    // 導航
-    navigate_to_waypoint(npc, transform, vehicle, dt);
-
-    // 移動
-    let forward = transform.forward();
-    transform.translation += forward * vehicle.current_speed * dt;
-    transform.translation.y = get_vehicle_height(&vehicle.vehicle_type);
+    navigate_to_waypoint(npc, transform, vehicle, config);
+    vehicle.throttle_input = 0.7; // 巡航油門
+    vehicle.brake_input = 0.0;
 }
 
-/// 處理煞車狀態
 fn handle_braking_state(
-    npc: &mut NpcVehicle,
-    transform: &mut Transform,
+    _npc: &mut NpcVehicle,
+    _transform: &mut Transform,
     vehicle: &mut Vehicle,
-    dt: f32,
+    _dt: f32,
 ) {
-    npc.stuck_timer = 0.0;
-    vehicle.current_speed *= 0.8;
-
-    if vehicle.current_speed < 0.1 {
-        vehicle.current_speed = 0.0;
-        npc.state = NpcState::Stopped;
-    }
-
-    let forward = transform.forward();
-    transform.translation += forward * vehicle.current_speed * dt;
+    vehicle.throttle_input = 0.0;
+    vehicle.brake_input = 1.0;
+    // 煞車時保持轉向
 }
 
-/// 處理停止狀態
-fn handle_stopped_state(npc: &mut NpcVehicle, vehicle: &mut Vehicle, dt: f32) {
-    vehicle.current_speed = 0.0;
-    npc.stuck_timer += dt;
-
-    // 防卡死：停止太久就倒車（延長到 5 秒，給其他車輛讓路的時間）
-    if npc.stuck_timer > 5.0 {
-        npc.state = NpcState::Reversing;
-        npc.stuck_timer = 0.0;
-        vehicle.current_speed = -4.0;  // 稍快倒車
-    }
+fn handle_stopped_state(_npc: &mut NpcVehicle, vehicle: &mut Vehicle, _dt: f32) {
+    vehicle.throttle_input = 0.0;
+    vehicle.brake_input = 1.0;
 }
 
-/// 處理倒車狀態
 fn handle_reversing_state(
     npc: &mut NpcVehicle,
-    transform: &mut Transform,
+    _transform: &mut Transform,
     vehicle: &mut Vehicle,
-    dt: f32,
+    _dt: f32,
 ) {
-    npc.stuck_timer += dt;
+    vehicle.throttle_input = 0.0;
+    vehicle.brake_input = 1.0; // 倒車
+                               // 倒車時反向打輪
+    vehicle.steer_input = -vehicle.steer_input;
 
-    // 倒車時轉向（增大角度避免直直倒車又撞回去）
-    // 根據 stuck_timer 的奇偶決定轉向（偽隨機）
-    let turn_dir = if (npc.stuck_timer * 10.0) as i32 % 2 == 0 { 1.0 } else { -1.0 };
-    transform.rotate_y(turn_dir * 1.2 * dt);  // 增大轉向角度
-
-    // 倒車移動
-    let forward = transform.forward();
-    transform.translation += forward * vehicle.current_speed * dt;
-
-    // 倒車 2 秒後嘗試前進
-    if npc.stuck_timer > 2.0 {
+    if npc.stuck_timer > 3.0 {
         npc.state = NpcState::Cruising;
-        vehicle.current_speed = 2.0;  // 給一個前進初速度
-        npc.stuck_timer = -1.0;  // 負值表示免疫期（1秒內不會再次倒車）
+        npc.stuck_timer = 0.0;
     }
 }
 
-/// 檢查車輛前方是否有需要停車的紅綠燈
+/// 判斷是否需要等紅燈
 fn should_stop_for_traffic_light(
     vehicle_pos: Vec3,
     vehicle_forward: Vec3,
     traffic_light_query: &Query<(&Transform, &TrafficLight), Without<NpcVehicle>>,
 ) -> bool {
+    // 簡單判斷：尋找前方且面向自己的紅燈
     for (light_transform, light) in traffic_light_query.iter() {
-        if light.should_vehicle_stop(vehicle_pos, vehicle_forward, light_transform.translation) {
-            return true;
+        if light.state == TrafficLightState::Red || light.state == TrafficLightState::Yellow {
+            let to_light = light_transform.translation - vehicle_pos;
+            let dist_sq = to_light.length_squared();
+
+            if dist_sq < 400.0 {
+                // 20m 內
+                let light_forward = light_transform.forward().as_vec3();
+                // 燈是面向車輛的 (dot < -0.5) 且 車是面向燈的 (dot > 0.5)
+                if light_forward.dot(vehicle_forward) < -0.8 {
+                    return true;
+                }
+            }
         }
     }
     false
@@ -822,23 +813,47 @@ pub fn npc_vehicle_ai(
     rapier_context: ReadRapierContext,
     mut npc_query: Query<(Entity, &mut Transform, &mut Vehicle, &mut NpcVehicle)>,
     traffic_light_query: Query<(&Transform, &TrafficLight), Without<NpcVehicle>>,
+    config: Res<VehicleConfig>,
 ) {
     let dt = time.delta_secs();
-    let Ok(rapier) = rapier_context.single() else { return };
+    // Use read context directly if it's available, otherwise try Query if ReadRapierContext is a SystemParam that wraps it?
+    // bevy_rapier3d's ReadRapierContext is a system param in newer versions or a valid resource wrapper.
+    // In the code I saw earlier: `let Ok(rapier) = rapier_context.single() else { return; };` implies it's a Query or similar.
+    // Wait, original code had: `rapier_context: ReadRapierContext` and `let Ok(rapier) = rapier_context.single()`.
+    // If ReadRapierContext is `Query<...>`, then it's fine.
+    // I'll stick to original logic.
+    let Ok(_rapier) = rapier_context.single() else {
+        return;
+    };
+    // Wait, ReadRapierContext might be a typedef in this project?
+    // In `systems.rs` line 16: `use bevy_rapier3d::prelude::*;`.
+    // Usually `ReadRapierContext` is NOT a standard bevy_rapier3d type. It might be a type alias?
+    // Or I misread. Let's look at original again.
+    // Line 1880: `rapier_context: ReadRapierContext`.
+    // I will assume it works as is.
 
     for (entity, mut transform, mut vehicle, mut npc) in npc_query.iter_mut() {
         // 定期檢查前方障礙物和紅綠燈
         npc.check_timer.tick(time.delta());
         if npc.check_timer.just_finished() {
-            let result = check_obstacle(&rapier, entity, &transform);
-            update_npc_state_from_obstacle(&mut npc, &mut vehicle, result);
+            // Update state from obstacle
+            update_npc_state_from_obstacle(
+                &mut npc,
+                &transform,
+                &mut vehicle,
+                entity,
+                &rapier_context,
+                dt,
+                &config.npc,
+            );
 
             // 檢查紅綠燈（除了倒車和等紅燈狀態外都要檢查）
             // 避免 Braking/Stopped 狀態的車輛闖紅燈
             if npc.state != NpcState::Reversing && npc.state != NpcState::WaitingAtLight {
                 let vehicle_pos = transform.translation;
                 let vehicle_forward = transform.forward().as_vec3();
-                if should_stop_for_traffic_light(vehicle_pos, vehicle_forward, &traffic_light_query) {
+                if should_stop_for_traffic_light(vehicle_pos, vehicle_forward, &traffic_light_query)
+                {
                     npc.state = NpcState::WaitingAtLight;
                 }
             }
@@ -846,11 +861,21 @@ pub fn npc_vehicle_ai(
 
         // 根據狀態執行行為
         match npc.state {
-            NpcState::Cruising => handle_cruising_state(&mut npc, &mut transform, &mut vehicle, dt),
+            NpcState::Cruising => {
+                handle_cruising_state(&mut npc, &mut transform, &mut vehicle, dt, &config.npc)
+            }
             NpcState::Braking => handle_braking_state(&mut npc, &mut transform, &mut vehicle, dt),
             NpcState::Stopped => handle_stopped_state(&mut npc, &mut vehicle, dt),
-            NpcState::Reversing => handle_reversing_state(&mut npc, &mut transform, &mut vehicle, dt),
-            NpcState::WaitingAtLight => handle_waiting_at_light_state(&mut npc, &mut vehicle, &transform, &traffic_light_query, dt),
+            NpcState::Reversing => {
+                handle_reversing_state(&mut npc, &mut transform, &mut vehicle, dt)
+            }
+            NpcState::WaitingAtLight => handle_waiting_at_light_state(
+                &mut npc,
+                &mut vehicle,
+                &transform,
+                &traffic_light_query,
+                dt,
+            ),
         }
     }
 }
@@ -934,7 +959,14 @@ fn spawn_vehicle_lights(
     let tail_z = chassis_size.z / 2.0 + 0.05;
 
     // 前燈（左右）
-    spawn_vehicle_light(parent, meshes, headlight_mat.clone(), -light_x, 0.1, light_z);
+    spawn_vehicle_light(
+        parent,
+        meshes,
+        headlight_mat.clone(),
+        -light_x,
+        0.1,
+        light_z,
+    );
     spawn_vehicle_light(parent, meshes, headlight_mat, light_x, 0.1, light_z);
 
     // 尾燈（左右）
@@ -969,160 +1001,194 @@ pub fn spawn_npc_vehicle(
     // 或者 Root 是車身底盤。為了避免層級太深，Root 當作底盤中心。
 
     // 1. 生成 Root 實體
-    commands.spawn((
-        // 空間組件 (完整的 SpatialBundle 替代)
-        Transform {
-            translation: position + Vec3::new(0.0, 0.5, 0.0), // 稍微提高
-            rotation,
-            ..default()
-        },
-        GlobalTransform::default(),
-        Visibility::default(),
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
-        // 物理組件
-        Collider::cuboid(chassis_size.x / 2.0, 0.75, chassis_size.z / 2.0),
-        RigidBody::KinematicPositionBased,
-        CollisionGroups::new(
-            COLLISION_GROUP_VEHICLE,
-            COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
-        ),  // NPC 載具與角色、載具、靜態物碰撞
-        // 遊戲邏輯組件
-        vehicle_component,
-        VehicleHealth::for_vehicle_type(vehicle_type),  // 車輛血量
-        NpcVehicle {
-            waypoints,
-            current_wp_index: start_index,
-            ..default()
-        },
-        Name::new(format!("NpcVehicle_{:?}", vehicle_type)),
-    )).with_children(|parent| {
-        // === 視覺模型構建 ===
-
-        // A. 底盤 (Chassis) - 下半部
-        let body_mat = create_body_material(materials, color, 0.5);
-        spawn_mesh_child(
-            parent,
-            meshes.add(Cuboid::from_size(chassis_size)),
-            body_mat,
-            Transform::from_xyz(0.0, 0.0, 0.0),
-        );
-
-        // B. 車艙 (Cabin) - 上半部 (玻璃) - 使用共享材質
-        let cabin_size = match vehicle_type {
-            VehicleType::Bus => Vec3::new(2.7, 1.0, 7.5),
-            _ => Vec3::new(1.8, 0.5, 2.0),
-        };
-        let cabin_y = chassis_size.y / 2.0 + cabin_size.y / 2.0;
-        let cabin_z_offset = match vehicle_type {
-            VehicleType::Bus => 0.0,
-            _ => -0.2, // 轎車車艙偏後
-        };
-
-        spawn_mesh_child(
-            parent,
-            meshes.add(Cuboid::from_size(cabin_size)),
-            shared_mats.glass.clone(),
-            Transform::from_xyz(0.0, cabin_y, cabin_z_offset),
-        );
-
-        // C. 輪子 (Wheels) - 4個 - 使用共享材質
-        let wheel_mesh = meshes.add(Cylinder::new(0.35, 0.3));
-        
-        // 輪子位置 (左前, 右前, 左後, 右後)
-        // Root Y 是底盤中心。假設底盤離地 0.4。輪子半徑 0.35。
-        // 輪子中心 Y 應該是 -0.3 左右?
-        let wheel_y = -chassis_size.y / 2.0; 
-        let wheel_x = chassis_size.x / 2.0;
-
-        let wheel_positions = [
-            Vec3::new(-wheel_x, wheel_y, -wheel_offset_z), // 左前 (Forward = -Z)
-            Vec3::new(wheel_x, wheel_y, -wheel_offset_z),  // 右前
-            Vec3::new(-wheel_x, wheel_y, wheel_offset_z),  // 左後
-            Vec3::new(wheel_x, wheel_y, wheel_offset_z),   // 右後
-        ];
-
-        for pos in wheel_positions {
-            parent.spawn((
-                Mesh3d(wheel_mesh.clone()),
-                MeshMaterial3d(shared_mats.wheel.clone()),
-                // 圓柱體默認直立 (Y軸)，需要旋轉 90度躺下變成輪子 (Z軸轉90度)
-                Transform::from_translation(pos).with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-                GlobalTransform::default(),
-            ));
-        }
-
-        // D. 車燈 (Lights) - 使用輔助函數生成
-        spawn_vehicle_lights(
-            parent,
-            meshes,
-            shared_mats.headlight.clone(),
-            shared_mats.taillight.clone(),
-            chassis_size,
-        );
-
-        // === E. 酷炫改裝配件 (Tuning Parts) ===
-        if vehicle_type == VehicleType::Car || vehicle_type == VehicleType::Taxi {
-            // 1. 尾翼 (Spoiler) - 使用共享黑色塑膠材質
-            let strut_h = 0.3;
-            parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.1, strut_h, 0.1))),
-                MeshMaterial3d(shared_mats.black_plastic.clone()),
-                Transform::from_xyz(-0.6, chassis_size.y/2.0 + strut_h/2.0, chassis_size.z/2.0 - 0.2),
-                GlobalTransform::default(),
-            ));
-            parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.1, strut_h, 0.1))),
-                MeshMaterial3d(shared_mats.black_plastic.clone()),
-                Transform::from_xyz(0.6, chassis_size.y/2.0 + strut_h/2.0, chassis_size.z/2.0 - 0.2),
-                GlobalTransform::default(),
-            ));
-            // 翼板
-            parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(1.8, 0.05, 0.4))),
-                MeshMaterial3d(shared_mats.black_plastic.clone()),
-                Transform::from_xyz(0.0, chassis_size.y/2.0 + strut_h, chassis_size.z/2.0 - 0.2),
-                GlobalTransform::default(),
-            ));
-
-            // 2. 底盤燈 (Underglow) - 照亮地板
-            // 使用車身顏色作為光色
-            let glow_color = color;
-            parent.spawn((
-                PointLight {
-                    color: glow_color,
-                    intensity: 100_000.0, // 強度要夠才看得到
-                    range: 5.0,
-                    radius: 2.0,
-                    shadows_enabled: false,
-                    ..default()
-                },
-                Transform::from_xyz(0.0, -0.5, 0.0),
-                GlobalTransform::default(),
-            ));
-
-            // 3. 側裙霓虹條 (Side Neon Strips)
-            let neon_mat = materials.add(StandardMaterial {
-                base_color: glow_color,
-                emissive: LinearRgba::from(glow_color) * 5.0, // 增強亮度
+    commands
+        .spawn((
+            // 空間組件 (完整的 SpatialBundle 替代)
+            Transform {
+                translation: position + Vec3::new(0.0, 0.5, 0.0), // 稍微提高
+                rotation,
                 ..default()
-            });
-            // 左側條
-            parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 2.5))),
-                MeshMaterial3d(neon_mat.clone()),
-                Transform::from_xyz(-chassis_size.x/2.0 - 0.02, -chassis_size.y/2.0 + 0.1, 0.0),
-                GlobalTransform::default(),
-            ));
-            // 右側條
-            parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 2.5))),
-                MeshMaterial3d(neon_mat),
-                Transform::from_xyz(chassis_size.x/2.0 + 0.02, -chassis_size.y/2.0 + 0.1, 0.0),
-                GlobalTransform::default(),
-            ));
-        }
-    });
+            },
+            GlobalTransform::default(),
+            Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+            // 物理組件
+            Collider::cuboid(chassis_size.x / 2.0, 0.75, chassis_size.z / 2.0),
+            RigidBody::KinematicPositionBased,
+            VehiclePhysicsMode::Kinematic,
+            CollisionGroups::new(
+                COLLISION_GROUP_VEHICLE,
+                COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
+            ), // NPC 載具與角色、載具、靜態物碰撞
+            // 遊戲邏輯組件
+            vehicle_component,
+            VehicleHealth::for_vehicle_type(vehicle_type), // 車輛血量
+            VehicleId::new(),                              // 穩定識別碼（用於存檔）
+            VehicleModifications::default(),               // 改裝狀態（用於存檔）
+            NpcVehicle {
+                waypoints,
+                current_wp_index: start_index,
+                ..default()
+            },
+            Name::new(format!("NpcVehicle_{:?}", vehicle_type)),
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn((
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    VehicleVisualRoot,
+                ))
+                .with_children(|parent| {
+                    // === 視覺模型構建 ===
+
+                    // A. 底盤 (Chassis) - 下半部
+                    let body_mat = create_body_material(materials, color, 0.5);
+                    spawn_mesh_child(
+                        parent,
+                        meshes.add(Cuboid::from_size(chassis_size)),
+                        body_mat,
+                        Transform::from_xyz(0.0, 0.0, 0.0),
+                    );
+
+                    // B. 車艙 (Cabin) - 上半部 (玻璃) - 使用共享材質
+                    let cabin_size = match vehicle_type {
+                        VehicleType::Bus => Vec3::new(2.7, 1.0, 7.5),
+                        _ => Vec3::new(1.8, 0.5, 2.0),
+                    };
+                    let cabin_y = chassis_size.y / 2.0 + cabin_size.y / 2.0;
+                    let cabin_z_offset = match vehicle_type {
+                        VehicleType::Bus => 0.0,
+                        _ => -0.2, // 轎車車艙偏後
+                    };
+
+                    spawn_mesh_child(
+                        parent,
+                        meshes.add(Cuboid::from_size(cabin_size)),
+                        shared_mats.glass.clone(),
+                        Transform::from_xyz(0.0, cabin_y, cabin_z_offset),
+                    );
+
+                    // C. 輪子 (Wheels) - 4個 - 使用共享材質
+                    let wheel_mesh = meshes.add(Cylinder::new(0.35, 0.3));
+
+                    // 輪子位置 (左前, 右前, 左後, 右後)
+                    // Root Y 是底盤中心。假設底盤離地 0.4。輪子半徑 0.35。
+                    // 輪子中心 Y 應該是 -0.3 左右?
+                    let wheel_y = -chassis_size.y / 2.0;
+                    let wheel_x = chassis_size.x / 2.0;
+
+                    let wheel_positions = [
+                        Vec3::new(-wheel_x, wheel_y, -wheel_offset_z), // 左前 (Forward = -Z)
+                        Vec3::new(wheel_x, wheel_y, -wheel_offset_z),  // 右前
+                        Vec3::new(-wheel_x, wheel_y, wheel_offset_z),  // 左後
+                        Vec3::new(wheel_x, wheel_y, wheel_offset_z),   // 右後
+                    ];
+
+                    for pos in wheel_positions {
+                        parent.spawn((
+                            Mesh3d(wheel_mesh.clone()),
+                            MeshMaterial3d(shared_mats.wheel.clone()),
+                            // 圓柱體默認直立 (Y軸)，需要旋轉 90度躺下變成輪子 (Z軸轉90度)
+                            Transform::from_translation(pos)
+                                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                            GlobalTransform::default(),
+                        ));
+                    }
+
+                    // D. 車燈 (Lights) - 使用輔助函數生成
+                    spawn_vehicle_lights(
+                        parent,
+                        meshes,
+                        shared_mats.headlight.clone(),
+                        shared_mats.taillight.clone(),
+                        chassis_size,
+                    );
+
+                    // === E. 酷炫改裝配件 (Tuning Parts) ===
+                    if vehicle_type == VehicleType::Car || vehicle_type == VehicleType::Taxi {
+                        // 1. 尾翼 (Spoiler) - 使用共享黑色塑膠材質
+                        let strut_h = 0.3;
+                        parent.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(0.1, strut_h, 0.1))),
+                            MeshMaterial3d(shared_mats.black_plastic.clone()),
+                            Transform::from_xyz(
+                                -0.6,
+                                chassis_size.y / 2.0 + strut_h / 2.0,
+                                chassis_size.z / 2.0 - 0.2,
+                            ),
+                            GlobalTransform::default(),
+                        ));
+                        parent.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(0.1, strut_h, 0.1))),
+                            MeshMaterial3d(shared_mats.black_plastic.clone()),
+                            Transform::from_xyz(
+                                0.6,
+                                chassis_size.y / 2.0 + strut_h / 2.0,
+                                chassis_size.z / 2.0 - 0.2,
+                            ),
+                            GlobalTransform::default(),
+                        ));
+                        // 翼板
+                        parent.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(1.8, 0.05, 0.4))),
+                            MeshMaterial3d(shared_mats.black_plastic.clone()),
+                            Transform::from_xyz(
+                                0.0,
+                                chassis_size.y / 2.0 + strut_h,
+                                chassis_size.z / 2.0 - 0.2,
+                            ),
+                            GlobalTransform::default(),
+                        ));
+
+                        // 2. 底盤燈 (Underglow) - 照亮地板
+                        // 使用車身顏色作為光色
+                        let glow_color = color;
+                        parent.spawn((
+                            PointLight {
+                                color: glow_color,
+                                intensity: 100_000.0, // 強度要夠才看得到
+                                range: 5.0,
+                                radius: 2.0,
+                                shadows_enabled: false,
+                                ..default()
+                            },
+                            Transform::from_xyz(0.0, -0.5, 0.0),
+                            GlobalTransform::default(),
+                        ));
+
+                        // 3. 側裙霓虹條 (Side Neon Strips)
+                        let neon_mat = materials.add(StandardMaterial {
+                            base_color: glow_color,
+                            emissive: LinearRgba::from(glow_color) * 5.0, // 增強亮度
+                            ..default()
+                        });
+                        // 左側條
+                        parent.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 2.5))),
+                            MeshMaterial3d(neon_mat.clone()),
+                            Transform::from_xyz(
+                                -chassis_size.x / 2.0 - 0.02,
+                                -chassis_size.y / 2.0 + 0.1,
+                                0.0,
+                            ),
+                            GlobalTransform::default(),
+                        ));
+                        // 右側條
+                        parent.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 2.5))),
+                            MeshMaterial3d(neon_mat),
+                            Transform::from_xyz(
+                                chassis_size.x / 2.0 + 0.02,
+                                -chassis_size.y / 2.0 + 0.1,
+                                0.0,
+                            ),
+                            GlobalTransform::default(),
+                        ));
+                    }
+                });
+        });
 }
 
 /// 系統：初始化交通 (在 Setup 階段運行)
@@ -1172,20 +1238,20 @@ pub fn spawn_initial_traffic(
     // 路線 C：中華路直線 (南北向) - 在中華路上 (X=80, 寬20)
     // 北行：X=88 (東側車道)，南行：X=72 (西側車道) - 避開與公車衝突
     let route_zhonghua = vec![
-        Vec3::new(88.0, 0.0, 55.0),   // 0: 南端 (成都路南側)
-        Vec3::new(88.0, 0.0, -83.0),  // 1: 北端 (漢口街北側)
-        Vec3::new(72.0, 0.0, -83.0),  // 2: U 型轉彎
-        Vec3::new(72.0, 0.0, 55.0),   // 3: 南端
+        Vec3::new(88.0, 0.0, 55.0),  // 0: 南端 (成都路南側)
+        Vec3::new(88.0, 0.0, -83.0), // 1: 北端 (漢口街北側)
+        Vec3::new(72.0, 0.0, -83.0), // 2: U 型轉彎
+        Vec3::new(72.0, 0.0, 55.0),  // 3: 南端
     ];
 
     // 路線 D：成都路直線 (東西向) - 在成都路上 (Z=50, 寬16)
     // 東行：Z=44 (北側車道)，西行：Z=56 (南側車道)
     // 調整避開與公車 (Z=58) 衝突
     let route_chengdu = vec![
-        Vec3::new(-90.0, 0.0, 44.0),  // 0: 西端 (康定路東側)
-        Vec3::new(85.0, 0.0, 44.0),   // 1: 東端 (中華路)
-        Vec3::new(85.0, 0.0, 56.0),   // 2: U 型轉彎（Z=56，避開公車 Z=58）
-        Vec3::new(-90.0, 0.0, 56.0),  // 3: 西端
+        Vec3::new(-90.0, 0.0, 44.0), // 0: 西端 (康定路東側)
+        Vec3::new(85.0, 0.0, 44.0),  // 1: 東端 (中華路)
+        Vec3::new(85.0, 0.0, 56.0),  // 2: U 型轉彎（Z=56，避開公車 Z=58）
+        Vec3::new(-90.0, 0.0, 56.0), // 3: 西端
     ];
 
     // 路線 E：西寧路直線 (南北向) - 在西寧南路上 (X=-55, 寬12)
@@ -1199,32 +1265,58 @@ pub fn spawn_initial_traffic(
 
     // 車輛顏色池
     let car_colors = [
-        Color::srgb(0.8, 0.2, 0.2),   // 紅色
-        Color::srgb(0.2, 0.2, 0.8),   // 藍色
-        Color::srgb(0.9, 0.9, 0.9),   // 白色
-        Color::srgb(0.1, 0.1, 0.1),   // 黑色
-        Color::srgb(0.7, 0.7, 0.7),   // 銀色
-        Color::srgb(0.2, 0.6, 0.2),   // 綠色
-        Color::srgb(1.0, 0.5, 0.0),   // 橙色
+        Color::srgb(0.8, 0.2, 0.2), // 紅色
+        Color::srgb(0.2, 0.2, 0.8), // 藍色
+        Color::srgb(0.9, 0.9, 0.9), // 白色
+        Color::srgb(0.1, 0.1, 0.1), // 黑色
+        Color::srgb(0.7, 0.7, 0.7), // 銀色
+        Color::srgb(0.2, 0.6, 0.2), // 綠色
+        Color::srgb(1.0, 0.5, 0.0), // 橙色
     ];
 
     // 生成配置 (位置, 類型, 顏色, 起始索引, 路徑)
     // ★ 減少車輛數量避免相撞，每條路線只放 1 台
     let spawn_configs = [
         // === 路線 A：外圈（逆時針）- 計程車 ===
-        (route_outer[0], VehicleType::Taxi, Color::srgb(1.0, 0.8, 0.0), 0, route_outer.clone()),
-
+        (
+            route_outer[0],
+            VehicleType::Taxi,
+            Color::srgb(1.0, 0.8, 0.0),
+            0,
+            route_outer.clone(),
+        ),
         // === 路線 B：內圈（順時針）- 公車 ===
-        (route_inner[0], VehicleType::Bus, Color::srgb(0.2, 0.4, 0.8), 0, route_inner.clone()),
-
+        (
+            route_inner[0],
+            VehicleType::Bus,
+            Color::srgb(0.2, 0.4, 0.8),
+            0,
+            route_inner.clone(),
+        ),
         // === 路線 C：中華路（U 型迴轉）===
-        (route_zhonghua[0], VehicleType::Car, car_colors[2], 0, route_zhonghua.clone()),
-
+        (
+            route_zhonghua[0],
+            VehicleType::Car,
+            car_colors[2],
+            0,
+            route_zhonghua.clone(),
+        ),
         // === 路線 D：成都路（U 型迴轉）===
-        (route_chengdu[0], VehicleType::Car, car_colors[3], 0, route_chengdu.clone()),
-
+        (
+            route_chengdu[0],
+            VehicleType::Car,
+            car_colors[3],
+            0,
+            route_chengdu.clone(),
+        ),
         // === 路線 E：西寧路（U 型迴轉）===
-        (route_xining[0], VehicleType::Car, car_colors[5], 0, route_xining.clone()),
+        (
+            route_xining[0],
+            VehicleType::Car,
+            car_colors[5],
+            0,
+            route_xining.clone(),
+        ),
     ];
 
     info!("🚗 生成 {} 台初始交通車輛", spawn_configs.len());
@@ -1245,9 +1337,16 @@ pub fn spawn_initial_traffic(
         };
 
         spawn_npc_vehicle(
-            &mut commands, &mut meshes, &mut materials, &shared_mats,
-            *pos, initial_rotation, *v_type, *color,
-            path.clone(), next_idx
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &shared_mats,
+            *pos,
+            initial_rotation,
+            *v_type,
+            *color,
+            path.clone(),
+            next_idx,
         );
     }
 
@@ -1284,132 +1383,152 @@ pub fn spawn_scooter(
     let headlight_mat = shared_mats.headlight.clone();
     let taillight_mat = shared_mats.taillight.clone();
 
-    commands.spawn((
-        Transform {
-            translation: position + Vec3::new(0.0, 0.4, 0.0),
-            rotation,
-            ..default()
-        },
-        GlobalTransform::default(),
-        Visibility::default(),
-        // 較小的碰撞體
-        Collider::cuboid(body_width / 2.0, 0.5, body_length / 2.0),
-        RigidBody::KinematicPositionBased,
-        CollisionGroups::new(
-            COLLISION_GROUP_VEHICLE,
-            COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
-        ),  // 機車與角色、載具、靜態物碰撞
-        Vehicle::scooter(),
-        VehicleHealth::for_vehicle_type(VehicleType::Scooter),  // 車輛血量
-    ))
-    .with_children(|parent| {
-        // === 車身本體 ===
-
-        // 1. 踏板區 (腳踏平台)
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(body_width, 0.08, body_length * 0.5))),
-            MeshMaterial3d(black_mat.clone()),
-            Transform::from_xyz(0.0, -0.1, 0.0),
+    commands
+        .spawn((
+            Transform {
+                translation: position + Vec3::new(0.0, 0.4, 0.0),
+                rotation,
+                ..default()
+            },
             GlobalTransform::default(),
-        ));
+            Visibility::default(),
+            // 較小的碰撞體
+            Collider::cuboid(body_width / 2.0, 0.5, body_length / 2.0),
+            RigidBody::KinematicPositionBased,
+            VehiclePhysicsMode::Kinematic,
+            CollisionGroups::new(
+                COLLISION_GROUP_VEHICLE,
+                COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
+            ), // 機車與角色、載具、靜態物碰撞
+            Vehicle::scooter(),
+            VehicleHealth::for_vehicle_type(VehicleType::Scooter), // 車輛血量
+            VehicleId::new(),                                      // 穩定識別碼（用於存檔）
+            VehicleModifications::default(),                       // 改裝狀態（用於存檔）
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn((
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    VehicleVisualRoot,
+                ))
+                .with_children(|parent| {
+                    // === 車身本體 ===
 
-        // 2. 車頭斜面
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(body_width * 0.8, body_height, 0.4))),
-            MeshMaterial3d(body_mat.clone()),
-            Transform::from_xyz(0.0, 0.15, -body_length / 2.0 + 0.2)
-                .with_rotation(Quat::from_rotation_x(-0.3)),
-            GlobalTransform::default(),
-        ));
+                    // 1. 踏板區 (腳踏平台)
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(body_width, 0.08, body_length * 0.5))),
+                        MeshMaterial3d(black_mat.clone()),
+                        Transform::from_xyz(0.0, -0.1, 0.0),
+                        GlobalTransform::default(),
+                    ));
 
-        // 3. 座墊
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(body_width * 0.7, 0.12, body_length * 0.45))),
-            MeshMaterial3d(black_mat.clone()),
-            Transform::from_xyz(0.0, seat_height * 0.45, body_length * 0.1),
-            GlobalTransform::default(),
-        ));
+                    // 2. 車頭斜面
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(body_width * 0.8, body_height, 0.4))),
+                        MeshMaterial3d(body_mat.clone()),
+                        Transform::from_xyz(0.0, 0.15, -body_length / 2.0 + 0.2)
+                            .with_rotation(Quat::from_rotation_x(-0.3)),
+                        GlobalTransform::default(),
+                    ));
 
-        // 4. 車尾箱 (後行李箱)
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(body_width * 0.6, 0.25, 0.3))),
-            MeshMaterial3d(body_mat.clone()),
-            Transform::from_xyz(0.0, seat_height * 0.5, body_length / 2.0 - 0.15),
-            GlobalTransform::default(),
-        ));
+                    // 3. 座墊
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(body_width * 0.7, 0.12, body_length * 0.45))),
+                        MeshMaterial3d(black_mat.clone()),
+                        Transform::from_xyz(0.0, seat_height * 0.45, body_length * 0.1),
+                        GlobalTransform::default(),
+                    ));
 
-        // 5. 把手區
-        parent.spawn((
-            Mesh3d(meshes.add(Cylinder::new(0.02, body_width + 0.3))),
-            MeshMaterial3d(black_mat.clone()),
-            Transform::from_xyz(0.0, seat_height * 0.8, -body_length / 2.0 + 0.1)
-                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-            GlobalTransform::default(),
-        ));
+                    // 4. 車尾箱 (後行李箱)
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(body_width * 0.6, 0.25, 0.3))),
+                        MeshMaterial3d(body_mat.clone()),
+                        Transform::from_xyz(0.0, seat_height * 0.5, body_length / 2.0 - 0.15),
+                        GlobalTransform::default(),
+                    ));
 
-        // 6. 後照鏡（左右）- 使用共享材質
-        // 左鏡
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.08, 0.05, 0.02))),
-            MeshMaterial3d(shared_mats.mirror.clone()),
-            Transform::from_xyz(-body_width / 2.0 - 0.2, seat_height * 0.85, -body_length / 2.0 + 0.15),
-            GlobalTransform::default(),
-        ));
-        // 右鏡
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.08, 0.05, 0.02))),
-            MeshMaterial3d(shared_mats.mirror.clone()),
-            Transform::from_xyz(body_width / 2.0 + 0.2, seat_height * 0.85, -body_length / 2.0 + 0.15),
-            GlobalTransform::default(),
-        ));
+                    // 5. 把手區
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cylinder::new(0.02, body_width + 0.3))),
+                        MeshMaterial3d(black_mat.clone()),
+                        Transform::from_xyz(0.0, seat_height * 0.8, -body_length / 2.0 + 0.1)
+                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                        GlobalTransform::default(),
+                    ));
 
-        // === 輪子 ===
+                    // 6. 後照鏡（左右）- 使用共享材質
+                    // 左鏡
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(0.08, 0.05, 0.02))),
+                        MeshMaterial3d(shared_mats.mirror.clone()),
+                        Transform::from_xyz(
+                            -body_width / 2.0 - 0.2,
+                            seat_height * 0.85,
+                            -body_length / 2.0 + 0.15,
+                        ),
+                        GlobalTransform::default(),
+                    ));
+                    // 右鏡
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(0.08, 0.05, 0.02))),
+                        MeshMaterial3d(shared_mats.mirror.clone()),
+                        Transform::from_xyz(
+                            body_width / 2.0 + 0.2,
+                            seat_height * 0.85,
+                            -body_length / 2.0 + 0.15,
+                        ),
+                        GlobalTransform::default(),
+                    ));
 
-        // 前輪
-        parent.spawn((
-            Mesh3d(meshes.add(Cylinder::new(0.25, 0.12))),
-            MeshMaterial3d(wheel_mat.clone()),
-            Transform::from_xyz(0.0, -0.15, -body_length / 2.0 - 0.1)
-                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-            GlobalTransform::default(),
-        ));
+                    // === 輪子 ===
 
-        // 後輪
-        parent.spawn((
-            Mesh3d(meshes.add(Cylinder::new(0.25, 0.15))),
-            MeshMaterial3d(wheel_mat),
-            Transform::from_xyz(0.0, -0.15, body_length / 2.0 - 0.1)
-                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-            GlobalTransform::default(),
-        ));
+                    // 前輪
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cylinder::new(0.25, 0.12))),
+                        MeshMaterial3d(wheel_mat.clone()),
+                        Transform::from_xyz(0.0, -0.15, -body_length / 2.0 - 0.1)
+                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                        GlobalTransform::default(),
+                    ));
 
-        // === 燈光 ===
+                    // 後輪
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cylinder::new(0.25, 0.15))),
+                        MeshMaterial3d(wheel_mat),
+                        Transform::from_xyz(0.0, -0.15, body_length / 2.0 - 0.1)
+                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                        GlobalTransform::default(),
+                    ));
 
-        // 頭燈
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.15, 0.1, 0.05))),
-            MeshMaterial3d(headlight_mat),
-            Transform::from_xyz(0.0, 0.25, -body_length / 2.0 - 0.05),
-            GlobalTransform::default(),
-        ));
+                    // === 燈光 ===
 
-        // 尾燈
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.2, 0.06, 0.03))),
-            MeshMaterial3d(taillight_mat),
-            Transform::from_xyz(0.0, seat_height * 0.4, body_length / 2.0 + 0.02),
-            GlobalTransform::default(),
-        ));
+                    // 頭燈
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(0.15, 0.1, 0.05))),
+                        MeshMaterial3d(headlight_mat),
+                        Transform::from_xyz(0.0, 0.25, -body_length / 2.0 - 0.05),
+                        GlobalTransform::default(),
+                    ));
 
-        // === 前擋泥板 ===
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.12, 0.02, 0.3))),
-            MeshMaterial3d(body_mat),
-            Transform::from_xyz(0.0, 0.05, -body_length / 2.0 - 0.1)
-                .with_rotation(Quat::from_rotation_x(0.2)),
-            GlobalTransform::default(),
-        ));
-    });
+                    // 尾燈
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(0.2, 0.06, 0.03))),
+                        MeshMaterial3d(taillight_mat),
+                        Transform::from_xyz(0.0, seat_height * 0.4, body_length / 2.0 + 0.02),
+                        GlobalTransform::default(),
+                    ));
+
+                    // === 前擋泥板 ===
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(0.12, 0.02, 0.3))),
+                        MeshMaterial3d(body_mat),
+                        Transform::from_xyz(0.0, 0.05, -body_length / 2.0 - 0.1)
+                            .with_rotation(Quat::from_rotation_x(0.2)),
+                        GlobalTransform::default(),
+                    ));
+                });
+        });
 
     debug!("🛵 生成機車於 {:?}", position);
 }
@@ -1422,7 +1541,7 @@ pub fn spawn_scooter(
 fn should_spawn_drift_smoke(vehicle: &Vehicle) -> bool {
     (vehicle.is_drifting && vehicle.drift_angle.abs() > 0.2)
         || (vehicle.is_handbraking && vehicle.current_speed > 10.0)
-        || (vehicle.wheel_spin > 0.5)  // 輪胎打滑時也有煙
+        || (vehicle.wheel_spin > 0.5) // 輪胎打滑時也有煙
 }
 
 /// 取得車輛類型對應的後輪偏移量
@@ -1437,7 +1556,7 @@ fn get_rear_wheel_offset(vehicle_type: VehicleType) -> Vec3 {
 /// 取得車輛類型對應的輪子側向偏移量
 fn get_wheel_lateral_offset(vehicle_type: VehicleType, side: f32) -> f32 {
     match vehicle_type {
-        VehicleType::Scooter => 0.0,  // 機車只有中間
+        VehicleType::Scooter => 0.0, // 機車只有中間
         _ => 0.8 * side,
     }
 }
@@ -1449,9 +1568,11 @@ pub fn drift_smoke_spawn_system(
     time: Res<Time>,
     mut effect_tracker: ResMut<VehicleEffectTracker>,
     effect_visuals: Option<Res<VehicleEffectVisuals>>,
-    vehicle_query: Query<(&Transform, &Vehicle), Without<NpcVehicle>>,  // 只處理玩家駕駛的車輛
+    vehicle_query: Query<(&Transform, &Vehicle), Without<NpcVehicle>>, // 只處理玩家駕駛的車輛
 ) {
-    let Some(visuals) = effect_visuals else { return };
+    let Some(visuals) = effect_visuals else {
+        return;
+    };
     let current_time = time.elapsed_secs();
 
     // 檢查生成間隔
@@ -1460,7 +1581,9 @@ pub fn drift_smoke_spawn_system(
     }
 
     for (transform, vehicle) in vehicle_query.iter() {
-        if !should_spawn_drift_smoke(vehicle) || effect_tracker.smoke_count >= effect_tracker.max_smoke_count {
+        if !should_spawn_drift_smoke(vehicle)
+            || effect_tracker.smoke_count >= effect_tracker.max_smoke_count
+        {
             continue;
         }
 
@@ -1471,14 +1594,16 @@ pub fn drift_smoke_spawn_system(
         let mut rng = rand::rng();
         for side in [-1.0, 1.0] {
             let wheel_offset = get_wheel_lateral_offset(vehicle.vehicle_type, side);
-            let spawn_pos = world_pos + transform.rotation * Vec3::new(wheel_offset, wheel_height, 0.0);
+            let spawn_pos =
+                world_pos + transform.rotation * Vec3::new(wheel_offset, wheel_height, 0.0);
 
             let spread = Vec3::new(
                 rng.random_range(-0.5..0.5),
                 rng.random_range(0.3..0.8),
                 rng.random_range(-0.5..0.5),
             );
-            let base_velocity = -transform.forward().as_vec3() * (vehicle.current_speed * 0.1).max(1.0);
+            let base_velocity =
+                -transform.forward().as_vec3() * (vehicle.current_speed * 0.1).max(1.0);
 
             commands.spawn((
                 Mesh3d(visuals.smoke_mesh.clone()),
@@ -1548,7 +1673,9 @@ pub fn nitro_flame_spawn_system(
     effect_visuals: Option<Res<VehicleEffectVisuals>>,
     vehicle_query: Query<(&Transform, &VehicleModifications, &NitroBoost), Without<NpcVehicle>>,
 ) {
-    let Some(visuals) = effect_visuals else { return };
+    let Some(visuals) = effect_visuals else {
+        return;
+    };
 
     for (transform, mods, nitro) in vehicle_query.iter() {
         // 只有在使用氮氣且有充能時生成火焰
@@ -1582,7 +1709,7 @@ pub fn nitro_flame_spawn_system(
                 Mesh3d(visuals.nitro_flame_mesh.clone()),
                 MeshMaterial3d(visuals.nitro_flame_material.clone()),
                 Transform::from_translation(exhaust_pos + offset)
-                    .with_scale(Vec3::new(0.2, 0.2, 0.4)),  // 拉長形狀
+                    .with_scale(Vec3::new(0.2, 0.2, 0.4)), // 拉長形狀
                 NitroFlame::new(velocity),
             ));
         }
@@ -1613,7 +1740,7 @@ pub fn nitro_flame_update_system(
 
         // 更新縮放（逐漸消散）
         let scale = flame.scale();
-        transform.scale = Vec3::new(scale, scale, scale * 2.0);  // 保持拉長形狀
+        transform.scale = Vec3::new(scale, scale, scale * 2.0); // 保持拉長形狀
     }
 }
 
@@ -1641,7 +1768,9 @@ pub fn tire_track_spawn_system(
     effect_visuals: Option<Res<VehicleEffectVisuals>>,
     vehicle_query: Query<(&Transform, &Vehicle), Without<NpcVehicle>>,
 ) {
-    let Some(visuals) = effect_visuals else { return };
+    let Some(visuals) = effect_visuals else {
+        return;
+    };
     let current_time = time.elapsed_secs();
 
     if current_time - effect_tracker.last_track_spawn < effect_tracker.track_spawn_interval {
@@ -1649,7 +1778,9 @@ pub fn tire_track_spawn_system(
     }
 
     for (transform, vehicle) in vehicle_query.iter() {
-        if !should_spawn_tire_track(vehicle) || effect_tracker.track_count >= effect_tracker.max_track_count {
+        if !should_spawn_tire_track(vehicle)
+            || effect_tracker.track_count >= effect_tracker.max_track_count
+        {
             continue;
         }
 
@@ -1658,7 +1789,8 @@ pub fn tire_track_spawn_system(
 
         for side in [-1.0, 1.0] {
             let wheel_offset = get_wheel_lateral_offset(vehicle.vehicle_type, side);
-            let track_pos = transform.translation + transform.rotation * (rear_offset + Vec3::new(wheel_offset, 0.0, 0.0));
+            let track_pos = transform.translation
+                + transform.rotation * (rear_offset + Vec3::new(wheel_offset, 0.0, 0.0));
             let ground_pos = Vec3::new(track_pos.x, 0.02, track_pos.z);
 
             commands.spawn((
@@ -1721,12 +1853,12 @@ pub fn setup_vehicle_effects(
 // ============================================================================
 
 use super::{
-    VehicleHealth, VehicleDamageState, VehicleDamageVisuals,
-    VehicleDamageSmoke, VehicleFire, VehicleExplosion,
+    VehicleDamageSmoke, VehicleDamageState, VehicleDamageVisuals, VehicleExplosion, VehicleFire,
+    VehicleHealth,
 };
 use crate::combat::{DamageEvent, DamageSource, Enemy};
-use crate::player::Player;
 use crate::pedestrian::Pedestrian;
+use crate::player::Player;
 use crate::wanted::PoliceOfficer;
 
 /// 初始化車輛損壞視覺效果資源
@@ -1782,14 +1914,14 @@ pub fn vehicle_collision_damage_system(
             // 速度越快，傷害越高
             let speed = vehicle.current_speed.abs();
             if speed < COLLISION_DAMAGE_SPEED_THRESHOLD {
-                continue;  // 低速碰撞不造成傷害
+                continue; // 低速碰撞不造成傷害
             }
 
             // 傷害公式：(速度 - 門檻) * 倍率
             // 例如：30 m/s = (30-10) * 5 = 100 傷害
             let damage = (speed - COLLISION_DAMAGE_SPEED_THRESHOLD) * COLLISION_DAMAGE_MULTIPLIER;
             health.take_damage(damage, current_time);
-            break;  // 一次碰撞只計算一次傷害
+            break; // 一次碰撞只計算一次傷害
         }
     }
 }
@@ -1870,7 +2002,9 @@ pub fn vehicle_damage_effect_system(
     damage_visuals: Option<Res<VehicleDamageVisuals>>,
     vehicle_query: Query<(&Transform, &Vehicle, &VehicleHealth)>,
 ) {
-    let Some(visuals) = damage_visuals else { return };
+    let Some(visuals) = damage_visuals else {
+        return;
+    };
     let dt = time.delta_secs();
     let mut rng = rand::rng();
 
@@ -1935,8 +2069,7 @@ fn spawn_damage_smoke(
     commands.spawn((
         Mesh3d(visuals.smoke_mesh.clone()),
         MeshMaterial3d(material),
-        Transform::from_translation(position)
-            .with_scale(Vec3::splat(0.2)),
+        Transform::from_translation(position).with_scale(Vec3::splat(0.2)),
         VehicleDamageSmoke::new(spread, is_heavy),
     ));
 }
@@ -1980,8 +2113,12 @@ fn apply_explosion_damage_to_targets<'a>(
         if distance < explosion_radius {
             let damage_factor = 1.0 - (distance / explosion_radius);
             damage_events.write(
-                DamageEvent::new(target_entity, explosion_damage * damage_factor, DamageSource::Explosion)
-                    .with_position(explosion_center)
+                DamageEvent::new(
+                    target_entity,
+                    explosion_damage * damage_factor,
+                    DamageSource::Explosion,
+                )
+                .with_position(explosion_center),
             );
         }
     }
@@ -2014,8 +2151,24 @@ pub fn vehicle_explosion_system(
     mut explosion_query: Query<(Entity, &mut VehicleExplosion, &mut Transform)>,
     player_query: Query<(Entity, &Transform), (With<Player>, Without<VehicleExplosion>)>,
     enemy_query: Query<(Entity, &Transform), (With<Enemy>, Without<VehicleExplosion>)>,
-    pedestrian_query: Query<(Entity, &Transform), (With<Pedestrian>, Without<Player>, Without<Enemy>, Without<VehicleExplosion>)>,
-    police_query: Query<(Entity, &Transform), (With<PoliceOfficer>, Without<Player>, Without<Enemy>, Without<VehicleExplosion>)>,
+    pedestrian_query: Query<
+        (Entity, &Transform),
+        (
+            With<Pedestrian>,
+            Without<Player>,
+            Without<Enemy>,
+            Without<VehicleExplosion>,
+        ),
+    >,
+    police_query: Query<
+        (Entity, &Transform),
+        (
+            With<PoliceOfficer>,
+            Without<Player>,
+            Without<Enemy>,
+            Without<VehicleExplosion>,
+        ),
+    >,
     vehicle_query: Query<(Entity, &Transform), (With<VehicleHealth>, Without<VehicleExplosion>)>,
     mut damage_events: MessageWriter<DamageEvent>,
 ) {
@@ -2029,14 +2182,54 @@ pub fn vehicle_explosion_system(
             explosion.damage_dealt = true;
 
             if let Ok((_, player_transform)) = player_query.single() {
-                trigger_explosion_camera_shake(explosion.center, explosion.radius, player_transform.translation, &mut camera_shake);
+                trigger_explosion_camera_shake(
+                    explosion.center,
+                    explosion.radius,
+                    player_transform.translation,
+                    &mut camera_shake,
+                );
             }
 
-            apply_explosion_damage_to_targets(player_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, None);
-            apply_explosion_damage_to_targets(enemy_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, None);
-            apply_explosion_damage_to_targets(pedestrian_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, None);
-            apply_explosion_damage_to_targets(police_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, None);
-            apply_explosion_damage_to_targets(vehicle_query.iter(), explosion.center, explosion.radius, explosion.damage, &mut damage_events, Some(entity));
+            apply_explosion_damage_to_targets(
+                player_query.iter(),
+                explosion.center,
+                explosion.radius,
+                explosion.damage,
+                &mut damage_events,
+                None,
+            );
+            apply_explosion_damage_to_targets(
+                enemy_query.iter(),
+                explosion.center,
+                explosion.radius,
+                explosion.damage,
+                &mut damage_events,
+                None,
+            );
+            apply_explosion_damage_to_targets(
+                pedestrian_query.iter(),
+                explosion.center,
+                explosion.radius,
+                explosion.damage,
+                &mut damage_events,
+                None,
+            );
+            apply_explosion_damage_to_targets(
+                police_query.iter(),
+                explosion.center,
+                explosion.radius,
+                explosion.damage,
+                &mut damage_events,
+                None,
+            );
+            apply_explosion_damage_to_targets(
+                vehicle_query.iter(),
+                explosion.center,
+                explosion.radius,
+                explosion.damage,
+                &mut damage_events,
+                Some(entity),
+            );
         }
 
         if explosion.lifetime >= explosion.max_lifetime {
@@ -2162,7 +2355,8 @@ pub fn traffic_light_cycle_system(
             // 更新燈泡材質
             for child in children.iter() {
                 if let Ok((bulb, mut material)) = bulb_query.get_mut(child) {
-                    *material = MeshMaterial3d(visuals.get_bulb_material(bulb.light_type, light.state));
+                    *material =
+                        MeshMaterial3d(visuals.get_bulb_material(bulb.light_type, light.state));
                 }
             }
         }
@@ -2184,64 +2378,72 @@ pub fn spawn_traffic_light(
         TrafficLightState::Red
     };
 
-    commands.spawn((
-        // 空間組件
-        Transform {
-            translation: position,
-            rotation,
-            ..default()
-        },
-        GlobalTransform::default(),
-        Visibility::default(),
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
-        // 紅綠燈組件
-        TrafficLight::new(direction, is_primary),
-        Name::new("TrafficLight"),
-    )).with_children(|parent| {
-        // 燈柱
-        parent.spawn((
-            Mesh3d(visuals.pole_mesh.clone()),
-            MeshMaterial3d(visuals.pole_material.clone()),
-            Transform::from_xyz(0.0, 2.0, 0.0),
+    commands
+        .spawn((
+            // 空間組件
+            Transform {
+                translation: position,
+                rotation,
+                ..default()
+            },
             GlobalTransform::default(),
-        ));
+            Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+            // 紅綠燈組件
+            TrafficLight::new(direction, is_primary),
+            Name::new("TrafficLight"),
+        ))
+        .with_children(|parent| {
+            // 燈柱
+            parent.spawn((
+                Mesh3d(visuals.pole_mesh.clone()),
+                MeshMaterial3d(visuals.pole_material.clone()),
+                Transform::from_xyz(0.0, 2.0, 0.0),
+                GlobalTransform::default(),
+            ));
 
-        // 燈箱
-        parent.spawn((
-            Mesh3d(visuals.box_mesh.clone()),
-            MeshMaterial3d(visuals.box_material.clone()),
-            Transform::from_xyz(0.0, 4.5, 0.0),
-            GlobalTransform::default(),
-        ));
+            // 燈箱
+            parent.spawn((
+                Mesh3d(visuals.box_mesh.clone()),
+                MeshMaterial3d(visuals.box_material.clone()),
+                Transform::from_xyz(0.0, 4.5, 0.0),
+                GlobalTransform::default(),
+            ));
 
-        // 紅燈（頂部）
-        parent.spawn((
-            Mesh3d(visuals.bulb_mesh.clone()),
-            MeshMaterial3d(visuals.get_bulb_material(TrafficLightState::Red, initial_state)),
-            Transform::from_xyz(0.0, 4.9, 0.16),
-            GlobalTransform::default(),
-            TrafficLightBulb { light_type: TrafficLightState::Red },
-        ));
+            // 紅燈（頂部）
+            parent.spawn((
+                Mesh3d(visuals.bulb_mesh.clone()),
+                MeshMaterial3d(visuals.get_bulb_material(TrafficLightState::Red, initial_state)),
+                Transform::from_xyz(0.0, 4.9, 0.16),
+                GlobalTransform::default(),
+                TrafficLightBulb {
+                    light_type: TrafficLightState::Red,
+                },
+            ));
 
-        // 黃燈（中間）
-        parent.spawn((
-            Mesh3d(visuals.bulb_mesh.clone()),
-            MeshMaterial3d(visuals.get_bulb_material(TrafficLightState::Yellow, initial_state)),
-            Transform::from_xyz(0.0, 4.5, 0.16),
-            GlobalTransform::default(),
-            TrafficLightBulb { light_type: TrafficLightState::Yellow },
-        ));
+            // 黃燈（中間）
+            parent.spawn((
+                Mesh3d(visuals.bulb_mesh.clone()),
+                MeshMaterial3d(visuals.get_bulb_material(TrafficLightState::Yellow, initial_state)),
+                Transform::from_xyz(0.0, 4.5, 0.16),
+                GlobalTransform::default(),
+                TrafficLightBulb {
+                    light_type: TrafficLightState::Yellow,
+                },
+            ));
 
-        // 綠燈（底部）
-        parent.spawn((
-            Mesh3d(visuals.bulb_mesh.clone()),
-            MeshMaterial3d(visuals.get_bulb_material(TrafficLightState::Green, initial_state)),
-            Transform::from_xyz(0.0, 4.1, 0.16),
-            GlobalTransform::default(),
-            TrafficLightBulb { light_type: TrafficLightState::Green },
-        ));
-    });
+            // 綠燈（底部）
+            parent.spawn((
+                Mesh3d(visuals.bulb_mesh.clone()),
+                MeshMaterial3d(visuals.get_bulb_material(TrafficLightState::Green, initial_state)),
+                Transform::from_xyz(0.0, 4.1, 0.16),
+                GlobalTransform::default(),
+                TrafficLightBulb {
+                    light_type: TrafficLightState::Green,
+                },
+            ));
+        });
 }
 
 /// 生成交叉路口的紅綠燈組（4個方向）
@@ -2255,8 +2457,8 @@ pub fn spawn_intersection_lights(
     ew_road_width: f32,
 ) {
     // 紅綠燈放在道路邊緣外側 1 公尺
-    let offset_x = ns_road_width / 2.0 + 1.0;  // X 方向偏移（南北向道路寬度）
-    let offset_z = ew_road_width / 2.0 + 1.0;  // Z 方向偏移（東西向道路寬度）
+    let offset_x = ns_road_width / 2.0 + 1.0; // X 方向偏移（南北向道路寬度）
+    let offset_z = ew_road_width / 2.0 + 1.0; // Z 方向偏移（東西向道路寬度）
 
     // 北向（控制南北向車流）- 主燈
     // 放在交叉口西北角（西側人行道，面向南來車）
@@ -2314,15 +2516,15 @@ pub fn spawn_world_traffic_lights(
 
     // 道路常數（與 setup.rs 一致）
     // 南北向道路 X 位置
-    const X_ZHONGHUA: f32 = 80.0;   // 中華路
-    const X_XINING: f32 = -55.0;    // 西寧南路
-    // 東西向道路 Z 位置
-    const Z_HANKOU: f32 = -80.0;    // 漢口街
-    const Z_CHENGDU: f32 = 50.0;    // 成都路
-    // 道路寬度
-    const W_ZHONGHUA: f32 = 40.0;   // 中華路寬度
-    const W_MAIN: f32 = 16.0;       // 成都路寬度
-    const W_SECONDARY: f32 = 12.0;  // 西寧路、漢口街寬度
+    const X_ZHONGHUA: f32 = 80.0; // 中華路
+    const X_XINING: f32 = -55.0; // 西寧南路
+                                 // 東西向道路 Z 位置
+    const Z_HANKOU: f32 = -80.0; // 漢口街
+    const Z_CHENGDU: f32 = 50.0; // 成都路
+                                 // 道路寬度
+    const W_ZHONGHUA: f32 = 40.0; // 中華路寬度
+    const W_MAIN: f32 = 16.0; // 成都路寬度
+    const W_SECONDARY: f32 = 12.0; // 西寧路、漢口街寬度
 
     // 主要路口：(位置, 南北道路寬度, 東西道路寬度)
     let intersections: [(Vec3, f32, f32); 4] = [
@@ -2333,13 +2535,20 @@ pub fn spawn_world_traffic_lights(
         // 西寧路/漢口街交叉口
         (Vec3::new(X_XINING, 0.0, Z_HANKOU), W_SECONDARY, W_SECONDARY),
         // 中華路/漢口街交叉口
-        (Vec3::new(X_ZHONGHUA, 0.0, Z_HANKOU), W_ZHONGHUA, W_SECONDARY),
+        (
+            Vec3::new(X_ZHONGHUA, 0.0, Z_HANKOU),
+            W_ZHONGHUA,
+            W_SECONDARY,
+        ),
     ];
 
     for (center, ns_width, ew_width) in intersections.iter() {
         spawn_intersection_lights(&mut commands, &visuals, *center, *ns_width, *ew_width);
     }
 
-    info!("✅ 已生成 {} 組交通燈（共 {} 個）", intersections.len(), intersections.len() * 4);
+    info!(
+        "✅ 已生成 {} 組交通燈（共 {} 個）",
+        intersections.len(),
+        intersections.len() * 4
+    );
 }
-

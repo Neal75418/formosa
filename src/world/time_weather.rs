@@ -5,7 +5,7 @@ use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy_rapier3d::prelude::*;
 use crate::core::{WorldTime, WeatherState, WeatherType};
 use crate::camera::GameCamera;
-use super::{StreetLight, NeonSign, BuildingWindow};
+use super::{StreetLight, NeonSign, BuildingWindow, Sun, Moon};
 
 /// 窗戶更新計時器（效能優化：避免每幀更新）
 #[derive(Resource)]
@@ -119,7 +119,7 @@ fn calculate_day_intensity(hour: f32) -> f32 {
     if !(6.0..=18.0).contains(&hour) {
         return 0.0;
     }
-    
+
     if hour < 8.0 {
         (hour - 6.0) / 2.0  // 日出漸亮
     } else if hour > 16.0 {
@@ -129,6 +129,108 @@ fn calculate_day_intensity(hour: f32) -> f32 {
     }
 }
 
+/// 太陽/月亮軌跡系統
+/// 根據世界時間旋轉太陽（東升西落）和更新月亮位置
+///
+/// 太陽軌跡：
+/// - 6:00 日出 (東方，+X)
+/// - 12:00 正午 (頭頂，-Y 方向)
+/// - 18:00 日落 (西方，-X)
+pub fn sun_moon_rotation_system(
+    time: Res<Time>,
+    world_time: Res<WorldTime>,
+    mut sun_query: Query<&mut Transform, With<Sun>>,
+    mut moon_query: Query<(&mut Transform, &mut Moon), Without<Sun>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    moon_material_query: Query<&MeshMaterial3d<StandardMaterial>, With<Moon>>,
+) {
+    let hour = world_time.hour;
+    let dt = time.delta_secs();
+
+    // 太陽在 6:00 從東方升起，18:00 從西方落下
+
+    // 更新太陽方向
+    for mut transform in sun_query.iter_mut() {
+        // 計算太陽高度角
+        // 6:00 和 18:00 時在地平線，12:00 時在最高點
+        let elevation = if (6.0..=18.0).contains(&hour) {
+            // 白天：正弦曲線從 0 到 π
+            let day_progress = (hour - 6.0) / 12.0;
+            (day_progress * std::f32::consts::PI).sin() * 1.2  // 1.2 rad ≈ 69° 最大仰角
+        } else {
+            // 夜晚：太陽在地平線下
+            -0.5  // 略低於地平線
+        };
+
+        // 方位角：東（6:00）→ 南（12:00）→ 西（18:00）
+        // 只在白天計算有效方位角，夜間保持最後位置
+        let azimuth = if (6.0..=18.0).contains(&hour) {
+            (hour - 6.0) / 12.0 * std::f32::consts::PI
+        } else if hour > 18.0 {
+            std::f32::consts::PI  // 日落後固定在西方
+        } else {
+            0.0  // 日出前固定在東方
+        };
+
+        // 設定太陽方向
+        // DirectionalLight 指向 -Z，所以需要旋轉使其指向地面
+        *transform = Transform::from_rotation(
+            Quat::from_euler(EulerRot::XYZ, -elevation, azimuth, 0.0)
+        );
+    }
+
+    // 月亮位置（與太陽大致相對）
+    // 月亮在天空中的軌道半徑
+    const MOON_ORBIT_RADIUS: f32 = 500.0;
+    const MOON_HEIGHT_OFFSET: f32 = 100.0;
+
+    for (mut moon_transform, mut moon) in moon_query.iter_mut() {
+        // 月亮與太陽相差約 12 小時（簡化模型）
+        let moon_hour = (hour + 12.0) % 24.0;
+
+        // 計算月亮在天空中的位置
+        let moon_elevation = if (6.0..=18.0).contains(&moon_hour) {
+            let night_progress = (moon_hour - 6.0) / 12.0;
+            (night_progress * std::f32::consts::PI).sin()
+        } else {
+            -0.3  // 白天在地平線下但不完全消失（可選：完全隱藏）
+        };
+
+        // 計算月亮 3D 位置
+        let moon_azimuth = (moon_hour - 6.0) / 12.0 * std::f32::consts::PI;
+        let moon_x = -MOON_ORBIT_RADIUS * moon_azimuth.sin();
+        let moon_z = -MOON_ORBIT_RADIUS * moon_azimuth.cos();
+        let moon_y = MOON_HEIGHT_OFFSET + MOON_ORBIT_RADIUS * moon_elevation * 0.5;
+
+        moon_transform.translation = Vec3::new(moon_x, moon_y, moon_z);
+
+        // 月亮始終面向原點（玩家通常在原點附近）
+        moon_transform.look_at(Vec3::ZERO, Vec3::Y);
+
+        // 更新月亮發光強度（夜間更亮）
+        let night_intensity = if (18.0..=24.0).contains(&hour) || (0.0..=6.0).contains(&hour) {
+            1.0 + 0.5 * moon_elevation.max(0.0)  // 夜間增強
+        } else {
+            0.2  // 白天減弱
+        };
+        moon.emissive_intensity = night_intensity;
+
+        // 更新月亮材質發光強度
+        if let Ok(material_handle) = moon_material_query.single() {
+            if let Some(material) = materials.get_mut(&material_handle.0) {
+                let base_emissive = LinearRgba::new(0.8, 0.8, 0.9, 1.0);
+                material.emissive = base_emissive * night_intensity;
+            }
+        }
+
+        // 簡單月相模擬（每 30 遊戲天循環一次）
+        // 使用 dt 確保幀率無關
+        // 30 天 = 30 * 24 * 3600 秒（遊戲時間）
+        // 但我們用 time_scale 調整，所以直接用 dt
+        let phase_speed = 1.0 / (30.0 * 24.0 * 60.0);  // 每遊戲分鐘的相位變化
+        moon.phase = (moon.phase + phase_speed * dt * world_time.time_scale) % 1.0;
+    }
+}
 
 /// 更新路燈開關
 fn update_street_lights(

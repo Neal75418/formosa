@@ -1,6 +1,6 @@
 //! 戰鬥系統單元測試
 
-use super::components::*;
+use super::*;
 use bevy::prelude::*;
 
 // ============================================================================
@@ -910,7 +910,7 @@ fn test_punch_animation_phase_times() {
     let (wind_up, strike, total) = anim.phase_times();
 
     assert!((wind_up - 0.099).abs() < 0.001); // 33%
-    assert!((strike - 0.198).abs() < 0.001);  // 66%
+    assert!((strike - 0.198).abs() < 0.001); // 66%
     assert_eq!(total, 0.3);
 }
 

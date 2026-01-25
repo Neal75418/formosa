@@ -4,19 +4,25 @@
 
 #![allow(dead_code)] // Phase 2+ 功能預留
 
-use bevy::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::math::EulerRot;
+use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
 
 use super::components::*;
+use super::health::*;
 use super::killcam::{KillCamState, KillCamTrigger};
-use crate::player::Player;
-use crate::ui::{NotificationQueue, DamageIndicatorState, trigger_damage_indicator, FloatingDamageNumber, FloatingDamageTracker, ChineseFont};
-use crate::audio::{AudioManager, WeaponSounds, play_hit_sound};
-use crate::ai::{AiBehavior, AiMovement, AiPerception, AiCombat, CoverSeeker, CoverPoint};
+use super::ragdoll::{convert_to_skeletal_ragdoll, BodyPart};
+use super::visuals::*;
+use crate::ai::{AiBehavior, AiCombat, AiMovement, AiPerception, CoverPoint, CoverSeeker};
+use crate::audio::{play_hit_sound, AudioManager, WeaponSounds};
 use crate::pedestrian::Pedestrian;
+use crate::player::Player;
+use crate::ui::{
+    trigger_damage_indicator, ChineseFont, DamageIndicatorState, FloatingDamageNumber,
+    FloatingDamageTracker, NotificationQueue,
+};
 use crate::wanted::{CrimeEvent, PoliceOfficer};
 
 /// 傷害系統資源參數包（解決 Bevy 16 參數限制）
@@ -134,8 +140,12 @@ fn calculate_cover_reduction(
     if !seeker.is_in_cover || seeker.is_peeking {
         return 0.0;
     }
-    let Some(cover_entity) = seeker.target_cover else { return 0.0 };
-    let Ok(cover) = cover_point_query.get(cover_entity) else { return 0.0 };
+    let Some(cover_entity) = seeker.target_cover else {
+        return 0.0;
+    };
+    let Ok(cover) = cover_point_query.get(cover_entity) else {
+        return 0.0;
+    };
 
     // 檢查攻擊方向是否與掩體保護方向一致
     if let Some(attacker_entity) = attacker {
@@ -143,7 +153,8 @@ fn calculate_cover_reduction(
             // 計算攻擊方向（水平面）
             let attack_dir = target_pos - attacker_transform.translation;
             let attack_dir_2d = Vec3::new(attack_dir.x, 0.0, attack_dir.z).normalize_or_zero();
-            let cover_dir_2d = Vec3::new(cover.cover_direction.x, 0.0, cover.cover_direction.z).normalize_or_zero();
+            let cover_dir_2d = Vec3::new(cover.cover_direction.x, 0.0, cover.cover_direction.z)
+                .normalize_or_zero();
 
             // 如果攻擊從掩體背面來（夾角 > 90°），掩體無效
             if attack_dir_2d.dot(cover_dir_2d) < 0.0 {
@@ -195,9 +206,12 @@ fn send_armor_break_event(
     if !armor_result.was_hit {
         return;
     }
-    let Ok(target_transform) = transform_query.get(target) else { return };
+    let Ok(target_transform) = transform_query.get(target) else {
+        return;
+    };
 
-    let hit_pos = hit_position.unwrap_or(target_transform.translation + Vec3::Y * DEFAULT_HIT_POSITION_Y_OFFSET);
+    let hit_pos = hit_position
+        .unwrap_or(target_transform.translation + Vec3::Y * DEFAULT_HIT_POSITION_Y_OFFSET);
     armor_break_events.write(ArmorBreakEvent {
         entity: target,
         position: hit_pos,
@@ -212,9 +226,15 @@ fn calculate_hit_direction(
     target: Entity,
     transform_query: &Query<&Transform>,
 ) -> Vec3 {
-    let Some(attacker) = attacker else { return Vec3::NEG_Z };
-    let Ok(target_transform) = transform_query.get(target) else { return Vec3::NEG_Z };
-    let Ok(attacker_transform) = transform_query.get(attacker) else { return Vec3::NEG_Z };
+    let Some(attacker) = attacker else {
+        return Vec3::NEG_Z;
+    };
+    let Ok(target_transform) = transform_query.get(target) else {
+        return Vec3::NEG_Z;
+    };
+    let Ok(attacker_transform) = transform_query.get(attacker) else {
+        return Vec3::NEG_Z;
+    };
 
     (target_transform.translation - attacker_transform.translation).normalize_or_zero()
 }
@@ -229,7 +249,9 @@ fn trigger_hit_reaction(
     is_headshot: bool,
     transform_query: &Query<&Transform>,
 ) {
-    let Some(ref mut reaction) = hit_reaction else { return };
+    let Some(ref mut reaction) = hit_reaction else {
+        return;
+    };
     let hit_direction = calculate_hit_direction(attacker, target, transform_query);
     reaction.trigger(damage_dealt, hit_direction, is_headshot);
 }
@@ -321,7 +343,9 @@ fn get_floating_damage_position(
     if let Some(hit_pos) = hit_position {
         return Some(hit_pos + Vec3::Y * 0.3);
     }
-    transform_query.get(target).ok()
+    transform_query
+        .get(target)
+        .ok()
         .map(|t| t.translation + Vec3::Y * FLOATING_DAMAGE_HEAD_OFFSET)
 }
 
@@ -341,8 +365,8 @@ fn spawn_floating_damage_if_possible(
     let Some(ref chinese_font) = font else { return };
 
     let offset = damage_tracker.next_offset();
-    let floating_damage = FloatingDamageNumber::new(damage_pos, damage_dealt, is_headshot)
-        .with_offset(offset);
+    let floating_damage =
+        FloatingDamageNumber::new(damage_pos, damage_dealt, is_headshot).with_offset(offset);
 
     spawn_floating_damage_number(commands, floating_damage, chinese_font);
     damage_tracker.active_count += 1;
@@ -371,7 +395,9 @@ fn handle_player_hit_enemy(
         &res.audio_manager,
     );
 
-    let Some(damage_pos) = get_floating_damage_position(event.hit_position, event.target, transform_query) else {
+    let Some(damage_pos) =
+        get_floating_damage_position(event.hit_position, event.target, transform_query)
+    else {
         return;
     };
 
@@ -394,9 +420,15 @@ fn calculate_death_hit_direction(
 ) -> Option<Vec3> {
     let default_dir = Some(Vec3::new(0.0, 0.2, -1.0).normalize());
 
-    let Some(attacker) = attacker else { return default_dir };
-    let Ok(target_transform) = transform_query.get(target) else { return default_dir };
-    let Ok(attacker_transform) = transform_query.get(attacker) else { return default_dir };
+    let Some(attacker) = attacker else {
+        return default_dir;
+    };
+    let Ok(target_transform) = transform_query.get(target) else {
+        return default_dir;
+    };
+    let Ok(attacker_transform) = transform_query.get(attacker) else {
+        return default_dir;
+    };
 
     let dir = target_transform.translation - attacker_transform.translation;
     Some(Vec3::new(dir.x, 0.3, dir.z).normalize_or_zero())
@@ -410,7 +442,12 @@ pub fn damage_system(
     mut armor_break_events: MessageWriter<ArmorBreakEvent>,
     mut commands: Commands,
     // 合併查詢：Health + Armor + CoverSeeker + HitReaction (同一實體)
-    mut health_query: Query<(&mut Health, Option<&mut Armor>, Option<&CoverSeeker>, Option<&mut HitReaction>)>,
+    mut health_query: Query<(
+        &mut Health,
+        Option<&mut Armor>,
+        Option<&CoverSeeker>,
+        Option<&mut HitReaction>,
+    )>,
     cover_point_query: Query<&CoverPoint>,
     player_query: Query<Entity, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
@@ -422,12 +459,17 @@ pub fn damage_system(
     let player_entity = player_query.single().ok();
 
     for event in damage_events.read() {
-        let Ok((mut health, mut armor, cover_seeker, mut hit_reaction)) = health_query.get_mut(event.target) else {
+        let Ok((mut health, mut armor, cover_seeker, mut hit_reaction)) =
+            health_query.get_mut(event.target)
+        else {
             continue;
         };
 
         // 計算掩體傷害減免（含攻擊方向檢測）
-        let target_pos = transform_query.get(event.target).map(|t| t.translation).unwrap_or(Vec3::ZERO);
+        let target_pos = transform_query
+            .get(event.target)
+            .map(|t| t.translation)
+            .unwrap_or(Vec3::ZERO);
         let cover_reduction = calculate_cover_reduction(
             cover_seeker,
             &cover_point_query,
@@ -439,13 +481,26 @@ pub fn damage_system(
 
         // 處理護甲吸收
         let armor_result = process_armor_absorption(&mut armor, actual_damage);
-        send_armor_break_event(&armor_result, event.target, event.hit_position, &transform_query, &mut armor_break_events);
+        send_armor_break_event(
+            &armor_result,
+            event.target,
+            event.hit_position,
+            &transform_query,
+            &mut armor_break_events,
+        );
 
         // 扣血
         let damage_dealt = health.take_damage(armor_result.damage_after_armor, current_time);
 
         // 觸發受傷反應
-        trigger_hit_reaction(&mut hit_reaction, damage_dealt, event.attacker, event.target, event.is_headshot, &transform_query);
+        trigger_hit_reaction(
+            &mut hit_reaction,
+            damage_dealt,
+            event.attacker,
+            event.target,
+            event.is_headshot,
+            &transform_query,
+        );
 
         // 玩家受傷通知（含方向指示器）
         handle_player_damage_notification(
@@ -459,11 +514,20 @@ pub fn damage_system(
         );
 
         // 玩家攻擊敵人的效果
-        handle_player_hit_enemy(event, damage_dealt, player_entity, &enemy_query, &transform_query, &mut res, &mut commands);
+        handle_player_hit_enemy(
+            event,
+            damage_dealt,
+            player_entity,
+            &enemy_query,
+            &transform_query,
+            &mut res,
+            &mut commands,
+        );
 
         // 檢查死亡
         if health.is_dead() {
-            let hit_direction = calculate_death_hit_direction(event.attacker, event.target, &transform_query);
+            let hit_direction =
+                calculate_death_hit_direction(event.attacker, event.target, &transform_query);
             death_events.write(DeathEvent {
                 entity: event.target,
                 killer: event.attacker,
@@ -485,7 +549,9 @@ fn handle_player_death(
     respawn_state: &mut RespawnState,
     notifications: &mut NotificationQueue,
 ) -> bool {
-    let Ok((_, transform)) = player_query.get(entity) else { return false };
+    let Ok((_, transform)) = player_query.get(entity) else {
+        return false;
+    };
 
     if respawn_state.is_dead {
         return true;
@@ -508,7 +574,9 @@ fn handle_police_death_crime(
     crime_events: &mut MessageWriter<CrimeEvent>,
     notifications: &mut NotificationQueue,
 ) {
-    let Ok(police_transform) = police_query.get(entity) else { return };
+    let Ok(police_transform) = police_query.get(entity) else {
+        return;
+    };
     if killer != player_entity {
         return;
     }
@@ -526,10 +594,15 @@ fn handle_pedestrian_death_crime(
     entity: Entity,
     killer: Option<Entity>,
     player_entity: Option<Entity>,
-    pedestrian_query: &Query<&Transform, (With<Pedestrian>, Without<Player>, Without<Enemy>)>,
+    pedestrian_query: &Query<
+        (Entity, &Transform, &Children),
+        (With<Pedestrian>, Without<Player>, Without<Enemy>),
+    >,
     crime_events: &mut MessageWriter<CrimeEvent>,
 ) {
-    let Ok(ped_transform) = pedestrian_query.get(entity) else { return };
+    let Ok((_, ped_transform, _)) = pedestrian_query.get(entity) else {
+        return;
+    };
     if killer != player_entity {
         return;
     }
@@ -553,7 +626,8 @@ fn determine_killcam_trigger(
     }
 
     // 檢查擊殺條件（優先順序：爆頭 > 最後敵人 > 連殺）
-    let is_headshot = event.hit_position
+    let is_headshot = event
+        .hit_position
         .map(|p| p.y > enemy_pos.y + HEADSHOT_HEIGHT_THRESHOLD)
         .unwrap_or(false);
 
@@ -647,7 +721,9 @@ fn setup_ragdoll_physics(
 ) {
     let tilt_axis = Vec3::new(impulse_dir.z, 0.0, -impulse_dir.x).normalize_or_zero();
 
-    let Ok(mut entity_commands) = commands.get_entity(entity) else { return };
+    let Ok(mut entity_commands) = commands.get_entity(entity) else {
+        return;
+    };
 
     entity_commands
         .insert(Ragdoll::with_impulse(impulse_dir, impulse_strength))
@@ -689,10 +765,19 @@ fn handle_enemy_death(
     let enemy_pos = enemy_transform.translation;
 
     // Kill Cam 邏輯
-    handle_killcam(event, enemy_pos, player_entity, all_enemies_query, killcam, current_time);
+    handle_killcam(
+        event,
+        enemy_pos,
+        player_entity,
+        all_enemies_query,
+        killcam,
+        current_time,
+    );
 
     // 計算物理參數
-    let impulse_dir = event.hit_direction.unwrap_or(Vec3::new(0.0, 0.2, -1.0).normalize());
+    let impulse_dir = event
+        .hit_direction
+        .unwrap_or(Vec3::new(0.0, 0.2, -1.0).normalize());
     let impulse_strength = get_impulse_strength(event.cause);
     let tilt_strength = get_tilt_strength(event.cause);
 
@@ -706,7 +791,13 @@ fn handle_enemy_death(
     }
 
     // 設置布娃娃物理
-    setup_ragdoll_physics(commands, event.entity, impulse_dir, impulse_strength, tilt_strength);
+    setup_ragdoll_physics(
+        commands,
+        event.entity,
+        impulse_dir,
+        impulse_strength,
+        tilt_strength,
+    );
 }
 
 /// 死亡處理系統
@@ -717,8 +808,17 @@ pub fn death_system(
     player_query: Query<(Entity, &Transform), With<Player>>,
     enemy_query: Query<(Entity, &Transform), (With<Enemy>, Without<Ragdoll>)>,
     all_enemies_query: Query<Entity, (With<Enemy>, Without<Ragdoll>)>,
-    pedestrian_query: Query<&Transform, (With<Pedestrian>, Without<Player>, Without<Enemy>)>,
+    pedestrian_query: Query<
+        (Entity, &Transform, &Children),
+        (With<Pedestrian>, Without<Player>, Without<Enemy>),
+    >,
     police_query: Query<&Transform, (With<PoliceOfficer>, Without<Player>, Without<Enemy>)>,
+    body_parts_query: Query<(
+        &BodyPart,
+        &Transform,
+        &Mesh3d,
+        &MeshMaterial3d<StandardMaterial>,
+    )>,
     mut crime_events: MessageWriter<CrimeEvent>,
     mut notifications: ResMut<NotificationQueue>,
     mut respawn_state: ResMut<RespawnState>,
@@ -732,15 +832,60 @@ pub fn death_system(
 
     for event in death_events.read() {
         // 玩家死亡
-        if handle_player_death(event.entity, &player_query, &mut respawn_state, &mut notifications) {
+        if handle_player_death(
+            event.entity,
+            &player_query,
+            &mut respawn_state,
+            &mut notifications,
+        ) {
             continue;
         }
 
         // 犯罪事件
-        handle_police_death_crime(event.entity, event.killer, player_entity, &police_query, &mut crime_events, &mut notifications);
-        handle_pedestrian_death_crime(event.entity, event.killer, player_entity, &pedestrian_query, &mut crime_events);
+        handle_police_death_crime(
+            event.entity,
+            event.killer,
+            player_entity,
+            &police_query,
+            &mut crime_events,
+            &mut notifications,
+        );
 
-        // 敵人死亡 - 布娃娃效果
+        // 計算衝擊方向和強度
+        let impulse_dir = event
+            .hit_direction
+            .unwrap_or(Vec3::new(0.0, 0.2, -1.0).normalize());
+        let impulse_strength = get_impulse_strength(event.cause);
+
+        // 行人死亡 - 骨骼布娃娃效果
+        if let Ok((ped_entity, ped_transform, children)) = pedestrian_query.get(event.entity) {
+            // 生成血液粒子
+            let blood_pos = ped_transform.translation + Vec3::Y * CHEST_HEIGHT;
+            if let Some(ref blood) = blood_visuals {
+                spawn_blood_particles(&mut commands, blood_pos, impulse_dir, blood);
+            }
+
+            // 轉換為骨骼布娃娃並追蹤數量
+            if let Some(ragdoll_entity) = convert_to_skeletal_ragdoll(
+                &mut commands,
+                ped_entity,
+                ped_transform,
+                children,
+                &body_parts_query,
+                impulse_dir,
+                impulse_strength,
+            ) {
+                manage_ragdoll_limit(
+                    &mut commands,
+                    &mut ragdoll_tracker,
+                    ragdoll_entity,
+                    current_time,
+                );
+            }
+            continue;
+        }
+
+        // 敵人死亡 - 傳統布娃娃效果（保持向後兼容）
         if let Ok((_, enemy_transform)) = enemy_query.get(event.entity) {
             notifications.success("擊殺敵人！");
             handle_enemy_death(
@@ -776,8 +921,10 @@ fn spawn_blood_particles(
             rng.random_range(-1.0..1.0),
         );
         // 粒子速度：沿衝擊方向 + 散射
-        let velocity = (direction + spread).normalize() * rng.random_range(BLOOD_PARTICLE_MIN_SPEED..BLOOD_PARTICLE_MAX_SPEED);
-        let max_lifetime = rng.random_range(BLOOD_PARTICLE_MIN_LIFETIME..BLOOD_PARTICLE_MAX_LIFETIME);
+        let velocity = (direction + spread).normalize()
+            * rng.random_range(BLOOD_PARTICLE_MIN_SPEED..BLOOD_PARTICLE_MAX_SPEED);
+        let max_lifetime =
+            rng.random_range(BLOOD_PARTICLE_MIN_LIFETIME..BLOOD_PARTICLE_MAX_LIFETIME);
         let scale = rng.random_range(BLOOD_PARTICLE_MIN_SCALE..BLOOD_PARTICLE_MAX_SCALE);
 
         commands.spawn((
@@ -824,10 +971,7 @@ pub fn player_respawn_system(
 }
 
 /// 生命回復系統（可選，給有回復能力的實體使用）
-pub fn health_regeneration_system(
-    time: Res<Time>,
-    mut query: Query<&mut Health>,
-) {
+pub fn health_regeneration_system(time: Res<Time>, mut query: Query<&mut Health>) {
     let current_time = time.elapsed_secs();
     let dt = time.delta_secs();
 
@@ -870,7 +1014,9 @@ pub fn ragdoll_update_system(
         if let Some(vel) = velocity {
             let speed = vel.linvel.length();
             // 如果速度很低且已經過了一段時間，開始淡出
-            if speed < RAGDOLL_SETTLE_SPEED_THRESHOLD && ragdoll.lifetime > RAGDOLL_SETTLE_TIME_THRESHOLD {
+            if speed < RAGDOLL_SETTLE_SPEED_THRESHOLD
+                && ragdoll.lifetime > RAGDOLL_SETTLE_TIME_THRESHOLD
+            {
                 // 加速計時器
                 ragdoll.lifetime += dt * 2.0;
             }
@@ -908,7 +1054,11 @@ fn set_children_visibility(
     visible: bool,
     material_query: &mut Query<&mut Visibility>,
 ) {
-    let visibility_value = if visible { Visibility::Inherited } else { Visibility::Hidden };
+    let visibility_value = if visible {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
 
     for child in children.iter() {
         if let Ok(mut visibility) = material_query.get_mut(child) {
@@ -924,7 +1074,9 @@ pub fn ragdoll_visual_system(
     mut material_query: Query<&mut Visibility>,
 ) {
     for (ragdoll, children) in ragdoll_query.iter() {
-        let Some(visible) = calculate_ragdoll_blink_visibility(ragdoll) else { continue };
+        let Some(visible) = calculate_ragdoll_blink_visibility(ragdoll) else {
+            continue;
+        };
         set_children_visibility(children, visible, &mut material_query);
     }
 }
@@ -978,8 +1130,8 @@ pub fn blood_particle_update_system(
 
 /// 傷害數字顏色常數
 const DAMAGE_NUMBER_COLOR: Color = Color::WHITE;
-const HEADSHOT_NUMBER_COLOR: Color = Color::srgb(1.0, 0.9, 0.0);  // 金黃色
-const CRITICAL_NUMBER_COLOR: Color = Color::srgb(1.0, 0.3, 0.1);  // 橙紅色
+const HEADSHOT_NUMBER_COLOR: Color = Color::srgb(1.0, 0.9, 0.0); // 金黃色
+const CRITICAL_NUMBER_COLOR: Color = Color::srgb(1.0, 0.3, 0.1); // 橙紅色
 
 /// 生成浮動傷害數字實體
 fn spawn_floating_damage_number(
@@ -991,14 +1143,14 @@ fn spawn_floating_damage_number(
     let color = if damage.is_headshot {
         HEADSHOT_NUMBER_COLOR
     } else if damage.damage >= 50.0 {
-        CRITICAL_NUMBER_COLOR  // 高傷害用橙紅色
+        CRITICAL_NUMBER_COLOR // 高傷害用橙紅色
     } else {
         DAMAGE_NUMBER_COLOR
     };
 
     // 格式化傷害數字
     let text = if damage.is_headshot {
-        format!("💀 {:.0}", damage.damage)  // 爆頭加骷髏
+        format!("💀 {:.0}", damage.damage) // 爆頭加骷髏
     } else {
         format!("{:.0}", damage.damage)
     };
@@ -1017,8 +1169,7 @@ fn spawn_floating_damage_number(
         },
         TextColor(color),
         // 世界空間 Transform
-        Transform::from_translation(position)
-            .with_scale(Vec3::splat(0.02)),  // 縮小到世界空間大小
+        Transform::from_translation(position).with_scale(Vec3::splat(0.02)), // 縮小到世界空間大小
         GlobalTransform::default(),
         // 浮動傷害組件
         damage,
@@ -1064,12 +1215,15 @@ pub fn floating_damage_number_update_system(
     mut commands: Commands,
     time: Res<Time>,
     camera_query: Query<&Transform, With<Camera3d>>,
-    mut damage_query: Query<(
-        Entity,
-        &mut FloatingDamageNumber,
-        &mut Transform,
-        &mut TextColor,
-    ), Without<Camera3d>>,
+    mut damage_query: Query<
+        (
+            Entity,
+            &mut FloatingDamageNumber,
+            &mut Transform,
+            &mut TextColor,
+        ),
+        Without<Camera3d>,
+    >,
     mut damage_tracker: ResMut<FloatingDamageTracker>,
 ) {
     let dt = time.delta_secs();
@@ -1089,7 +1243,8 @@ pub fn floating_damage_number_update_system(
 
         // 更新位置
         let y_offset = damage.y_offset();
-        transform.translation = damage.start_position + Vec3::new(damage.horizontal_offset, y_offset, 0.0);
+        transform.translation =
+            damage.start_position + Vec3::new(damage.horizontal_offset, y_offset, 0.0);
 
         // Billboard 效果
         if let Some(rotation) = calculate_billboard_rotation(transform.translation, camera_pos) {
@@ -1111,10 +1266,7 @@ pub fn floating_damage_number_update_system(
 
 /// 受傷反應更新系統
 /// 每幀更新所有 HitReaction 組件的狀態
-pub fn hit_reaction_update_system(
-    time: Res<Time>,
-    mut query: Query<&mut HitReaction>,
-) {
+pub fn hit_reaction_update_system(time: Res<Time>, mut query: Query<&mut HitReaction>) {
     let delta = time.delta_secs();
 
     for mut reaction in query.iter_mut() {
@@ -1141,9 +1293,9 @@ pub fn hit_reaction_visual_system(
                 let target_euler = reaction.visual_rotation.to_euler(EulerRot::XYZ);
                 transform.rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    target_euler.0,      // 使用反應的 X 旋轉
-                    current_euler.1,     // 保持 Y 旋轉
-                    current_euler.2,     // 保持 Z 旋轉
+                    target_euler.0,  // 使用反應的 X 旋轉
+                    current_euler.1, // 保持 Y 旋轉
+                    current_euler.2, // 保持 Z 旋轉
                 );
                 break; // 只處理第一個子實體
             }
@@ -1367,7 +1519,8 @@ pub fn armor_shard_update_system(
 
         // 後期淡出（縮小）
         if shard.lifetime > shard.max_lifetime * 0.7 {
-            let fade_progress = (shard.lifetime - shard.max_lifetime * 0.7) / (shard.max_lifetime * 0.3);
+            let fade_progress =
+                (shard.lifetime - shard.max_lifetime * 0.7) / (shard.max_lifetime * 0.3);
             let scale = (1.0 - fade_progress).max(0.1);
             transform.scale = Vec3::splat(scale);
         }

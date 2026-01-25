@@ -427,7 +427,7 @@ pub struct Interactable {
 impl Default for Interactable {
     fn default() -> Self {
         Self {
-            prompt: "按 E 互動".to_string(),
+            prompt: "按 F 互動".to_string(),
             range: 3.0,
             interaction_type: InteractionType::Generic,
         }

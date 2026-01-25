@@ -399,12 +399,13 @@ impl GunshotTracker {
 
     /// 檢查附近是否有最近的槍擊
     pub fn has_nearby_shot(&self, position: Vec3, range: f32, current_time: f32) -> Option<Vec3> {
+        let range_sq = range * range;
         for (shot_pos, shot_time) in self.recent_shots.iter().rev() {
             // 只考慮 3 秒內的槍擊
             if current_time - *shot_time > 3.0 {
                 continue;
             }
-            if position.distance(*shot_pos) <= range {
+            if position.distance_squared(*shot_pos) <= range_sq {
                 return Some(*shot_pos);
             }
         }
@@ -983,6 +984,7 @@ pub enum PointOfInterestType {
 
 /// 庇護點位置匹配容差
 const SHELTER_POSITION_TOLERANCE: f32 = 2.0;
+const SHELTER_POSITION_TOLERANCE_SQ: f32 = SHELTER_POSITION_TOLERANCE * SHELTER_POSITION_TOLERANCE;
 
 /// 興趣點資源
 #[derive(Resource, Default)]
@@ -1098,11 +1100,13 @@ impl PointsOfInterest {
 
     /// 找到最近的點位
     fn find_nearest_point(&self, points: &[Vec3], pos: Vec3, max_distance: f32) -> Option<Vec3> {
+        let max_distance_sq = max_distance * max_distance;
         points
             .iter()
-            .filter(|p| p.distance(pos) < max_distance)
-            .min_by(|a, b| a.distance(pos).total_cmp(&b.distance(pos)))
-            .copied()
+            .map(|p| (*p, p.distance_squared(pos)))
+            .filter(|(_, dist_sq)| *dist_sq < max_distance_sq)
+            .min_by(|(_, a), (_, b)| a.total_cmp(b))
+            .map(|(p, _)| p)
     }
 
     /// 找到最近且有空位的庇護點
@@ -1120,7 +1124,7 @@ impl PointsOfInterest {
     /// 佔用庇護點
     pub fn occupy_shelter(&mut self, pos: Vec3) -> bool {
         if let Some(shelter) = self.shelters.iter_mut()
-            .find(|s| s.position.distance(pos) < SHELTER_POSITION_TOLERANCE && s.has_space())
+            .find(|s| s.position.distance_squared(pos) < SHELTER_POSITION_TOLERANCE_SQ && s.has_space())
         {
             shelter.current_occupants += 1;
             true
@@ -1132,7 +1136,7 @@ impl PointsOfInterest {
     /// 釋放庇護點
     pub fn release_shelter(&mut self, pos: Vec3) {
         if let Some(shelter) = self.shelters.iter_mut()
-            .find(|s| s.position.distance(pos) < SHELTER_POSITION_TOLERANCE)
+            .find(|s| s.position.distance_squared(pos) < SHELTER_POSITION_TOLERANCE_SQ)
         {
             shelter.current_occupants = shelter.current_occupants.saturating_sub(1);
         }
@@ -1283,9 +1287,12 @@ impl PanicWaveManager {
         let mut best_hit: Option<PanicWaveHit> = None;
 
         for wave in &self.active_waves {
-            let dist = position.distance(wave.origin);
+            let dist_sq = position.distance_squared(wave.origin);
+            let outer_radius_sq = wave.current_radius * wave.current_radius;
+            let inner_radius = (wave.current_radius - PANIC_WAVE_FRONT_WIDTH).max(0.0);
+            let inner_radius_sq = inner_radius * inner_radius;
             // 在恐慌波前緣範圍內
-            if dist <= wave.current_radius && dist > wave.current_radius - PANIC_WAVE_FRONT_WIDTH {
+            if dist_sq <= outer_radius_sq && dist_sq > inner_radius_sq {
                 match &best_hit {
                     None => {
                         best_hit = Some(PanicWaveHit {

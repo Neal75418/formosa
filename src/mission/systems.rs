@@ -6,7 +6,7 @@ use super::{
     MissionType, MissionData, RaceMedal, TaxiRating,
 };
 use crate::player::Player;
-use crate::core::PlayerStats;
+use crate::core::{InteractionState, PlayerStats};
 use crate::ui::NotificationQueue;
 use crate::vehicle::Vehicle;
 
@@ -91,7 +91,7 @@ fn update_active_mission(
     active: &mut ActiveMission,
     player_pos: Vec3,
     player_in_vehicle: bool,
-    keyboard: &ButtonInput<KeyCode>,
+    interaction: &mut InteractionState,
     time_delta: f32,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -111,13 +111,13 @@ fn update_active_mission(
     // 根據任務類型分派處理
     match active.data.mission_type {
         MissionType::Delivery => {
-            update_delivery_mission(active, player_pos, keyboard, commands, meshes, materials, notifications)
+            update_delivery_mission(active, player_pos, interaction, commands, meshes, materials, notifications)
         }
         MissionType::Race => {
             update_race_mission(active, player_pos, player_in_vehicle, commands, meshes, materials, notifications)
         }
         MissionType::Taxi => {
-            update_taxi_mission(active, player_pos, player_in_vehicle, keyboard, time_delta, commands, meshes, materials, notifications)
+            update_taxi_mission(active, player_pos, player_in_vehicle, interaction, time_delta, commands, meshes, materials, notifications)
         }
         MissionType::Explore => {
             // 探索任務：直接檢查終點 (使用 distance_squared 優化)
@@ -135,7 +135,7 @@ fn update_active_mission(
 fn update_delivery_mission(
     active: &mut ActiveMission,
     player_pos: Vec3,
-    keyboard: &ButtonInput<KeyCode>,
+    interaction: &mut InteractionState,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
@@ -144,12 +144,13 @@ fn update_delivery_mission(
     if !active.picked_up {
         // 檢查是否到達取餐點 (使用 distance_squared 優化)
         let distance_sq = player_pos.distance_squared(active.data.start_pos);
-        if distance_sq < MISSION_INTERACT_DIST_SQ && keyboard.just_pressed(KeyCode::KeyF) {
+        if distance_sq < MISSION_INTERACT_DIST_SQ && interaction.can_interact() {
             active.picked_up = true;
             notifications.success("📦 已取餐！請送往目的地");
 
             // 生成終點標記
             spawn_marker(commands, meshes, materials, active.data.end_pos, active.data.id, false);
+            interaction.consume();
         }
         return MissionResult::None;
     }
@@ -272,7 +273,7 @@ fn update_taxi_mission(
     active: &mut ActiveMission,
     player_pos: Vec3,
     player_in_vehicle: bool,
-    keyboard: &ButtonInput<KeyCode>,
+    interaction: &mut InteractionState,
     time_delta: f32,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -298,13 +299,14 @@ fn update_taxi_mission(
 
         // 檢查是否到達接客點 (使用 distance_squared 優化)
         let distance_sq = player_pos.distance_squared(active.data.start_pos);
-        if distance_sq < TAXI_INTERACT_DIST_SQ && keyboard.just_pressed(KeyCode::KeyF) {
+        if distance_sq < TAXI_INTERACT_DIST_SQ && interaction.can_interact() {
             taxi_data.passenger_picked_up = true;
             notifications.success(format!("🚕 {} 已上車！前往 {}",
                 taxi_data.passenger_name, taxi_data.destination_name));
 
             // 生成終點標記
             spawn_marker(commands, meshes, materials, active.data.end_pos, active.data.id, false);
+            interaction.consume();
         }
         return MissionResult::None;
     }
@@ -564,7 +566,7 @@ fn accept_mission(
 /// 任務邏輯（含外送評價系統）
 #[allow(clippy::too_many_arguments)]
 pub fn mission_system(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut interaction: ResMut<InteractionState>,
     mut mission_manager: ResMut<MissionManager>,
     mut player_stats: ResMut<PlayerStats>,
     mut notifications: ResMut<NotificationQueue>,
@@ -591,7 +593,7 @@ pub fn mission_system(
             active,
             player_pos,
             player_in_vehicle,
-            &keyboard,
+            &mut interaction,
             time.delta_secs(),
             &mut commands,
             &mut meshes,
@@ -653,7 +655,7 @@ pub fn mission_system(
     }
 
     // 接取新任務
-    if keyboard.just_pressed(KeyCode::KeyF) {
+    if interaction.can_interact() {
         if let Some(mission) = find_nearby_mission(&mission_manager, player_pos) {
             accept_mission(
                 mission,
@@ -663,6 +665,7 @@ pub fn mission_system(
                 &mut meshes,
                 &mut materials,
             );
+            interaction.consume();
         }
     }
 }

@@ -5,6 +5,7 @@
 #![allow(dead_code)] // 部分函數供未來擴展使用
 
 use bevy::prelude::*;
+use crate::core::{clamp_dot, safe_normalize};
 
 // ============================================================================
 // AI 狀態機
@@ -147,20 +148,23 @@ impl AiPerception {
 
     /// 檢查目標是否在視野內
     pub fn is_in_fov(&self, my_pos: Vec3, my_forward: Vec3, target_pos: Vec3) -> bool {
-        let to_target = (target_pos - my_pos).normalize_or_zero();
-        let dot = my_forward.dot(to_target);
+        let to_target = safe_normalize(target_pos - my_pos);
+        let forward = safe_normalize(my_forward);
+        let dot = clamp_dot(forward.dot(to_target));
         let angle = dot.acos().to_degrees();
         angle <= self.fov / 2.0
     }
 
     /// 檢查目標是否在視距內
     pub fn is_in_sight_range(&self, my_pos: Vec3, target_pos: Vec3) -> bool {
-        my_pos.distance(target_pos) <= self.sight_range
+        let sight_range_sq = self.sight_range * self.sight_range;
+        my_pos.distance_squared(target_pos) <= sight_range_sq
     }
 
     /// 檢查聲音是否在聽力範圍內
     pub fn is_in_hearing_range(&self, my_pos: Vec3, sound_pos: Vec3) -> bool {
-        my_pos.distance(sound_pos) <= self.hearing_range
+        let hearing_range_sq = self.hearing_range * self.hearing_range;
+        my_pos.distance_squared(sound_pos) <= hearing_range_sq
     }
 }
 
@@ -280,8 +284,8 @@ impl AiMovement {
     /// 檢查是否到達目標
     pub fn has_arrived(&self, current_pos: Vec3) -> bool {
         if let Some(target) = self.move_target {
-            let dist = current_pos.distance(target);
-            dist <= self.arrival_threshold
+            let arrival_threshold_sq = self.arrival_threshold * self.arrival_threshold;
+            current_pos.distance_squared(target) <= arrival_threshold_sq
         } else {
             true
         }
@@ -334,7 +338,8 @@ impl AiCombat {
     }
 
     pub fn is_in_range(&self, my_pos: Vec3, target_pos: Vec3) -> bool {
-        my_pos.distance(target_pos) <= self.attack_range
+        let attack_range_sq = self.attack_range * self.attack_range;
+        my_pos.distance_squared(target_pos) <= attack_range_sq
     }
 
     pub fn start_attack(&mut self) {

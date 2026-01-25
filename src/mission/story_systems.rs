@@ -10,12 +10,17 @@ use super::cutscene::CutsceneEvent;
 use super::cutscene_systems::is_cutscene_active;
 use super::dialogue::DialogueEvent;
 use super::dialogue_systems::is_dialogue_active;
+use super::economy::RespectManager;
+use super::relationship::RelationshipManager;
 use super::story_data::*;
 use super::story_manager::*;
 use super::trigger::{
-    MissionTargetEntity, MissionTargetType, MissionTrigger, ObjectiveMarker, TriggerEvent,
-    TriggerEventType, TriggerShape, TriggerType, DialogueTrigger, MissionNpc, TriggerVisual,
+    trigger_system, MissionNpc, MissionTargetEntity, MissionTargetType, ObjectiveMarker, Trigger,
+    TriggerAction, TriggerEvent, TriggerEventType, TriggerShape, TriggerType, TriggerVisual,
 };
+use super::unlocks::UnlockManager;
+use crate::core::{InteractionSet, InteractionState};
+use crate::economy::PlayerWallet;
 
 /// 劇情任務系統 Plugin
 pub struct StoryMissionPlugin;
@@ -25,23 +30,27 @@ impl Plugin for StoryMissionPlugin {
         app
             // 資源
             .init_resource::<StoryMissionManager>()
+            .init_resource::<RespectManager>()
+            .init_resource::<RelationshipManager>()
+            .init_resource::<UnlockManager>()
             .init_resource::<StoryMissionDatabase>()
             // 事件
             .add_message::<StoryMissionEvent>()
             .add_message::<TriggerEvent>()
             // 啟動系統
-            .add_systems(Startup, (
-                setup_mission_trigger_visuals,
-                setup_story_missions,
-            ).chain())
+            .add_systems(
+                Startup,
+                (setup_mission_trigger_visuals, setup_story_missions).chain(),
+            )
             // 更新系統
             .add_systems(
                 Update,
                 (
-                    update_total_play_time, // 每幀更新遊戲時間
-                    spawn_mission_triggers, // 生成可用任務的觸發點
-                    mission_trigger_system,
-                    dialogue_trigger_system, // 對話觸發器
+                    update_total_play_time,         // 每幀更新遊戲時間
+                    spawn_mission_triggers,         // 生成可用任務的觸發點
+                    trigger_system,                 // 通用觸發系統
+                    mission_trigger_event_handler,  // 處理任務觸發事件
+                    dialogue_trigger_event_handler, // 處理對話觸發事件
                     mission_npc_interaction_system,
                     mission_objective_tracking_system,
                     mission_phase_system,
@@ -50,7 +59,8 @@ impl Plugin for StoryMissionPlugin {
                     objective_marker_system,
                     update_mission_trigger_visuals, // 更新觸發點視覺效果
                 )
-                    .chain(),
+                    .chain()
+                    .in_set(InteractionSet::Mission),
             );
     }
 }
@@ -60,10 +70,7 @@ impl Plugin for StoryMissionPlugin {
 // ============================================================================
 
 /// 更新總遊戲時間
-fn update_total_play_time(
-    mut manager: ResMut<StoryMissionManager>,
-    time: Res<Time>,
-) {
+fn update_total_play_time(mut manager: ResMut<StoryMissionManager>, time: Res<Time>) {
     manager.total_play_time += time.delta_secs();
 }
 
@@ -82,399 +89,89 @@ fn setup_story_missions(
     // 解鎖第一個任務
     manager.unlock_mission(1);
 
-    info!("劇情任務系統初始化完成，共 {} 個任務", database.total_count());
+    info!(
+        "劇情任務系統初始化完成，共 {} 個任務",
+        database.total_count()
+    );
 }
 
 // ============================================================================
-// 觸發系統
+// 觸發系統處理
 // ============================================================================
 
-/// 觸發器追蹤狀態（用於 OnEnterDelayed、OnStay、OnExit）
-#[derive(Default)]
-struct TriggerTrackingState {
-    /// 玩家是否在區域內
-    was_inside: bool,
-    /// 進入後的計時器
-    timer: f32,
-    /// 是否已觸發
-    triggered: bool,
-}
-
-/// 觸發器上下文（用於簡化參數傳遞）
-struct TriggerContext {
-    entity: Entity,
-    in_range: bool,
-    just_entered: bool,
-    just_exited: bool,
-}
-
-impl TriggerContext {
-    fn new(entity: Entity, trigger_pos: Vec3, player_pos: Vec3, shape: &TriggerShape, was_inside: bool) -> Self {
-        let in_range = shape.contains(trigger_pos, player_pos);
-        Self {
-            entity,
-            in_range,
-            just_entered: in_range && !was_inside,
-            just_exited: !in_range && was_inside,
-        }
-    }
-}
-
-// === 任務觸發類型處理輔助函數 ===
-
-/// 處理 OnEnter 觸發
-fn handle_mission_on_enter(
-    ctx: &TriggerContext,
-    trigger: &mut MissionTrigger,
-    events: &mut MessageWriter<TriggerEvent>,
-    mission_events: &mut MessageWriter<StoryMissionEvent>,
-    database: &StoryMissionDatabase,
-) {
-    if !ctx.just_entered {
-        return;
-    }
-    trigger.triggered = trigger.one_shot;
-    events.write(TriggerEvent::PlayerEntered {
-        entity: ctx.entity,
-        trigger_type: TriggerEventType::Mission(trigger.mission_id),
-    });
-    try_start_mission(trigger.mission_id, database, mission_events);
-}
-
-/// 處理 OnInteract 觸發
-fn handle_mission_on_interact(
-    ctx: &TriggerContext,
-    trigger: &mut MissionTrigger,
-    keyboard: &ButtonInput<KeyCode>,
-    events: &mut MessageWriter<TriggerEvent>,
-    mission_events: &mut MessageWriter<StoryMissionEvent>,
-    database: &StoryMissionDatabase,
-) {
-    if !ctx.in_range || !keyboard.just_pressed(KeyCode::KeyF) {
-        return;
-    }
-    trigger.triggered = trigger.one_shot;
-    events.write(TriggerEvent::PlayerInteracted {
-        entity: ctx.entity,
-        trigger_type: TriggerEventType::Mission(trigger.mission_id),
-    });
-    try_start_mission(trigger.mission_id, database, mission_events);
-}
-
-/// 處理 OnEnterDelayed 觸發
-fn handle_mission_on_enter_delayed(
-    ctx: &TriggerContext,
-    trigger: &mut MissionTrigger,
-    track: &mut TriggerTrackingState,
-    delay: u32,
-    delta_ms: f32,
-    events: &mut MessageWriter<TriggerEvent>,
-    mission_events: &mut MessageWriter<StoryMissionEvent>,
-    database: &StoryMissionDatabase,
-) {
-    if ctx.just_entered {
-        track.timer = 0.0;
-        track.triggered = false;
-    }
-    if !ctx.in_range || track.triggered {
-        return;
-    }
-    track.timer += delta_ms;
-    if track.timer < delay as f32 {
-        return;
-    }
-    track.triggered = true;
-    trigger.triggered = trigger.one_shot;
-    events.write(TriggerEvent::PlayerEntered {
-        entity: ctx.entity,
-        trigger_type: TriggerEventType::Mission(trigger.mission_id),
-    });
-    try_start_mission(trigger.mission_id, database, mission_events);
-    info!("延遲觸發: {} ms 後觸發任務 {}", delay, trigger.mission_id);
-}
-
-/// 處理 OnExit 觸發
-fn handle_mission_on_exit(
-    ctx: &TriggerContext,
-    trigger: &mut MissionTrigger,
-    events: &mut MessageWriter<TriggerEvent>,
-    mission_events: &mut MessageWriter<StoryMissionEvent>,
-    database: &StoryMissionDatabase,
-) {
-    if !ctx.just_exited {
-        return;
-    }
-    trigger.triggered = trigger.one_shot;
-    events.write(TriggerEvent::PlayerExited {
-        entity: ctx.entity,
-        trigger_type: TriggerEventType::Mission(trigger.mission_id),
-    });
-    try_start_mission(trigger.mission_id, database, mission_events);
-    info!("離開觸發: 任務 {}", trigger.mission_id);
-}
-
-/// 處理 OnStay 觸發
-fn handle_mission_on_stay(
-    ctx: &TriggerContext,
-    trigger: &mut MissionTrigger,
-    track: &mut TriggerTrackingState,
-    duration: u32,
-    delta_ms: f32,
-    events: &mut MessageWriter<TriggerEvent>,
-    mission_events: &mut MessageWriter<StoryMissionEvent>,
-    database: &StoryMissionDatabase,
-) {
-    if ctx.just_entered {
-        track.timer = 0.0;
-        track.triggered = false;
-    }
-    if ctx.in_range && !track.triggered {
-        track.timer += delta_ms;
-        if track.timer >= duration as f32 {
-            track.triggered = true;
-            trigger.triggered = trigger.one_shot;
-            events.write(TriggerEvent::PlayerStayed {
-                entity: ctx.entity,
-                trigger_type: TriggerEventType::Mission(trigger.mission_id),
-                duration: track.timer / 1000.0,
-            });
-            try_start_mission(trigger.mission_id, database, mission_events);
-            info!("停留觸發: 停留 {} ms 後觸發任務 {}", duration, trigger.mission_id);
-        }
-    } else if !ctx.in_range {
-        track.timer = 0.0;
-        track.triggered = false;
-    }
-}
-
-/// 任務觸發點系統（支援所有 TriggerType）
-fn mission_trigger_system(
-    mut trigger_query: Query<(Entity, &Transform, &mut MissionTrigger)>,
-    player_query: Query<&Transform, With<crate::player::Player>>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    time: Res<Time>,
-    manager: Res<StoryMissionManager>,
-    database: Res<StoryMissionDatabase>,
-    mut events: MessageWriter<TriggerEvent>,
+/// 處理任務觸發事件
+fn mission_trigger_event_handler(
+    mut events: MessageReader<TriggerEvent>,
     mut mission_events: MessageWriter<StoryMissionEvent>,
-    mut tracking: Local<HashMap<Entity, TriggerTrackingState>>,
+    database: Res<StoryMissionDatabase>,
+    mut manager: ResMut<StoryMissionManager>,
+    wallet: Res<PlayerWallet>,
+    respect: Res<RespectManager>,
+    unlocks: Res<UnlockManager>,
+    trigger_query: Query<&Trigger>,
 ) {
-    let Ok(player_transform) = player_query.single() else {
-        return;
-    };
-    let player_pos = player_transform.translation;
-    let delta_ms = time.delta_secs() * 1000.0;
+    for event in events.read() {
+        match event {
+            TriggerEvent::PlayerEntered {
+                entity,
+                trigger_type,
+            }
+            | TriggerEvent::PlayerInteracted {
+                entity,
+                trigger_type,
+            }
+            | TriggerEvent::PlayerStayed {
+                entity,
+                trigger_type,
+                ..
+            } => {
+                // 檢查是否是任務觸發
+                if let TriggerEventType::Mission(mission_id) = trigger_type {
+                    // 檢查 Flag (如果 Trigger 有 required_flag)
+                    if let Ok(trigger) = trigger_query.get(*entity) {
+                        if let Some(flag) = &trigger.required_flag {
+                            if !manager.get_flag(flag) {
+                                continue;
+                            }
+                        }
+                    }
 
-    for (entity, transform, mut trigger) in &mut trigger_query {
-        if !trigger.enabled || (trigger.triggered && trigger.one_shot) {
-            continue;
+                    try_start_mission(
+                        *mission_id,
+                        &database,
+                        &mut mission_events,
+                        &mut manager,
+                        &wallet,
+                        &respect,
+                        &unlocks,
+                    );
+                }
+            }
+            TriggerEvent::PlayerExited { .. } => {} // 無需處理
         }
-
-        // 檢查旗標條件
-        if let Some(flag) = &trigger.required_flag {
-            if !manager.get_flag(flag) {
-                continue;
-            }
-        }
-
-        let track = tracking.entry(entity).or_default();
-        let ctx = TriggerContext::new(entity, transform.translation, player_pos, &trigger.shape, track.was_inside);
-        track.was_inside = ctx.in_range;
-
-        match trigger.trigger_type {
-            TriggerType::OnEnter => {
-                handle_mission_on_enter(&ctx, &mut trigger, &mut events, &mut mission_events, &database);
-            }
-            TriggerType::OnInteract => {
-                handle_mission_on_interact(&ctx, &mut trigger, &keyboard, &mut events, &mut mission_events, &database);
-            }
-            TriggerType::OnEnterDelayed { delay } => {
-                handle_mission_on_enter_delayed(&ctx, &mut trigger, track, delay, delta_ms, &mut events, &mut mission_events, &database);
-            }
-            TriggerType::OnExit => {
-                handle_mission_on_exit(&ctx, &mut trigger, &mut events, &mut mission_events, &database);
-            }
-            TriggerType::OnStay { duration } => {
-                handle_mission_on_stay(&ctx, &mut trigger, track, duration, delta_ms, &mut events, &mut mission_events, &database);
-            }
-        }
     }
 }
 
-// === 對話觸發類型處理輔助函數 ===
-
-/// 處理對話 OnEnter 觸發
-fn handle_dialogue_on_enter(
-    ctx: &TriggerContext,
-    trigger: &mut DialogueTrigger,
-    events: &mut MessageWriter<TriggerEvent>,
-    dialogue_events: &mut MessageWriter<DialogueEvent>,
-) {
-    if !ctx.just_entered {
-        return;
-    }
-    trigger.triggered = trigger.one_shot;
-    events.write(TriggerEvent::PlayerEntered {
-        entity: ctx.entity,
-        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-    });
-    start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
-}
-
-/// 處理對話 OnInteract 觸發
-fn handle_dialogue_on_interact(
-    ctx: &TriggerContext,
-    trigger: &mut DialogueTrigger,
-    keyboard: &ButtonInput<KeyCode>,
-    events: &mut MessageWriter<TriggerEvent>,
-    dialogue_events: &mut MessageWriter<DialogueEvent>,
-) {
-    if !ctx.in_range || !keyboard.just_pressed(KeyCode::KeyF) {
-        return;
-    }
-    trigger.triggered = trigger.one_shot;
-    events.write(TriggerEvent::PlayerInteracted {
-        entity: ctx.entity,
-        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-    });
-    start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
-}
-
-/// 處理對話 OnEnterDelayed 觸發
-fn handle_dialogue_on_enter_delayed(
-    ctx: &TriggerContext,
-    trigger: &mut DialogueTrigger,
-    track: &mut TriggerTrackingState,
-    delay: u32,
-    delta_ms: f32,
-    events: &mut MessageWriter<TriggerEvent>,
-    dialogue_events: &mut MessageWriter<DialogueEvent>,
-) {
-    if ctx.just_entered {
-        track.timer = 0.0;
-        track.triggered = false;
-    }
-    if !ctx.in_range || track.triggered {
-        return;
-    }
-    track.timer += delta_ms;
-    if track.timer < delay as f32 {
-        return;
-    }
-    track.triggered = true;
-    trigger.triggered = trigger.one_shot;
-    events.write(TriggerEvent::PlayerEntered {
-        entity: ctx.entity,
-        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-    });
-    start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
-}
-
-/// 處理對話 OnExit 觸發
-fn handle_dialogue_on_exit(
-    ctx: &TriggerContext,
-    trigger: &mut DialogueTrigger,
-    events: &mut MessageWriter<TriggerEvent>,
-    dialogue_events: &mut MessageWriter<DialogueEvent>,
-) {
-    if !ctx.just_exited {
-        return;
-    }
-    trigger.triggered = trigger.one_shot;
-    events.write(TriggerEvent::PlayerExited {
-        entity: ctx.entity,
-        trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-    });
-    start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
-}
-
-/// 處理對話 OnStay 觸發
-fn handle_dialogue_on_stay(
-    ctx: &TriggerContext,
-    trigger: &mut DialogueTrigger,
-    track: &mut TriggerTrackingState,
-    duration: u32,
-    delta_ms: f32,
-    events: &mut MessageWriter<TriggerEvent>,
-    dialogue_events: &mut MessageWriter<DialogueEvent>,
-) {
-    if ctx.just_entered {
-        track.timer = 0.0;
-        track.triggered = false;
-    }
-    if ctx.in_range && !track.triggered {
-        track.timer += delta_ms;
-        if track.timer >= duration as f32 {
-            track.triggered = true;
-            trigger.triggered = trigger.one_shot;
-            events.write(TriggerEvent::PlayerStayed {
-                entity: ctx.entity,
-                trigger_type: TriggerEventType::Dialogue(trigger.dialogue_id),
-                duration: track.timer / 1000.0,
-            });
-            start_dialogue_from_trigger(trigger.dialogue_id, dialogue_events);
-        }
-    } else if !ctx.in_range {
-        track.timer = 0.0;
-        track.triggered = false;
-    }
-}
-
-/// 對話觸發點系統
-fn dialogue_trigger_system(
-    mut trigger_query: Query<(Entity, &Transform, &mut DialogueTrigger)>,
-    player_query: Query<&Transform, With<crate::player::Player>>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    time: Res<Time>,
-    dialogue_state: Res<super::dialogue::DialogueState>,
-    mut events: MessageWriter<TriggerEvent>,
+/// 處理對話觸發事件
+fn dialogue_trigger_event_handler(
+    mut events: MessageReader<TriggerEvent>,
     mut dialogue_events: MessageWriter<DialogueEvent>,
-    mut tracking: Local<HashMap<Entity, TriggerTrackingState>>,
 ) {
-    if is_dialogue_active(&dialogue_state) {
-        return;
-    }
-
-    let Ok(player_transform) = player_query.single() else {
-        return;
-    };
-    let player_pos = player_transform.translation;
-    let delta_ms = time.delta_secs() * 1000.0;
-
-    for (entity, transform, mut trigger) in &mut trigger_query {
-        if !trigger.enabled || (trigger.triggered && trigger.one_shot) {
-            continue;
-        }
-
-        let track = tracking.entry(entity).or_default();
-        let ctx = TriggerContext::new(entity, transform.translation, player_pos, &trigger.shape, track.was_inside);
-        track.was_inside = ctx.in_range;
-
-        match trigger.trigger_type {
-            TriggerType::OnEnter => {
-                handle_dialogue_on_enter(&ctx, &mut trigger, &mut events, &mut dialogue_events);
+    for event in events.read() {
+        match event {
+            TriggerEvent::PlayerEntered { trigger_type, .. }
+            | TriggerEvent::PlayerInteracted { trigger_type, .. } => {
+                if let TriggerEventType::Dialogue(id) = trigger_type {
+                    start_dialogue_from_trigger(*id, &mut dialogue_events);
+                }
             }
-            TriggerType::OnInteract => {
-                handle_dialogue_on_interact(&ctx, &mut trigger, &keyboard, &mut events, &mut dialogue_events);
-            }
-            TriggerType::OnEnterDelayed { delay } => {
-                handle_dialogue_on_enter_delayed(&ctx, &mut trigger, track, delay, delta_ms, &mut events, &mut dialogue_events);
-            }
-            TriggerType::OnExit => {
-                handle_dialogue_on_exit(&ctx, &mut trigger, &mut events, &mut dialogue_events);
-            }
-            TriggerType::OnStay { duration } => {
-                handle_dialogue_on_stay(&ctx, &mut trigger, track, duration, delta_ms, &mut events, &mut dialogue_events);
-            }
+            _ => {}
         }
     }
 }
 
 /// 從觸發器開始對話
-fn start_dialogue_from_trigger(
-    dialogue_id: DialogueId,
-    events: &mut MessageWriter<DialogueEvent>,
-) {
+fn start_dialogue_from_trigger(dialogue_id: DialogueId, events: &mut MessageWriter<DialogueEvent>) {
     events.write(DialogueEvent::Start {
         dialogue_id,
         participants: HashMap::new(),
@@ -487,9 +184,15 @@ fn try_start_mission(
     mission_id: StoryMissionId,
     database: &StoryMissionDatabase,
     events: &mut MessageWriter<StoryMissionEvent>,
+    manager: &mut StoryMissionManager,
+    wallet: &PlayerWallet,
+    respect: &RespectManager,
+    unlocks: &UnlockManager,
 ) {
-    if let Some(_mission) = database.get(mission_id) {
-        events.write(StoryMissionEvent::Started(mission_id));
+    if let Some(mission) = database.get(mission_id) {
+        if manager.start_mission(mission, wallet, respect, unlocks).is_ok() {
+            events.write(StoryMissionEvent::Started(mission_id));
+        }
     }
 }
 
@@ -498,8 +201,11 @@ fn try_start_mission(
 /// 嘗試透過 NPC 開始任務
 fn try_start_npc_mission(
     mission_id: StoryMissionId,
-    manager: &StoryMissionManager,
+    manager: &mut StoryMissionManager,
     database: &StoryMissionDatabase,
+    wallet: &PlayerWallet,
+    respect: &RespectManager,
+    unlocks: &UnlockManager,
     mission_events: &mut MessageWriter<StoryMissionEvent>,
     dialogue_events: &mut MessageWriter<DialogueEvent>,
 ) -> bool {
@@ -508,7 +214,15 @@ fn try_start_npc_mission(
         return false;
     }
 
-    mission_events.write(StoryMissionEvent::Started(mission_id));
+    if let Some(mission) = database.get(mission_id) {
+        if manager.start_mission(mission, wallet, respect, unlocks).is_ok() {
+            mission_events.write(StoryMissionEvent::Started(mission_id));
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
 
     // 播放任務開場對話（如果有）
     if let Some(dialogue_id) = get_mission_start_dialogue(mission_id, database) {
@@ -545,14 +259,21 @@ fn play_npc_idle_dialogue(
 fn mission_npc_interaction_system(
     npc_query: Query<(Entity, &Transform, &MissionNpc)>,
     player_query: Query<&Transform, With<crate::player::Player>>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    manager: Res<StoryMissionManager>,
+    mut interaction: ResMut<InteractionState>,
+    mut manager: ResMut<StoryMissionManager>,
     database: Res<StoryMissionDatabase>,
+    wallet: Res<PlayerWallet>,
+    respect: Res<RespectManager>,
+    unlocks: Res<UnlockManager>,
     dialogue_state: Res<super::dialogue::DialogueState>,
     mut dialogue_events: MessageWriter<DialogueEvent>,
     mut mission_events: MessageWriter<StoryMissionEvent>,
 ) {
     if is_dialogue_active(&dialogue_state) {
+        return;
+    }
+
+    if !interaction.can_interact() {
         return;
     }
 
@@ -568,13 +289,23 @@ fn mission_npc_interaction_system(
 
         let distance_sq = player_pos.distance_squared(transform.translation);
         let radius_sq = npc.interaction_radius * npc.interaction_radius;
-        if distance_sq > radius_sq || !keyboard.just_pressed(KeyCode::KeyF) {
+        if distance_sq > radius_sq {
             continue;
         }
 
         // 優先嘗試開始任務
         if let Some(mission_id) = npc.offers_mission {
-            if try_start_npc_mission(mission_id, &manager, &database, &mut mission_events, &mut dialogue_events) {
+            if try_start_npc_mission(
+                mission_id,
+                &mut manager,
+                &database,
+                &wallet,
+                &respect,
+                &unlocks,
+                &mut mission_events,
+                &mut dialogue_events,
+            ) {
+                interaction.consume();
                 return;
             }
         }
@@ -582,6 +313,8 @@ fn mission_npc_interaction_system(
         // 否則播放閒聊對話
         if let Some(dialogue_id) = npc.idle_dialogue {
             play_npc_idle_dialogue(dialogue_id, &mut dialogue_events);
+            interaction.consume();
+            return;
         }
     }
 }
@@ -676,7 +409,13 @@ fn mission_objective_tracking_system(
             continue;
         }
 
-        let completed = check_objective_complete(objective, player_pos, phase_timer, mission_id, &target_query);
+        let completed = check_objective_complete(
+            objective,
+            player_pos,
+            phase_timer,
+            mission_id,
+            &target_query,
+        );
 
         if completed {
             objective.is_completed = true;
@@ -726,6 +465,9 @@ fn mission_phase_system(
     mut commands: Commands,
     mut manager: ResMut<StoryMissionManager>,
     database: Res<StoryMissionDatabase>,
+    mut wallet: ResMut<PlayerWallet>,
+    mut respect: ResMut<RespectManager>,
+    mut unlocks: ResMut<UnlockManager>,
     time: Res<Time>,
     dialogue_state: Res<super::dialogue::DialogueState>,
     cutscene_state: Res<super::cutscene::CutsceneState>,
@@ -754,7 +496,10 @@ fn mission_phase_system(
     };
 
     // 播放階段完成對話（如果有）
-    if let Some(end_dialogue) = mission.get_phase(current_phase).and_then(|p| p.end_dialogue) {
+    if let Some(end_dialogue) = mission
+        .get_phase(current_phase)
+        .and_then(|p| p.end_dialogue)
+    {
         dialogue_events.write(DialogueEvent::Start {
             dialogue_id: end_dialogue,
             participants: HashMap::new(),
@@ -776,7 +521,7 @@ fn mission_phase_system(
     } else {
         // 任務完成
         let rewards = mission.rewards.clone();
-        manager.grant_rewards(&rewards);
+        manager.grant_rewards(&rewards, &mut wallet, &mut respect, &mut unlocks);
 
         if let Some((completed_id, spawned_entities)) = manager.complete_current_mission() {
             cleanup_mission_entities(&mut commands, spawned_entities);
@@ -858,12 +603,15 @@ fn mission_event_handler(
     mut events: MessageReader<StoryMissionEvent>,
     mut manager: ResMut<StoryMissionManager>,
     database: Res<StoryMissionDatabase>,
+    wallet: Res<PlayerWallet>,
+    respect: Res<RespectManager>,
+    unlocks: Res<UnlockManager>,
 ) {
     for event in events.read() {
         match event {
             StoryMissionEvent::Started(mission_id) => {
                 if let Some(mission) = database.get(*mission_id) {
-                    if let Err(e) = manager.start_mission(mission) {
+                    if let Err(e) = manager.start_mission(mission, &wallet, &respect, &unlocks) {
                         warn!("無法開始任務 {}: {}", mission_id, e);
                     } else {
                         info!("任務開始: {} - {}", mission_id, mission.title);
@@ -889,7 +637,7 @@ fn mission_event_handler(
 // 標記系統
 // ============================================================================
 
-/// 目標標記動畫系統
+/// 目標標記動畫系統 (Restored)
 fn objective_marker_system(
     mut marker_query: Query<(&mut ObjectiveMarker, &mut Transform)>,
     time: Res<Time>,
@@ -999,7 +747,9 @@ pub fn get_current_mission_info(
         title: mission.title.clone(),
         phase_description: phase.description.clone(),
         objectives: active.objectives.clone(),
-        time_remaining: phase.time_limit.map(|limit| (limit - active.phase_timer).max(0.0)),
+        time_remaining: phase
+            .time_limit
+            .map(|limit| (limit - active.phase_timer).max(0.0)),
     })
 }
 
@@ -1056,7 +806,9 @@ pub struct MissionMarkerRing {
 
 impl Default for MissionMarkerRing {
     fn default() -> Self {
-        Self { rotation_speed: 1.0 }
+        Self {
+            rotation_speed: 1.0,
+        }
     }
 }
 
@@ -1179,11 +931,10 @@ fn spawn_mission_trigger_marker(
             MeshMaterial3d(visuals.marker_material.clone()),
             Transform::from_translation(position + Vec3::Y * TRIGGER_HEIGHT_OFFSET),
             WorldMissionTrigger { mission_id, base_y },
-            MissionTrigger::new(mission_id)
+            Trigger::new(TriggerAction::Mission(mission_id))
                 .with_shape(TriggerShape::Circle(radius))
-                .with_trigger_type(TriggerType::OnInteract)
-                .with_prompt(format!("按 F 開始任務: {}", title))
-                .with_mission_name(title.to_string()),
+                .with_type(TriggerType::OnInteract)
+                .with_prompt(format!("按 F 開始任務: {}", title)),
             TriggerVisual::default(),
             Name::new(format!("MissionTrigger_{}", mission_id)),
         ))

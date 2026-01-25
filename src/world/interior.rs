@@ -10,7 +10,7 @@ use bevy_rapier3d::prelude::*;
 use super::{InteriorSpace, Door, DoorState, PlayerInteriorState, InteriorPrompt};
 use crate::player::Player;
 use crate::ui::{ChineseFont, NotificationQueue};
-use crate::core::WorldTime;
+use crate::core::{InteractionState, WorldTime};
 use crate::wanted::WantedLevel;
 
 // ============================================================================
@@ -36,7 +36,7 @@ fn get_door_prompt(is_locked: bool, is_open: bool) -> &'static str {
     } else if !is_open {
         "🚫 營業時間外"
     } else {
-        "按 E 進入"
+        "按 F 進入"
     }
 }
 
@@ -130,16 +130,16 @@ pub fn interior_proximity_system(
 }
 
 /// 室內進入系統
-/// 處理玩家按 E 進入/離開室內
+/// 處理玩家按 F 進入/離開室內
 pub fn interior_enter_system(
-    keyboard: Res<ButtonInput<KeyCode>>,
     mut player_query: Query<(&Transform, &mut PlayerInteriorState), With<Player>>,
     mut door_query: Query<(&Transform, &mut Door)>,
     interior_query: Query<&InteriorSpace>,
     world_time: Res<WorldTime>,
     mut notifications: ResMut<NotificationQueue>,
+    mut interaction: ResMut<InteractionState>,
 ) {
-    if !keyboard.just_pressed(KeyCode::KeyE) {
+    if !interaction.can_interact() {
         return;
     }
 
@@ -149,6 +149,7 @@ pub fn interior_enter_system(
     // 如果已在室內，嘗試離開
     if interior_state.is_inside {
         try_exit_interior(&mut interior_state, &interior_query, &mut notifications);
+        interaction.consume();
         return;
     }
 
@@ -163,6 +164,7 @@ pub fn interior_enter_system(
 
         if door.is_locked {
             notifications.warning("門已上鎖！");
+            interaction.consume();
             return;
         }
 
@@ -170,6 +172,7 @@ pub fn interior_enter_system(
         let Ok(interior) = interior_query.get(interior_entity) else { continue };
 
         if try_enter_interior(&mut door, interior_entity, interior, &mut interior_state, &world_time, &mut notifications) {
+            interaction.consume();
             return;
         }
     }

@@ -7,6 +7,10 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use super::{AiBehavior, AiConfig, AiMovement, AiState};
+use crate::combat::{Enemy, Ragdoll};
+use crate::player::Player;
+
 // ============================================================================
 // 小隊角色
 // ============================================================================
@@ -29,10 +33,10 @@ impl SquadRole {
     /// 取得角色的理想進攻角度（相對於目標正面）
     pub fn ideal_attack_angle(&self) -> f32 {
         match self {
-            SquadRole::Rusher => 0.0,             // 正面
-            SquadRole::Flanker => 90.0_f32.to_radians(),  // 側翼 90 度
+            SquadRole::Rusher => 0.0,                       // 正面
+            SquadRole::Flanker => 90.0_f32.to_radians(),    // 側翼 90 度
             SquadRole::Suppressor => 10.0_f32.to_radians(), // 略偏正面，保持距離
-            SquadRole::Leader => 20.0_f32.to_radians(),    // 稍偏，觀察全局
+            SquadRole::Leader => 20.0_f32.to_radians(),     // 稍偏，觀察全局
         }
     }
 
@@ -94,10 +98,7 @@ impl Default for SquadMember {
 impl SquadMember {
     /// 創建指定角色的小隊成員
     pub fn with_role(role: SquadRole) -> Self {
-        Self {
-            role,
-            ..default()
-        }
+        Self { role, ..default() }
     }
 
     /// 設定小隊 ID
@@ -193,6 +194,7 @@ pub fn calculate_flank_position(
     let to_me = (my_pos - target_pos).normalize_or_zero();
     let distance = role.ideal_attack_distance();
     let angle = role.ideal_attack_angle();
+    let min_ally_distance_sq = min_ally_distance * min_ally_distance;
 
     // 根據角色計算兩個可能的包抄位置（左右兩側）
     let left_dir = rotate_y(to_me, angle);
@@ -202,19 +204,19 @@ pub fn calculate_flank_position(
     let right_pos = target_pos + right_dir * distance;
 
     // 選擇離隊友較遠的位置
-    let left_min_dist = ally_positions
+    let left_min_dist_sq = ally_positions
         .iter()
-        .map(|p| left_pos.distance(*p))
+        .map(|p| left_pos.distance_squared(*p))
         .fold(f32::MAX, f32::min);
-    let right_min_dist = ally_positions
+    let right_min_dist_sq = ally_positions
         .iter()
-        .map(|p| right_pos.distance(*p))
+        .map(|p| right_pos.distance_squared(*p))
         .fold(f32::MAX, f32::min);
 
     // 如果兩邊都太擠，選擇更遠的那個
-    if left_min_dist > right_min_dist && left_min_dist >= min_ally_distance {
+    if left_min_dist_sq > right_min_dist_sq && left_min_dist_sq >= min_ally_distance_sq {
         left_pos
-    } else if right_min_dist >= min_ally_distance {
+    } else if right_min_dist_sq >= min_ally_distance_sq {
         right_pos
     } else {
         // 都太擠了，直接走向目標
@@ -226,11 +228,7 @@ pub fn calculate_flank_position(
 fn rotate_y(v: Vec3, angle: f32) -> Vec3 {
     let cos_a = angle.cos();
     let sin_a = angle.sin();
-    Vec3::new(
-        v.x * cos_a - v.z * sin_a,
-        v.y,
-        v.x * sin_a + v.z * cos_a,
-    )
+    Vec3::new(v.x * cos_a - v.z * sin_a, v.y, v.x * sin_a + v.z * cos_a)
 }
 
 /// 根據小隊大小分配角色
@@ -269,10 +267,7 @@ pub fn assign_squad_roles(member_count: usize) -> Vec<SquadRole> {
 
 /// 評估當前包抄態勢的品質
 /// 回傳 0.0-1.0 的分數，1.0 表示完美包抄
-pub fn evaluate_flank_quality(
-    target_pos: Vec3,
-    ally_positions: &[Vec3],
-) -> f32 {
+pub fn evaluate_flank_quality(target_pos: Vec3, ally_positions: &[Vec3]) -> f32 {
     // 安全檢查：防止空陣列或單人情況
     // 至少需要 2 人才能形成包抄態勢
     if ally_positions.is_empty() || ally_positions.len() < 2 {
@@ -310,4 +305,268 @@ pub fn evaluate_flank_quality(
 
     // 品質分數：間隙越接近理想值越好
     (1.0 - (max_gap - ideal_gap).abs() / std::f32::consts::PI).clamp(0.0, 1.0)
+}
+
+// ============================================================================
+// 小隊協調系統 (GTA 5 風格包抄戰術)
+// ============================================================================
+
+// === 小隊協調系統輔助函數 ===
+
+/// 檢查是否在戰鬥狀態中可執行包抄
+/// 返回 true 表示應該跳過此敵人
+#[inline]
+fn check_combat_state_for_flanking(behavior: &AiBehavior, member: &mut SquadMember) -> bool {
+    if behavior.state != AiState::Chase && behavior.state != AiState::Attack {
+        // 如果正在包抄但狀態改變，結束包抄
+        if member.is_flanking {
+            member.end_flank();
+        }
+        return true;
+    }
+    false
+}
+
+/// 嘗試開始包抄（Flanker 角色專用）
+#[inline]
+fn try_start_flanking(
+    my_pos: Vec3,
+    player_pos: Vec3,
+    member: &mut SquadMember,
+    movement: &mut AiMovement,
+    ally_positions: &[Vec3],
+    config: &AiConfig,
+) {
+    if member.role != SquadRole::Flanker || !member.can_flank() {
+        return;
+    }
+
+    // 過濾自己的位置，避免把自己算入隊友
+    let other_positions: Vec<Vec3> = ally_positions
+        .iter()
+        .filter(|p| p.distance_squared(my_pos) > config.flank_self_filter_distance_sq)
+        .copied()
+        .collect();
+
+    let flank_pos = calculate_flank_position(
+        my_pos,
+        player_pos,
+        member.role,
+        &other_positions,
+        member.min_ally_distance,
+    );
+
+    // 開始包抄
+    member.start_flank(flank_pos);
+    movement.move_target = Some(flank_pos);
+    movement.is_running = true;
+}
+
+/// 更新包抄狀態
+/// 返回 true 表示到達包抄位置
+#[inline]
+fn update_flanking_state(
+    my_pos: Vec3,
+    member: &mut SquadMember,
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    current_time: f32,
+    config: &AiConfig,
+) {
+    if !member.is_flanking {
+        return;
+    }
+
+    let Some(flank_target) = member.flank_target else {
+        return;
+    };
+
+    if my_pos.distance_squared(flank_target) < config.flank_arrival_sq {
+        // 到達包抄位置，結束包抄，準備攻擊
+        member.end_flank();
+        if behavior.state == AiState::Chase {
+            behavior.set_state(AiState::Attack, current_time);
+            movement.is_running = false;
+        }
+    } else {
+        // 繼續向包抄位置移動
+        movement.move_target = Some(flank_target);
+    }
+}
+
+/// 處理突擊者角色行為
+#[inline]
+fn handle_rusher_role(member: &SquadMember, behavior: &AiBehavior, movement: &mut AiMovement) {
+    if !member.is_flanking && behavior.state == AiState::Chase {
+        movement.move_target = behavior.last_known_target_pos;
+        movement.is_running = true;
+    }
+}
+
+/// 計算距離相關數據（用於角色行為判斷）
+/// 返回 (目標位置, 距離平方, 理想距離) 或 None
+#[inline]
+fn calculate_role_distance_data(
+    my_pos: Vec3,
+    member: &SquadMember,
+    behavior: &AiBehavior,
+) -> Option<(Vec3, f32, f32)> {
+    let target_pos = behavior.last_known_target_pos?;
+    let distance_sq = my_pos.distance_squared(target_pos);
+    let ideal_dist = member.role.ideal_attack_distance();
+    Some((target_pos, distance_sq, ideal_dist))
+}
+
+/// 執行後退移動
+#[inline]
+fn execute_retreat(my_pos: Vec3, target_pos: Vec3, retreat_dist: f32, movement: &mut AiMovement) {
+    let retreat_dir = (my_pos - target_pos).normalize_or_zero();
+    movement.move_target = Some(my_pos + retreat_dir * retreat_dist);
+    movement.is_running = false;
+}
+
+/// 處理壓制者角色行為
+#[inline]
+fn handle_suppressor_role(
+    my_pos: Vec3,
+    member: &SquadMember,
+    behavior: &AiBehavior,
+    movement: &mut AiMovement,
+) {
+    let Some((target_pos, distance_sq, ideal_dist)) =
+        calculate_role_distance_data(my_pos, member, behavior)
+    else {
+        return;
+    };
+
+    let too_close = (ideal_dist - 2.0).max(0.0);
+    let too_far = ideal_dist + 5.0;
+    let too_close_sq = too_close * too_close;
+    let too_far_sq = too_far * too_far;
+
+    if distance_sq < too_close_sq {
+        // 太近了，後退
+        execute_retreat(my_pos, target_pos, 5.0, movement);
+    } else if distance_sq > too_far_sq {
+        // 太遠了，靠近一點
+        movement.move_target = Some(target_pos);
+        movement.is_running = false;
+    } else {
+        // 距離合適，停止移動準備射擊
+        movement.move_target = None;
+    }
+}
+
+/// 處理隊長角色行為
+#[inline]
+fn handle_leader_role(
+    my_pos: Vec3,
+    member: &SquadMember,
+    behavior: &AiBehavior,
+    movement: &mut AiMovement,
+) {
+    let Some((target_pos, distance_sq, ideal_dist)) =
+        calculate_role_distance_data(my_pos, member, behavior)
+    else {
+        return;
+    };
+
+    let too_close = (ideal_dist - 3.0).max(0.0);
+    let too_close_sq = too_close * too_close;
+
+    if distance_sq < too_close_sq {
+        // 太近了，稍微後退
+        execute_retreat(my_pos, target_pos, 3.0, movement);
+    }
+}
+
+/// 小隊協調系統
+/// 協調同一小隊的敵人進行包抄戰術
+#[allow(clippy::type_complexity)]
+pub fn squad_coordination_system(
+    time: Res<Time>,
+    config: Res<AiConfig>,
+    mut squad_manager: ResMut<SquadManager>,
+    player_query: Query<&Transform, With<Player>>,
+    mut enemy_query: Query<
+        (
+            Entity,
+            &Transform,
+            &mut AiBehavior,
+            &mut AiMovement,
+            &mut SquadMember,
+        ),
+        (With<Enemy>, Without<Ragdoll>),
+    >,
+) {
+    let dt = time.delta_secs();
+
+    // 先更新所有成員的計時器（只執行一次，避免重複呼叫）
+    for (_, _, _, _, mut member) in &mut enemy_query {
+        member.tick(dt);
+    }
+
+    // 更新協調計時器
+    squad_manager.coordination_timer.tick(time.delta());
+    if !squad_manager.coordination_timer.just_finished() {
+        // 協調邏輯有冷卻時間，跳過本幀的包抄計算
+        return;
+    }
+
+    let current_time = time.elapsed_secs();
+
+    // 取得玩家位置
+    let player_pos = match player_query.single() {
+        Ok(t) => t.translation,
+        Err(_) => return,
+    };
+
+    // 收集所有敵人位置（用於包抄計算）
+    // 注意：這裡只收集一次，後面使用索引排除自己而非重新過濾
+    let ally_positions: Vec<Vec3> = enemy_query
+        .iter()
+        .map(|(_, t, _, _, _)| t.translation)
+        .collect();
+
+    // 處理每個敵人的包抄行為
+    for (_entity, transform, mut behavior, mut movement, mut member) in &mut enemy_query {
+        let my_pos = transform.translation;
+
+        // 檢查是否在戰鬥狀態中
+        if check_combat_state_for_flanking(&behavior, &mut member) {
+            continue;
+        }
+
+        // 嘗試開始包抄（Flanker 角色專用）
+        try_start_flanking(
+            my_pos,
+            player_pos,
+            &mut member,
+            &mut movement,
+            &ally_positions,
+            &config,
+        );
+
+        // 更新包抄狀態
+        update_flanking_state(
+            my_pos,
+            &mut member,
+            &mut behavior,
+            &mut movement,
+            current_time,
+            &config,
+        );
+
+        // 根據角色調整行為
+        match member.role {
+            SquadRole::Rusher => handle_rusher_role(&member, &behavior, &mut movement),
+            SquadRole::Suppressor => {
+                handle_suppressor_role(my_pos, &member, &behavior, &mut movement)
+            }
+            SquadRole::Leader => handle_leader_role(my_pos, &member, &behavior, &mut movement),
+            SquadRole::Flanker => {
+                // 側翼者：由上面的包抄邏輯處理
+            }
+        }
+    }
 }

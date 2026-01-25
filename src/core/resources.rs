@@ -75,6 +75,45 @@ impl Default for PlayerStats {
     }
 }
 
+/// 互動輸入狀態（F 鍵）
+#[derive(Resource, Default)]
+pub struct InteractionState {
+    pub pressed: bool,
+    pub consumed: bool,
+}
+
+impl InteractionState {
+    pub fn update(&mut self, pressed: bool) {
+        self.pressed = pressed;
+        self.consumed = false;
+    }
+
+    pub fn can_interact(&self) -> bool {
+        self.pressed && !self.consumed
+    }
+
+    pub fn consume(&mut self) {
+        self.consumed = true;
+    }
+}
+
+/// 每幀更新互動輸入狀態
+pub fn update_interaction_state(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut interaction: ResMut<InteractionState>,
+) {
+    interaction.update(keyboard.just_pressed(KeyCode::KeyF));
+}
+
+/// 互動系統優先序
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub enum InteractionSet {
+    Vehicle,
+    Mission,
+    Economy,
+    Interior,
+}
+
 /// Debug 設定（F3 切換）
 #[derive(Resource, Default)]
 pub struct DebugSettings {

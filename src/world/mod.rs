@@ -13,3 +13,79 @@ pub use time_weather::*;
 pub use interior::*;
 pub use random_events::*;
 pub use destructible::*;
+
+use bevy::prelude::*;
+use crate::core::{AppState, GameSet, InteractionSet};
+
+/// 世界系統插件
+pub struct WorldPlugin;
+
+impl Plugin for WorldPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            // Message
+            .add_message::<RandomEventTriggered>()
+            .add_message::<RandomEventCompleted>()
+            .add_message::<EnvironmentDamageEvent>()
+            // Startup
+            .add_systems(Startup, setup_world)
+            .add_systems(Startup, setup_random_events)
+            .add_systems(Startup, setup_destructible_visuals)
+            // Update（時間/光照）
+            .add_systems(Update, (
+                update_world_time,
+                update_lighting,
+                sun_moon_rotation_system,
+                update_neon_signs,
+                update_building_windows,
+            ).in_set(GameSet::World))
+            // Update（天氣：輸入和視覺）
+            .add_systems(Update, (
+                weather_input_system,
+                update_sky_color,
+                update_fog_effect,
+            ).in_set(GameSet::World))
+            // Update（隨機事件）
+            .add_systems(Update, (
+                random_event_spawn_system,
+                random_event_update_system,
+                handle_event_completed_system,
+                event_notification_system,
+                event_marker_system,
+            )
+                .in_set(GameSet::World)
+                .run_if(in_state(AppState::InGame)))
+            // Update（天氣粒子/動態效果）
+            .add_systems(Update, (
+                update_weather_transition,
+                spawn_rain_drops,
+                update_rain_drops,
+                cleanup_rain,
+                spawn_rain_puddles,
+                update_rain_puddles,
+                update_lightning,
+                lightning_visual_effect,
+            )
+                .in_set(GameSet::World)
+                .run_if(in_state(AppState::InGame)))
+            // Update（室內系統）
+            .add_systems(Update, (
+                interior_proximity_system,
+                interior_enter_system.in_set(InteractionSet::Interior),
+                interior_hiding_system,
+                door_animation_system,
+            )
+                .in_set(GameSet::World)
+                .run_if(in_state(AppState::InGame)))
+            // Update（可破壞環境）
+            .add_systems(Update, (
+                vehicle_destructible_collision_system,
+                combat_destructible_damage_system,
+                handle_environment_damage_system,
+                debris_update_system,
+                destruction_particle_update_system,
+            )
+                .in_set(GameSet::World)
+                .run_if(in_state(AppState::InGame)));
+    }
+}

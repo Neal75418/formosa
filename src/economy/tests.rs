@@ -587,7 +587,7 @@ fn test_atm_default() {
 fn test_interactable_default() {
     let interactable = Interactable::default();
 
-    assert_eq!(interactable.prompt, "按 E 互動");
+    assert_eq!(interactable.prompt, "按 F 互動");
     assert_eq!(interactable.range, 3.0);
     assert_eq!(interactable.interaction_type, InteractionType::Generic);
 }

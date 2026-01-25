@@ -15,24 +15,30 @@ mod data;
 mod systems;
 
 // 劇情任務系統
-mod story_data;
-mod story_manager;
+mod cutscene;
+mod cutscene_systems;
 mod dialogue;
 mod dialogue_systems;
 mod dialogue_ui;
-mod cutscene;
-mod cutscene_systems;
-mod trigger;
+mod economy;
+mod relationship;
+mod story_data;
+mod story_manager;
 mod story_systems;
+mod trigger;
+mod unlocks;
 
 // 重新導出一般任務
 pub use data::*;
 pub use systems::*;
 
 // 重新導出劇情任務
-pub use story_manager::*;
+pub use cutscene_systems::*;
 pub use dialogue_systems::*;
 pub use dialogue_ui::*;
-pub use cutscene_systems::*;
-pub use trigger::*;
+pub use economy::*;
+pub use relationship::*;
+pub use story_manager::*;
 pub use story_systems::*;
+pub use trigger::*;
+pub use unlocks::*;

@@ -13,7 +13,7 @@ use std::f32::consts::PI;
 use crate::ai::{PatrolPath, AiMovement};
 use crate::player::Player;
 use crate::core::{COLLISION_GROUP_CHARACTER, VehicleSpatialHash, PedestrianSpatialHash, GameState, WeatherState, WeatherType};
-use crate::combat::{CombatState, WeaponInventory, WeaponType, Health, Damageable, HitReaction};
+use crate::combat::{CombatState, WeaponInventory, WeaponType, Health, Damageable, HitReaction, BodyPart};
 use crate::vehicle::Vehicle;
 use crate::wanted::{CrimeEvent, WitnessReport};
 use super::components::{
@@ -323,66 +323,74 @@ fn spawn_pedestrian(
             ..default()
         },
     )).with_children(|parent| {
-        // 頭部
+        // 頭部（含布娃娃標記）
         parent.spawn((
             Mesh3d(visuals.head_mesh.clone()),
             MeshMaterial3d(visuals.skin_materials[indices.skin].clone()),
             Transform::from_xyz(0.0, torso_height / 2.0 + head_radius + 0.05, 0.0),
+            BodyPart::head(),
         ));
-        // 頭髮
+        // 頭髮（不需要物理，跟隨頭部）
         parent.spawn((
             Mesh3d(visuals.hair_mesh.clone()),
             MeshMaterial3d(visuals.hair_materials[indices.hair].clone()),
             Transform::from_xyz(0.0, torso_height / 2.0 + head_radius + 0.08, -0.02)
                 .with_scale(Vec3::new(1.0, 0.8, 1.0)),
         ));
-        // 軀幹
+        // 軀幹（布娃娃核心）
         parent.spawn((
             Mesh3d(visuals.torso_mesh.clone()),
             MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
             Transform::from_xyz(0.0, 0.0, 0.0),
+            BodyPart::torso(),
         ));
-        // 左腿（加標記用於動畫）
+        // 左腿（加標記用於動畫和布娃娃）
         parent.spawn((
             Mesh3d(visuals.leg_mesh.clone()),
             MeshMaterial3d(visuals.pants_materials[indices.pants].clone()),
             Transform::from_xyz(-0.08, -torso_height / 2.0 - leg_height / 2.0, 0.0),
             PedestrianLeg { is_left: true },
+            BodyPart::left_leg(),
         ));
-        // 右腿（加標記用於動畫）
+        // 右腿（加標記用於動畫和布娃娃）
         parent.spawn((
             Mesh3d(visuals.leg_mesh.clone()),
             MeshMaterial3d(visuals.pants_materials[indices.pants].clone()),
             Transform::from_xyz(0.08, -torso_height / 2.0 - leg_height / 2.0, 0.0),
             PedestrianLeg { is_left: false },
+            BodyPart::right_leg(),
         ));
-        // 左腳
+        // 左腳（布娃娃標記）
         parent.spawn((
             Mesh3d(visuals.shoe_mesh.clone()),
             MeshMaterial3d(visuals.shoe_materials[indices.shoe].clone()),
             Transform::from_xyz(-0.08, -torso_height / 2.0 - leg_height - 0.025, 0.03),
+            BodyPart::left_foot(),
         ));
-        // 右腳
+        // 右腳（布娃娃標記）
         parent.spawn((
             Mesh3d(visuals.shoe_mesh.clone()),
             MeshMaterial3d(visuals.shoe_materials[indices.shoe].clone()),
             Transform::from_xyz(0.08, -torso_height / 2.0 - leg_height - 0.025, 0.03),
+            BodyPart::right_foot(),
         ));
-        // 左手臂（加標記用於動畫）
+        // 左手臂（加標記用於動畫和布娃娃）
         parent.spawn((
             Mesh3d(visuals.arm_mesh.clone()),
             MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
             Transform::from_xyz(-0.22, torso_height / 4.0, 0.0)
                 .with_rotation(Quat::from_rotation_z(0.15)),
             PedestrianArm { is_left: true },
+            BodyPart::left_arm(),
         ));
-        // 右手臂（加標記用於動畫）
+        // 右手臂（加標記用於動畫和布娃娃）
         parent.spawn((
             Mesh3d(visuals.arm_mesh.clone()),
             MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
             Transform::from_xyz(0.22, torso_height / 4.0, 0.0)
                 .with_rotation(Quat::from_rotation_z(-0.15)),
             PedestrianArm { is_left: false },
+            BodyPart::right_arm(),
         ));
     });
 }

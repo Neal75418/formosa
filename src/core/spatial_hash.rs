@@ -66,7 +66,11 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     /// # Panics
     /// 如果 `cell_size <= 0` 會 panic
     pub fn new(cell_size: f32) -> Self {
-        assert!(cell_size > 0.0, "cell_size must be positive, got {}", cell_size);
+        assert!(
+            cell_size > 0.0,
+            "cell_size must be positive, got {}",
+            cell_size
+        );
         Self {
             cell_size,
             cells: HashMap::new(),
@@ -81,7 +85,11 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
 
     /// 建立指定大小和預期容量的空間哈希網格
     pub fn with_capacity(cell_size: f32, capacity: usize) -> Self {
-        assert!(cell_size > 0.0, "cell_size must be positive, got {}", cell_size);
+        assert!(
+            cell_size > 0.0,
+            "cell_size must be positive, got {}",
+            cell_size
+        );
         Self {
             cell_size,
             cells: HashMap::with_capacity(capacity / 4), // 假設每個 cell 平均 4 個實體
@@ -162,7 +170,7 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     /// 這是所有半徑查詢的核心邏輯，避免重複的巢狀迴圈。
     /// 處理函數返回 `Some(result)` 時會立即返回該結果（用於提前終止）。
     #[inline]
-    fn for_each_in_radius<R>(
+    pub fn for_each_in_radius<R>(
         &self,
         center: Vec3,
         radius: f32,
@@ -175,9 +183,13 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
         for dx in -cells_needed..=cells_needed {
             for dz in -cells_needed..=cells_needed {
                 let coord = CellCoord::new(center_coord.x + dx, center_coord.z + dz);
-                let Some(entities) = self.cells.get(&coord) else { continue };
+                let Some(entities) = self.cells.get(&coord) else {
+                    continue;
+                };
 
-                if let Some(result) = Self::process_cell_in_radius(entities, center, radius_sq, &mut f) {
+                if let Some(result) =
+                    Self::process_cell_in_radius(entities, center, radius_sq, &mut f)
+                {
                     return Some(result);
                 }
             }
@@ -216,7 +228,8 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     ///
     /// 比 `!query_radius().is_empty()` 更有效率，因為找到第一個就返回。
     pub fn has_entity_in_radius(&self, center: Vec3, radius: f32) -> bool {
-        self.for_each_in_radius(center, radius, |_, _, _| Some(())).is_some()
+        self.for_each_in_radius(center, radius, |_, _, _| Some(()))
+            .is_some()
     }
 
     /// 計算指定半徑內的實體數量（不分配記憶體）
@@ -436,7 +449,8 @@ mod tests {
 
         assert!(grid.has_entity_in_radius(Vec3::ZERO, 10.0));
         assert!(!grid.has_entity_in_radius(Vec3::ZERO, 3.0)); // 太遠
-        assert!(!grid.has_entity_in_radius(Vec3::new(100.0, 0.0, 100.0), 10.0)); // 完全不同區域
+        assert!(!grid.has_entity_in_radius(Vec3::new(100.0, 0.0, 100.0), 10.0));
+        // 完全不同區域
     }
 
     #[test]

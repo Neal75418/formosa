@@ -392,7 +392,7 @@ fn check_theft_interruption(
     }
 
     // 檢查是否放開按鍵
-    if !keyboard.pressed(KeyCode::Tab) {
+    if !keyboard.pressed(KeyCode::KeyX) {
         return Some("放開按鍵");
     }
 
@@ -539,7 +539,7 @@ pub fn theft_input_system(
 
     let player_pos = player_transform.translation;
 
-    // 如果正在偷車，按 E 可以取消
+    // 如果正在偷車，按 Esc 可以取消
     if theft_state.is_stealing() {
         if keyboard.just_pressed(KeyCode::Escape) {
             theft_state.reset();
@@ -548,8 +548,8 @@ pub fn theft_input_system(
         return;
     }
 
-    // Tab 鍵觸發偷車（如果車輛上鎖）
-    if !keyboard.just_pressed(KeyCode::Tab) {
+    // X 鍵觸發偷車（如果車輛上鎖）
+    if !keyboard.just_pressed(KeyCode::KeyX) {
         return;
     }
 

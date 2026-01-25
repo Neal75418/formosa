@@ -241,7 +241,7 @@ fn test_search_zone_creation() {
 #[test]
 fn test_wanted_star_creation() {
     for i in 0..5 {
-        let star = WantedStar { index: i };
+        let star = WantedStar::new(i);
         assert_eq!(star.index, i);
     }
 }

@@ -6,8 +6,11 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use super::dialogue::*;
+use super::relationship::RelationshipManager;
 use super::story_data::DialogueId;
 use super::story_manager::StoryMissionManager;
+use super::unlocks::UnlockManager;
+use crate::economy::PlayerWallet;
 
 // ============================================================================
 // 常數定義
@@ -58,7 +61,7 @@ impl Plugin for DialogueSystemPlugin {
                 Update,
                 (
                     dialogue_event_handler,
-                    dialogue_action_trigger_system, // 觸發節點動作
+                    dialogue_action_trigger_system,  // 觸發節點動作
                     dialogue_action_executor_system, // 執行動作（攝影機等）
                     dialogue_typing_system,
                     dialogue_input_system,
@@ -88,7 +91,10 @@ fn setup_sample_dialogues(mut database: ResMut<DialogueDatabase>) {
         voice_style: None,
     });
 
-    info!("對話系統初始化完成，共 {} 個對話", database.dialogue_count());
+    info!(
+        "對話系統初始化完成，共 {} 個對話",
+        database.dialogue_count()
+    );
 }
 
 /// 創建任務 2 的對話
@@ -105,31 +111,47 @@ fn create_mission2_dialogue() -> DialogueTree {
 
     // 節點 1：任務說明
     tree.add_node(
-        DialogueNode::new(1, speaker.clone(), "工業區有個叫阿強的傢伙欠我一大筆錢。我需要你去「提醒」他該還錢了。")
-            .with_emotion(SpeakerEmotion::Serious)
-            .then(2),
+        DialogueNode::new(
+            1,
+            speaker.clone(),
+            "工業區有個叫阿強的傢伙欠我一大筆錢。我需要你去「提醒」他該還錢了。",
+        )
+        .with_emotion(SpeakerEmotion::Serious)
+        .then(2),
     );
 
     // 節點 2：任務目標
     tree.add_node(
-        DialogueNode::new(2, speaker.clone(), "他躲在倉庫裡，身邊有幾個打手。先解決掉他們，然後把阿強帶到我這來。")
-            .with_emotion(SpeakerEmotion::Angry)
-            .with_choice(DialogueChoice::simple("沒問題", 3))
-            .with_choice(DialogueChoice::simple("報酬呢？", 4)),
+        DialogueNode::new(
+            2,
+            speaker.clone(),
+            "他躲在倉庫裡，身邊有幾個打手。先解決掉他們，然後把阿強帶到我這來。",
+        )
+        .with_emotion(SpeakerEmotion::Angry)
+        .with_choice(DialogueChoice::simple("沒問題", 3))
+        .with_choice(DialogueChoice::simple("報酬呢？", 4)),
     );
 
     // 節點 3：接受任務
     tree.add_node(
-        DialogueNode::new(3, speaker.clone(), "好，地點我發到你手機了。記住，我要活的。")
-            .with_emotion(SpeakerEmotion::Neutral)
-            .with_choice(DialogueChoice::end("出發")),
+        DialogueNode::new(
+            3,
+            speaker.clone(),
+            "好，地點我發到你手機了。記住，我要活的。",
+        )
+        .with_emotion(SpeakerEmotion::Neutral)
+        .with_choice(DialogueChoice::end("出發")),
     );
 
     // 節點 4：談報酬
     tree.add_node(
-        DialogueNode::new(4, speaker, "事成之後，500 塊現金，加上我欠你一個人情。這個人情在這座島上可值不少。")
-            .with_emotion(SpeakerEmotion::Smirk)
-            .with_choice(DialogueChoice::simple("成交", 3)),
+        DialogueNode::new(
+            4,
+            speaker,
+            "事成之後，500 塊現金，加上我欠你一個人情。這個人情在這座島上可值不少。",
+        )
+        .with_emotion(SpeakerEmotion::Smirk)
+        .with_choice(DialogueChoice::simple("成交", 3)),
     );
 
     tree
@@ -180,7 +202,9 @@ fn handle_dialogue_start(
     active.start_time = elapsed_secs;
 
     for (key, value) in participants.iter() {
-        active.participants.insert(key.to_string(), value.to_string());
+        active
+            .participants
+            .insert(key.to_string(), value.to_string());
     }
 
     dialogue_state.active_dialogue = Some(active);
@@ -204,8 +228,17 @@ pub fn dialogue_event_handler(
 ) {
     for event in events.read() {
         match event {
-            DialogueEvent::Start { dialogue_id, participants } => {
-                handle_dialogue_start(*dialogue_id, participants, &mut dialogue_state, &database, time.elapsed_secs());
+            DialogueEvent::Start {
+                dialogue_id,
+                participants,
+            } => {
+                handle_dialogue_start(
+                    *dialogue_id,
+                    participants,
+                    &mut dialogue_state,
+                    &database,
+                    time.elapsed_secs(),
+                );
             }
             DialogueEvent::GoToNode(node_id) => {
                 if let Some(active) = &mut dialogue_state.active_dialogue {
@@ -303,12 +336,21 @@ fn handle_dialogue_advance(
     tree: &DialogueTree,
     dialogue_id: DialogueId,
     story_manager: &mut StoryMissionManager,
+    wallet: &mut PlayerWallet,
+    unlocks: &mut UnlockManager,
+    relationship: &mut RelationshipManager,
     events: &mut MessageWriter<DialogueEvent>,
 ) {
     if let Some(next_node) = node.next_node {
         events.write(DialogueEvent::GoToNode(next_node));
     } else {
-        process_dialogue_consequences(&tree.on_complete, story_manager);
+        process_dialogue_consequences(
+            &tree.on_complete,
+            story_manager,
+            wallet,
+            unlocks,
+            relationship,
+        );
         events.write(DialogueEvent::Completed(dialogue_id));
         events.write(DialogueEvent::End);
     }
@@ -319,14 +361,29 @@ fn handle_choice_selection(
     keyboard: &ButtonInput<KeyCode>,
     valid_choices: &[&DialogueChoice],
     story_manager: &mut StoryMissionManager,
+    wallet: &mut PlayerWallet,
+    unlocks: &mut UnlockManager,
+    relationship: &mut RelationshipManager,
     events: &mut MessageWriter<DialogueEvent>,
     tree: &DialogueTree,
     dialogue_id: DialogueId,
 ) {
     for (index, _) in valid_choices.iter().enumerate() {
-        let Some(key) = get_choice_key(index) else { continue };
+        let Some(key) = get_choice_key(index) else {
+            continue;
+        };
         if keyboard.just_pressed(key) {
-            select_choice(index, valid_choices, story_manager, events, tree, dialogue_id);
+            select_choice(
+                index,
+                valid_choices,
+                story_manager,
+                wallet,
+                unlocks,
+                relationship,
+                events,
+                tree,
+                dialogue_id,
+            );
             return;
         }
     }
@@ -336,14 +393,23 @@ fn handle_choice_selection(
 pub fn dialogue_input_system(
     dialogue_state: ResMut<DialogueState>,
     mut story_manager: ResMut<StoryMissionManager>,
+    mut wallet: ResMut<PlayerWallet>,
+    mut unlocks: ResMut<UnlockManager>,
+    mut relationship: ResMut<RelationshipManager>,
     database: Res<DialogueDatabase>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut events: MessageWriter<DialogueEvent>,
 ) {
-    let Some(active) = &dialogue_state.active_dialogue else { return };
-    let Some(tree) = database.get_dialogue(active.dialogue_id) else { return };
-    let Some(node) = tree.get_node(active.current_node) else { return };
+    let Some(active) = &dialogue_state.active_dialogue else {
+        return;
+    };
+    let Some(tree) = database.get_dialogue(active.dialogue_id) else {
+        return;
+    };
+    let Some(node) = tree.get_node(active.current_node) else {
+        return;
+    };
 
     let advance_pressed = keyboard.just_pressed(KeyCode::Space)
         || keyboard.just_pressed(KeyCode::Enter)
@@ -353,14 +419,34 @@ pub fn dialogue_input_system(
         if !active.typing_complete {
             events.write(DialogueEvent::SkipTyping);
         } else if node.choices.is_empty() {
-            handle_dialogue_advance(node, tree, active.dialogue_id, &mut story_manager, &mut events);
+            handle_dialogue_advance(
+                node,
+                tree,
+                active.dialogue_id,
+                &mut story_manager,
+                &mut wallet,
+                &mut unlocks,
+                &mut relationship,
+                &mut events,
+            );
         }
     }
 
     // 數字鍵選擇選項
     if active.typing_complete && !node.choices.is_empty() {
-        let valid_choices = get_valid_choices(node, &story_manager);
-        handle_choice_selection(&keyboard, &valid_choices, &mut story_manager, &mut events, tree, active.dialogue_id);
+        let valid_choices =
+            get_valid_choices(node, &story_manager, &wallet, &unlocks, &relationship);
+        handle_choice_selection(
+            &keyboard,
+            &valid_choices,
+            &mut story_manager,
+            &mut wallet,
+            &mut unlocks,
+            &mut relationship,
+            &mut events,
+            tree,
+            active.dialogue_id,
+        );
     }
 }
 
@@ -369,8 +455,12 @@ pub fn dialogue_input_system(
 /// 執行自動前進（跳轉或結束對話）
 fn perform_auto_advance(next_node: Option<u32>, events: &mut MessageWriter<DialogueEvent>) {
     match next_node {
-        Some(node_id) => { events.write(DialogueEvent::GoToNode(node_id)); }
-        None => { events.write(DialogueEvent::End); }
+        Some(node_id) => {
+            events.write(DialogueEvent::GoToNode(node_id));
+        }
+        None => {
+            events.write(DialogueEvent::End);
+        }
     }
 }
 
@@ -411,8 +501,12 @@ pub fn dialogue_auto_advance_system(
         return;
     }
 
-    let Some(tree) = database.get_dialogue(active.dialogue_id) else { return };
-    let Some(node) = tree.get_node(active.current_node) else { return };
+    let Some(tree) = database.get_dialogue(active.dialogue_id) else {
+        return;
+    };
+    let Some(node) = tree.get_node(active.current_node) else {
+        return;
+    };
 
     // 無選項時才考慮自動前進
     if !node.choices.is_empty() {
@@ -423,9 +517,21 @@ pub fn dialogue_auto_advance_system(
 
     // 優先使用節點設置的延遲，否則使用全局設置
     if node.auto_advance_delay > 0.0 {
-        try_auto_advance(&mut auto_advance_timer, node.auto_advance_delay, delta, node.next_node, &mut events);
+        try_auto_advance(
+            &mut auto_advance_timer,
+            node.auto_advance_delay,
+            delta,
+            node.next_node,
+            &mut events,
+        );
     } else if settings.auto_advance {
-        try_auto_advance(&mut auto_advance_timer, settings.auto_advance_delay, delta, node.next_node, &mut events);
+        try_auto_advance(
+            &mut auto_advance_timer,
+            settings.auto_advance_delay,
+            delta,
+            node.next_node,
+            &mut events,
+        );
     }
 }
 
@@ -446,7 +552,11 @@ pub fn substitute_variables(text: &str, participants: &HashMap<String, String>) 
 }
 
 /// 取得當前顯示的文字（根據打字進度）
-pub fn get_displayed_text(text: &str, progress: f32, participants: &HashMap<String, String>) -> String {
+pub fn get_displayed_text(
+    text: &str,
+    progress: f32,
+    participants: &HashMap<String, String>,
+) -> String {
     let full_text = substitute_variables(text, participants);
     let total_chars = full_text.chars().count();
     let visible_chars = (total_chars as f32 * progress).round() as usize;
@@ -458,12 +568,15 @@ pub fn get_displayed_text(text: &str, progress: f32, participants: &HashMap<Stri
 pub fn get_valid_choices<'a>(
     node: &'a DialogueNode,
     story_manager: &StoryMissionManager,
+    wallet: &PlayerWallet,
+    unlocks: &UnlockManager,
+    relationship: &RelationshipManager,
 ) -> Vec<&'a DialogueChoice> {
     node.choices
         .iter()
         .filter(|choice| {
             if let Some(condition) = &choice.condition {
-                check_dialogue_condition(condition, story_manager)
+                check_dialogue_condition(condition, story_manager, wallet, unlocks, relationship)
             } else {
                 true
             }
@@ -475,27 +588,28 @@ pub fn get_valid_choices<'a>(
 pub fn check_dialogue_condition(
     condition: &DialogueCondition,
     story_manager: &StoryMissionManager,
+    wallet: &PlayerWallet,
+    unlocks: &UnlockManager,
+    relationship: &RelationshipManager,
 ) -> bool {
     match condition {
         DialogueCondition::HasFlag(flag) => story_manager.get_flag(flag),
         DialogueCondition::NotHasFlag(flag) => !story_manager.get_flag(flag),
-        DialogueCondition::HasMoney(amount) => story_manager.player_money >= *amount,
-        DialogueCondition::HasItem { item_id, count: _ } => {
-            story_manager.is_item_unlocked(item_id)
-        }
+        DialogueCondition::HasMoney(amount) => wallet.cash >= *amount,
+        DialogueCondition::HasItem { item_id, count: _ } => unlocks.is_item_unlocked(item_id),
         DialogueCondition::MissionCompleted(mission_id) => {
             story_manager.get_mission_status(*mission_id)
                 == super::story_data::StoryMissionStatus::Completed
         }
         DialogueCondition::RelationshipMin { npc_id, min } => {
-            story_manager.get_relationship(*npc_id) >= *min
+            relationship.get_relationship(*npc_id) >= *min
         }
-        DialogueCondition::All(conditions) => {
-            conditions.iter().all(|c| check_dialogue_condition(c, story_manager))
-        }
-        DialogueCondition::Any(conditions) => {
-            conditions.iter().any(|c| check_dialogue_condition(c, story_manager))
-        }
+        DialogueCondition::All(conditions) => conditions
+            .iter()
+            .all(|c| check_dialogue_condition(c, story_manager, wallet, unlocks, relationship)),
+        DialogueCondition::Any(conditions) => conditions
+            .iter()
+            .any(|c| check_dialogue_condition(c, story_manager, wallet, unlocks, relationship)),
     }
 }
 
@@ -504,17 +618,32 @@ fn select_choice(
     choice_index: usize,
     valid_choices: &[&DialogueChoice],
     story_manager: &mut StoryMissionManager,
+    wallet: &mut PlayerWallet,
+    unlocks: &mut UnlockManager,
+    relationship: &mut RelationshipManager,
     events: &mut MessageWriter<DialogueEvent>,
     tree: &DialogueTree,
     dialogue_id: DialogueId,
 ) {
     if let Some(choice) = valid_choices.get(choice_index) {
         // 處理選項後果
-        process_dialogue_consequences(&choice.consequences, story_manager);
+        process_dialogue_consequences(
+            &choice.consequences,
+            story_manager,
+            wallet,
+            unlocks,
+            relationship,
+        );
 
         // 跳轉或結束
         if choice.ends_dialogue {
-            process_dialogue_consequences(&tree.on_complete, story_manager);
+            process_dialogue_consequences(
+                &tree.on_complete,
+                story_manager,
+                wallet,
+                unlocks,
+                relationship,
+            );
             events.write(DialogueEvent::Completed(dialogue_id));
             events.write(DialogueEvent::End);
         } else if let Some(next_node) = choice.next_node {
@@ -527,6 +656,9 @@ fn select_choice(
 pub fn process_dialogue_consequences(
     consequences: &[DialogueConsequence],
     story_manager: &mut StoryMissionManager,
+    wallet: &mut PlayerWallet,
+    unlocks: &mut UnlockManager,
+    relationship: &mut RelationshipManager,
 ) {
     for consequence in consequences {
         match consequence {
@@ -534,13 +666,13 @@ pub fn process_dialogue_consequences(
                 story_manager.set_flag(flag.clone(), *value);
             }
             DialogueConsequence::ChangeRelationship { npc_id, delta } => {
-                story_manager.change_relationship(*npc_id, *delta);
+                relationship.change_relationship(*npc_id, *delta);
             }
             DialogueConsequence::GiveMoney(amount) => {
-                story_manager.add_money(*amount);
+                wallet.add_cash(*amount);
             }
             DialogueConsequence::GiveItem { item_id, count: _ } => {
-                story_manager.unlock_item(item_id.clone());
+                unlocks.unlock_item(item_id.clone());
             }
             DialogueConsequence::UnlockMission(mission_id) => {
                 story_manager.unlock_mission(*mission_id);
@@ -565,10 +697,7 @@ pub fn process_dialogue_consequences(
 }
 
 /// 開始對話的便利函數
-pub fn start_dialogue(
-    dialogue_id: DialogueId,
-    events: &mut MessageWriter<DialogueEvent>,
-) {
+pub fn start_dialogue(dialogue_id: DialogueId, events: &mut MessageWriter<DialogueEvent>) {
     events.write(DialogueEvent::Start {
         dialogue_id,
         participants: HashMap::new(),
@@ -783,11 +912,10 @@ fn dialogue_history_system(
         Some(name) => name.clone(),
         None => match node.speaker {
             DialogueSpeaker::Player => "玩家".to_string(),
-            DialogueSpeaker::Npc(npc_id) => {
-                database.get_npc(npc_id)
-                    .map(|npc| npc.name.clone())
-                    .unwrap_or_else(|| format!("NPC {}", npc_id))
-            }
+            DialogueSpeaker::Npc(npc_id) => database
+                .get_npc(npc_id)
+                .map(|npc| npc.name.clone())
+                .unwrap_or_else(|| format!("NPC {}", npc_id)),
             DialogueSpeaker::Narrator => "旁白".to_string(),
             DialogueSpeaker::Radio => "電台".to_string(),
             DialogueSpeaker::System => "系統".to_string(),

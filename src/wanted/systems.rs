@@ -843,6 +843,12 @@ fn create_wanted_hud(commands: &mut Commands, wanted_stars: u8) {
             Color::srgba(0.3, 0.3, 0.3, 0.5)
         };
 
+        // 新獲得的星星開始漸入動畫
+        let mut star = WantedStar::new(i);
+        if i < wanted_stars {
+            star.trigger_gain();
+        }
+
         let star_entity = commands
             .spawn((
                 Node {
@@ -851,7 +857,7 @@ fn create_wanted_hud(commands: &mut Commands, wanted_stars: u8) {
                     ..default()
                 },
                 BackgroundColor(initial_color),
-                WantedStar { index: i },
+                star,
             ))
             .id();
 
@@ -859,35 +865,114 @@ fn create_wanted_hud(commands: &mut Commands, wanted_stars: u8) {
     }
 }
 
-/// 計算星星顯示顏色
-fn calc_star_color(star_index: u8, wanted: &WantedLevel) -> Color {
-    if star_index < wanted.stars {
-        let pulse = (wanted.cooldown_timer * 3.0).sin() * 0.2 + 0.8;
-        if wanted.player_visible {
-            Color::srgb(1.0, pulse * 0.3, 0.0) // 被追捕時紅色
+/// 計算星星顯示顏色（GTA5 風格動畫）
+fn calc_star_color(star: &WantedStar, wanted: &WantedLevel, time: f32) -> Color {
+    // 閃爍效果（新獲得星星時）
+    let flash_boost = if star.flash_timer > 0.0 {
+        let flash_progress = star.flash_timer / 0.5;
+        (flash_progress * 10.0).sin().abs()  // 快速閃爍
+    } else {
+        0.0
+    };
+
+    // 漸入效果
+    let gain_alpha = if star.is_gaining {
+        star.gain_progress
+    } else {
+        1.0
+    };
+
+    if star.index < wanted.stars {
+        // 脈衝動畫（錯開相位）
+        let pulse = ((time * 3.0 + star.scale_phase).sin() * 0.2 + 0.8) * gain_alpha;
+
+        if star.flash_timer > 0.0 {
+            // 閃爍時白色高亮
+            Color::srgb(
+                1.0,
+                0.9 + flash_boost * 0.1,
+                0.7 + flash_boost * 0.3,
+            )
+        } else if wanted.player_visible {
+            // 被追捕時紅色脈衝
+            Color::srgb(1.0, pulse * 0.3, 0.0)
         } else {
-            Color::srgb(1.0, pulse, 0.0) // 消退中黃色
+            // 消退中黃色脈衝
+            Color::srgb(1.0, pulse, 0.0)
         }
     } else {
-        Color::srgba(0.3, 0.3, 0.3, 0.5) // 未啟用灰色
+        // 未啟用的星星（灰色）
+        Color::srgba(0.3, 0.3, 0.3, 0.5)
     }
 }
 
-/// 更新通緝等級 HUD
+/// 計算星星縮放（GTA5 風格脈動）
+fn calc_star_scale(star: &WantedStar, wanted: &WantedLevel, time: f32) -> f32 {
+    if star.index < wanted.stars {
+        // 基礎脈動
+        let pulse = (time * 2.0 + star.scale_phase).sin() * 0.1;
+
+        // 閃爍時放大
+        let flash_scale = if star.flash_timer > 0.0 {
+            0.2 * (star.flash_timer / 0.5)  // 漸漸縮回
+        } else {
+            0.0
+        };
+
+        // 漸入時從小到大
+        let gain_scale = if star.is_gaining {
+            star.gain_progress
+        } else {
+            1.0
+        };
+
+        (1.0 + pulse + flash_scale) * gain_scale
+    } else {
+        1.0
+    }
+}
+
+/// 更新通緝等級 HUD（GTA5 風格動畫）
 pub fn update_wanted_hud(
     mut commands: Commands,
+    time: Res<Time>,
     wanted: Res<WantedLevel>,
     hud_query: Query<Entity, With<WantedHud>>,
-    star_query: Query<(Entity, &WantedStar)>,
+    mut star_query: Query<(Entity, &mut WantedStar, &mut Node)>,
 ) {
+    let t = time.elapsed_secs();
+    let dt = time.delta_secs();
+
     // 創建 HUD（如果不存在）
     if hud_query.is_empty() && wanted.stars > 0 {
         create_wanted_hud(&mut commands, wanted.stars);
     }
 
-    // 更新星星顏色
-    for (entity, star) in &star_query {
-        let color = calc_star_color(star.index, &wanted);
+    // 更新星星動畫
+    for (entity, mut star, mut node) in &mut star_query {
+        // 更新動畫計時器
+        if star.flash_timer > 0.0 {
+            star.flash_timer -= dt;
+        }
+
+        // 更新漸入動畫
+        if star.is_gaining {
+            star.gain_progress += dt * 3.0;  // 0.33 秒完成
+            if star.gain_progress >= 1.0 {
+                star.gain_progress = 1.0;
+                star.is_gaining = false;
+            }
+        }
+
+        // 計算顏色和縮放
+        let color = calc_star_color(&star, &wanted, t);
+        let scale = calc_star_scale(&star, &wanted, t);
+
+        // 應用縮放（通過修改尺寸）
+        let base_size = 24.0;
+        node.width = Val::Px(base_size * scale);
+        node.height = Val::Px(base_size * scale);
+
         commands.entity(entity).insert(BackgroundColor(color));
     }
 
@@ -895,6 +980,24 @@ pub fn update_wanted_hud(
     if wanted.stars == 0 {
         for entity in &hud_query {
             commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// 通緝等級變化動畫系統
+/// 監聽 WantedLevelChanged 事件，觸發星星獲得動畫
+pub fn wanted_level_change_animation(
+    mut level_changed: MessageReader<WantedLevelChanged>,
+    mut star_query: Query<&mut WantedStar>,
+) {
+    for event in level_changed.read() {
+        if event.new_stars > event.old_stars {
+            // 等級上升：為新獲得的星星觸發動畫
+            for mut star in &mut star_query {
+                if star.index >= event.old_stars && star.index < event.new_stars {
+                    star.trigger_gain();
+                }
+            }
         }
     }
 }

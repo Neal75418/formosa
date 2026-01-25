@@ -2,7 +2,55 @@
 
 use bevy::prelude::*;
 use bevy::pbr::StandardMaterial;
+use serde::{Serialize, Deserialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use crate::core::calculate_fade_alpha;
+
+// ============================================================================
+// 車輛穩定 ID（用於存檔識別）
+// ============================================================================
+
+/// 全局車輛 ID 計數器
+static VEHICLE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// 車輛穩定識別碼組件
+///
+/// 用於存檔/讀檔時識別特定車輛，不依賴 Query 枚舉順序
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct VehicleId(pub u64);
+
+impl VehicleId {
+    /// 生成新的唯一 ID
+    pub fn new() -> Self {
+        Self(VEHICLE_ID_COUNTER.fetch_add(1, Ordering::SeqCst))
+    }
+
+    /// 從已知 ID 創建（用於讀檔）
+    pub fn from_raw(id: u64) -> Self {
+        // 確保計數器超過這個 ID，避免將來衝突
+        loop {
+            let current = VEHICLE_ID_COUNTER.load(Ordering::SeqCst);
+            if current > id {
+                break;
+            }
+            if VEHICLE_ID_COUNTER.compare_exchange(current, id + 1, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                break;
+            }
+        }
+        Self(id)
+    }
+
+    /// 取得原始 ID 值
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+}
+
+impl Default for VehicleId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// 共享載具材質（效能優化：避免重複創建相同材質）
 /// 每種通用材質只創建一次，所有載具共用
@@ -69,6 +117,15 @@ pub enum VehicleType {
     Car,        // 汽車
     Taxi,       // 計程車
     Bus,        // 公車
+}
+
+/// 載具物理模式
+/// - Dynamic：玩家駕駛，使用 Velocity/Impulse/Torque 驅動
+/// - Kinematic：NPC/停放車輛，以 Transform 控制
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VehiclePhysicsMode {
+    Dynamic,
+    Kinematic,
 }
 
 /// 載具組件（GTA 風格街機物理）
@@ -334,6 +391,10 @@ impl Default for NpcVehicle {
 // ============================================================================
 // 車輛視覺效果組件（GTA 5 風格）
 // ============================================================================
+
+/// Vehicle visual root for applying roll/pitch/lean without affecting physics.
+#[derive(Component)]
+pub struct VehicleVisualRoot;
 
 /// 輪胎痕跡組件
 /// 漂移/急煞時在地面留下的胎痕

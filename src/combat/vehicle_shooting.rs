@@ -7,12 +7,15 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::core::{GameState, CameraSettings};
+use crate::audio::{play_weapon_fire_sound, AudioManager, WeaponSounds};
+use crate::core::{CameraSettings, GameState};
 use crate::player::Player;
 use crate::vehicle::Vehicle;
-use crate::audio::{AudioManager, WeaponSounds, play_weapon_fire_sound};
 
 use super::components::*;
+use super::health::*;
+use super::visuals::*;
+use super::weapon::*;
 
 // ============================================================================
 // 常數
@@ -105,18 +108,15 @@ pub fn vehicle_shooting_input_system(
 
     // 計算相對於車輛的瞄準角度
     let vehicle_forward = vehicle_transform.forward();
-    let aim_dir = Vec3::new(
-        camera_settings.yaw.cos(),
-        0.0,
-        camera_settings.yaw.sin(),
-    ).normalize();
+    let aim_dir = Vec3::new(camera_settings.yaw.cos(), 0.0, camera_settings.yaw.sin()).normalize();
 
     let angle = vehicle_forward.dot(aim_dir).acos().to_degrees();
     let cross = vehicle_forward.cross(aim_dir).y;
     let signed_angle = if cross >= 0.0 { angle } else { -angle };
 
     // 檢查角度是否在允許範圍內（假設駕駛座）
-    let in_range = signed_angle >= -DRIVER_LEFT_ANGLE_LIMIT && signed_angle <= DRIVER_RIGHT_ANGLE_LIMIT;
+    let in_range =
+        signed_angle >= -DRIVER_LEFT_ANGLE_LIMIT && signed_angle <= DRIVER_RIGHT_ANGLE_LIMIT;
     combat_state.vehicle_aim_valid = in_range;
 }
 
@@ -152,8 +152,12 @@ pub fn vehicle_shooting_fire_system(
         return;
     }
 
-    let Some(visuals) = combat_visuals else { return; };
-    let Ok(rapier) = rapier_context.single() else { return; };
+    let Some(visuals) = combat_visuals else {
+        return;
+    };
+    let Ok(rapier) = rapier_context.single() else {
+        return;
+    };
 
     let Some(vehicle_entity) = game_state.current_vehicle else {
         return;
@@ -187,7 +191,8 @@ pub fn vehicle_shooting_fire_system(
         camera_settings.yaw.cos(),
         -camera_settings.pitch.sin() * 0.3, // 限制垂直角度
         camera_settings.yaw.sin(),
-    ).normalize();
+    )
+    .normalize();
 
     // 射線檢測
     let filter = QueryFilter::new()
@@ -258,9 +263,10 @@ fn is_vehicle_compatible_weapon(weapon_type: WeaponType) -> bool {
 
 /// 找到可在車上使用的武器索引
 fn find_compatible_weapon_index(inventory: &WeaponInventory) -> Option<usize> {
-    inventory.weapons.iter().position(|w| {
-        is_vehicle_compatible_weapon(w.stats.weapon_type)
-    })
+    inventory
+        .weapons
+        .iter()
+        .position(|w| is_vehicle_compatible_weapon(w.stats.weapon_type))
 }
 
 /// 生成槍口火焰
@@ -293,7 +299,10 @@ fn spawn_impact_effect(
         Transform::from_translation(position)
             .looking_to(normal, Vec3::Y)
             .with_scale(Vec3::splat(0.2)),
-        ImpactEffect { lifetime: 0.1, max_lifetime: 0.1 },
+        ImpactEffect {
+            lifetime: 0.1,
+            max_lifetime: 0.1,
+        },
     ));
 }
 
@@ -319,7 +328,11 @@ fn spawn_bullet_tracer(
         MeshMaterial3d(tracer_config.material.clone()),
         Transform::from_translation(mid)
             .looking_to(direction, Vec3::Y)
-            .with_scale(Vec3::new(tracer_config.thickness * 0.02, tracer_config.thickness * 0.02, length)),
+            .with_scale(Vec3::new(
+                tracer_config.thickness * 0.02,
+                tracer_config.thickness * 0.02,
+                length,
+            )),
         BulletTracer {
             lifetime: tracer_config.lifetime,
             start_pos: start,

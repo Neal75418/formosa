@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 use crate::player::Player;
+use crate::core::{clamp_dot, safe_normalize};
 use crate::core::GameState;
 use crate::vehicle::{Vehicle, VehicleHealth};
 use crate::combat::{DamageEvent, DamageSource};
@@ -50,7 +51,7 @@ fn can_attempt_pit(
     if distance_sq >= PIT_MANEUVER_DISTANCE_SQ * 4.0 || pit_cooldown > 0.0 || wanted_stars < 3 {
         return false;
     }
-    let angle = car_forward.dot(to_player.normalize_or_zero()).acos();
+    let angle = clamp_dot(car_forward.dot(safe_normalize(to_player))).acos();
     angle < PIT_MANEUVER_ANGLE
 }
 

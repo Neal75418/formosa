@@ -11,7 +11,7 @@ pub use components::*;
 pub use systems::*;
 
 use bevy::prelude::*;
-use crate::ui::UiState;
+use crate::core::AppState;
 
 /// 環境系統插件
 pub struct EnvironmentPlugin;
@@ -31,6 +31,6 @@ impl Plugin for EnvironmentPlugin {
                 destructible_damage_system,
                 destruction_effect_system,
                 debris_update_system,
-            ).chain().run_if(|ui: Res<UiState>| !ui.paused));
+            ).chain().run_if(in_state(AppState::InGame)));
     }
 }

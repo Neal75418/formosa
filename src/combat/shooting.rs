@@ -2,9 +2,9 @@
 //!
 //! 處理射擊輸入、武器發射、子彈移動等邏輯。
 
-use bevy::prelude::*;
-use bevy::math::EulerRot;
 use bevy::ecs::hierarchy::ChildOf;
+use bevy::math::EulerRot;
+use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 /// 將 Rapier 的 Real 類型 (f32) 轉換為 f32
@@ -14,12 +14,20 @@ fn real_to_f32(r: bevy_rapier3d::prelude::Real) -> f32 {
     r
 }
 
-use super::components::{*, check_headshot, HEADSHOT_MULTIPLIER, BLEED_CHANCE};
-use crate::player::Player;
-use crate::core::{CameraSettings, GameState, RecoilState, CameraShake, ease_out_quad, ease_out_cubic, ease_in_out_quad};
-use crate::ui::NotificationQueue;
-use crate::audio::{AudioManager, WeaponSounds, play_weapon_fire_sound, play_reload_sound, play_weapon_switch_sound};
+use super::components::*;
+use super::health::{check_headshot, BLEED_CHANCE, HEADSHOT_MULTIPLIER, *};
+use super::visuals::*;
+use super::weapon::*;
 use super::RespawnState;
+use crate::audio::{
+    play_reload_sound, play_weapon_fire_sound, play_weapon_switch_sound, AudioManager, WeaponSounds,
+};
+use crate::core::{
+    ease_in_out_quad, ease_out_cubic, ease_out_quad, CameraSettings, CameraShake, GameState,
+    RecoilState,
+};
+use crate::player::Player;
+use crate::ui::NotificationQueue;
 
 // === Lifetime Trait 用於統一特效消失邏輯 ===
 
@@ -30,13 +38,21 @@ trait HasLifetime {
 }
 
 impl HasLifetime for MuzzleFlash {
-    fn lifetime(&self) -> f32 { self.lifetime }
-    fn lifetime_mut(&mut self) -> &mut f32 { &mut self.lifetime }
+    fn lifetime(&self) -> f32 {
+        self.lifetime
+    }
+    fn lifetime_mut(&mut self) -> &mut f32 {
+        &mut self.lifetime
+    }
 }
 
 impl HasLifetime for BulletTracer {
-    fn lifetime(&self) -> f32 { self.lifetime }
-    fn lifetime_mut(&mut self) -> &mut f32 { &mut self.lifetime }
+    fn lifetime(&self) -> f32 {
+        self.lifetime
+    }
+    fn lifetime_mut(&mut self) -> &mut f32 {
+        &mut self.lifetime
+    }
 }
 
 /// 更新 lifetime 並檢查是否應該 despawn
@@ -233,7 +249,9 @@ pub fn reload_system(
             continue;
         }
 
-        let Some(weapon) = inventory.current_weapon_mut() else { continue; };
+        let Some(weapon) = inventory.current_weapon_mut() else {
+            continue;
+        };
 
         // 更新換彈進度
         if update_reload_progress(weapon, dt) {
@@ -289,7 +307,8 @@ fn calculate_aim_point(
         -yaw.sin() * pitch.cos(),
         -pitch.sin(),
         -yaw.cos() * pitch.cos(),
-    ).normalize();
+    )
+    .normalize();
 
     // 計算攝影機位置（玩家後上方）
     let player_center = player_pos + Vec3::Y * 1.5;
@@ -329,16 +348,12 @@ fn calculate_muzzle_position(
         base_pos + char_vecs.right * 0.25 + char_vecs.forward * 0.3
     } else if is_aiming {
         // 瞄準姿勢：槍口在身體前方中央偏右
-        let hand_pos = base_pos
-            + char_vecs.right * 0.15
-            + char_vecs.forward * 0.45;
+        let hand_pos = base_pos + char_vecs.right * 0.15 + char_vecs.forward * 0.45;
         hand_pos + char_vecs.forward * muzzle_offset.z + char_vecs.up * muzzle_offset.y
     } else {
         // 待機持槍姿勢：槍口朝下前方
-        let hand_pos = base_pos
-            + char_vecs.right * 0.22
-            + char_vecs.forward * 0.25
-            + char_vecs.up * (-0.1);
+        let hand_pos =
+            base_pos + char_vecs.right * 0.22 + char_vecs.forward * 0.25 + char_vecs.up * (-0.1);
         let tilted_forward = (char_vecs.forward * 0.8 + char_vecs.up * (-0.2)).normalize();
         hand_pos + tilted_forward * muzzle_offset.z * 0.8
     }
@@ -406,8 +421,8 @@ fn generate_shotgun_pattern(pellet_count: u32, base_spread: f32) -> Vec<Vec2> {
 
     // 計算內外圈彈丸數量
     let remaining = pellet_count - 1;
-    let inner_count = remaining.min(6);  // 內圈最多 6 顆
-    let outer_count = remaining.saturating_sub(6);  // 剩餘的放外圈
+    let inner_count = remaining.min(6); // 內圈最多 6 顆
+    let outer_count = remaining.saturating_sub(6); // 剩餘的放外圈
 
     // 內圈（較準確，50% 散佈半徑）
     let inner_radius = spread_rad * 0.5;
@@ -517,11 +532,17 @@ pub fn fire_weapon_system(
     damageable_query: Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: Query<&Transform>,
 ) {
-    let Some(visuals) = combat_visuals else { return; };
-    let Ok(rapier) = rapier_context.single() else { return; };
+    let Some(visuals) = combat_visuals else {
+        return;
+    };
+    let Ok(rapier) = rapier_context.single() else {
+        return;
+    };
 
     for (player_entity, player_transform, mut inventory) in player_query.iter_mut() {
-        let Some(weapon) = inventory.current_weapon_mut() else { continue; };
+        let Some(weapon) = inventory.current_weapon_mut() else {
+            continue;
+        };
 
         if !should_fire(&input, weapon) {
             continue;
@@ -575,12 +596,22 @@ pub fn fire_weapon_system(
                 &damageable_query,
                 &transform_query,
             );
-            apply_ranged_fire_effects(weapon, combat_state.is_aiming, &mut recoil_state, &mut camera_shake);
+            apply_ranged_fire_effects(
+                weapon,
+                combat_state.is_aiming,
+                &mut recoil_state,
+                &mut camera_shake,
+            );
         }
 
         // 播放槍聲
         if let Some(ref sounds) = weapon_sounds {
-            play_weapon_fire_sound(&mut commands, sounds, &audio_manager, weapon.stats.weapon_type);
+            play_weapon_fire_sound(
+                &mut commands,
+                sounds,
+                &audio_manager,
+                weapon.stats.weapon_type,
+            );
         }
 
         // 消耗彈藥並設置冷卻
@@ -730,7 +761,9 @@ fn fire_knife_attack(
 
         // 機率觸發流血效果
         if rand::random::<f32>() < BLEED_CHANCE {
-            commands.entity(hit_entity).insert(BleedEffect::new(attacker));
+            commands
+                .entity(hit_entity)
+                .insert(BleedEffect::new(attacker));
         }
     }
 }
@@ -896,11 +929,7 @@ pub fn spawn_bullet_tracer(
 }
 
 /// 生成槍口閃光（公開供其他模組使用）
-pub fn spawn_muzzle_flash(
-    commands: &mut Commands,
-    visuals: &CombatVisuals,
-    position: Vec3,
-) {
+pub fn spawn_muzzle_flash(commands: &mut Commands, visuals: &CombatVisuals, position: Vec3) {
     // 共用 mesh 和 material
     commands.spawn((
         Mesh3d(visuals.muzzle_mesh.clone()),
@@ -911,11 +940,7 @@ pub fn spawn_muzzle_flash(
 }
 
 /// 生成擊中特效（火花）
-fn spawn_impact_effect(
-    commands: &mut Commands,
-    visuals: &CombatVisuals,
-    position: Vec3,
-) {
+fn spawn_impact_effect(commands: &mut Commands, visuals: &CombatVisuals, position: Vec3) {
     let lifetime = 0.15;
     commands.spawn((
         Mesh3d(visuals.impact_mesh.clone()),
@@ -1035,7 +1060,9 @@ pub fn punch_animation_trigger_system(
     for child in children.iter() {
         if let Ok((arm_entity, arm)) = arm_query.get(child) {
             if arm.is_right {
-                commands.entity(arm_entity).insert(PunchAnimation::default());
+                commands
+                    .entity(arm_entity)
+                    .insert(PunchAnimation::default());
                 break;
             }
         }
@@ -1078,16 +1105,16 @@ pub fn punch_animation_update_system(
                 // 手臂向下+向後+向外側
                 let rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    0.5 * ease,       // X: 手臂向下/向後（正值）
-                    -0.3 * ease,      // Y: 向外側旋轉
-                    0.2 * ease        // Z: 稍微內傾
+                    0.5 * ease,  // X: 手臂向下/向後（正值）
+                    -0.3 * ease, // Y: 向外側旋轉
+                    0.2 * ease,  // Z: 稍微內傾
                 );
 
                 // 位置往下、往後、往外收
                 let offset = Vec3::new(
-                    -0.08 * ease,   // X: 往外側
-                    -0.12 * ease,   // Y: 向下沉（蓄力）
-                    -0.1 * ease     // Z: 往後
+                    -0.08 * ease, // X: 往外側
+                    -0.12 * ease, // Y: 向下沉（蓄力）
+                    -0.1 * ease,  // Z: 往後
                 );
 
                 transform.translation = arm.rest_position + offset;
@@ -1113,17 +1140,17 @@ pub fn punch_animation_update_system(
 
                 let rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    current_x,                 // X: 從下往上揮
-                    current_y,                 // Y: 從外側到前方（弧線）
-                    0.2 * (1.0 - ease)         // Z: 從傾斜到直
+                    current_x,          // X: 從下往上揮
+                    current_y,          // Y: 從外側到前方（弧線）
+                    0.2 * (1.0 - ease), // Z: 從傾斜到直
                 );
 
                 // 位置：弧線軌跡（從下後外 → 上前中）
                 let arc = (phase_progress * std::f32::consts::PI).sin();
                 let offset = Vec3::new(
-                    -0.08 + 0.13 * ease + 0.05 * arc,  // X: 從外側繞回中間
-                    -0.12 + 0.42 * ease,               // Y: 從下往上（-0.12 → +0.3）
-                    -0.1 + 0.4 * ease                  // Z: 向前伸出
+                    -0.08 + 0.13 * ease + 0.05 * arc, // X: 從外側繞回中間
+                    -0.12 + 0.42 * ease,              // Y: 從下往上（-0.12 → +0.3）
+                    -0.1 + 0.4 * ease,                // Z: 向前伸出
                 );
 
                 transform.translation = arm.rest_position + offset;
@@ -1139,13 +1166,14 @@ pub fn punch_animation_update_system(
                 // 從上勾拳終點插值回原位
                 let strike_rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    -1.0,   // 手臂向上的終點
-                    0.2,    // 在前方
-                    0.0
+                    -1.0, // 手臂向上的終點
+                    0.2,  // 在前方
+                    0.0,
                 );
                 let strike_offset = Vec3::new(0.05, 0.3, 0.3);
 
-                transform.translation = (arm.rest_position + strike_offset).lerp(arm.rest_position, ease);
+                transform.translation =
+                    (arm.rest_position + strike_offset).lerp(arm.rest_position, ease);
                 transform.rotation = strike_rotation.slerp(arm.rest_rotation, ease);
             }
         }
@@ -1171,7 +1199,9 @@ pub fn spawn_player_weapons(
     weapon_visuals: Option<Res<WeaponVisuals>>,
     hand_query: Query<(Entity, &PlayerHand), Added<PlayerHand>>,
 ) {
-    let Some(visuals) = weapon_visuals else { return; };
+    let Some(visuals) = weapon_visuals else {
+        return;
+    };
 
     for (hand_entity, hand) in hand_query.iter() {
         // 只為右手生成武器
@@ -1181,21 +1211,32 @@ pub fn spawn_player_weapons(
 
         // 為每種武器類型生成模型
         // 使用 ChildOf 直接設定父子關係，可能避免 B0004 警告
-        for weapon_type in [WeaponType::Staff, WeaponType::Knife, WeaponType::Pistol, WeaponType::SMG, WeaponType::Shotgun, WeaponType::Rifle] {
-            let Some(weapon_data) = visuals.get(weapon_type) else { continue; };
+        for weapon_type in [
+            WeaponType::Staff,
+            WeaponType::Knife,
+            WeaponType::Pistol,
+            WeaponType::SMG,
+            WeaponType::Shotgun,
+            WeaponType::Rifle,
+        ] {
+            let Some(weapon_data) = visuals.get(weapon_type) else {
+                continue;
+            };
 
             // 先生成武器根實體，使用 ChildOf 設定父實體
-            let weapon_root = commands.spawn((
-                Transform::from_translation(weapon_data.hand_offset)
-                    .with_rotation(weapon_data.hand_rotation),
-                GlobalTransform::default(),
-                Visibility::Hidden,  // 預設隱藏
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
-                WeaponModel { weapon_type },
-                Name::new(format!("Weapon_{:?}", weapon_type)),
-                ChildOf(hand_entity),  // 直接設定父實體
-            )).id();
+            let weapon_root = commands
+                .spawn((
+                    Transform::from_translation(weapon_data.hand_offset)
+                        .with_rotation(weapon_data.hand_rotation),
+                    GlobalTransform::default(),
+                    Visibility::Hidden, // 預設隱藏
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                    WeaponModel { weapon_type },
+                    Name::new(format!("Weapon_{:?}", weapon_type)),
+                    ChildOf(hand_entity), // 直接設定父實體
+                ))
+                .id();
 
             // 生成武器部件作為武器根的子實體
             for part in &weapon_data.parts {
@@ -1204,7 +1245,7 @@ pub fn spawn_player_weapons(
                     MeshMaterial3d(part.material.clone()),
                     part.transform,
                     GlobalTransform::default(),
-                    ChildOf(weapon_root),  // 直接設定父實體
+                    ChildOf(weapon_root), // 直接設定父實體
                 ));
             }
         }
@@ -1230,8 +1271,12 @@ pub fn weapon_visibility_system(
     player_query: Query<&WeaponInventory, (With<Player>, Changed<WeaponInventory>)>,
     mut weapon_model_query: Query<(&WeaponModel, &mut Visibility)>,
 ) {
-    let Ok(inventory) = player_query.single() else { return; };
-    let Some(current_weapon) = inventory.current_weapon() else { return; };
+    let Ok(inventory) = player_query.single() else {
+        return;
+    };
+    let Some(current_weapon) = inventory.current_weapon() else {
+        return;
+    };
 
     update_weapon_visibility(current_weapon.stats.weapon_type, &mut weapon_model_query);
 }
@@ -1246,8 +1291,12 @@ pub fn weapon_visibility_init_system(
         return;
     }
 
-    let Ok(inventory) = player_query.single() else { return; };
-    let Some(current_weapon) = inventory.current_weapon() else { return; };
+    let Ok(inventory) = player_query.single() else {
+        return;
+    };
+    let Some(current_weapon) = inventory.current_weapon() else {
+        return;
+    };
 
     // 檢查是否有武器模型存在
     if weapon_model_query.iter().next().is_none() {
@@ -1302,15 +1351,21 @@ pub fn holding_pose_system(
     mut arm_query: Query<(&PlayerArm, &mut Transform), Without<PunchAnimation>>,
     input: Res<ShootingInput>,
 ) {
-    let Ok((inventory, children)) = player_query.single() else { return; };
-    let Some(weapon) = inventory.current_weapon() else { return; };
+    let Ok((inventory, children)) = player_query.single() else {
+        return;
+    };
+    let Some(weapon) = inventory.current_weapon() else {
+        return;
+    };
 
     // 使用 ShootingInput 中的 aim_pressed，確保系統順序正確
     let is_aiming = input.aim_pressed;
     let is_melee = weapon.stats.weapon_type.is_melee();
 
     for child in children.iter() {
-        let Ok((arm, mut transform)) = arm_query.get_mut(child) else { continue; };
+        let Ok((arm, mut transform)) = arm_query.get_mut(child) else {
+            continue;
+        };
 
         if arm.is_right {
             // 右手臂 - 主要持槍手
@@ -1322,14 +1377,14 @@ pub fn holding_pose_system(
                 // 瞄準姿勢：手臂向前伸直，抬槍瞄準
                 let aim_rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    1.4,   // X: 接近水平（稍微抬起）
+                    1.4, // X: 接近水平（稍微抬起）
                     0.0,
-                    0.0    // Z: 直的
+                    0.0, // Z: 直的
                 );
                 let aim_offset = Vec3::new(
-                    -0.05,  // 往身體中心靠一點
-                    -0.15,  // 手臂水平後的高度調整
-                    0.35    // 向前伸
+                    -0.05, // 往身體中心靠一點
+                    -0.15, // 手臂水平後的高度調整
+                    0.35,  // 向前伸
                 );
                 transform.translation = arm.rest_position + aim_offset;
                 transform.rotation = aim_rotation;
@@ -1337,14 +1392,14 @@ pub fn holding_pose_system(
                 // 待機持槍姿勢：手臂微彎，槍口朝下前方
                 let hold_rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    0.8,   // X: 稍微向前（約45度）
+                    0.8, // X: 稍微向前（約45度）
                     0.0,
-                    0.1    // Z: 稍微外傾
+                    0.1, // Z: 稍微外傾
                 );
                 let hold_offset = Vec3::new(
-                    -0.02,  // 往身體靠一點
-                    -0.08,  // 稍微下降
-                    0.12    // 稍微向前
+                    -0.02, // 往身體靠一點
+                    -0.08, // 稍微下降
+                    0.12,  // 稍微向前
                 );
                 transform.translation = arm.rest_position + hold_offset;
                 transform.rotation = hold_rotation;
@@ -1360,14 +1415,14 @@ pub fn holding_pose_system(
                 // 雙手持槍瞄準姿勢：左手支撐護木
                 let support_rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    1.3,    // X: 接近水平
+                    1.3, // X: 接近水平
                     0.0,
-                    -0.1    // Z: 稍微內傾
+                    -0.1, // Z: 稍微內傾
                 );
                 let support_offset = Vec3::new(
-                    -0.12,  // 往中間移動
-                    -0.12,  // 手臂水平後的高度調整
-                    0.38    // 向前伸（比右手更前，支撐護木）
+                    -0.12, // 往中間移動
+                    -0.12, // 手臂水平後的高度調整
+                    0.38,  // 向前伸（比右手更前，支撐護木）
                 );
                 transform.translation = arm.rest_position + support_offset;
                 transform.rotation = support_rotation;

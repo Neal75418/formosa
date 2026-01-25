@@ -12,6 +12,7 @@ pub use components::*;
 pub use systems::*;
 
 use bevy::prelude::*;
+use crate::core::InteractionSet;
 
 /// 經濟系統插件
 pub struct EconomyPlugin;
@@ -31,8 +32,8 @@ impl Plugin for EconomyPlugin {
             // 系統
             .add_systems(Update, (
                 sync_money_display,
-                handle_shop_interaction,
-                handle_atm_interaction,
+                handle_shop_interaction.in_set(InteractionSet::Economy),
+                handle_atm_interaction.in_set(InteractionSet::Economy),
                 process_transactions,
                 update_money_ui,
                 update_cash_pickups,

@@ -1,13 +1,17 @@
 //! 玩家系統
 
+use super::PlayerConfig;
+use super::{
+    ClimbState, DodgeState, DoubleTapTracker, Player, VehicleTransitionPhase,
+    VehicleTransitionState,
+};
+use crate::combat::{CombatState, PlayerCoverState, RespawnState};
+use crate::core::{GameState, InteractionState};
+use crate::pedestrian::Pedestrian;
+use crate::vehicle::{apply_vehicle_physics_mode, NpcVehicle, Vehicle, VehiclePhysicsMode};
+use crate::wanted::CrimeEvent;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *}; // 引入 Rapier 物理引擎類型 (RapierContext, QueryFilter 等)
-use super::{Player, DodgeState, DoubleTapTracker, VehicleTransitionState, VehicleTransitionPhase};
-use crate::core::GameState;
-use crate::vehicle::Vehicle;
-use crate::combat::{RespawnState, CombatState, PlayerCoverState};
-use crate::wanted::CrimeEvent;
-use crate::pedestrian::Pedestrian;
 
 /// 將 Rapier 的 Real 類型轉換為 f32
 /// 注意：bevy_rapier3d 0.32 的 Real 就是 f32，但因與 bevy::prelude::Real 衝突需明確轉換
@@ -30,7 +34,8 @@ pub fn player_input(
 
     if let Ok(mut player) = query.single_mut() {
         // 按住 Shift = 衝刺（更直覺的控制）
-        player.is_sprinting = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+        player.is_sprinting =
+            keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     }
 }
 
@@ -48,21 +53,29 @@ fn calculate_movement_input(
     }
 
     // WASD 基本移動
-    if keyboard.pressed(KeyCode::KeyW) { input.z -= 1.0; }
-    if keyboard.pressed(KeyCode::KeyS) { input.z += 1.0; }
-    if keyboard.pressed(KeyCode::KeyA) { input.x -= 1.0; }
-    if keyboard.pressed(KeyCode::KeyD) { input.x += 1.0; }
+    if keyboard.pressed(KeyCode::KeyW) {
+        input.z -= 1.0;
+    }
+    if keyboard.pressed(KeyCode::KeyS) {
+        input.z += 1.0;
+    }
+    if keyboard.pressed(KeyCode::KeyA) {
+        input.x -= 1.0;
+    }
+    if keyboard.pressed(KeyCode::KeyD) {
+        input.x += 1.0;
+    }
 
     // Q/E 斜向前進（左前方/右前方）
     // 掩體狀態下不處理（掩體系統用 Q/E 切換掩體位置）
     if !in_cover {
         if keyboard.pressed(KeyCode::KeyQ) {
-            input.z -= 1.0;  // 前
-            input.x -= 1.0;  // 左
+            input.z -= 1.0; // 前
+            input.x -= 1.0; // 左
         }
         if keyboard.pressed(KeyCode::KeyE) {
-            input.z -= 1.0;  // 前
-            input.x += 1.0;  // 右
+            input.z -= 1.0; // 前
+            input.x += 1.0; // 右
         }
     }
 
@@ -76,8 +89,8 @@ fn calculate_world_direction(input: Vec3, yaw: f32) -> Vec3 {
     (forward * (-input.z) + right * input.x).normalize()
 }
 
-/// 角色旋轉速度（越大越快，動作遊戲風格使用較高值）
-const ROTATION_SPEED: f32 = 25.0;
+// /// 角色旋轉速度 (Moved to Config)
+// const ROTATION_SPEED: f32 = 25.0;
 
 /// 更新角色旋轉
 /// - 向前走時：面向移動方向
@@ -89,9 +102,10 @@ fn update_character_rotation(
     is_aiming: bool,
     is_forward_movement: bool,
     dt: f32,
+    rotation_speed: f32,
 ) {
     // 動作遊戲風格：更快的旋轉響應
-    let rotation_factor = (ROTATION_SPEED * dt).min(1.0);
+    let rotation_factor = (rotation_speed * dt).min(1.0);
 
     if is_aiming || !is_forward_movement {
         // 瞄準時或後退/平移時：面向攝影機方向
@@ -99,7 +113,8 @@ fn update_character_rotation(
         transform.rotation = transform.rotation.slerp(target_rotation, rotation_factor);
     } else {
         // 向前走時：面向移動方向（模型前方是 +Z，需加 PI）
-        let target_rotation = Quat::from_rotation_y((-direction.x).atan2(-direction.z) + std::f32::consts::PI);
+        let target_rotation =
+            Quat::from_rotation_y((-direction.x).atan2(-direction.z) + std::f32::consts::PI);
         transform.rotation = transform.rotation.slerp(target_rotation, rotation_factor);
     }
 }
@@ -119,18 +134,28 @@ pub fn player_movement(
     respawn_state: Res<RespawnState>,
     combat_state: Res<CombatState>,
     camera_settings: Res<crate::core::CameraSettings>,
-    mut query: Query<(&mut Transform, &Player, &DodgeState, &PlayerCoverState, &mut KinematicCharacterController)>,
+    config: Res<PlayerConfig>,
+    mut query: Query<(
+        &mut Transform,
+        &Player,
+        &DodgeState,
+        &PlayerCoverState,
+        &ClimbState,
+        &mut KinematicCharacterController,
+    )>,
 ) {
     if respawn_state.is_dead || game_state.player_in_vehicle {
         return;
     }
 
-    let Ok((mut transform, player, dodge, cover_state, mut controller)) = query.single_mut() else {
+    let Ok((mut transform, player, dodge, cover_state, climb_state, mut controller)) =
+        query.single_mut()
+    else {
         return;
     };
 
-    // 閃避期間不處理普通移動
-    if dodge.is_dodging {
+    // 閃避或攀爬期間不處理普通移動
+    if dodge.is_dodging || climb_state.is_climbing() {
         return;
     }
 
@@ -152,10 +177,22 @@ pub fn player_movement(
     }
 
     let direction = calculate_world_direction(input.normalize(), yaw);
-    let speed = if player.is_sprinting { player.sprint_speed } else { player.speed };
+    let speed = if player.is_sprinting {
+        player.sprint_speed
+    } else {
+        player.speed
+    };
 
     controller.translation = Some(direction * speed * dt);
-    update_character_rotation(&mut transform, direction, yaw, combat_state.is_aiming, is_forward_movement, dt);
+    update_character_rotation(
+        &mut transform,
+        direction,
+        yaw,
+        combat_state.is_aiming,
+        is_forward_movement,
+        dt,
+        config.movement.rotation_speed,
+    );
 }
 
 /// 玩家跳躍
@@ -164,21 +201,40 @@ pub fn player_jump(
     time: Res<Time>,
     game_state: Res<GameState>,
     respawn_state: Res<RespawnState>,
-    mut query: Query<(&mut Transform, &mut Player)>,
+    config: Res<PlayerConfig>,
+    mut query: Query<(
+        &mut Player,
+        &ClimbState,
+        &mut KinematicCharacterController,
+        Option<&KinematicCharacterControllerOutput>,
+    )>,
 ) {
     // 死亡時或在車上時不處理跳躍
     if respawn_state.is_dead || game_state.player_in_vehicle {
         return;
     }
 
-    let Ok((mut transform, mut player)) = query.single_mut() else {
+    let Ok((mut player, climb_state, mut controller, controller_output)) = query.single_mut()
+    else {
         return;
     };
 
-    const GRAVITY: f32 = 30.0;
-    // 修正：碰撞體中心 Y = COLLIDER_HALF_HEIGHT + COLLIDER_RADIUS = 0.45 + 0.25 = 0.7
-    // 當腳踩在地面（Y=0）時，Transform 中心應在 Y=0.7
-    const GROUND_CENTER_Y: f32 = 0.7;
+    if climb_state.is_climbing() {
+        return;
+    }
+
+    let dt = time.delta_secs();
+
+    let output_grounded = controller_output
+        .map(|output| output.grounded)
+        .unwrap_or(player.is_grounded);
+
+    if output_grounded && player.vertical_velocity <= 0.0 {
+        player.is_grounded = true;
+        player.vertical_velocity = 0.0;
+    } else if !output_grounded {
+        player.is_grounded = false;
+    }
 
     if keyboard.just_pressed(KeyCode::Space) && player.is_grounded {
         player.vertical_velocity = player.jump_force;
@@ -186,56 +242,71 @@ pub fn player_jump(
     }
 
     if !player.is_grounded {
-        player.vertical_velocity -= GRAVITY * time.delta_secs();
-        // 終端速度限制，防止穿透地面
-        player.vertical_velocity = player.vertical_velocity.max(-50.0);
-        transform.translation.y += player.vertical_velocity * time.delta_secs();
+        player.vertical_velocity -= config.movement.gravity * dt;
+        // 終端速度限制，避免高速穿透
+        player.vertical_velocity = player
+            .vertical_velocity
+            .max(-config.movement.max_fall_speed);
 
-        if transform.translation.y <= GROUND_CENTER_Y {
-            transform.translation.y = GROUND_CENTER_Y;
-            player.vertical_velocity = 0.0;
-            player.is_grounded = true;
-        }
+        let mut translation = controller.translation.unwrap_or(Vec3::ZERO);
+        translation.y += player.vertical_velocity * dt;
+        controller.translation = Some(translation);
     }
 }
 
-/// 上下車（Tab 鍵）- GTA 5 風格動畫版
+/// 上下車（F 鍵）- GTA 5 風格動畫版
 pub fn enter_exit_vehicle(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut interaction: ResMut<InteractionState>,
     game_state: ResMut<GameState>,
     mut transition: ResMut<VehicleTransitionState>,
     player_query: Query<&mut Transform, (With<Player>, Without<Vehicle>)>,
     vehicle_query: Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
     _visibility_query: Query<&mut Visibility, With<Player>>,
     rapier_context: ReadRapierContext,
+    config: Res<PlayerConfig>,
 ) {
     // 如果正在動畫中，不處理輸入
     if transition.is_animating() {
         return;
     }
 
-    if !keyboard.just_pressed(KeyCode::Tab) {
+    if !interaction.can_interact() {
         return;
     }
 
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
 
     // 如果玩家在車上 -> 開始下車動畫
     if game_state.player_in_vehicle {
-        let Ok(rapier_ctx) = rapier_context.single() else { return; };
-        let Some(vehicle_entity) = game_state.current_vehicle else { return; };
-        let Ok((_, vehicle_transform, _)) = vehicle_query.get(vehicle_entity) else { return; };
+        let Ok(rapier_ctx) = rapier_context.single() else {
+            return;
+        };
+        let Some(vehicle_entity) = game_state.current_vehicle else {
+            return;
+        };
+        let Ok((_, vehicle_transform, _)) = vehicle_query.get(vehicle_entity) else {
+            return;
+        };
 
         // 計算下車位置
         let right = vehicle_transform.right();
         let left = -right;
-        let origin = vehicle_transform.translation + Vec3::new(0.0, 0.5, 0.0);
+        let origin = vehicle_transform.translation
+            + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
         let filter = QueryFilter::new().exclude_rigid_body(vehicle_entity);
 
         // 決定下車方向
-        let (exit_dir, from_right) = if rapier_ctx.cast_ray(origin, *right, 2.0 as RapierReal, true, filter).is_none() {
+        let (exit_dir, from_right) = if rapier_ctx
+            .cast_ray(origin, *right, 2.0 as RapierReal, true, filter)
+            .is_none()
+        {
             (*right, true)
-        } else if rapier_ctx.cast_ray(origin, *left, 2.0 as RapierReal, true, filter).is_none() {
+        } else if rapier_ctx
+            .cast_ray(origin, *left, 2.0 as RapierReal, true, filter)
+            .is_none()
+        {
             (*left, false)
         } else {
             (*right, true) // 預設右側
@@ -246,25 +317,39 @@ pub fn enter_exit_vehicle(
 
         // 開始下車動畫
         transition.start_exit(seat_pos, vehicle_entity, exit_pos, from_right);
+        interaction.consume();
     }
     // 如果玩家在車外 -> 開始上車動畫
     else {
-        let Ok(rapier_ctx) = rapier_context.single() else { return; };
+        let Ok(rapier_ctx) = rapier_context.single() else {
+            return;
+        };
         let player_pos = player_transform.translation;
-        let ray_origin = player_pos + Vec3::new(0.0, 0.5, 0.0);
+        let ray_origin = player_pos + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
 
         // 尋找最近且可到達的車輛
-        let nearest_vehicle = vehicle_query.iter()
+        let nearest_vehicle = vehicle_query
+            .iter()
             .filter_map(|(entity, transform, vehicle)| {
                 let distance = can_enter_vehicle(
-                    entity, vehicle, transform.translation, player_pos, ray_origin, &rapier_ctx
+                    entity,
+                    vehicle,
+                    transform.translation,
+                    player_pos,
+                    ray_origin,
+                    &rapier_ctx,
+                    &config,
                 )?;
                 Some((entity, transform.translation, distance))
             })
             .min_by(|(_, _, a), (_, _, b)| a.total_cmp(b));
 
-        let Some((vehicle_entity, vehicle_pos, _)) = nearest_vehicle else { return; };
-        let Ok((_, vehicle_transform, _)) = vehicle_query.get(vehicle_entity) else { return; };
+        let Some((vehicle_entity, vehicle_pos, _)) = nearest_vehicle else {
+            return;
+        };
+        let Ok((_, vehicle_transform, _)) = vehicle_query.get(vehicle_entity) else {
+            return;
+        };
 
         // 計算上車側（玩家面向車輛的哪一側）
         let to_vehicle = (vehicle_pos - player_pos).normalize();
@@ -272,68 +357,21 @@ pub fn enter_exit_vehicle(
         let from_right = to_vehicle.dot(*vehicle_right) > 0.0;
 
         // 門的位置（車輛側邊）
-        let door_offset = if from_right { *vehicle_right } else { -*vehicle_right } * 1.2;
+        let door_offset = if from_right {
+            *vehicle_right
+        } else {
+            -*vehicle_right
+        } * 1.2;
         let door_pos = vehicle_pos + door_offset;
 
         // 開始上車動畫
         transition.start_enter(player_pos, vehicle_entity, door_pos, from_right);
+        interaction.consume();
     }
 }
 
-
-/// 處理下車邏輯 (Helper)
-fn handle_vehicle_exit(
-    game_state: &mut ResMut<GameState>,
-    player_transform: &mut Transform,
-    vehicle_query: &mut Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
-    visibility_query: &mut Query<&mut Visibility, With<Player>>,
-    rapier_context: &RapierContext,
-) {
-    let Some(vehicle_entity) = game_state.current_vehicle else { return; };
-    let Ok((_, vehicle_transform, mut vehicle)) = vehicle_query.get_mut(vehicle_entity) else { return; };
-
-    // 智慧下車檢測參數
-    // let check_dist: f32 = 2.0; // Inlined below to avoid type issues
-    let exit_dist_normal = 2.5;
-    let exit_dist_blocked = 3.5;
-
-    let right = vehicle_transform.right();
-    let left = -right;
-    let up = vehicle_transform.up();
-    let origin = vehicle_transform.translation + Vec3::new(0.0, 0.5, 0.0);
-    
-    let filter = QueryFilter::new().exclude_rigid_body(vehicle_entity);
-
-    // 決定下車方向
-    // 使用 as RapierReal 強制轉型，解決 f32/f64 與 Real 的類型不匹配問題
-    let (exit_dir, valid_exit) = if rapier_context.cast_ray(origin, *right, 2.0 as RapierReal, true, filter).is_none() {
-        (*right, true)
-    } else if rapier_context.cast_ray(origin, *left, 2.0 as RapierReal, true, filter).is_none() {
-        (*left, true)
-    } else {
-        (*up, false)
-    };
-    
-    let exit_dist = if valid_exit { exit_dist_normal } else { exit_dist_blocked };
-    let exit_offset = exit_dir * exit_dist;
-    
-    player_transform.translation = vehicle_transform.translation + exit_offset;
-    // 修正：使用正確的碰撞體中心高度 (0.45 + 0.25 = 0.7)
-    player_transform.translation.y = 0.7; 
-    
-    vehicle.is_occupied = false;
-    vehicle.current_speed = 0.0;
-    
-    game_state.player_in_vehicle = false;
-    game_state.current_vehicle = None;
-    
-    if let Ok(mut visibility) = visibility_query.single_mut() {
-        *visibility = Visibility::Visible;
-    }
-}
-
-/// 上車距離常數
-const VEHICLE_ENTRY_DISTANCE: f32 = 4.0;
+// /// 上車距離常數 (Moved to Config)
+// const VEHICLE_ENTRY_DISTANCE: f32 = 4.0;
 
 /// 檢查到車輛的路徑是否暢通（射線檢測）
 fn is_path_clear_to_vehicle(
@@ -363,13 +401,14 @@ fn can_enter_vehicle(
     player_pos: Vec3,
     ray_origin: Vec3,
     rapier_context: &RapierContext,
+    config: &PlayerConfig,
 ) -> Option<f32> {
     if vehicle.is_occupied {
         return None;
     }
 
     let distance = player_pos.distance(vehicle_pos);
-    if distance >= VEHICLE_ENTRY_DISTANCE {
+    if distance >= config.interaction.vehicle_entry_distance {
         return None;
     }
 
@@ -378,41 +417,6 @@ fn can_enter_vehicle(
     }
 
     Some(distance)
-}
-
-/// 處理上車邏輯 (Helper)
-/// 包含射線檢測，防止穿牆上車
-fn handle_vehicle_entry(
-    game_state: &mut ResMut<GameState>,
-    player_transform: &Transform,
-    vehicle_query: &mut Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
-    visibility_query: &mut Query<&mut Visibility, With<Player>>,
-    rapier_context: &RapierContext,
-) {
-    let player_pos = player_transform.translation;
-    let ray_origin = player_pos + Vec3::new(0.0, 0.5, 0.0);
-
-    // 尋找最近且可到達的車輛
-    let nearest_vehicle = vehicle_query.iter()
-        .filter_map(|(entity, transform, vehicle)| {
-            let distance = can_enter_vehicle(
-                entity, vehicle, transform.translation, player_pos, ray_origin, rapier_context
-            )?;
-            Some((entity, distance))
-        })
-        .min_by(|(_, a), (_, b)| a.total_cmp(b));
-
-    // 上車
-    let Some((vehicle_entity, _)) = nearest_vehicle else { return; };
-    let Ok((_, _, mut vehicle)) = vehicle_query.get_mut(vehicle_entity) else { return; };
-
-    vehicle.is_occupied = true;
-    game_state.player_in_vehicle = true;
-    game_state.current_vehicle = Some(vehicle_entity);
-
-    if let Ok(mut visibility) = visibility_query.single_mut() {
-        *visibility = Visibility::Hidden;
-    }
 }
 
 // === 閃避系統 ===
@@ -432,7 +436,9 @@ pub fn dodge_detection_system(
         return;
     }
 
-    let Ok(mut dodge) = query.single_mut() else { return; };
+    let Ok(mut dodge) = query.single_mut() else {
+        return;
+    };
 
     // 正在閃避中則不檢測新的閃避
     if dodge.is_dodging {
@@ -465,11 +471,10 @@ pub fn dodge_detection_system(
 }
 
 /// 閃避狀態更新系統
-pub fn dodge_state_update_system(
-    time: Res<Time>,
-    mut query: Query<&mut DodgeState, With<Player>>,
-) {
-    let Ok(mut dodge) = query.single_mut() else { return; };
+pub fn dodge_state_update_system(time: Res<Time>, mut query: Query<&mut DodgeState, With<Player>>) {
+    let Ok(mut dodge) = query.single_mut() else {
+        return;
+    };
     dodge.update(time.delta_secs());
 }
 
@@ -485,7 +490,9 @@ pub fn dodge_movement_system(
         return;
     }
 
-    let Ok((dodge, mut controller)) = query.single_mut() else { return; };
+    let Ok((dodge, mut controller)) = query.single_mut() else {
+        return;
+    };
 
     if dodge.is_dodging {
         let velocity = dodge.get_dodge_velocity();
@@ -501,13 +508,16 @@ pub fn dodge_movement_system(
 /// 處理上下車動畫的位置插值和狀態轉換
 pub fn vehicle_transition_animation_system(
     time: Res<Time>,
+    mut commands: Commands,
     mut transition: ResMut<VehicleTransitionState>,
     mut game_state: ResMut<GameState>,
     mut player_query: Query<&mut Transform, (With<Player>, Without<Vehicle>)>,
     mut vehicle_query: Query<(&Transform, &mut Vehicle), Without<Player>>,
+    velocity_query: Query<&Velocity>,
     mut visibility_query: Query<&mut Visibility, With<Player>>,
     mut crime_events: MessageWriter<CrimeEvent>,
     pedestrian_query: Query<&Transform, (With<Pedestrian>, Without<Player>, Without<Vehicle>)>,
+    config: Res<PlayerConfig>,
 ) {
     if !transition.is_animating() {
         return;
@@ -516,14 +526,19 @@ pub fn vehicle_transition_animation_system(
     let dt = time.delta_secs();
     let should_advance = transition.update(dt);
 
-    let Ok(mut player_transform) = player_query.single_mut() else { return; };
+    let Ok(mut player_transform) = player_query.single_mut() else {
+        return;
+    };
     let Some(vehicle_entity) = transition.target_vehicle else {
         transition.reset();
         return;
     };
 
     // 取得車輛資訊
-    let vehicle_info = vehicle_query.get(vehicle_entity).ok().map(|(t, _)| t.translation);
+    let vehicle_info = vehicle_query
+        .get(vehicle_entity)
+        .ok()
+        .map(|(t, _)| t.translation);
     let Some(vehicle_pos) = vehicle_info else {
         transition.reset();
         return;
@@ -535,7 +550,9 @@ pub fn vehicle_transition_animation_system(
     match transition.phase {
         VehicleTransitionPhase::WalkingToVehicle => {
             // 玩家走向車門
-            let new_pos = transition.start_position.lerp(transition.target_position, progress);
+            let new_pos = transition
+                .start_position
+                .lerp(transition.target_position, progress);
             player_transform.translation = new_pos;
             player_transform.translation.y = 0.7; // 保持正確高度
 
@@ -572,7 +589,9 @@ pub fn vehicle_transition_animation_system(
         }
         VehicleTransitionPhase::ExitingVehicle => {
             // 玩家從座位移動到門外
-            let new_pos = transition.start_position.lerp(transition.target_position, progress);
+            let new_pos = transition
+                .start_position
+                .lerp(transition.target_position, progress);
             player_transform.translation = new_pos;
             player_transform.translation.y = 0.7;
             set_player_visibility(&mut visibility_query, true);
@@ -605,48 +624,85 @@ pub fn vehicle_transition_animation_system(
     match current_phase {
         VehicleTransitionPhase::ClosingDoor => {
             handle_enter_vehicle_complete(
-                vehicle_entity, &mut game_state, &mut vehicle_query,
-                &pedestrian_query, &mut crime_events,
+                vehicle_entity,
+                &mut commands,
+                &velocity_query,
+                &mut game_state,
+                &mut vehicle_query,
+                &pedestrian_query,
+                &mut crime_events,
+                &config,
             );
         }
         VehicleTransitionPhase::WalkingAway => {
-            handle_exit_vehicle_complete(vehicle_entity, &mut game_state, &mut vehicle_query);
+            handle_exit_vehicle_complete(
+                vehicle_entity,
+                &mut commands,
+                &mut game_state,
+                &mut vehicle_query,
+            );
         }
         _ => {}
     }
 }
 
 /// 設定玩家可見性
-fn set_player_visibility(visibility_query: &mut Query<&mut Visibility, With<Player>>, visible: bool) {
-    let Ok(mut vis) = visibility_query.single_mut() else { return };
-    *vis = if visible { Visibility::Visible } else { Visibility::Hidden };
+fn set_player_visibility(
+    visibility_query: &mut Query<&mut Visibility, With<Player>>,
+    visible: bool,
+) {
+    let Ok(mut vis) = visibility_query.single_mut() else {
+        return;
+    };
+    *vis = if visible {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
 }
 
 /// 檢查是否有目擊者（GTA 風格搶車犯罪判定）
 fn has_witness_nearby(
     vehicle_pos: Vec3,
     pedestrian_query: &Query<&Transform, (With<Pedestrian>, Without<Player>, Without<Vehicle>)>,
+    config: &PlayerConfig,
 ) -> bool {
-    const WITNESS_RANGE: f32 = 20.0;
-    pedestrian_query.iter().any(|ped_transform| {
-        ped_transform.translation.distance(vehicle_pos) < WITNESS_RANGE
-    })
+    let witness_range = config.interaction.witness_range;
+    pedestrian_query
+        .iter()
+        .any(|ped_transform| ped_transform.translation.distance(vehicle_pos) < witness_range)
 }
 
 /// 處理上車動畫完成
 fn handle_enter_vehicle_complete(
     vehicle_entity: Entity,
+    commands: &mut Commands,
+    velocity_query: &Query<&Velocity>,
     game_state: &mut GameState,
     vehicle_query: &mut Query<(&Transform, &mut Vehicle), Without<Player>>,
     pedestrian_query: &Query<&Transform, (With<Pedestrian>, Without<Player>, Without<Vehicle>)>,
     crime_events: &mut MessageWriter<CrimeEvent>,
+    config: &PlayerConfig,
 ) {
     if let Ok((vehicle_transform, mut vehicle)) = vehicle_query.get_mut(vehicle_entity) {
         let vehicle_pos = vehicle_transform.translation;
-        if has_witness_nearby(vehicle_pos, pedestrian_query) {
-            crime_events.write(CrimeEvent::VehicleTheft { position: vehicle_pos });
+        if has_witness_nearby(vehicle_pos, pedestrian_query, config) {
+            crime_events.write(CrimeEvent::VehicleTheft {
+                position: vehicle_pos,
+            });
         }
         vehicle.is_occupied = true;
+
+        let existing_velocity = velocity_query.get(vehicle_entity).ok();
+        apply_vehicle_physics_mode(
+            commands,
+            vehicle_entity,
+            VehiclePhysicsMode::Dynamic,
+            vehicle_transform,
+            &vehicle,
+            existing_velocity,
+        );
+        commands.entity(vehicle_entity).remove::<NpcVehicle>();
     }
     game_state.player_in_vehicle = true;
     game_state.current_vehicle = Some(vehicle_entity);
@@ -655,12 +711,21 @@ fn handle_enter_vehicle_complete(
 /// 處理下車動畫完成
 fn handle_exit_vehicle_complete(
     vehicle_entity: Entity,
+    commands: &mut Commands,
     game_state: &mut GameState,
     vehicle_query: &mut Query<(&Transform, &mut Vehicle), Without<Player>>,
 ) {
-    if let Ok((_, mut vehicle)) = vehicle_query.get_mut(vehicle_entity) {
+    if let Ok((vehicle_transform, mut vehicle)) = vehicle_query.get_mut(vehicle_entity) {
         vehicle.is_occupied = false;
         vehicle.current_speed = 0.0;
+        apply_vehicle_physics_mode(
+            commands,
+            vehicle_entity,
+            VehiclePhysicsMode::Kinematic,
+            vehicle_transform,
+            &vehicle,
+            None,
+        );
     }
     game_state.player_in_vehicle = false;
     game_state.current_vehicle = None;

@@ -7,6 +7,7 @@
 use bevy::prelude::*;
 
 use crate::ai::CoverPoint;
+use crate::core::safe_normalize;
 use crate::player::Player;
 
 // ============================================================================
@@ -87,11 +88,11 @@ impl PeekState {
         match self {
             PeekState::Hidden => Vec3::ZERO,
             PeekState::PeekingLeft => {
-                let left = cover_direction.cross(Vec3::Y).normalize();
+                let left = safe_normalize(cover_direction.cross(Vec3::Y));
                 left * PEEK_OFFSET
             }
             PeekState::PeekingRight => {
-                let right = Vec3::Y.cross(cover_direction).normalize();
+                let right = safe_normalize(Vec3::Y.cross(cover_direction));
                 right * PEEK_OFFSET
             }
             PeekState::PeekingUp => Vec3::Y * PEEK_OFFSET,
@@ -490,9 +491,9 @@ fn find_adjacent_cover(
 
     // 計算左/右方向
     let side_dir = if left_side {
-        current_point.cover_direction.cross(Vec3::Y).normalize()
+        safe_normalize(current_point.cover_direction.cross(Vec3::Y))
     } else {
-        Vec3::Y.cross(current_point.cover_direction).normalize()
+        safe_normalize(Vec3::Y.cross(current_point.cover_direction))
     };
 
     let mut best: Option<(Entity, f32)> = None;
@@ -508,7 +509,7 @@ fn find_adjacent_cover(
         }
 
         // 檢查是否在正確的方向
-        let to_cover = (transform.translation - current_transform.translation).normalize();
+        let to_cover = safe_normalize(transform.translation - current_transform.translation);
         let dot = side_dir.dot(to_cover);
 
         if dot > 0.3 {

@@ -63,6 +63,8 @@ pub struct PlayerSaveData {
     pub armor: f32,
     /// 現金
     pub cash: i32,
+    /// 聲望
+    pub respect: i32,
     /// 銀行存款
     pub bank: i32,
     /// 武器庫存
@@ -120,7 +122,12 @@ impl Default for WorldSaveData {
 /// 車輛改裝存檔資料
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct VehicleModificationSaveData {
-    /// 車輛實體索引（用於識別）
+    /// 車輛穩定 ID（新版存檔使用）
+    #[serde(default)]
+    pub vehicle_id: u64,
+    /// 車輛實體索引（舊版相容，已棄用）
+    #[serde(default)]
+    #[deprecated(note = "使用 vehicle_id 代替")]
     pub vehicle_index: u32,
     /// 引擎等級 (0=Stock, 1=Level1, 2=Level2, 3=Level3)
     pub engine_level: u8,
@@ -153,8 +160,14 @@ pub struct MissionSaveData {
     pub mission_ratings: Vec<(String, u8)>,
     /// 已解鎖的任務 ID
     pub unlocked_missions: Vec<String>,
+    /// 已解鎖的物品 ID
+    pub unlocked_items: Vec<String>,
+    /// 已解鎖的區域 ID
+    pub unlocked_areas: Vec<String>,
     /// NPC 好感度（NPC ID -> 好感度）
     pub npc_relationships: Vec<(String, i32)>,
+    /// 劇情旗標（Flag Name -> Value）
+    pub flags: Vec<(String, bool)>,
 }
 
 /// 遊戲統計資料

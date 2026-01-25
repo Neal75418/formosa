@@ -9,8 +9,7 @@ pub use components::*;
 pub use systems::*;
 
 use bevy::prelude::*;
-use crate::ui::UiState;
-use crate::core::{VehicleSpatialHash, PedestrianSpatialHash};
+use crate::core::{AppState, PedestrianSpatialHash, VehicleSpatialHash};
 
 /// 行人系統插件
 pub struct PedestrianPlugin;
@@ -35,7 +34,7 @@ impl Plugin for PedestrianPlugin {
             .add_systems(Update, (
                 update_vehicle_spatial_hash_system,
                 update_pedestrian_spatial_hash_system,
-            ).run_if(|ui: Res<UiState>| !ui.paused))
+            ).run_if(in_state(AppState::InGame)))
             // 更新系統 - 主要邏輯（暫停時跳過）
             .add_systems(Update, (
                 pedestrian_spawn_system,
@@ -43,37 +42,37 @@ impl Plugin for PedestrianPlugin {
                 pedestrian_reaction_system,
                 gunshot_tracking_system,
                 pedestrian_despawn_system,
-            ).chain().run_if(|ui: Res<UiState>| !ui.paused))
+            ).chain().run_if(in_state(AppState::InGame)))
             // 更新系統 - A* 尋路（暫停時跳過）
             .add_systems(Update, (
                 astar_path_calculation_system,
                 astar_movement_system,
-            ).run_if(|ui: Res<UiState>| !ui.paused))
+            ).run_if(in_state(AppState::InGame)))
             // 更新系統 - 日常行為（暫停時跳過）
             .add_systems(Update, (
                 daily_behavior_init_system,
                 daily_behavior_update_system,
                 behavior_animation_system,
-            ).run_if(|ui: Res<UiState>| !ui.paused))
+            ).run_if(in_state(AppState::InGame)))
             // 更新系統 - 動畫和碰撞（暫停時跳過）
             .add_systems(Update, (
                 pedestrian_walking_animation_system,
                 pedestrian_vehicle_collision_system,
                 pedestrian_hit_response_system,
-            ).run_if(|ui: Res<UiState>| !ui.paused))
+            ).run_if(in_state(AppState::InGame)))
             // 更新系統 - GTA 5 風格報警系統（暫停時跳過）
             .add_systems(Update, (
                 witness_crime_detection_system,
                 witness_phone_call_system,
                 witness_visual_system,
                 witness_icon_follow_system,
-            ).chain().run_if(|ui: Res<UiState>| !ui.paused))
+            ).chain().run_if(in_state(AppState::InGame)))
             // 更新系統 - GTA 5 風格群體恐慌傳播（暫停時跳過）
             .add_systems(Update, (
                 gunshot_panic_trigger_system,      // 槍聲觸發恐慌波
                 panic_wave_propagation_system,    // 恐慌波傳播
                 pedestrian_scream_system,         // 行人尖叫傳播
                 panic_flee_direction_system,      // 恐慌逃跑方向
-            ).chain().run_if(|ui: Res<UiState>| !ui.paused));
+            ).chain().run_if(in_state(AppState::InGame)));
     }
 }

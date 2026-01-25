@@ -231,8 +231,36 @@ pub struct SearchZone {
 #[derive(Component)]
 pub struct WantedHud;
 
-/// 單個星星組件
+/// 單個星星組件（GTA5 風格動畫）
 #[derive(Component)]
 pub struct WantedStar {
+    /// 星星索引 (0-4)
     pub index: u8,
+    /// 閃爍動畫計時器（獲得新星時觸發）
+    pub flash_timer: f32,
+    /// 縮放動畫相位
+    pub scale_phase: f32,
+    /// 是否正在獲得（漸入動畫）
+    pub is_gaining: bool,
+    /// 漸入進度 (0.0 ~ 1.0)
+    pub gain_progress: f32,
+}
+
+impl WantedStar {
+    pub fn new(index: u8) -> Self {
+        Self {
+            index,
+            flash_timer: 0.0,
+            scale_phase: index as f32 * 0.5,  // 錯開相位
+            is_gaining: false,
+            gain_progress: 1.0,
+        }
+    }
+
+    /// 觸發獲得動畫
+    pub fn trigger_gain(&mut self) {
+        self.flash_timer = 0.5;  // 0.5 秒閃爍
+        self.is_gaining = true;
+        self.gain_progress = 0.0;
+    }
 }

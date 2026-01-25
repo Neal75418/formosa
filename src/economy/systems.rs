@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 
-use crate::core::{PlayerStats, WorldTime};
+use crate::core::{InteractionState, PlayerStats, WorldTime};
 use crate::player::Player;
 use crate::ui::MoneyDisplay;
 
@@ -87,6 +87,7 @@ pub fn handle_shop_interaction(
     shop_inventory: Res<ShopInventory>,
     player_query: Query<&Transform, With<Player>>,
     shop_query: Query<(Entity, &Transform, &Shop, &Interactable)>,
+    mut interaction: ResMut<InteractionState>,
 ) {
     let Ok(player_transform) = player_query.single() else {
         return;
@@ -124,13 +125,15 @@ pub fn handle_shop_interaction(
             continue;
         }
 
-        // 按 E 開啟商店
-        if keyboard.just_pressed(KeyCode::KeyE) {
+        // 按 F 開啟商店
+        if interaction.can_interact() {
             menu_state.is_open = true;
             menu_state.current_shop = Some(entity);
             menu_state.shop_type = Some(shop.shop_type);
             menu_state.selected_index = 0;
+            interaction.consume();
             info!("開啟商店: {}", shop.name);
+            break;
         }
     }
 }
@@ -189,7 +192,7 @@ fn handle_shop_menu_input(
 
     handle_shop_navigation(keyboard, &mut menu_state.selected_index, items.len());
 
-    let purchase_pressed = keyboard.just_pressed(KeyCode::Enter) || keyboard.just_pressed(KeyCode::KeyE);
+    let purchase_pressed = keyboard.just_pressed(KeyCode::Enter);
     if purchase_pressed {
         if let Some(item) = items.get(menu_state.selected_index) {
             try_purchase_item(item, wallet, money_events);
@@ -209,6 +212,7 @@ pub fn handle_atm_interaction(
     mut money_events: MessageWriter<MoneyChangedEvent>,
     player_query: Query<&Transform, With<Player>>,
     atm_query: Query<(Entity, &Transform, &Atm, &Interactable)>,
+    mut interaction: ResMut<InteractionState>,
 ) {
     let Ok(player_transform) = player_query.single() else {
         return;
@@ -243,13 +247,15 @@ pub fn handle_atm_interaction(
             continue;
         }
 
-        // 按 E 開啟 ATM
-        if keyboard.just_pressed(KeyCode::KeyE) {
+        // 按 F 開啟 ATM
+        if interaction.can_interact() {
             menu_state.is_open = true;
             menu_state.current_atm = Some(entity);
             menu_state.mode = AtmMode::Main;
             menu_state.input_amount = 0;
+            interaction.consume();
             info!("開啟 ATM: {}", atm.name);
+            break;
         }
     }
 }

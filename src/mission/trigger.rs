@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::story_data::{DialogueId, NpcId, StoryMissionId};
+use crate::core::InteractionState; // Fix missing type
 
 /// 觸發器類型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,143 +65,205 @@ impl TriggerShape {
     }
 }
 
-/// 任務觸發點組件
+/// 觸發行為
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TriggerAction {
+    Mission(StoryMissionId),
+    Dialogue(DialogueId),
+    Area {
+        name: String,
+        enter_text: Option<String>,
+        exit_text: Option<String>,
+        is_objective: bool,
+    },
+    Custom(String),
+}
+
+impl Default for TriggerAction {
+    fn default() -> Self {
+        Self::Custom("Default".to_string())
+    }
+}
+
+/// 通用觸發器組件
 #[derive(Component, Debug, Clone)]
-pub struct MissionTrigger {
-    /// 關聯的任務 ID
-    pub mission_id: StoryMissionId,
-    /// 觸發器類型
+pub struct Trigger {
+    pub action: TriggerAction,
     pub trigger_type: TriggerType,
-    /// 觸發器形狀
     pub shape: TriggerShape,
-    /// 是否只觸發一次
     pub one_shot: bool,
-    /// 是否已觸發
     pub triggered: bool,
-    /// 是否啟用
     pub enabled: bool,
-    /// 顯示的提示文字
     pub prompt_text: Option<String>,
-    /// 顯示的任務名稱
-    pub mission_name: Option<String>,
-    /// 需要的劇情旗標
     pub required_flag: Option<String>,
 }
 
-impl Default for MissionTrigger {
+impl Default for Trigger {
     fn default() -> Self {
         Self {
-            mission_id: 0,
-            trigger_type: TriggerType::OnInteract,
+            action: TriggerAction::default(),
+            trigger_type: TriggerType::OnEnter,
             shape: TriggerShape::Circle(3.0),
             one_shot: false,
             triggered: false,
             enabled: true,
-            prompt_text: Some("按 F 開始任務".to_string()),
-            mission_name: None,
+            prompt_text: None,
             required_flag: None,
         }
     }
 }
 
-impl MissionTrigger {
-    /// 創建新的任務觸發點
-    pub fn new(mission_id: StoryMissionId) -> Self {
+impl Trigger {
+    pub fn new(action: TriggerAction) -> Self {
         Self {
-            mission_id,
+            action,
             ..Default::default()
         }
     }
 
-    /// 設置觸發類型
-    pub fn with_trigger_type(mut self, trigger_type: TriggerType) -> Self {
+    pub fn with_type(mut self, trigger_type: TriggerType) -> Self {
         self.trigger_type = trigger_type;
         self
     }
 
-    /// 設置形狀
     pub fn with_shape(mut self, shape: TriggerShape) -> Self {
         self.shape = shape;
         self
     }
 
-    /// 設置為一次性觸發
     pub fn one_shot(mut self) -> Self {
         self.one_shot = true;
         self
     }
 
-    /// 設置提示文字
-    pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
-        self.prompt_text = Some(prompt.into());
+    pub fn with_prompt(mut self, text: impl Into<String>) -> Self {
+        self.prompt_text = Some(text.into());
         self
     }
 
-    /// 設置任務名稱
-    pub fn with_mission_name(mut self, name: impl Into<String>) -> Self {
-        self.mission_name = Some(name.into());
-        self
-    }
-
-    /// 設置需要的旗標
     pub fn requires_flag(mut self, flag: impl Into<String>) -> Self {
         self.required_flag = Some(flag.into());
         self
     }
 }
 
-/// 對話觸發點組件
-#[derive(Component, Debug, Clone)]
-pub struct DialogueTrigger {
-    /// 對話樹 ID
-    pub dialogue_id: DialogueId,
-    /// 觸發器類型
-    pub trigger_type: TriggerType,
-    /// 觸發器形狀
-    pub shape: TriggerShape,
-    /// 是否只觸發一次
-    pub one_shot: bool,
-    /// 是否已觸發
-    pub triggered: bool,
-    /// 是否啟用
-    pub enabled: bool,
-    /// 顯示的提示文字
-    pub prompt_text: Option<String>,
+/// 觸發器追蹤狀態（系統內部使用）
+#[derive(Default)]
+pub struct TriggerTrackingState {
+    pub was_inside: bool,
+    pub timer: f32,      // 用於延遲或停留計時
+    pub triggered: bool, // 用於延遲觸發標記
 }
 
-impl Default for DialogueTrigger {
-    fn default() -> Self {
-        Self {
-            dialogue_id: 0,
-            trigger_type: TriggerType::OnInteract,
-            shape: TriggerShape::Circle(2.0),
-            one_shot: false,
-            triggered: false,
-            enabled: true,
-            prompt_text: Some("按 F 交談".to_string()),
+/// 通用觸發器系統
+pub fn trigger_system(
+    time: Res<Time>,
+    player_query: Query<&Transform, With<crate::player::Player>>,
+    mut trigger_query: Query<(Entity, &Transform, &mut Trigger)>,
+    mut events: MessageWriter<TriggerEvent>,
+    mut tracking: Local<std::collections::HashMap<Entity, TriggerTrackingState>>,
+    mut interaction: ResMut<InteractionState>,
+) {
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
+    let player_pos = player_transform.translation;
+    let delta_ms = time.delta_secs() * 1000.0;
+
+    for (entity, transform, mut trigger) in &mut trigger_query {
+        if !trigger.enabled || (trigger.triggered && trigger.one_shot) {
+            continue;
         }
-    }
-}
 
-impl DialogueTrigger {
-    /// 創建新的對話觸發點
-    pub fn new(dialogue_id: DialogueId) -> Self {
-        Self {
-            dialogue_id,
-            ..Default::default()
+        // 旗標檢查由監聽者處理
+
+        let track = tracking.entry(entity).or_default();
+        let in_range = trigger.shape.contains(transform.translation, player_pos);
+
+        // 構造事件類型
+        let event_type = match &trigger.action {
+            TriggerAction::Mission(id) => TriggerEventType::Mission(*id),
+            TriggerAction::Dialogue(id) => TriggerEventType::Dialogue(*id),
+            TriggerAction::Area { .. } => TriggerEventType::Area,
+            TriggerAction::Custom(_) => TriggerEventType::Area, // 暫時映射
+        };
+
+        // 處理進入/離開狀態
+        if in_range && !track.was_inside {
+            // 剛進入
+            match trigger.trigger_type {
+                TriggerType::OnEnter => {
+                    trigger.triggered = trigger.one_shot;
+                    events.write(TriggerEvent::PlayerEntered {
+                        entity,
+                        trigger_type: event_type,
+                    });
+                }
+                TriggerType::OnEnterDelayed { .. } => {
+                    track.timer = 0.0;
+                    track.triggered = false;
+                }
+                _ => {}
+            }
+        } else if !in_range && track.was_inside {
+            // 剛離開
+            if matches!(trigger.trigger_type, TriggerType::OnExit) {
+                trigger.triggered = trigger.one_shot;
+                events.write(TriggerEvent::PlayerExited {
+                    entity,
+                    trigger_type: event_type,
+                });
+            }
+            // 重置計時器
+            track.timer = 0.0;
+            track.triggered = false;
         }
-    }
 
-    /// 設置為一次性觸發
-    pub fn one_shot(mut self) -> Self {
-        self.one_shot = true;
-        self
-    }
+        // 處理持續狀態
+        if in_range {
+            match trigger.trigger_type {
+                TriggerType::OnInteract => {
+                    if interaction.can_interact() {
+                        trigger.triggered = trigger.one_shot;
+                        events.write(TriggerEvent::PlayerInteracted {
+                            entity,
+                            trigger_type: event_type,
+                        });
+                        interaction.consume();
+                    }
+                }
+                TriggerType::OnEnterDelayed { delay } => {
+                    if !track.triggered {
+                        track.timer += delta_ms;
+                        if track.timer >= delay as f32 {
+                            track.triggered = true;
+                            trigger.triggered = trigger.one_shot;
+                            events.write(TriggerEvent::PlayerEntered {
+                                entity,
+                                trigger_type: event_type,
+                            });
+                        }
+                    }
+                }
+                TriggerType::OnStay { duration } => {
+                    if !track.triggered {
+                        track.timer += delta_ms;
+                        if track.timer >= duration as f32 {
+                            track.triggered = true;
+                            trigger.triggered = trigger.one_shot;
+                            events.write(TriggerEvent::PlayerStayed {
+                                entity,
+                                trigger_type: event_type,
+                                duration: track.timer / 1000.0,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
 
-    /// 設置提示文字
-    pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
-        self.prompt_text = Some(prompt.into());
-        self
+        track.was_inside = in_range;
     }
 }
 
@@ -294,12 +357,12 @@ impl NpcMarkerType {
     pub fn color(&self) -> Color {
         match self {
             Self::None => Color::NONE,
-            Self::Mission => Color::srgb(1.0, 0.9, 0.0),        // 黃色
+            Self::Mission => Color::srgb(1.0, 0.9, 0.0), // 黃色
             Self::MissionInProgress => Color::srgb(1.0, 0.8, 0.0),
             Self::MissionComplete => Color::srgb(0.6, 0.6, 0.6), // 灰色
-            Self::Dialogue => Color::srgb(0.3, 0.7, 1.0),       // 藍色
-            Self::Shop => Color::srgb(0.2, 0.8, 0.2),           // 綠色
-            Self::Hostile => Color::srgb(1.0, 0.2, 0.2),        // 紅色
+            Self::Dialogue => Color::srgb(0.3, 0.7, 1.0),        // 藍色
+            Self::Shop => Color::srgb(0.2, 0.8, 0.2),            // 綠色
+            Self::Hostile => Color::srgb(1.0, 0.2, 0.2),         // 紅色
         }
     }
 
@@ -314,66 +377,6 @@ impl NpcMarkerType {
             Self::Shop => "$",
             Self::Hostile => "!",
         }
-    }
-}
-
-/// 區域觸發點組件（用於目標區域）
-#[derive(Component, Debug, Clone)]
-pub struct AreaTrigger {
-    /// 區域名稱
-    pub name: String,
-    /// 觸發器形狀
-    pub shape: TriggerShape,
-    /// 是否是任務目標區域
-    pub is_objective: bool,
-    /// 關聯的任務 ID
-    pub mission_id: Option<StoryMissionId>,
-    /// 進入時顯示的文字
-    pub enter_text: Option<String>,
-    /// 離開時顯示的文字
-    pub exit_text: Option<String>,
-    /// 玩家是否在區域內
-    pub player_inside: bool,
-    /// 停留時間（秒）
-    pub stay_duration: f32,
-}
-
-impl Default for AreaTrigger {
-    fn default() -> Self {
-        Self {
-            name: "區域".to_string(),
-            shape: TriggerShape::Circle(10.0),
-            is_objective: false,
-            mission_id: None,
-            enter_text: None,
-            exit_text: None,
-            player_inside: false,
-            stay_duration: 0.0,
-        }
-    }
-}
-
-impl AreaTrigger {
-    /// 創建新的區域觸發點
-    pub fn new(name: impl Into<String>, radius: f32) -> Self {
-        Self {
-            name: name.into(),
-            shape: TriggerShape::Circle(radius),
-            ..Default::default()
-        }
-    }
-
-    /// 設置為任務目標區域
-    pub fn with_objective(mut self, mission_id: StoryMissionId) -> Self {
-        self.is_objective = true;
-        self.mission_id = Some(mission_id);
-        self
-    }
-
-    /// 設置進入提示
-    pub fn with_enter_text(mut self, text: impl Into<String>) -> Self {
-        self.enter_text = Some(text.into());
-        self
     }
 }
 

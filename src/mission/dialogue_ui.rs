@@ -6,6 +6,10 @@ use bevy::prelude::*;
 
 use super::dialogue::*;
 use super::dialogue_systems::*;
+use super::economy::RespectManager;
+use super::relationship::RelationshipManager;
+use super::unlocks::UnlockManager;
+use crate::economy::PlayerWallet;
 
 // ============================================================================
 // 顏色常數
@@ -23,18 +27,17 @@ pub struct DialogueUIPlugin;
 
 impl Plugin for DialogueUIPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_dialogue_ui)
-            .add_systems(
-                Update,
-                (
-                    update_dialogue_ui_visibility,
-                    update_dialogue_text,
-                    update_dialogue_speaker,
-                    update_dialogue_choices,
-                    choice_button_interaction, // 滑鼠點擊選項處理
-                )
-                    .chain(),
-            );
+        app.add_systems(Startup, setup_dialogue_ui).add_systems(
+            Update,
+            (
+                update_dialogue_ui_visibility,
+                update_dialogue_text,
+                update_dialogue_speaker,
+                update_dialogue_choices,
+                choice_button_interaction, // 滑鼠點擊選項處理
+            )
+                .chain(),
+        );
     }
 }
 
@@ -139,13 +142,11 @@ fn setup_dialogue_ui(mut commands: Commands) {
 
                     // 文字區域（右側）
                     parent
-                        .spawn((
-                            Node {
-                                flex_direction: FlexDirection::Column,
-                                flex_grow: 1.0,
-                                ..default()
-                            },
-                        ))
+                        .spawn((Node {
+                            flex_direction: FlexDirection::Column,
+                            flex_grow: 1.0,
+                            ..default()
+                        },))
                         .with_children(|parent| {
                             // 說話者名稱
                             parent.spawn((
@@ -369,7 +370,14 @@ fn update_dialogue_choices(
     dialogue_state: Res<DialogueState>,
     database: Res<DialogueDatabase>,
     story_manager: Res<super::story_manager::StoryMissionManager>,
-    mut choices_container_query: Query<&mut Visibility, (With<ChoicesContainer>, Without<ChoiceButton>)>,
+    wallet: Res<PlayerWallet>,
+    _respect: Res<RespectManager>,
+    unlocks: Res<UnlockManager>,
+    relationship: Res<RelationshipManager>,
+    mut choices_container_query: Query<
+        &mut Visibility,
+        (With<ChoicesContainer>, Without<ChoiceButton>),
+    >,
     mut choice_button_query: Query<(&ChoiceButton, &mut Visibility), Without<ChoicesContainer>>,
     mut choice_text_query: Query<(&ChoiceText, &mut Text)>,
 ) {
@@ -396,7 +404,7 @@ fn update_dialogue_choices(
     };
 
     // 取得有效選項
-    let valid_choices = get_valid_choices(node, &story_manager);
+    let valid_choices = get_valid_choices(node, &story_manager, &wallet, &unlocks, &relationship);
 
     if valid_choices.is_empty() {
         *container_vis = Visibility::Hidden;
@@ -437,6 +445,10 @@ pub fn choice_button_interaction(
     dialogue_state: Res<DialogueState>,
     database: Res<DialogueDatabase>,
     mut story_manager: ResMut<super::story_manager::StoryMissionManager>,
+    mut wallet: ResMut<PlayerWallet>,
+    _respect: ResMut<RespectManager>,
+    mut unlocks: ResMut<UnlockManager>,
+    mut relationship: ResMut<RelationshipManager>,
     mut events: MessageWriter<DialogueEvent>,
 ) {
     // 早期返回：沒有按鈕互動變化
@@ -461,7 +473,7 @@ pub fn choice_button_interaction(
         return;
     };
 
-    let valid_choices = get_valid_choices(node, &story_manager);
+    let valid_choices = get_valid_choices(node, &story_manager, &wallet, &unlocks, &relationship);
 
     for (interaction, button, mut bg_color) in &mut interaction_query {
         if button.index >= valid_choices.len() {
@@ -474,11 +486,23 @@ pub fn choice_button_interaction(
                 let choice = valid_choices[button.index];
 
                 // 處理後果
-                process_dialogue_consequences(&choice.consequences, &mut story_manager);
+                process_dialogue_consequences(
+                    &choice.consequences,
+                    &mut story_manager,
+                    &mut wallet,
+                    &mut unlocks,
+                    &mut relationship,
+                );
 
                 // 跳轉或結束
                 if choice.ends_dialogue {
-                    process_dialogue_consequences(&tree.on_complete, &mut story_manager);
+                    process_dialogue_consequences(
+                        &tree.on_complete,
+                        &mut story_manager,
+                        &mut wallet,
+                        &mut unlocks,
+                        &mut relationship,
+                    );
                     events.write(DialogueEvent::Completed(active.dialogue_id));
                     events.write(DialogueEvent::End);
                 } else if let Some(next_node) = choice.next_node {

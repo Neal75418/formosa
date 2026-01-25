@@ -450,17 +450,7 @@ pub fn skeletal_ragdoll_update_system(
         ragdoll.lifetime += dt;
 
         // 檢查所有部位是否靜止
-        let mut all_settled = true;
-        let mut valid_parts = 0;
-
-        for &part_entity in &ragdoll.body_parts {
-            if let Ok(velocity) = part_velocity_query.get(part_entity) {
-                valid_parts += 1;
-                if velocity.linvel.length() > 0.3 {
-                    all_settled = false;
-                }
-            }
-        }
+        let (all_settled, valid_parts) = check_ragdoll_settled(&ragdoll, &part_velocity_query);
 
         // 如果所有部位靜止超過 1 秒，加速生命週期
         if all_settled && ragdoll.lifetime > 1.0 && valid_parts > 0 {
@@ -469,15 +459,37 @@ pub fn skeletal_ragdoll_update_system(
 
         // 超時移除
         if ragdoll.lifetime >= ragdoll.max_lifetime {
-            // 移除所有身體部位
-            for &part_entity in &ragdoll.body_parts {
-                if let Ok(mut entity_commands) = commands.get_entity(part_entity) {
-                    entity_commands.despawn();
-                }
-            }
-            commands.entity(entity).despawn();
+            despawn_ragdoll(&mut commands, entity, &ragdoll);
         }
     }
+}
+
+fn check_ragdoll_settled(
+    ragdoll: &SkeletalRagdoll,
+    part_velocity_query: &Query<&Velocity, With<RagdollPart>>,
+) -> (bool, u32) {
+    let mut all_settled = true;
+    let mut valid_parts = 0;
+
+    for &part_entity in &ragdoll.body_parts {
+        if let Ok(velocity) = part_velocity_query.get(part_entity) {
+            valid_parts += 1;
+            if velocity.linvel.length() > 0.3 {
+                all_settled = false;
+            }
+        }
+    }
+    (all_settled, valid_parts)
+}
+
+fn despawn_ragdoll(commands: &mut Commands, entity: Entity, ragdoll: &SkeletalRagdoll) {
+    // 移除所有身體部位
+    for &part_entity in &ragdoll.body_parts {
+        if let Ok(mut entity_commands) = commands.get_entity(part_entity) {
+            entity_commands.despawn();
+        }
+    }
+    commands.entity(entity).despawn();
 }
 
 /// 骨骼布娃娃視覺淡出系統

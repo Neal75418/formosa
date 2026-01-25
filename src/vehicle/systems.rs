@@ -6,6 +6,7 @@ use super::{
     VehicleEffectTracker, VehicleEffectVisuals, VehicleId, VehicleModifications,
     VehiclePhysicsMode, VehicleType, VehicleVisualRoot,
 };
+use crate::core::math::look_rotation_y_flat;
 use crate::core::{
     GameState, WeatherState, WeatherType, COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC,
     COLLISION_GROUP_VEHICLE,
@@ -166,90 +167,30 @@ pub fn vehicle_acceleration_system(
     };
 
     let dt = time.delta_secs();
-
-    // Mods
-    let (accel_mod, speed_mod, _, brake_mod, traction_mod) = if let Some(m) = mods {
-        (
-            m.engine.multiplier(),
-            m.transmission.multiplier(),
-            m.suspension.multiplier(),
-            m.brakes.multiplier(),
-            m.tires.multiplier(),
-        )
-    } else {
-        (1.0, 1.0, 1.0, 1.0, 1.0)
-    };
-
-    let nitro_mult = if let Some(n) = nitro {
-        if n.is_active {
-            n.boost_multiplier
-        } else {
-            1.0
-        }
-    } else {
-        1.0
-    };
+    let modifiers = VehicleDynamicsModifiers::new(mods, nitro);
 
     // Weather Traction
     let weather_traction = get_weather_traction_factor(&weather, &config.weather);
-    let effective_traction = weather_traction * traction_mod;
+    let effective_traction = weather_traction * modifiers.traction;
+    let effective_max_speed = vehicle.max_speed * modifiers.speed;
 
-    let effective_max_speed = vehicle.max_speed * speed_mod;
-    let accel_mult = nitro_mult.max(1.0);
-
-    // Logic
     if vehicle.throttle_input > 0.0 {
-        // Acceleration
-        let accel_force = calculate_acceleration_force(&vehicle) * accel_mod;
-        let effective_accel =
-            accel_force * accel_mult * vehicle.throttle_input * effective_traction;
-
-        // Wheel spin logic
-        let slip_threshold = if effective_traction < config.physics.normal_traction_threshold {
-            config.physics.slip_speed_low_traction
-        } else {
-            config.physics.slip_speed_normal
-        };
-        if vehicle.current_speed < slip_threshold
-            && (accel_mult > 1.0 || effective_traction < config.physics.low_traction_threshold)
-        {
-            let slip_factor = if effective_traction < config.physics.low_traction_threshold {
-                config.physics.slip_factor_low_traction
-            } else {
-                config.physics.slip_factor_normal
-            };
-            vehicle.wheel_spin = (vehicle.wheel_spin + dt * slip_factor).min(1.0);
-            let grip =
-                effective_traction * (1.0 - vehicle.wheel_spin * config.physics.slip_grip_penalty);
-            vehicle.current_speed += effective_accel * grip * dt;
-        } else {
-            vehicle.wheel_spin =
-                (vehicle.wheel_spin - dt * config.physics.slip_recovery_rate).max(0.0);
-            vehicle.current_speed += effective_accel * dt;
-        }
+        handle_acceleration(
+            &mut vehicle,
+            dt,
+            &config.physics,
+            &modifiers,
+            effective_traction,
+        );
     } else if vehicle.brake_input > 0.0 && !vehicle.is_handbraking {
-        // Braking
-        if vehicle.current_speed > 0.5 {
-            let brake_decel =
-                vehicle.brake_force * brake_mod * vehicle.brake_input * effective_traction;
-            vehicle.current_speed -= brake_decel * dt;
-            vehicle.current_speed = vehicle.current_speed.max(0.0);
-        } else {
-            // Reverse
-            let reverse_accel =
-                calculate_acceleration_force(&vehicle) * accel_mod * 0.5 * effective_traction;
-            vehicle.current_speed -= reverse_accel * dt;
-        }
-    } else if vehicle.is_handbraking {
-        // Handbrake
-        let handbrake_decel = vehicle.handbrake_force
-            * config.physics.handbrake_decel_coefficient
-            * effective_traction;
-        vehicle.current_speed *= 1.0 - handbrake_decel;
+        handle_braking(&mut vehicle, dt, &modifiers, effective_traction);
     } else {
-        // Natural Deceleration
-        let drag = 1.0 + (vehicle.current_speed.abs() / effective_max_speed) * 0.5;
-        vehicle.current_speed *= 1.0 - 0.025 * drag;
+        handle_friction(
+            &mut vehicle,
+            &config.physics,
+            effective_traction,
+            effective_max_speed,
+        );
     }
 
     // Clamp Speed
@@ -261,6 +202,122 @@ pub fn vehicle_acceleration_system(
         && vehicle.throttle_input == 0.0
     {
         vehicle.current_speed = 0.0;
+    }
+}
+
+struct VehicleDynamicsModifiers {
+    accel: f32,
+    speed: f32,
+    brake: f32,
+    traction: f32,
+    nitro: f32,
+}
+
+impl VehicleDynamicsModifiers {
+    fn new(mods: Option<&VehicleModifications>, nitro: Option<&NitroBoost>) -> Self {
+        let (accel, speed, _, brake, traction) = if let Some(m) = mods {
+            (
+                m.engine.multiplier(),
+                m.transmission.multiplier(),
+                m.suspension.multiplier(),
+                m.brakes.multiplier(),
+                m.tires.multiplier(),
+            )
+        } else {
+            (1.0, 1.0, 1.0, 1.0, 1.0)
+        };
+
+        let nitro_mult = if let Some(n) = nitro {
+            if n.is_active {
+                n.boost_multiplier
+            } else {
+                1.0
+            }
+        } else {
+            1.0
+        };
+
+        Self {
+            accel,
+            speed,
+            brake,
+            traction,
+            nitro: nitro_mult,
+        }
+    }
+}
+
+fn handle_acceleration(
+    vehicle: &mut Vehicle,
+    dt: f32,
+    physics_config: &crate::vehicle::config::VehiclePhysicsConfig,
+    modifiers: &VehicleDynamicsModifiers,
+    effective_traction: f32,
+) {
+    let accel_mult = modifiers.nitro.max(1.0);
+    let accel_force = calculate_acceleration_force(vehicle) * modifiers.accel;
+    let effective_accel = accel_force * accel_mult * vehicle.throttle_input * effective_traction;
+
+    // Wheel spin logic
+    let slip_threshold = if effective_traction < physics_config.normal_traction_threshold {
+        physics_config.slip_speed_low_traction
+    } else {
+        physics_config.slip_speed_normal
+    };
+
+    if vehicle.current_speed < slip_threshold
+        && (accel_mult > 1.0 || effective_traction < physics_config.low_traction_threshold)
+    {
+        let slip_factor = if effective_traction < physics_config.low_traction_threshold {
+            physics_config.slip_factor_low_traction
+        } else {
+            physics_config.slip_factor_normal
+        };
+        vehicle.wheel_spin = (vehicle.wheel_spin + dt * slip_factor).min(1.0);
+        let grip =
+            effective_traction * (1.0 - vehicle.wheel_spin * physics_config.slip_grip_penalty);
+        vehicle.current_speed += effective_accel * grip * dt;
+    } else {
+        vehicle.wheel_spin = (vehicle.wheel_spin - dt * physics_config.slip_recovery_rate).max(0.0);
+        vehicle.current_speed += effective_accel * dt;
+    }
+}
+
+fn handle_braking(
+    vehicle: &mut Vehicle,
+    dt: f32,
+    modifiers: &VehicleDynamicsModifiers,
+    effective_traction: f32,
+) {
+    if vehicle.current_speed > 0.5 {
+        let brake_decel =
+            vehicle.brake_force * modifiers.brake * vehicle.brake_input * effective_traction;
+        vehicle.current_speed -= brake_decel * dt;
+        vehicle.current_speed = vehicle.current_speed.max(0.0);
+    } else {
+        // Reverse
+        let reverse_accel =
+            calculate_acceleration_force(vehicle) * modifiers.accel * 0.5 * effective_traction;
+        vehicle.current_speed -= reverse_accel * dt;
+    }
+}
+
+fn handle_friction(
+    vehicle: &mut Vehicle,
+    physics_config: &crate::vehicle::config::VehiclePhysicsConfig,
+    effective_traction: f32,
+    effective_max_speed: f32,
+) {
+    if vehicle.is_handbraking {
+        // Handbrake
+        let handbrake_decel = vehicle.handbrake_force
+            * physics_config.handbrake_decel_coefficient
+            * effective_traction;
+        vehicle.current_speed *= 1.0 - handbrake_decel;
+    } else {
+        // Natural Deceleration
+        let drag = 1.0 + (vehicle.current_speed.abs() / effective_max_speed) * 0.5;
+        vehicle.current_speed *= 1.0 - 0.025 * drag;
     }
 }
 
@@ -345,78 +402,121 @@ pub fn vehicle_drift_system(
     };
 
     let dt = time.delta_secs();
-    let traction_mod = if let Some(m) = mods {
-        m.tires.multiplier()
-    } else {
-        1.0
-    };
-    let weather_traction = get_weather_traction_factor(&weather, &config.weather);
-    let effective_traction = weather_traction * traction_mod;
+    let effective_traction = calculate_effective_traction(&weather, &config, mods);
+    let params = DriftPhysicsParams::new(&config.physics, effective_traction);
 
-    let drift_speed_threshold = if effective_traction < config.physics.normal_traction_threshold {
-        config.physics.drift_speed_threshold_low_traction
-    } else {
-        config.physics.drift_speed_threshold_normal
-    };
-
-    if vehicle.is_handbraking && vehicle.current_speed.abs() > drift_speed_threshold {
-        // Handbrake trigger
-        let drift_amplifier = if effective_traction < config.physics.normal_traction_threshold {
-            config.physics.drift_amplifier_low_traction
-        } else {
-            config.physics.drift_amplifier_normal
-        };
-        vehicle.drift_angle +=
-            vehicle.steer_input * dt * config.physics.drift_angle_rate * drift_amplifier;
-        vehicle.drift_angle = vehicle.drift_angle.clamp(
-            -config.physics.max_drift_angle,
-            config.physics.max_drift_angle,
-        );
-        vehicle.is_drifting = vehicle.drift_angle.abs() > vehicle.drift_threshold;
+    if vehicle.is_handbraking && vehicle.current_speed.abs() > params.speed_threshold {
+        handle_drift_start(&mut vehicle, dt, &config.physics, params.amplifier);
     } else if vehicle.is_drifting {
-        // Active drift
-        let counter = -vehicle.drift_angle
-            * (1.0 - vehicle.drift_grip * effective_traction)
-            * dt
-            * config.physics.drift_counter_force_rate;
-        vehicle.drift_angle += counter;
-
-        // Counter steer
-        if vehicle.steer_input != 0.0
-            && vehicle.steer_input.signum() == -vehicle.drift_angle.signum()
-        {
-            vehicle.drift_angle += vehicle.steer_input
-                * vehicle.counter_steer_assist
-                * dt
-                * config.physics.counter_steer_rate;
-        }
-
-        // End condition
-        let end_speed = if effective_traction < config.physics.normal_traction_threshold {
-            config.physics.drift_end_speed_low_traction
-        } else {
-            config.physics.drift_end_speed_normal
-        };
-        if vehicle.drift_angle.abs() < config.physics.drift_end_angle_threshold
-            || vehicle.current_speed.abs() < end_speed
-        {
-            vehicle.is_drifting = false;
-            vehicle.drift_angle = 0.0;
-        } else {
-            // Speed loss
-            let drift_speed_loss = vehicle.drift_angle.abs()
-                * (1.0 - vehicle.drift_grip)
-                * effective_traction
-                * dt
-                * config.physics.drift_speed_loss_rate;
-            vehicle.current_speed *= 1.0 - drift_speed_loss;
-        }
+        handle_active_drift(
+            &mut vehicle,
+            dt,
+            &config.physics,
+            effective_traction,
+            params.end_speed,
+        );
     } else {
-        // Drift decay
-        vehicle.drift_angle *= 1.0 - dt * config.physics.drift_decay_rate;
-        if vehicle.drift_angle.abs() < config.physics.drift_angle_zero_threshold {
-            vehicle.drift_angle = 0.0;
+        handle_drift_decay(&mut vehicle, dt, &config.physics);
+    }
+}
+
+fn calculate_effective_traction(
+    weather: &WeatherState,
+    config: &VehicleConfig,
+    mods: Option<&VehicleModifications>,
+) -> f32 {
+    let traction_mod = mods.map_or(1.0, |m| m.tires.multiplier());
+    let weather_traction = get_weather_traction_factor(weather, &config.weather);
+    weather_traction * traction_mod
+}
+
+struct DriftPhysicsParams {
+    speed_threshold: f32,
+    amplifier: f32,
+    end_speed: f32,
+}
+
+impl DriftPhysicsParams {
+    fn new(physics_config: &crate::vehicle::config::VehiclePhysicsConfig, traction: f32) -> Self {
+        let low_traction = traction < physics_config.normal_traction_threshold;
+        Self {
+            speed_threshold: if low_traction {
+                physics_config.drift_speed_threshold_low_traction
+            } else {
+                physics_config.drift_speed_threshold_normal
+            },
+            amplifier: if low_traction {
+                physics_config.drift_amplifier_low_traction
+            } else {
+                physics_config.drift_amplifier_normal
+            },
+            end_speed: if low_traction {
+                physics_config.drift_end_speed_low_traction
+            } else {
+                physics_config.drift_end_speed_normal
+            },
         }
+    }
+}
+
+fn handle_drift_start(
+    vehicle: &mut Vehicle,
+    dt: f32,
+    config: &crate::vehicle::config::VehiclePhysicsConfig,
+    amplifier: f32,
+) {
+    vehicle.drift_angle += vehicle.steer_input * dt * config.drift_angle_rate * amplifier;
+    vehicle.drift_angle = vehicle
+        .drift_angle
+        .clamp(-config.max_drift_angle, config.max_drift_angle);
+    vehicle.is_drifting = vehicle.drift_angle.abs() > vehicle.drift_threshold;
+}
+
+fn handle_active_drift(
+    vehicle: &mut Vehicle,
+    dt: f32,
+    config: &crate::vehicle::config::VehiclePhysicsConfig,
+    traction: f32,
+    end_speed: f32,
+) {
+    // Apply counter force
+    let counter = -vehicle.drift_angle
+        * (1.0 - vehicle.drift_grip * traction)
+        * dt
+        * config.drift_counter_force_rate;
+    vehicle.drift_angle += counter;
+
+    // Apply counter steer assist
+    if vehicle.steer_input != 0.0 && vehicle.steer_input.signum() == -vehicle.drift_angle.signum() {
+        vehicle.drift_angle +=
+            vehicle.steer_input * vehicle.counter_steer_assist * dt * config.counter_steer_rate;
+    }
+
+    // Check end condition
+    if vehicle.drift_angle.abs() < config.drift_end_angle_threshold
+        || vehicle.current_speed.abs() < end_speed
+    {
+        vehicle.is_drifting = false;
+        vehicle.drift_angle = 0.0;
+    } else {
+        // Apply speed loss
+        let drift_speed_loss = vehicle.drift_angle.abs()
+            * (1.0 - vehicle.drift_grip)
+            * traction
+            * dt
+            * config.drift_speed_loss_rate;
+        vehicle.current_speed *= 1.0 - drift_speed_loss;
+    }
+}
+
+fn handle_drift_decay(
+    vehicle: &mut Vehicle,
+    dt: f32,
+    config: &crate::vehicle::config::VehiclePhysicsConfig,
+) {
+    vehicle.drift_angle *= 1.0 - dt * config.drift_decay_rate;
+    if vehicle.drift_angle.abs() < config.drift_angle_zero_threshold {
+        vehicle.drift_angle = 0.0;
     }
 }
 
@@ -665,7 +765,6 @@ fn update_npc_state_from_obstacle(
     dt: f32,
     config: &crate::vehicle::config::NpcDrivingConfig,
 ) {
-    // 簡單的狀態機邏輯
     npc.stuck_timer += dt;
 
     if let Some(distance) = check_obstacle(
@@ -675,27 +774,38 @@ fn update_npc_state_from_obstacle(
         rapier_context,
         config,
     ) {
-        if distance < config.obstacle_too_close_distance {
-            // 太近了，需要倒車或停車
-            if vehicle.current_speed < 1.0 {
-                if npc.stuck_timer > 2.0 {
-                    npc.state = NpcState::Reversing;
-                    npc.stuck_timer = 0.0;
-                } else {
-                    npc.state = NpcState::Stopped;
-                }
-            } else {
-                npc.state = NpcState::Braking;
-            }
-        } else if distance < config.obstacle_brake_distance {
-            // 距離還夠，煞車減速
-            npc.state = NpcState::Braking;
-        } else {
-            // 恢復巡航
-            npc.state = NpcState::Cruising;
+        let (new_state, reset_timer) =
+            determine_npc_reaction(distance, vehicle.current_speed, npc.stuck_timer, config);
+        npc.state = new_state;
+        if reset_timer {
+            npc.stuck_timer = 0.0;
         }
     } else {
         npc.state = NpcState::Cruising;
+    }
+}
+
+fn determine_npc_reaction(
+    distance: f32,
+    current_speed: f32,
+    stuck_timer: f32,
+    config: &crate::vehicle::config::NpcDrivingConfig,
+) -> (NpcState, bool) {
+    if distance < config.obstacle_too_close_distance {
+        // Too close, check if stuck
+        if current_speed < 1.0 {
+            if stuck_timer > 2.0 {
+                (NpcState::Reversing, true)
+            } else {
+                (NpcState::Stopped, false)
+            }
+        } else {
+            (NpcState::Braking, false)
+        }
+    } else if distance < config.obstacle_brake_distance {
+        (NpcState::Braking, false)
+    } else {
+        (NpcState::Cruising, false)
     }
 }
 
@@ -1330,11 +1440,7 @@ pub fn spawn_initial_traffic(
         // 計算初始朝向：面向下一個航點
         let next_pos = path[next_idx];
         let dir = (next_pos - *pos).normalize_or_zero();
-        let initial_rotation = if dir.length_squared() > 0.001 {
-            Quat::from_rotation_y((-dir.x).atan2(-dir.z))
-        } else {
-            Quat::IDENTITY
-        };
+        let initial_rotation = look_rotation_y_flat(dir);
 
         spawn_npc_vehicle(
             &mut commands,

@@ -4,14 +4,14 @@
 
 #![allow(dead_code)]
 
-mod resources;
 mod events;
+pub mod math;
+mod resources;
 mod spatial_hash;
-mod math;
 mod state;
 
-pub use resources::*;
 pub use events::*;
-pub use spatial_hash::*;
 pub use math::*;
+pub use resources::*;
+pub use spatial_hash::*;
 pub use state::*;

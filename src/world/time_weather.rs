@@ -1,11 +1,11 @@
 //! 日夜循環和天氣系統
 
-use bevy::prelude::*;
-use bevy::pbr::{DistanceFog, FogFalloff};
-use bevy_rapier3d::prelude::*;
-use crate::core::{WorldTime, WeatherState, WeatherType};
+use super::{BuildingWindow, Moon, NeonSign, StreetLight, Sun};
 use crate::camera::GameCamera;
-use super::{StreetLight, NeonSign, BuildingWindow, Sun, Moon};
+use crate::core::{WeatherState, WeatherType, WorldTime};
+use bevy::pbr::{DistanceFog, FogFalloff};
+use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 /// 窗戶更新計時器（效能優化：避免每幀更新）
 #[derive(Resource)]
@@ -18,10 +18,7 @@ impl Default for WindowUpdateTimer {
 }
 
 /// 更新世界時間
-pub fn update_world_time(
-    time: Res<Time>,
-    mut world_time: ResMut<WorldTime>,
-) {
+pub fn update_world_time(time: Res<Time>, mut world_time: ResMut<WorldTime>) {
     world_time.hour += time.delta_secs() * world_time.time_scale / 3600.0;
     if world_time.hour >= 24.0 {
         world_time.hour -= 24.0;
@@ -63,8 +60,8 @@ fn get_weather_light_factor(weather: &WeatherState) -> f32 {
         WeatherType::Cloudy => 0.6,
         WeatherType::Rainy => 0.4,
         WeatherType::Foggy => 0.5,
-        WeatherType::Stormy => 0.25,     // 暴風雨極暗
-        WeatherType::Sandstorm => 0.35,  // 沙塵暴遮蔽陽光
+        WeatherType::Stormy => 0.25,    // 暴風雨極暗
+        WeatherType::Sandstorm => 0.35, // 沙塵暴遮蔽陽光
     };
 
     if weather.is_transitioning {
@@ -88,11 +85,11 @@ fn adjust_hour_for_weather(hour: f32, weather: &WeatherState) -> f32 {
     // 陰雨天路燈提早開啟（模擬下午變暗）
     let hour_shift = match weather.weather_type {
         WeatherType::Clear => 0.0,
-        WeatherType::Cloudy => 2.0,      // 提早 2 小時
-        WeatherType::Rainy => 3.0,       // 提早 3 小時
-        WeatherType::Foggy => 2.5,       // 提早 2.5 小時
-        WeatherType::Stormy => 4.0,      // 暴風雨更早開燈
-        WeatherType::Sandstorm => 3.5,   // 沙塵暴影響能見度
+        WeatherType::Cloudy => 2.0,    // 提早 2 小時
+        WeatherType::Rainy => 3.0,     // 提早 3 小時
+        WeatherType::Foggy => 2.5,     // 提早 2.5 小時
+        WeatherType::Stormy => 4.0,    // 暴風雨更早開燈
+        WeatherType::Sandstorm => 3.5, // 沙塵暴影響能見度
     };
 
     // 只在白天時段調整
@@ -105,7 +102,11 @@ fn adjust_hour_for_weather(hour: f32, weather: &WeatherState) -> f32 {
 }
 
 /// 更新環境光（考慮天氣）
-fn update_ambient_light_with_weather(ambient: &mut AmbientLight, day_intensity: f32, weather_factor: f32) {
+fn update_ambient_light_with_weather(
+    ambient: &mut AmbientLight,
+    day_intensity: f32,
+    weather_factor: f32,
+) {
     ambient.color = Color::srgb(
         (0.1 + 0.4 * day_intensity) * weather_factor,
         (0.1 + 0.4 * day_intensity) * weather_factor,
@@ -121,11 +122,11 @@ fn calculate_day_intensity(hour: f32) -> f32 {
     }
 
     if hour < 8.0 {
-        (hour - 6.0) / 2.0  // 日出漸亮
+        (hour - 6.0) / 2.0 // 日出漸亮
     } else if hour > 16.0 {
-        (18.0 - hour) / 2.0  // 日落漸暗
+        (18.0 - hour) / 2.0 // 日落漸暗
     } else {
-        1.0  // 正午最亮
+        1.0 // 正午最亮
     }
 }
 
@@ -147,75 +148,21 @@ pub fn sun_moon_rotation_system(
     let hour = world_time.hour;
     let dt = time.delta_secs();
 
-    // 太陽在 6:00 從東方升起，18:00 從西方落下
-
-    // 更新太陽方向
+    // 1. 更新太陽
     for mut transform in sun_query.iter_mut() {
-        // 計算太陽高度角
-        // 6:00 和 18:00 時在地平線，12:00 時在最高點
-        let elevation = if (6.0..=18.0).contains(&hour) {
-            // 白天：正弦曲線從 0 到 π
-            let day_progress = (hour - 6.0) / 12.0;
-            (day_progress * std::f32::consts::PI).sin() * 1.2  // 1.2 rad ≈ 69° 最大仰角
-        } else {
-            // 夜晚：太陽在地平線下
-            -0.5  // 略低於地平線
-        };
-
-        // 方位角：東（6:00）→ 南（12:00）→ 西（18:00）
-        // 只在白天計算有效方位角，夜間保持最後位置
-        let azimuth = if (6.0..=18.0).contains(&hour) {
-            (hour - 6.0) / 12.0 * std::f32::consts::PI
-        } else if hour > 18.0 {
-            std::f32::consts::PI  // 日落後固定在西方
-        } else {
-            0.0  // 日出前固定在東方
-        };
-
-        // 設定太陽方向
-        // DirectionalLight 指向 -Z，所以需要旋轉使其指向地面
-        *transform = Transform::from_rotation(
-            Quat::from_euler(EulerRot::XYZ, -elevation, azimuth, 0.0)
-        );
+        *transform = Transform::from_rotation(calculate_sun_rotation(hour));
     }
 
-    // 月亮位置（與太陽大致相對）
-    // 月亮在天空中的軌道半徑
-    const MOON_ORBIT_RADIUS: f32 = 500.0;
-    const MOON_HEIGHT_OFFSET: f32 = 100.0;
-
+    // 2. 更新月亮
     for (mut moon_transform, mut moon) in moon_query.iter_mut() {
-        // 月亮與太陽相差約 12 小時（簡化模型）
-        let moon_hour = (hour + 12.0) % 24.0;
-
-        // 計算月亮在天空中的位置
-        let moon_elevation = if (6.0..=18.0).contains(&moon_hour) {
-            let night_progress = (moon_hour - 6.0) / 12.0;
-            (night_progress * std::f32::consts::PI).sin()
-        } else {
-            -0.3  // 白天在地平線下但不完全消失（可選：完全隱藏）
-        };
-
-        // 計算月亮 3D 位置
-        let moon_azimuth = (moon_hour - 6.0) / 12.0 * std::f32::consts::PI;
-        let moon_x = -MOON_ORBIT_RADIUS * moon_azimuth.sin();
-        let moon_z = -MOON_ORBIT_RADIUS * moon_azimuth.cos();
-        let moon_y = MOON_HEIGHT_OFFSET + MOON_ORBIT_RADIUS * moon_elevation * 0.5;
-
-        moon_transform.translation = Vec3::new(moon_x, moon_y, moon_z);
-
-        // 月亮始終面向原點（玩家通常在原點附近）
+        let (pos, elevation) = calculate_moon_position(hour);
+        moon_transform.translation = pos;
         moon_transform.look_at(Vec3::ZERO, Vec3::Y);
 
-        // 更新月亮發光強度（夜間更亮）
-        let night_intensity = if (18.0..=24.0).contains(&hour) || (0.0..=6.0).contains(&hour) {
-            1.0 + 0.5 * moon_elevation.max(0.0)  // 夜間增強
-        } else {
-            0.2  // 白天減弱
-        };
+        let night_intensity = calculate_moon_intensity(hour, elevation);
         moon.emissive_intensity = night_intensity;
 
-        // 更新月亮材質發光強度
+        // 更新月亮材質
         if let Ok(material_handle) = moon_material_query.single() {
             if let Some(material) = materials.get_mut(&material_handle.0) {
                 let base_emissive = LinearRgba::new(0.8, 0.8, 0.9, 1.0);
@@ -223,20 +170,82 @@ pub fn sun_moon_rotation_system(
             }
         }
 
-        // 簡單月相模擬（每 30 遊戲天循環一次）
-        // 使用 dt 確保幀率無關
-        // 30 天 = 30 * 24 * 3600 秒（遊戲時間）
-        // 但我們用 time_scale 調整，所以直接用 dt
-        let phase_speed = 1.0 / (30.0 * 24.0 * 60.0);  // 每遊戲分鐘的相位變化
-        moon.phase = (moon.phase + phase_speed * dt * world_time.time_scale) % 1.0;
+        // 更新月相
+        update_moon_phase(&mut moon, dt, world_time.time_scale);
     }
 }
 
+// === 日月輔助函數 ===
+
+/// 計算太陽旋轉 (基於時間)
+fn calculate_sun_rotation(hour: f32) -> Quat {
+    // 計算太陽高度角
+    // 6:00 和 18:00 時在地平線，12:00 時在最高點
+    let elevation = if (6.0..=18.0).contains(&hour) {
+        // 白天：正弦曲線從 0 到 π
+        let day_progress = (hour - 6.0) / 12.0;
+        (day_progress * std::f32::consts::PI).sin() * 1.2 // 1.2 rad ≈ 69° 最大仰角
+    } else {
+        // 夜晚：太陽在地平線下
+        -0.5 // 略低於地平線
+    };
+
+    // 方位角：東（6:00）→ 南（12:00）→ 西（18:00）
+    // 只在白天計算有效方位角，夜間保持最後位置
+    let azimuth = if (6.0..=18.0).contains(&hour) {
+        (hour - 6.0) / 12.0 * std::f32::consts::PI
+    } else if hour > 18.0 {
+        std::f32::consts::PI // 日落後固定在西方
+    } else {
+        0.0 // 日出前固定在東方
+    };
+
+    Quat::from_euler(EulerRot::XYZ, -elevation, azimuth, 0.0)
+}
+
+/// 計算月亮位置與高度角
+fn calculate_moon_position(hour: f32) -> (Vec3, f32) {
+    const MOON_ORBIT_RADIUS: f32 = 500.0;
+    const MOON_HEIGHT_OFFSET: f32 = 100.0;
+
+    // 月亮與太陽相差約 12 小時（簡化模型）
+    let moon_hour = (hour + 12.0) % 24.0;
+
+    // 計算月亮在天空中的位置
+    let moon_elevation = if (6.0..=18.0).contains(&moon_hour) {
+        let night_progress = (moon_hour - 6.0) / 12.0;
+        (night_progress * std::f32::consts::PI).sin()
+    } else {
+        -0.3 // 白天在地平線下但不完全消失
+    };
+
+    // 計算月亮 3D 位置
+    let moon_azimuth = (moon_hour - 6.0) / 12.0 * std::f32::consts::PI;
+    let moon_x = -MOON_ORBIT_RADIUS * moon_azimuth.sin();
+    let moon_z = -MOON_ORBIT_RADIUS * moon_azimuth.cos();
+    let moon_y = MOON_HEIGHT_OFFSET + MOON_ORBIT_RADIUS * moon_elevation * 0.5;
+
+    (Vec3::new(moon_x, moon_y, moon_z), moon_elevation)
+}
+
+/// 計算月亮發光強度
+fn calculate_moon_intensity(hour: f32, elevation: f32) -> f32 {
+    if (18.0..=24.0).contains(&hour) || (0.0..=6.0).contains(&hour) {
+        1.0 + 0.5 * elevation.max(0.0) // 夜間增強
+    } else {
+        0.2 // 白天減弱
+    }
+}
+
+/// 更新月相
+fn update_moon_phase(moon: &mut Moon, dt: f32, time_scale: f32) {
+    // 簡單月相模擬（每 30 遊戲天循環一次）
+    let phase_speed = 1.0 / (30.0 * 24.0 * 60.0);
+    moon.phase = (moon.phase + phase_speed * dt * time_scale) % 1.0;
+}
+
 /// 更新路燈開關
-fn update_street_lights(
-    street_lights: &mut Query<(&mut PointLight, &mut StreetLight)>,
-    hour: f32,
-) {
+fn update_street_lights(street_lights: &mut Query<(&mut PointLight, &mut StreetLight)>, hour: f32) {
     let should_be_on = !(6.0..=18.0).contains(&hour);
 
     for (mut light, mut street_light) in street_lights.iter_mut() {
@@ -252,7 +261,11 @@ fn update_street_lights(
 /// 計算夜晚亮度加成
 #[inline]
 fn get_night_boost(hour: f32) -> f32 {
-    if (6.0..=18.0).contains(&hour) { 0.8 } else { 1.5 }
+    if (6.0..=18.0).contains(&hour) {
+        0.8
+    } else {
+        1.5
+    }
 }
 
 /// 計算波形閃爍值
@@ -297,7 +310,9 @@ pub fn update_neon_signs(
     let mut rng = rand::rng();
 
     for (neon, material_handle) in &neon_query {
-        let Some(material) = materials.get_mut(&material_handle.0) else { continue };
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
 
         let flicker = calculate_neon_flicker(&mut rng, t, neon);
         let intensity = neon.base_intensity * flicker * night_boost;
@@ -318,10 +333,10 @@ pub fn update_neon_signs(
 #[inline]
 fn calculate_base_lit_chance(hour: f32) -> f32 {
     match () {
-        _ if (6.0..18.0).contains(&hour) => 0.1,   // 日間：10%
-        _ if (18.0..20.0).contains(&hour) => 0.6,  // 傍晚：60%
+        _ if (6.0..18.0).contains(&hour) => 0.1,  // 日間：10%
+        _ if (18.0..20.0).contains(&hour) => 0.6, // 傍晚：60%
         _ if (0.0..2.0).contains(&hour) || (22.0..24.0).contains(&hour) => 0.2, // 深夜：20%
-        _ => 0.4, // 一般夜晚：40%
+        _ => 0.4,                                 // 一般夜晚：40%
     }
 }
 
@@ -397,8 +412,8 @@ pub fn spawn_neon_sign(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     position: Vec3,
-    size: Vec3,        // (width, height, depth)
-    text: &str,        // 招牌文字（目前僅用於識別）
+    size: Vec3, // (width, height, depth)
+    text: &str, // 招牌文字（目前僅用於識別）
     neon_config: NeonSign,
 ) {
     let color = neon_config.color;
@@ -419,47 +434,48 @@ pub fn spawn_neon_sign(
     });
 
     // 生成招牌實體
-    commands.spawn((
-        Transform::from_translation(position),
-        GlobalTransform::default(),
-        Visibility::default(),
-        Name::new(format!("NeonSign_{}", text)),
-        // 招牌碰撞體
-        Collider::cuboid(size.x / 2.0 + 0.1, size.y / 2.0 + 0.05, size.z / 2.0 + 0.05),
-        RigidBody::Fixed,
-    ))
-    .with_children(|parent| {
-        // 底板（放在後面）
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(size.x + 0.2, size.y + 0.1, size.z))),
-            MeshMaterial3d(back_mat),
-            Transform::from_xyz(0.0, 0.0, -0.05),
+    commands
+        .spawn((
+            Transform::from_translation(position),
             GlobalTransform::default(),
-        ));
+            Visibility::default(),
+            Name::new(format!("NeonSign_{}", text)),
+            // 招牌碰撞體
+            Collider::cuboid(size.x / 2.0 + 0.1, size.y / 2.0 + 0.05, size.z / 2.0 + 0.05),
+            RigidBody::Fixed,
+        ))
+        .with_children(|parent| {
+            // 底板（放在後面）
+            parent.spawn((
+                Mesh3d(meshes.add(Cuboid::new(size.x + 0.2, size.y + 0.1, size.z))),
+                MeshMaterial3d(back_mat),
+                Transform::from_xyz(0.0, 0.0, -0.05),
+                GlobalTransform::default(),
+            ));
 
-        // 發光文字區（放在前面，與底板保持足夠距離）
-        parent.spawn((
-            Mesh3d(meshes.add(Cuboid::new(size.x, size.y, 0.05))),
-            MeshMaterial3d(neon_mat),
-            Transform::from_xyz(0.0, 0.0, size.z / 2.0 + 0.05),
-            GlobalTransform::default(),
-            neon_config,
-        ));
+            // 發光文字區（放在前面，與底板保持足夠距離）
+            parent.spawn((
+                Mesh3d(meshes.add(Cuboid::new(size.x, size.y, 0.05))),
+                MeshMaterial3d(neon_mat),
+                Transform::from_xyz(0.0, 0.0, size.z / 2.0 + 0.05),
+                GlobalTransform::default(),
+                neon_config,
+            ));
 
-        // 招牌光源（照亮周圍）
-        parent.spawn((
-            PointLight {
-                color,
-                intensity: 50000.0 * intensity / 8.0,
-                range: 15.0,
-                radius: 1.0,
-                shadows_enabled: false,
-                ..default()
-            },
-            Transform::from_xyz(0.0, 0.0, -1.0),
-            GlobalTransform::default(),
-        ));
-    });
+            // 招牌光源（照亮周圍）
+            parent.spawn((
+                PointLight {
+                    color,
+                    intensity: 50000.0 * intensity / 8.0,
+                    range: 15.0,
+                    radius: 1.0,
+                    shadows_enabled: false,
+                    ..default()
+                },
+                Transform::from_xyz(0.0, 0.0, -1.0),
+                GlobalTransform::default(),
+            ));
+        });
 }
 
 // === 天氣系統 ===
@@ -472,10 +488,7 @@ pub struct RainDrop {
 }
 
 /// 天氣過渡更新
-pub fn update_weather_transition(
-    time: Res<Time>,
-    mut weather: ResMut<WeatherState>,
-) {
+pub fn update_weather_transition(time: Res<Time>, mut weather: ResMut<WeatherState>) {
     weather.update_transition(time.delta_secs());
 }
 
@@ -487,7 +500,11 @@ pub fn weather_input_system(
     if keyboard.just_pressed(KeyCode::F1) {
         let next_weather = weather.weather_type.next();
         weather.start_transition(next_weather);
-        info!("🌤️ 天氣切換中: {} → {}", weather.weather_type.name(), next_weather.name());
+        info!(
+            "🌤️ 天氣切換中: {} → {}",
+            weather.weather_type.name(),
+            next_weather.name()
+        );
     }
 }
 
@@ -525,49 +542,29 @@ fn calculate_sky_color_by_time(hour: f32) -> Color {
         // 日出 (5-7)：橙紅漸變
         _ if (5.0..7.0).contains(&hour) => {
             let t = (hour - 5.0) / 2.0;
-            Color::srgb(
-                0.02 + 0.5 * t,
-                0.02 + 0.2 * t,
-                0.08 + 0.2 * t,
-            )
+            Color::srgb(0.02 + 0.5 * t, 0.02 + 0.2 * t, 0.08 + 0.2 * t)
         }
         // 清晨 (7-9)：淡藍色
         _ if (7.0..9.0).contains(&hour) => {
             let t = (hour - 7.0) / 2.0;
-            Color::srgb(
-                0.52 - 0.17 * t,
-                0.22 + 0.38 * t,
-                0.28 + 0.52 * t,
-            )
+            Color::srgb(0.52 - 0.17 * t, 0.22 + 0.38 * t, 0.28 + 0.52 * t)
         }
         // 白天 (9-16)：天藍色
         _ if (9.0..16.0).contains(&hour) => Color::srgb(0.35, 0.60, 0.80),
         // 黃昏 (16-18)：金橙色
         _ if (16.0..18.0).contains(&hour) => {
             let t = (hour - 16.0) / 2.0;
-            Color::srgb(
-                0.35 + 0.45 * t,
-                0.60 - 0.25 * t,
-                0.80 - 0.45 * t,
-            )
+            Color::srgb(0.35 + 0.45 * t, 0.60 - 0.25 * t, 0.80 - 0.45 * t)
         }
         // 傍晚 (18-20)：深紫紅色
         _ if (18.0..20.0).contains(&hour) => {
             let t = (hour - 18.0) / 2.0;
-            Color::srgb(
-                0.80 - 0.55 * t,
-                0.35 - 0.25 * t,
-                0.35 - 0.15 * t,
-            )
+            Color::srgb(0.80 - 0.55 * t, 0.35 - 0.25 * t, 0.35 - 0.15 * t)
         }
         // 夜晚 (20-24)：逐漸變深
         _ => {
             let t = (hour - 20.0) / 4.0;
-            Color::srgb(
-                0.25 - 0.23 * t,
-                0.10 - 0.08 * t,
-                0.20 - 0.12 * t,
-            )
+            Color::srgb(0.25 - 0.23 * t, 0.10 - 0.08 * t, 0.20 - 0.12 * t)
         }
     }
 }
@@ -610,12 +607,12 @@ fn apply_weather_to_sky(base_color: Color, weather: &WeatherState) -> Color {
 /// 取得天氣類型的顏色修正係數
 fn get_weather_color_modifier(weather_type: WeatherType) -> (f32, f32, f32) {
     match weather_type {
-        WeatherType::Clear => (1.0, 1.0, 1.0),       // 晴天：無修正
-        WeatherType::Cloudy => (0.7, 0.7, 0.75),     // 陰天：整體變灰
-        WeatherType::Rainy => (0.5, 0.5, 0.6),       // 雨天：更灰暗
-        WeatherType::Foggy => (0.8, 0.8, 0.85),      // 霧天：淡白灰
-        WeatherType::Stormy => (0.35, 0.35, 0.45),   // 暴風雨：深灰藍
-        WeatherType::Sandstorm => (0.7, 0.55, 0.4),  // 沙塵暴：黃褐色調
+        WeatherType::Clear => (1.0, 1.0, 1.0),      // 晴天：無修正
+        WeatherType::Cloudy => (0.7, 0.7, 0.75),    // 陰天：整體變灰
+        WeatherType::Rainy => (0.5, 0.5, 0.6),      // 雨天：更灰暗
+        WeatherType::Foggy => (0.8, 0.8, 0.85),     // 霧天：淡白灰
+        WeatherType::Stormy => (0.35, 0.35, 0.45),  // 暴風雨：深灰藍
+        WeatherType::Sandstorm => (0.7, 0.55, 0.4), // 沙塵暴：黃褐色調
     }
 }
 
@@ -624,7 +621,9 @@ pub fn update_fog_effect(
     weather: Res<WeatherState>,
     mut camera_query: Query<&mut DistanceFog, With<GameCamera>>,
 ) {
-    let Ok(mut fog) = camera_query.single_mut() else { return };
+    let Ok(mut fog) = camera_query.single_mut() else {
+        return;
+    };
 
     // 計算目標霧參數
     let (target_density, target_color) = match weather.weather_type {
@@ -632,7 +631,7 @@ pub fn update_fog_effect(
         WeatherType::Cloudy => (0.003, Color::srgba(0.6, 0.6, 0.65, 0.5)),
         WeatherType::Rainy => (0.008, Color::srgba(0.4, 0.42, 0.5, 0.7)),
         WeatherType::Foggy => (0.025, Color::srgba(0.75, 0.75, 0.8, 0.9)),
-        WeatherType::Stormy => (0.015, Color::srgba(0.3, 0.32, 0.4, 0.85)),   // 暴風雨：深藍灰霧
+        WeatherType::Stormy => (0.015, Color::srgba(0.3, 0.32, 0.4, 0.85)), // 暴風雨：深藍灰霧
         WeatherType::Sandstorm => (0.04, Color::srgba(0.75, 0.6, 0.4, 0.95)), // 沙塵暴：濃密黃沙
     };
 
@@ -686,7 +685,11 @@ pub fn spawn_rain_drops(
     }
 
     // 生成雨滴系統（暴風雨時更大的雨滴）
-    let rain_intensity = if matches!(weather.weather_type, WeatherType::Stormy) { "⛈️ 暴風雨" } else { "🌧️" };
+    let rain_intensity = if matches!(weather.weather_type, WeatherType::Stormy) {
+        "⛈️ 暴風雨"
+    } else {
+        "🌧️"
+    };
     info!("{} 開始下雨...", rain_intensity);
 
     // 雨滴材質（半透明藍白色）
@@ -701,37 +704,38 @@ pub fn spawn_rain_drops(
     let rain_mesh = meshes.add(Cylinder::new(0.02, 0.5));
 
     // 生成 300 個雨滴
-    commands.spawn((
-        RainSystem,
-        Transform::default(),
-        GlobalTransform::default(),
-        Visibility::default(),
-        Name::new("RainSystem"),
-    )).with_children(|parent| {
-        let mut rng = rand::rng();
-        use rand::Rng;
-        for _ in 0..300 {
-            let x = rng.random::<f32>() * 200.0 - 100.0;
-            let y = rng.random::<f32>() * 50.0 + 10.0;
-            let z = rng.random::<f32>() * 200.0 - 100.0;
+    commands
+        .spawn((
+            RainSystem,
+            Transform::default(),
+            GlobalTransform::default(),
+            Visibility::default(),
+            Name::new("RainSystem"),
+        ))
+        .with_children(|parent| {
+            let mut rng = rand::rng();
+            use rand::Rng;
+            for _ in 0..300 {
+                let x = rng.random::<f32>() * 200.0 - 100.0;
+                let y = rng.random::<f32>() * 50.0 + 10.0;
+                let z = rng.random::<f32>() * 200.0 - 100.0;
 
-            parent.spawn((
-                Mesh3d(rain_mesh.clone()),
-                MeshMaterial3d(rain_mat.clone()),
-                Transform::from_xyz(x, y, z)
-                    .with_rotation(Quat::from_rotation_x(-0.1)), // 稍微傾斜
-                GlobalTransform::default(),
-                RainDrop {
-                    velocity: Vec3::new(
-                        rng.random::<f32>() * 2.0 - 1.0,  // 風的影響
-                        -20.0 - rng.random::<f32>() * 10.0,  // 下落速度
-                        rng.random::<f32>() * 2.0 - 1.0,
-                    ),
-                    lifetime: rng.random::<f32>() * 3.0,
-                },
-            ));
-        }
-    });
+                parent.spawn((
+                    Mesh3d(rain_mesh.clone()),
+                    MeshMaterial3d(rain_mat.clone()),
+                    Transform::from_xyz(x, y, z).with_rotation(Quat::from_rotation_x(-0.1)), // 稍微傾斜
+                    GlobalTransform::default(),
+                    RainDrop {
+                        velocity: Vec3::new(
+                            rng.random::<f32>() * 2.0 - 1.0,    // 風的影響
+                            -20.0 - rng.random::<f32>() * 10.0, // 下落速度
+                            rng.random::<f32>() * 2.0 - 1.0,
+                        ),
+                        lifetime: rng.random::<f32>() * 3.0,
+                    },
+                ));
+            }
+        });
 }
 
 /// 更新雨滴位置
@@ -802,7 +806,7 @@ impl Default for RainPuddle {
     fn default() -> Self {
         Self {
             lifetime: 0.0,
-            max_lifetime: 30.0,  // 雨停後 30 秒消失
+            max_lifetime: 30.0, // 雨停後 30 秒消失
             size: 2.0,
         }
     }
@@ -831,12 +835,12 @@ pub struct LightningState {
 impl Default for LightningState {
     fn default() -> Self {
         Self {
-            next_flash_time: 5.0,  // 5 秒後第一次閃電
-            flash_duration: 0.15,  // 閃電持續 0.15 秒
+            next_flash_time: 5.0, // 5 秒後第一次閃電
+            flash_duration: 0.15, // 閃電持續 0.15 秒
             flash_intensity: 0.0,
             is_flashing: false,
-            min_interval: 8.0,   // 最少 8 秒一次
-            max_interval: 20.0,  // 最多 20 秒一次
+            min_interval: 8.0,  // 最少 8 秒一次
+            max_interval: 20.0, // 最多 20 秒一次
         }
     }
 }
@@ -866,11 +870,11 @@ pub fn spawn_rain_puddles(
 
     // 水坑材質（半透明反射）
     let puddle_mat = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.2, 0.25, 0.35, 0.6),  // 深藍灰色
+        base_color: Color::srgba(0.2, 0.25, 0.35, 0.6), // 深藍灰色
         alpha_mode: AlphaMode::Blend,
-        metallic: 0.9,  // 高金屬度模擬反射
-        perceptual_roughness: 0.1,  // 光滑表面
-        reflectance: 0.8,  // 高反射率
+        metallic: 0.9,             // 高金屬度模擬反射
+        perceptual_roughness: 0.1, // 光滑表面
+        reflectance: 0.8,          // 高反射率
         ..default()
     });
 
@@ -878,67 +882,65 @@ pub fn spawn_rain_puddles(
     let puddle_mesh = meshes.add(Cylinder::new(1.0, 0.02));
 
     // 生成水坑系統
-    commands.spawn((
-        PuddleSystem,
-        Transform::default(),
-        GlobalTransform::default(),
-        Visibility::default(),
-        Name::new("PuddleSystem"),
-    )).with_children(|parent| {
-        let mut rng = rand::rng();
-        use rand::Rng;
+    commands
+        .spawn((
+            PuddleSystem,
+            Transform::default(),
+            GlobalTransform::default(),
+            Visibility::default(),
+            Name::new("PuddleSystem"),
+        ))
+        .with_children(|parent| {
+            let mut rng = rand::rng();
+            use rand::Rng;
 
-        // 在徒步區和道路上生成水坑
-        // 徒步區: X ∈ [-30, 30], Z ∈ [-50, 20]
-        // 道路: 中華路 X=75, 西寧南路 X=-50
-        let puddle_positions = [
-            // 徒步區水坑
-            Vec3::new(5.0, 0.01, -10.0),
-            Vec3::new(-8.0, 0.01, 5.0),
-            Vec3::new(15.0, 0.01, -25.0),
-            Vec3::new(-12.0, 0.01, 10.0),
-            Vec3::new(0.0, 0.01, -35.0),
-            Vec3::new(20.0, 0.01, 0.0),
-            // 道路水坑
-            Vec3::new(70.0, 0.01, 20.0),
-            Vec3::new(80.0, 0.01, -30.0),
-            Vec3::new(-48.0, 0.01, 15.0),
-            Vec3::new(-52.0, 0.01, -20.0),
-        ];
+            // 在徒步區和道路上生成水坑
+            // 徒步區: X ∈ [-30, 30], Z ∈ [-50, 20]
+            // 道路: 中華路 X=75, 西寧南路 X=-50
+            let puddle_positions = [
+                // 徒步區水坑
+                Vec3::new(5.0, 0.01, -10.0),
+                Vec3::new(-8.0, 0.01, 5.0),
+                Vec3::new(15.0, 0.01, -25.0),
+                Vec3::new(-12.0, 0.01, 10.0),
+                Vec3::new(0.0, 0.01, -35.0),
+                Vec3::new(20.0, 0.01, 0.0),
+                // 道路水坑
+                Vec3::new(70.0, 0.01, 20.0),
+                Vec3::new(80.0, 0.01, -30.0),
+                Vec3::new(-48.0, 0.01, 15.0),
+                Vec3::new(-52.0, 0.01, -20.0),
+            ];
 
-        for base_pos in puddle_positions {
-            // 隨機偏移
-            let offset = Vec3::new(
-                rng.random::<f32>() * 4.0 - 2.0,
-                0.0,
-                rng.random::<f32>() * 4.0 - 2.0,
-            );
-            let pos = base_pos + offset;
+            for base_pos in puddle_positions {
+                // 隨機偏移
+                let offset = Vec3::new(
+                    rng.random::<f32>() * 4.0 - 2.0,
+                    0.0,
+                    rng.random::<f32>() * 4.0 - 2.0,
+                );
+                let pos = base_pos + offset;
 
-            // 隨機大小
-            let size = 1.5 + rng.random::<f32>() * 2.0;
-            let scale = Vec3::new(size, 1.0, size * (0.7 + rng.random::<f32>() * 0.6));
+                // 隨機大小
+                let size = 1.5 + rng.random::<f32>() * 2.0;
+                let scale = Vec3::new(size, 1.0, size * (0.7 + rng.random::<f32>() * 0.6));
 
-            parent.spawn((
-                Mesh3d(puddle_mesh.clone()),
-                MeshMaterial3d(puddle_mat.clone()),
-                Transform::from_translation(pos).with_scale(scale),
-                GlobalTransform::default(),
-                RainPuddle {
-                    size,
-                    ..Default::default()
-                },
-            ));
-        }
-    });
+                parent.spawn((
+                    Mesh3d(puddle_mesh.clone()),
+                    MeshMaterial3d(puddle_mat.clone()),
+                    Transform::from_translation(pos).with_scale(scale),
+                    GlobalTransform::default(),
+                    RainPuddle {
+                        size,
+                        ..Default::default()
+                    },
+                ));
+            }
+        });
 }
 
 /// 處理水坑乾涸邏輯，回傳是否應該移除
-fn handle_puddle_drying(
-    puddle: &mut RainPuddle,
-    transform: &mut Transform,
-    dt: f32,
-) -> bool {
+fn handle_puddle_drying(puddle: &mut RainPuddle, transform: &mut Transform, dt: f32) -> bool {
     puddle.lifetime += dt;
 
     // 根據生命時間縮小水坑
@@ -1020,7 +1022,8 @@ pub fn update_lightning(
         // 計算下次閃電時間
         let mut rng = rand::rng();
         use rand::Rng;
-        let interval = lightning.min_interval + rng.random::<f32>() * (lightning.max_interval - lightning.min_interval);
+        let interval = lightning.min_interval
+            + rng.random::<f32>() * (lightning.max_interval - lightning.min_interval);
         lightning.next_flash_time = current_time + interval;
 
         info!("⚡ 閃電！");

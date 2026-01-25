@@ -20,3 +20,15 @@ pub fn safe_normalize(value: Vec3) -> Vec3 {
     }
 }
 
+use bevy::prelude::Quat;
+
+/// 計算 Y 軸的朝向旋轉（僅考慮 XZ 平面）
+/// 如果方向向量過短，則返回 Identity
+#[inline]
+pub fn look_rotation_y_flat(dir: Vec3) -> Quat {
+    if dir.length_squared() > 0.001 {
+        Quat::from_rotation_y((-dir.x).atan2(-dir.z))
+    } else {
+        Quat::IDENTITY
+    }
+}

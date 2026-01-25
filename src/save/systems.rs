@@ -452,7 +452,7 @@ async fn perform_load_async(path: PathBuf) -> Result<SaveData, SaveError> {
 }
 
 /// 套用存檔資料到遊戲狀態
-fn apply_save_data(
+pub fn apply_save_data(
     commands: &mut Commands,
     save_data: &SaveData,
     player_query: &mut Query<(
@@ -476,7 +476,24 @@ fn apply_save_data(
         Option<&NitroBoost>,
     )>,
 ) {
-    // 玩家資料
+    apply_player_data(player_query, wallet, respect, save_data);
+    apply_weapon_data(weapon_query, save_data);
+    apply_world_data(world_time, weather_state, save_data);
+    apply_mission_data(story_manager, unlocks, relationship, save_data);
+    apply_vehicle_modifications(commands, vehicle_mod_query, save_data);
+}
+
+fn apply_player_data(
+    player_query: &mut Query<(
+        &mut Transform,
+        &mut Player,
+        Option<&mut Health>,
+        Option<&mut Armor>,
+    )>,
+    wallet: &mut PlayerWallet,
+    respect: &mut RespectManager,
+    save_data: &SaveData,
+) {
     if let Ok((mut transform, mut player, health, armor)) = player_query.single_mut() {
         let pos = save_data.player.position;
         transform.translation = Vec3::new(pos[0], pos[1], pos[2]);
@@ -493,12 +510,15 @@ fn apply_save_data(
         }
     }
 
-    // 錢包資料
     wallet.cash = save_data.player.cash;
     wallet.bank = save_data.player.bank;
     respect.respect = save_data.player.respect;
+}
 
-    // 武器庫存還原
+fn apply_weapon_data(
+    weapon_query: &mut Query<&mut WeaponInventory, With<Player>>,
+    save_data: &SaveData,
+) {
     if let Ok(mut inventory) = weapon_query.single_mut() {
         inventory.weapons.clear();
         for saved_weapon in &save_data.player.weapons {
@@ -511,37 +531,46 @@ fn apply_save_data(
                 warn!("無法解析武器類型: {}, 跳過", saved_weapon.weapon_type);
             }
         }
-        // 確保至少有拳頭
+
         if inventory.weapons.is_empty() {
             inventory.weapons.push(Weapon::new(WeaponStats::fist()));
         }
-        // 恢復當前武器索引（確保在有效範圍內）
+
         if save_data.player.current_weapon_index < inventory.weapons.len() {
             inventory.current_index = save_data.player.current_weapon_index;
         } else {
             inventory.current_index = 0;
         }
+
         info!(
             "還原 {} 把武器，當前武器索引: {}",
             inventory.weapons.len(),
             inventory.current_index
         );
     }
+}
 
-    // 世界資料
+fn apply_world_data(
+    world_time: &mut WorldTime,
+    weather_state: &mut WeatherState,
+    save_data: &SaveData,
+) {
     world_time.hour = save_data.world.world_hour;
-
-    // 天氣類型還原
     weather_state.weather_type = parse_weather_type(&save_data.world.weather);
     weather_state.intensity = save_data.world.weather_intensity.clamp(0.0, 2.0);
     info!(
         "還原天氣: {:?}, 強度: {}",
         weather_state.weather_type, weather_state.intensity
     );
+}
 
-    // 任務進度還原
+fn apply_mission_data(
+    story_manager: &mut StoryMissionManager,
+    unlocks: &mut UnlockManager,
+    relationship: &mut RelationshipManager,
+    save_data: &SaveData,
+) {
     story_manager.completed_count = save_data.missions.completed_missions.len() as u32;
-    // Restore unlocks
     unlocks.unlocked_items = save_data.missions.unlocked_items.clone();
     unlocks.unlocked_areas = save_data
         .missions
@@ -549,24 +578,33 @@ fn apply_save_data(
         .iter()
         .filter_map(|s| s.parse().ok())
         .collect();
-    // Restore relationships
+
     relationship.relationships.clear();
     for (npc_str, value) in &save_data.missions.npc_relationships {
         if let Ok(npc_id) = npc_str.parse::<u32>() {
             relationship.relationships.insert(npc_id, *value);
         }
     }
-    // Restore flags
+
     story_manager.story_flags = save_data.missions.flags.iter().cloned().collect();
     info!(
         "還原任務進度: {} 個已完成任務",
         story_manager.completed_count
     );
+}
 
-    // 車輛改裝資料（使用穩定 VehicleId 匹配）
+fn apply_vehicle_modifications(
+    commands: &mut Commands,
+    vehicle_mod_query: &mut Query<(
+        Entity,
+        &VehicleId,
+        &mut VehicleModifications,
+        Option<&NitroBoost>,
+    )>,
+    save_data: &SaveData,
+) {
     let vehicles: Vec<_> = vehicle_mod_query.iter_mut().collect();
     for (entity, vehicle_id, mut mods, nitro) in vehicles.into_iter() {
-        // 嘗試從存檔中找到對應的改裝資料（優先使用 vehicle_id，回退到 vehicle_index）
         #[allow(deprecated)]
         let saved_mods = save_data
             .world
@@ -575,7 +613,6 @@ fn apply_save_data(
             .find(|m| m.vehicle_id == vehicle_id.as_u64());
 
         if let Some(saved_mods) = saved_mods {
-            // 恢復改裝等級
             mods.engine = u8_to_mod_level(saved_mods.engine_level);
             mods.transmission = u8_to_mod_level(saved_mods.transmission_level);
             mods.suspension = u8_to_mod_level(saved_mods.suspension_level);
@@ -585,7 +622,6 @@ fn apply_save_data(
             mods.has_nitro = saved_mods.has_nitro;
             mods.nitro_charge = saved_mods.nitro_charge;
 
-            // 如果有氮氣但沒有 NitroBoost 組件，添加它
             if saved_mods.has_nitro && nitro.is_none() {
                 commands.entity(entity).insert(NitroBoost::new());
             }
@@ -669,7 +705,6 @@ pub enum SaveError {
 
 /// 驗證存檔資料有效性
 fn validate_save_data(data: &SaveData) -> Result<(), SaveError> {
-    // 1. 版本檢查 - 不接受未來版本
     if data.version > SAVE_VERSION {
         return Err(SaveError::FutureVersion {
             save_version: data.version,
@@ -677,49 +712,59 @@ fn validate_save_data(data: &SaveData) -> Result<(), SaveError> {
         });
     }
 
-    // 2. 玩家數值驗證
-    if data.player.health < 0.0 || data.player.health > 500.0 {
-        return Err(SaveError::InvalidValue {
-            field: "player.health".to_string(),
-            value: data.player.health.to_string(),
-            reason: "生命值應在 0-500 之間".to_string(),
-        });
-    }
+    validate_player_data(&data.player)?;
+    validate_world_data(&data.world)?;
+    validate_vehicle_data(&data.world)?;
 
-    if data.player.armor < 0.0 || data.player.armor > 200.0 {
-        return Err(SaveError::InvalidValue {
-            field: "player.armor".to_string(),
-            value: data.player.armor.to_string(),
-            reason: "護甲值應在 0-200 之間".to_string(),
-        });
-    }
-
-    // 3. 世界時間驗證
-    if data.world.world_hour < 0.0 || data.world.world_hour > 24.0 {
-        return Err(SaveError::InvalidValue {
-            field: "world.world_hour".to_string(),
-            value: data.world.world_hour.to_string(),
-            reason: "遊戲時間應在 0-24 之間".to_string(),
-        });
-    }
-
-    // 4. 天氣強度驗證
-    if data.world.weather_intensity < 0.0 || data.world.weather_intensity > 2.0 {
-        warn!(
-            "天氣強度 {} 超出正常範圍，將限制在 0-2",
-            data.world.weather_intensity
-        );
-    }
-
-    // 5. 武器類型驗證（僅警告，不阻止讀檔）
+    // 武器類型驗證（僅警告）
     for weapon in &data.player.weapons {
         if !is_valid_weapon_type(&weapon.weapon_type) {
             warn!("未知武器類型: {}, 讀檔時將跳過", weapon.weapon_type);
         }
     }
 
-    // 6. 車輛改裝等級驗證
-    for vehicle_mod in &data.world.vehicle_modifications {
+    Ok(())
+}
+
+fn validate_player_data(player: &PlayerSaveData) -> Result<(), SaveError> {
+    if player.health < 0.0 || player.health > 500.0 {
+        return Err(SaveError::InvalidValue {
+            field: "player.health".to_string(),
+            value: player.health.to_string(),
+            reason: "生命值應在 0-500 之間".to_string(),
+        });
+    }
+
+    if player.armor < 0.0 || player.armor > 200.0 {
+        return Err(SaveError::InvalidValue {
+            field: "player.armor".to_string(),
+            value: player.armor.to_string(),
+            reason: "護甲值應在 0-200 之間".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_world_data(world: &WorldSaveData) -> Result<(), SaveError> {
+    if world.world_hour < 0.0 || world.world_hour > 24.0 {
+        return Err(SaveError::InvalidValue {
+            field: "world.world_hour".to_string(),
+            value: world.world_hour.to_string(),
+            reason: "遊戲時間應在 0-24 之間".to_string(),
+        });
+    }
+
+    if world.weather_intensity < 0.0 || world.weather_intensity > 2.0 {
+        warn!(
+            "天氣強度 {} 超出正常範圍，將限制在 0-2",
+            world.weather_intensity
+        );
+    }
+    Ok(())
+}
+
+fn validate_vehicle_data(world: &WorldSaveData) -> Result<(), SaveError> {
+    for vehicle_mod in &world.vehicle_modifications {
         if vehicle_mod.engine_level > 3
             || vehicle_mod.transmission_level > 3
             || vehicle_mod.suspension_level > 3
@@ -733,7 +778,6 @@ fn validate_save_data(data: &SaveData) -> Result<(), SaveError> {
             );
         }
     }
-
     Ok(())
 }
 

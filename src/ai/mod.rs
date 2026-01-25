@@ -22,6 +22,7 @@ pub use movement::*;
 pub use perception::*;
 pub use squad::*;
 
+use crate::combat::Enemy;
 use crate::core::{AppState, DebugSettings};
 use bevy::prelude::*;
 
@@ -82,7 +83,7 @@ fn debug_toggle_system(keyboard: Res<ButtonInput<KeyCode>>, mut debug: ResMut<De
 /// 繪製 AI Debug Gizmos（視野範圍、聽覺範圍）
 fn draw_ai_debug_gizmos(
     debug: Res<DebugSettings>,
-    enemy_query: Query<(&Transform, &AiPerception), With<crate::combat::Enemy>>,
+    enemy_query: Query<(&Transform, &AiPerception), With<Enemy>>,
     mut gizmos: Gizmos,
 ) {
     if !debug.show_ai_ranges {

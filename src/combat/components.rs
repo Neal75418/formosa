@@ -120,6 +120,43 @@ pub enum PunchPhase {
     Return, // 收回
 }
 
+/// 揮拳動畫通用特徵
+pub trait PunchAnimatable {
+    fn get_timer(&self) -> f32;
+    fn get_duration(&self) -> f32;
+    fn set_phase(&mut self, phase: PunchPhase);
+
+    /// 取得各階段時間佔比
+    fn phase_times(&self) -> (f32, f32, f32) {
+        let duration = self.get_duration();
+        (duration * 0.33, duration * 0.66, duration)
+    }
+
+    /// 取得當前進度 (0.0 - 1.0)
+    #[allow(dead_code)]
+    fn progress(&self) -> f32 {
+        (self.get_timer() / self.get_duration()).clamp(0.0, 1.0)
+    }
+
+    /// 檢查動畫是否完成
+    fn is_finished(&self) -> bool {
+        self.get_timer() >= self.get_duration()
+    }
+
+    /// 根據計時器更新動畫階段
+    fn update_phase(&mut self) {
+        let (wind_up_end, strike_end, duration) = self.phase_times();
+        let t = self.get_timer();
+        if t < wind_up_end {
+            self.set_phase(PunchPhase::WindUp);
+        } else if t < strike_end {
+            self.set_phase(PunchPhase::Strike);
+        } else if t < duration {
+            self.set_phase(PunchPhase::Return);
+        }
+    }
+}
+
 /// 揮拳動畫組件
 #[derive(Component, Debug)]
 #[allow(dead_code)]
@@ -140,36 +177,17 @@ impl Default for PunchAnimation {
 }
 
 #[allow(dead_code)]
-impl PunchAnimation {
-    /// 取得各階段時間佔比
-    pub fn phase_times(&self) -> (f32, f32, f32) {
-        // WindUp: 0-33%, Strike: 33-66%, Return: 66-100%
-        let wind_up_end = self.duration * 0.33;
-        let strike_end = self.duration * 0.66;
-        (wind_up_end, strike_end, self.duration)
+impl PunchAnimatable for PunchAnimation {
+    fn get_timer(&self) -> f32 {
+        self.timer
     }
 
-    /// 取得當前進度 (0.0 - 1.0)
-    pub fn progress(&self) -> f32 {
-        (self.timer / self.duration).clamp(0.0, 1.0)
+    fn get_duration(&self) -> f32 {
+        self.duration
     }
 
-    /// 檢查動畫是否完成
-    pub fn is_finished(&self) -> bool {
-        self.timer >= self.duration
-    }
-
-    /// 根據計時器更新動畫階段
-    pub fn update_phase(&mut self) {
-        let (wind_up_end, strike_end, duration) = self.phase_times();
-        let t = self.timer;
-        if t < wind_up_end {
-            self.phase = PunchPhase::WindUp;
-        } else if t < strike_end {
-            self.phase = PunchPhase::Strike;
-        } else if t < duration {
-            self.phase = PunchPhase::Return;
-        }
+    fn set_phase(&mut self, phase: PunchPhase) {
+        self.phase = phase;
     }
 }
 
@@ -234,30 +252,17 @@ impl EnemyPunchAnimation {
     }
 }
 
-impl EnemyPunchAnimation {
-    /// 取得各階段時間佔比
-    pub fn phase_times(&self) -> (f32, f32, f32) {
-        let wind_up_end = self.duration * 0.33;
-        let strike_end = self.duration * 0.66;
-        (wind_up_end, strike_end, self.duration)
+impl PunchAnimatable for EnemyPunchAnimation {
+    fn get_timer(&self) -> f32 {
+        self.timer
     }
 
-    /// 檢查動畫是否完成
-    pub fn is_finished(&self) -> bool {
-        self.timer >= self.duration
+    fn get_duration(&self) -> f32 {
+        self.duration
     }
 
-    /// 根據計時器更新動畫階段
-    pub fn update_phase(&mut self) {
-        let (wind_up_end, strike_end, duration) = self.phase_times();
-        let t = self.timer;
-        if t < wind_up_end {
-            self.phase = PunchPhase::WindUp;
-        } else if t < strike_end {
-            self.phase = PunchPhase::Strike;
-        } else if t < duration {
-            self.phase = PunchPhase::Return;
-        }
+    fn set_phase(&mut self, phase: PunchPhase) {
+        self.phase = phase;
     }
 }
 

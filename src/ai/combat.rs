@@ -4,7 +4,8 @@ use rand::Rng;
 use super::{AiBehavior, AiCombat, AiConfig, AiPerception, AiState};
 use crate::combat::{
     spawn_bullet_tracer, CombatVisuals, DamageEvent, DamageSource, Enemy, EnemyArm,
-    EnemyPunchAnimation, MuzzleFlash, PunchPhase, TracerStyle, Weapon, MELEE_DAMAGE,
+    EnemyPunchAnimation, MuzzleFlash, PunchAnimatable, PunchPhase, TracerStyle, Weapon,
+    MELEE_DAMAGE,
 };
 use crate::core::{ease_in_out_quad, ease_out_cubic, ease_out_quad};
 use crate::player::Player;

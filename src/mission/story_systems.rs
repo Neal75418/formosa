@@ -111,45 +111,63 @@ fn mission_trigger_event_handler(
     trigger_query: Query<&Trigger>,
 ) {
     for event in events.read() {
-        match event {
-            TriggerEvent::PlayerEntered {
-                entity,
-                trigger_type,
+        if let Some((entity, mission_id)) = extract_mission_trigger_event(event) {
+            // 檢查 Flag (如果 Trigger 有 required_flag)
+            if !check_trigger_flags(*entity, &trigger_query, &manager) {
+                continue;
             }
-            | TriggerEvent::PlayerInteracted {
-                entity,
-                trigger_type,
-            }
-            | TriggerEvent::PlayerStayed {
-                entity,
-                trigger_type,
-                ..
-            } => {
-                // 檢查是否是任務觸發
-                if let TriggerEventType::Mission(mission_id) = trigger_type {
-                    // 檢查 Flag (如果 Trigger 有 required_flag)
-                    if let Ok(trigger) = trigger_query.get(*entity) {
-                        if let Some(flag) = &trigger.required_flag {
-                            if !manager.get_flag(flag) {
-                                continue;
-                            }
-                        }
-                    }
 
-                    try_start_mission(
-                        *mission_id,
-                        &database,
-                        &mut mission_events,
-                        &mut manager,
-                        &wallet,
-                        &respect,
-                        &unlocks,
-                    );
-                }
-            }
-            TriggerEvent::PlayerExited { .. } => {} // 無需處理
+            try_start_mission(
+                *mission_id,
+                &database,
+                &mut mission_events,
+                &mut manager,
+                &wallet,
+                &respect,
+                &unlocks,
+            );
         }
     }
+}
+
+fn extract_mission_trigger_event(event: &TriggerEvent) -> Option<(&Entity, &StoryMissionId)> {
+    match event {
+        TriggerEvent::PlayerEntered {
+            entity,
+            trigger_type,
+        }
+        | TriggerEvent::PlayerInteracted {
+            entity,
+            trigger_type,
+        }
+        | TriggerEvent::PlayerStayed {
+            entity,
+            trigger_type,
+            ..
+        } => {
+            if let TriggerEventType::Mission(mission_id) = trigger_type {
+                Some((entity, mission_id))
+            } else {
+                None
+            }
+        }
+        TriggerEvent::PlayerExited { .. } => None,
+    }
+}
+
+fn check_trigger_flags(
+    entity: Entity,
+    trigger_query: &Query<&Trigger>,
+    manager: &StoryMissionManager,
+) -> bool {
+    if let Ok(trigger) = trigger_query.get(entity) {
+        if let Some(flag) = &trigger.required_flag {
+            if !manager.get_flag(flag) {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// 處理對話觸發事件
@@ -190,7 +208,10 @@ fn try_start_mission(
     unlocks: &UnlockManager,
 ) {
     if let Some(mission) = database.get(mission_id) {
-        if manager.start_mission(mission, wallet, respect, unlocks).is_ok() {
+        if manager
+            .start_mission(mission, wallet, respect, unlocks)
+            .is_ok()
+        {
             events.write(StoryMissionEvent::Started(mission_id));
         }
     }
@@ -215,7 +236,10 @@ fn try_start_npc_mission(
     }
 
     if let Some(mission) = database.get(mission_id) {
-        if manager.start_mission(mission, wallet, respect, unlocks).is_ok() {
+        if manager
+            .start_mission(mission, wallet, respect, unlocks)
+            .is_ok()
+        {
             mission_events.write(StoryMissionEvent::Started(mission_id));
         } else {
             return false;

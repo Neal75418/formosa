@@ -88,8 +88,8 @@ fn test_save_data_serialization() {
         world: WorldSaveData::default(),
         missions: MissionSaveData {
             flags: vec![("flag1".to_string(), true)],
-            unlocked_items: vec![("item1".to_string())],
-            unlocked_areas: vec![("area1".to_string())],
+            unlocked_items: vec!["item1".to_string()],
+            unlocked_areas: vec!["area1".to_string()],
             ..Default::default()
         },
         stats: GameStatistics::default(),

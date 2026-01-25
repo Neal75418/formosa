@@ -4,27 +4,31 @@
 
 #![allow(dead_code)] // Phase 5+ 預留功能
 
-use bevy::prelude::*;
 use bevy::ecs::relationship::Relationship;
+use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
 use std::f32::consts::PI;
 
-use crate::ai::{PatrolPath, AiMovement};
+use super::components::{
+    AStarPath, BehaviorType, DailyBehavior, GunshotTracker, HitByVehicle, PanicState, PanicWave,
+    PanicWaveManager, PathfindingGrid, PedState, Pedestrian, PedestrianArm, PedestrianConfig,
+    PedestrianLeg, PedestrianPaths, PedestrianState, PedestrianType, PedestrianVisuals,
+    PointOfInterestType, PointsOfInterest, ShelterSeeker, SidewalkPath, WalkingAnimation,
+    WitnessState, WitnessedCrime,
+};
+use crate::ai::{AiMovement, PatrolPath};
+use crate::combat::{
+    BodyPart, CombatState, Damageable, Health, HitReaction, WeaponInventory, WeaponType,
+};
+use crate::core::math::look_rotation_y_flat;
+use crate::core::{
+    GameState, PedestrianSpatialHash, VehicleSpatialHash, WeatherState, WeatherType,
+    COLLISION_GROUP_CHARACTER,
+};
 use crate::player::Player;
-use crate::core::{COLLISION_GROUP_CHARACTER, VehicleSpatialHash, PedestrianSpatialHash, GameState, WeatherState, WeatherType};
-use crate::combat::{CombatState, WeaponInventory, WeaponType, Health, Damageable, HitReaction, BodyPart};
 use crate::vehicle::Vehicle;
 use crate::wanted::{CrimeEvent, WitnessReport};
-use super::components::{
-    Pedestrian, PedestrianState, PedState, PedestrianType,
-    PedestrianConfig, PedestrianPaths, SidewalkPath, GunshotTracker,
-    PedestrianVisuals, WalkingAnimation, PedestrianLeg, PedestrianArm,
-    HitByVehicle, PathfindingGrid, AStarPath, DailyBehavior, BehaviorType,
-    PointsOfInterest, PointOfInterestType,
-    WitnessState, WitnessedCrime, ShelterSeeker,
-    PanicWaveManager, PanicState, PanicWave,
-};
 
 // ============================================================================
 // 躲雨行為常數
@@ -189,7 +193,9 @@ pub fn pedestrian_spawn_system(
     }
 
     // 取得玩家位置
-    let Ok(player_transform) = player_query.single() else { return };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     // 在玩家附近的路徑上選擇生成點
@@ -268,131 +274,135 @@ fn spawn_pedestrian(
     } else {
         Vec3::NEG_Z
     };
-    let rotation = if look_dir.length_squared() > 0.001 {
-        Quat::from_rotation_y((-look_dir.x).atan2(-look_dir.z))
-    } else {
-        Quat::IDENTITY
-    };
+    let rotation = look_rotation_y_flat(look_dir);
 
     // 生成行人實體（使用單一 spawn 搭配 with_children 避免 B0004 警告）
     // 注意：Bevy Bundle 限制為 15 個組件，因此分成多個 insert 調用
-    commands.spawn((
-        // 根實體 Transform 組件
-        Transform::from_translation(position + Vec3::new(0.0, body_height / 2.0, 0.0))
-            .with_rotation(rotation),
-        GlobalTransform::default(),
-        Visibility::default(),
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
-        // 行人組件
-        Pedestrian { ped_type },
-        PedestrianState::default(),
-        WalkingAnimation::default(),
-        WitnessState::default(),  // 目擊者狀態（GTA 5 風格報警系統）
-        ShelterSeeker::default(), // 躲雨行為追蹤
-        PanicState::default(),    // 恐慌狀態（GTA 5 風格群體恐慌）
-        // 可受傷組件
-        Health::default(),
-        Damageable,
-        HitReaction::default(),  // 受傷反應（畏縮、踉蹌、擊退）
-    )).insert((
-        // 移動組件（分開 insert 以符合 Bundle 大小限制）
-        AiMovement {
-            walk_speed: config.walk_speed,
-            run_speed: config.flee_speed,
-            is_running: false,
-            arrival_threshold: 0.8,
-            move_target: None,
-        },
-        PatrolPath {
-            waypoints: waypoints.clone(),
-            // 目標是下一個 waypoint（不是當前位置）
-            current_index: if start_index + 1 < waypoints.len() { start_index + 1 } else { 0 },
-            ping_pong,
-            forward: true,
-            wait_time: 0.0,
-            wait_timer: 0.0,
-        },
-    )).insert((
-        // 物理組件（分開 insert 以符合 Bundle 大小限制）
-        RigidBody::KinematicPositionBased,
-        Collider::capsule_y(body_height / 2.0 - 0.2, 0.25),
-        CollisionGroups::new(COLLISION_GROUP_CHARACTER, Group::ALL),
-        KinematicCharacterController {
-            offset: CharacterLength::Absolute(0.01),
-            ..default()
-        },
-    )).with_children(|parent| {
-        // 頭部（含布娃娃標記）
-        parent.spawn((
-            Mesh3d(visuals.head_mesh.clone()),
-            MeshMaterial3d(visuals.skin_materials[indices.skin].clone()),
-            Transform::from_xyz(0.0, torso_height / 2.0 + head_radius + 0.05, 0.0),
-            BodyPart::head(),
-        ));
-        // 頭髮（不需要物理，跟隨頭部）
-        parent.spawn((
-            Mesh3d(visuals.hair_mesh.clone()),
-            MeshMaterial3d(visuals.hair_materials[indices.hair].clone()),
-            Transform::from_xyz(0.0, torso_height / 2.0 + head_radius + 0.08, -0.02)
-                .with_scale(Vec3::new(1.0, 0.8, 1.0)),
-        ));
-        // 軀幹（布娃娃核心）
-        parent.spawn((
-            Mesh3d(visuals.torso_mesh.clone()),
-            MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
-            Transform::from_xyz(0.0, 0.0, 0.0),
-            BodyPart::torso(),
-        ));
-        // 左腿（加標記用於動畫和布娃娃）
-        parent.spawn((
-            Mesh3d(visuals.leg_mesh.clone()),
-            MeshMaterial3d(visuals.pants_materials[indices.pants].clone()),
-            Transform::from_xyz(-0.08, -torso_height / 2.0 - leg_height / 2.0, 0.0),
-            PedestrianLeg { is_left: true },
-            BodyPart::left_leg(),
-        ));
-        // 右腿（加標記用於動畫和布娃娃）
-        parent.spawn((
-            Mesh3d(visuals.leg_mesh.clone()),
-            MeshMaterial3d(visuals.pants_materials[indices.pants].clone()),
-            Transform::from_xyz(0.08, -torso_height / 2.0 - leg_height / 2.0, 0.0),
-            PedestrianLeg { is_left: false },
-            BodyPart::right_leg(),
-        ));
-        // 左腳（布娃娃標記）
-        parent.spawn((
-            Mesh3d(visuals.shoe_mesh.clone()),
-            MeshMaterial3d(visuals.shoe_materials[indices.shoe].clone()),
-            Transform::from_xyz(-0.08, -torso_height / 2.0 - leg_height - 0.025, 0.03),
-            BodyPart::left_foot(),
-        ));
-        // 右腳（布娃娃標記）
-        parent.spawn((
-            Mesh3d(visuals.shoe_mesh.clone()),
-            MeshMaterial3d(visuals.shoe_materials[indices.shoe].clone()),
-            Transform::from_xyz(0.08, -torso_height / 2.0 - leg_height - 0.025, 0.03),
-            BodyPart::right_foot(),
-        ));
-        // 左手臂（加標記用於動畫和布娃娃）
-        parent.spawn((
-            Mesh3d(visuals.arm_mesh.clone()),
-            MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
-            Transform::from_xyz(-0.22, torso_height / 4.0, 0.0)
-                .with_rotation(Quat::from_rotation_z(0.15)),
-            PedestrianArm { is_left: true },
-            BodyPart::left_arm(),
-        ));
-        // 右手臂（加標記用於動畫和布娃娃）
-        parent.spawn((
-            Mesh3d(visuals.arm_mesh.clone()),
-            MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
-            Transform::from_xyz(0.22, torso_height / 4.0, 0.0)
-                .with_rotation(Quat::from_rotation_z(-0.15)),
-            PedestrianArm { is_left: false },
-            BodyPart::right_arm(),
-        ));
-    });
+    commands
+        .spawn((
+            // 根實體 Transform 組件
+            Transform::from_translation(position + Vec3::new(0.0, body_height / 2.0, 0.0))
+                .with_rotation(rotation),
+            GlobalTransform::default(),
+            Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+            // 行人組件
+            Pedestrian { ped_type },
+            PedestrianState::default(),
+            WalkingAnimation::default(),
+            WitnessState::default(),  // 目擊者狀態（GTA 5 風格報警系統）
+            ShelterSeeker::default(), // 躲雨行為追蹤
+            PanicState::default(),    // 恐慌狀態（GTA 5 風格群體恐慌）
+            // 可受傷組件
+            Health::default(),
+            Damageable,
+            HitReaction::default(), // 受傷反應（畏縮、踉蹌、擊退）
+        ))
+        .insert((
+            // 移動組件（分開 insert 以符合 Bundle 大小限制）
+            AiMovement {
+                walk_speed: config.walk_speed,
+                run_speed: config.flee_speed,
+                is_running: false,
+                arrival_threshold: 0.8,
+                move_target: None,
+            },
+            PatrolPath {
+                waypoints: waypoints.clone(),
+                // 目標是下一個 waypoint（不是當前位置）
+                current_index: if start_index + 1 < waypoints.len() {
+                    start_index + 1
+                } else {
+                    0
+                },
+                ping_pong,
+                forward: true,
+                wait_time: 0.0,
+                wait_timer: 0.0,
+            },
+        ))
+        .insert((
+            // 物理組件（分開 insert 以符合 Bundle 大小限制）
+            RigidBody::KinematicPositionBased,
+            Collider::capsule_y(body_height / 2.0 - 0.2, 0.25),
+            CollisionGroups::new(COLLISION_GROUP_CHARACTER, Group::ALL),
+            KinematicCharacterController {
+                offset: CharacterLength::Absolute(0.01),
+                ..default()
+            },
+        ))
+        .with_children(|parent| {
+            // 頭部（含布娃娃標記）
+            parent.spawn((
+                Mesh3d(visuals.head_mesh.clone()),
+                MeshMaterial3d(visuals.skin_materials[indices.skin].clone()),
+                Transform::from_xyz(0.0, torso_height / 2.0 + head_radius + 0.05, 0.0),
+                BodyPart::head(),
+            ));
+            // 頭髮（不需要物理，跟隨頭部）
+            parent.spawn((
+                Mesh3d(visuals.hair_mesh.clone()),
+                MeshMaterial3d(visuals.hair_materials[indices.hair].clone()),
+                Transform::from_xyz(0.0, torso_height / 2.0 + head_radius + 0.08, -0.02)
+                    .with_scale(Vec3::new(1.0, 0.8, 1.0)),
+            ));
+            // 軀幹（布娃娃核心）
+            parent.spawn((
+                Mesh3d(visuals.torso_mesh.clone()),
+                MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
+                Transform::from_xyz(0.0, 0.0, 0.0),
+                BodyPart::torso(),
+            ));
+            // 左腿（加標記用於動畫和布娃娃）
+            parent.spawn((
+                Mesh3d(visuals.leg_mesh.clone()),
+                MeshMaterial3d(visuals.pants_materials[indices.pants].clone()),
+                Transform::from_xyz(-0.08, -torso_height / 2.0 - leg_height / 2.0, 0.0),
+                PedestrianLeg { is_left: true },
+                BodyPart::left_leg(),
+            ));
+            // 右腿（加標記用於動畫和布娃娃）
+            parent.spawn((
+                Mesh3d(visuals.leg_mesh.clone()),
+                MeshMaterial3d(visuals.pants_materials[indices.pants].clone()),
+                Transform::from_xyz(0.08, -torso_height / 2.0 - leg_height / 2.0, 0.0),
+                PedestrianLeg { is_left: false },
+                BodyPart::right_leg(),
+            ));
+            // 左腳（布娃娃標記）
+            parent.spawn((
+                Mesh3d(visuals.shoe_mesh.clone()),
+                MeshMaterial3d(visuals.shoe_materials[indices.shoe].clone()),
+                Transform::from_xyz(-0.08, -torso_height / 2.0 - leg_height - 0.025, 0.03),
+                BodyPart::left_foot(),
+            ));
+            // 右腳（布娃娃標記）
+            parent.spawn((
+                Mesh3d(visuals.shoe_mesh.clone()),
+                MeshMaterial3d(visuals.shoe_materials[indices.shoe].clone()),
+                Transform::from_xyz(0.08, -torso_height / 2.0 - leg_height - 0.025, 0.03),
+                BodyPart::right_foot(),
+            ));
+            // 左手臂（加標記用於動畫和布娃娃）
+            parent.spawn((
+                Mesh3d(visuals.arm_mesh.clone()),
+                MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
+                Transform::from_xyz(-0.22, torso_height / 4.0, 0.0)
+                    .with_rotation(Quat::from_rotation_z(0.15)),
+                PedestrianArm { is_left: true },
+                BodyPart::left_arm(),
+            ));
+            // 右手臂（加標記用於動畫和布娃娃）
+            parent.spawn((
+                Mesh3d(visuals.arm_mesh.clone()),
+                MeshMaterial3d(visuals.shirt_materials[indices.shirt].clone()),
+                Transform::from_xyz(0.22, torso_height / 4.0, 0.0)
+                    .with_rotation(Quat::from_rotation_z(-0.15)),
+                PedestrianArm { is_left: false },
+                BodyPart::right_arm(),
+            ));
+        });
 }
 
 // ============================================================================
@@ -423,9 +433,9 @@ fn get_movement_target(
             // 將逃跑目標限制在市區範圍內
             // 地圖邊界：X: -100 ~ 80, Z: -80 ~ 50
             let clamped = Vec3::new(
-                flee_target.x.clamp(-95.0, 75.0),  // 留5公尺邊界緩衝
+                flee_target.x.clamp(-95.0, 75.0), // 留5公尺邊界緩衝
                 flee_target.y,
-                flee_target.z.clamp(-75.0, 45.0),  // 留5公尺邊界緩衝
+                flee_target.z.clamp(-75.0, 45.0), // 留5公尺邊界緩衝
             );
             return Some(clamped);
         }
@@ -455,7 +465,9 @@ pub fn pedestrian_movement_system(
         }
 
         let current_pos = transform.translation;
-        let Some(target_pos) = get_movement_target(state, current_pos, &patrol) else { continue };
+        let Some(target_pos) = get_movement_target(state, current_pos, &patrol) else {
+            continue;
+        };
 
         let direction = (target_pos - current_pos).normalize_or_zero();
         let flat_direction = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
@@ -473,7 +485,8 @@ pub fn pedestrian_movement_system(
         controller.translation = Some(velocity * dt + Vec3::new(0.0, -9.8 * dt, 0.0));
 
         // 檢查是否到達目標
-        let flat_dist_sq = (target_pos.x - current_pos.x).powi(2) + (target_pos.z - current_pos.z).powi(2);
+        let flat_dist_sq =
+            (target_pos.x - current_pos.x).powi(2) + (target_pos.z - current_pos.z).powi(2);
         if flat_dist_sq < movement.arrival_threshold.powi(2) && state.state != PedState::Fleeing {
             patrol.advance();
         }
@@ -498,7 +511,9 @@ pub fn pedestrian_reaction_system(
         let pos = transform.translation;
 
         // 檢查附近是否有槍聲
-        if let Some(shot_pos) = gunshot_tracker.has_nearby_shot(pos, config.hearing_range, current_time) {
+        if let Some(shot_pos) =
+            gunshot_tracker.has_nearby_shot(pos, config.hearing_range, current_time)
+        {
             // 聽到槍聲！
             state.fear_level = (state.fear_level + 0.5).min(1.0);
             state.last_threat_pos = Some(shot_pos);
@@ -546,7 +561,9 @@ pub fn gunshot_tracking_system(
 
     // 檢查是否有新的槍擊
     // last_shot_time 會在射擊時更新
-    let Ok((player_transform, inventory)) = player_query.single() else { return };
+    let Ok((player_transform, inventory)) = player_query.single() else {
+        return;
+    };
 
     // 只有遠程武器才會發出槍聲
     if let Some(weapon) = inventory.current_weapon() {
@@ -563,7 +580,8 @@ pub fn gunshot_tracking_system(
         // 檢查這次射擊是否已經記錄過
         let player_pos = player_transform.translation;
         let already_recorded = tracker.recent_shots.iter().any(|(pos, t)| {
-            (*t - combat_state.last_shot_time).abs() < 0.05 && pos.distance_squared(player_pos) < SHOT_RECORD_DISTANCE_SQ
+            (*t - combat_state.last_shot_time).abs() < 0.05
+                && pos.distance_squared(player_pos) < SHOT_RECORD_DISTANCE_SQ
         });
 
         if !already_recorded {
@@ -606,15 +624,17 @@ pub fn pedestrian_despawn_system(
     player_query: Query<&Transform, With<Player>>,
     mut ped_query: Query<(Entity, &Transform, &mut PedestrianState), With<Pedestrian>>,
 ) {
-    let Ok(player_transform) = player_query.single() else { return };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
     let dt = time.delta_secs();
 
     // 地圖邊界常數（與 setup.rs 一致）
-    const MAP_MIN_X: f32 = -100.0;  // X_KANGDING
-    const MAP_MAX_X: f32 = 80.0;    // X_ZHONGHUA
-    const MAP_MIN_Z: f32 = -80.0;   // Z_HANKOU
-    const MAP_MAX_Z: f32 = 50.0;    // Z_CHENGDU
+    const MAP_MIN_X: f32 = -100.0; // X_KANGDING
+    const MAP_MAX_X: f32 = 80.0; // X_ZHONGHUA
+    const MAP_MIN_Z: f32 = -80.0; // Z_HANKOU
+    const MAP_MAX_Z: f32 = 50.0; // Z_CHENGDU
 
     // 使用 distance_squared 避免 sqrt
     let despawn_radius_sq = config.despawn_radius * config.despawn_radius;
@@ -622,8 +642,10 @@ pub fn pedestrian_despawn_system(
         let current_pos = transform.translation;
 
         // 超出地圖邊界，立即移除
-        if current_pos.x < MAP_MIN_X || current_pos.x > MAP_MAX_X
-            || current_pos.z < MAP_MIN_Z || current_pos.z > MAP_MAX_Z
+        if current_pos.x < MAP_MIN_X
+            || current_pos.x > MAP_MAX_X
+            || current_pos.z < MAP_MIN_Z
+            || current_pos.z > MAP_MAX_Z
         {
             commands.entity(entity).despawn();
             continue;
@@ -728,13 +750,17 @@ pub fn pedestrian_walking_animation_system(
 
     // 更新腿部擺動
     for (parent, leg, mut transform) in leg_query.iter_mut() {
-        let Ok((_, anim)) = ped_query.get(parent.get()) else { continue };
+        let Ok((_, anim)) = ped_query.get(parent.get()) else {
+            continue;
+        };
         update_leg_transform(&mut transform, anim, leg.is_left);
     }
 
     // 更新手臂擺動（與腿相反）
     for (parent, arm, mut transform) in arm_query.iter_mut() {
-        let Ok((_, anim)) = ped_query.get(parent.get()) else { continue };
+        let Ok((_, anim)) = ped_query.get(parent.get()) else {
+            continue;
+        };
         update_arm_transform(&mut transform, anim, arm.is_left);
     }
 }
@@ -756,9 +782,9 @@ pub fn update_vehicle_spatial_hash_system(
 
     // 插入所有車輛（批量插入效能更好）
     vehicle_hash.insert_batch(
-        vehicle_query.iter().map(|(entity, transform, _)| {
-            (entity, transform.translation)
-        })
+        vehicle_query
+            .iter()
+            .map(|(entity, transform, _)| (entity, transform.translation)),
     );
 }
 
@@ -775,9 +801,9 @@ pub fn update_pedestrian_spatial_hash_system(
 
     // 插入所有行人（批量插入效能更好）
     ped_hash.insert_batch(
-        ped_query.iter().map(|(entity, transform)| {
-            (entity, transform.translation)
-        })
+        ped_query
+            .iter()
+            .map(|(entity, transform)| (entity, transform.translation)),
     );
 }
 
@@ -851,19 +877,31 @@ pub fn pedestrian_vehicle_collision_system(
     for (ped_entity, ped_transform, mut state, health) in ped_query.iter_mut() {
         let ped_pos = ped_transform.translation;
 
-        for (vehicle_entity, vehicle_pos, dist_sq) in vehicle_hash.query_radius(ped_pos, QUERY_RADIUS) {
+        for (vehicle_entity, vehicle_pos, dist_sq) in
+            vehicle_hash.query_radius(ped_pos, QUERY_RADIUS)
+        {
             if dist_sq >= VEHICLE_COLLISION_SQ {
                 continue;
             }
 
-            let Ok(velocity) = vehicle_velocity_query.get(vehicle_entity) else { continue };
+            let Ok(velocity) = vehicle_velocity_query.get(vehicle_entity) else {
+                continue;
+            };
             let speed = velocity.linvel.length();
 
             if speed <= MIN_HIT_SPEED {
                 continue;
             }
 
-            apply_vehicle_hit(&mut commands, ped_entity, &mut state, ped_pos, vehicle_pos, speed, current_time);
+            apply_vehicle_hit(
+                &mut commands,
+                ped_entity,
+                &mut state,
+                ped_pos,
+                vehicle_pos,
+                speed,
+                current_time,
+            );
 
             if Some(vehicle_entity) == player_vehicle {
                 send_vehicle_hit_crime(&mut crime_events, ped_entity, ped_pos, speed, health);
@@ -888,7 +926,8 @@ pub fn pedestrian_hit_response_system(
         // 被撞後的飛行效果（持續 1 秒）
         if time_since_hit < 1.0 {
             // 根據撞擊力計算位移
-            let displacement = hit.impact_direction * hit.impact_force * 0.01 * (1.0 - time_since_hit);
+            let displacement =
+                hit.impact_direction * hit.impact_force * 0.01 * (1.0 - time_since_hit);
             transform.translation += displacement * time.delta_secs() * 10.0;
 
             // 添加一些上升效果
@@ -1029,13 +1068,16 @@ pub fn astar_path_calculation_system(
 pub fn astar_movement_system(
     time: Res<Time>,
     config: Res<PedestrianConfig>,
-    mut ped_query: Query<(
-        &PedestrianState,
-        &DailyBehavior,
-        &mut Transform,
-        &mut AStarPath,
-        &mut KinematicCharacterController,
-    ), With<Pedestrian>>,
+    mut ped_query: Query<
+        (
+            &PedestrianState,
+            &DailyBehavior,
+            &mut Transform,
+            &mut AStarPath,
+            &mut KinematicCharacterController,
+        ),
+        With<Pedestrian>,
+    >,
 ) {
     let dt = time.delta_secs();
 
@@ -1075,11 +1117,7 @@ pub fn astar_movement_system(
         controller.translation = Some(velocity * dt + Vec3::new(0.0, -9.8 * dt, 0.0));
 
         // 檢查是否到達當前路徑點
-        let flat_dist = Vec3::new(
-            target.x - current_pos.x,
-            0.0,
-            target.z - current_pos.z,
-        ).length();
+        let flat_dist = Vec3::new(target.x - current_pos.x, 0.0, target.z - current_pos.z).length();
 
         if flat_dist < 1.5 {
             if !path.advance() {
@@ -1174,7 +1212,9 @@ fn handle_shelter_arrival(
         return;
     }
 
-    let Some(target) = shelter_seeker.target_shelter else { return };
+    let Some(target) = shelter_seeker.target_shelter else {
+        return;
+    };
     let dist_sq = pos.distance_squared(target);
 
     if dist_sq >= SHELTER_ARRIVAL_SQ {
@@ -1220,9 +1260,17 @@ fn try_start_shelter_seeking(
 ) -> bool {
     let shelter_target = pois
         .find_nearest_shelter(pos, SHELTER_SEARCH_RADIUS)
-        .or_else(|| pois.find_nearest(pos, PointOfInterestType::ShopWindow, SHOP_FALLBACK_SEARCH_RADIUS));
+        .or_else(|| {
+            pois.find_nearest(
+                pos,
+                PointOfInterestType::ShopWindow,
+                SHOP_FALLBACK_SEARCH_RADIUS,
+            )
+        });
 
-    let Some(target) = shelter_target else { return false };
+    let Some(target) = shelter_target else {
+        return false;
+    };
 
     shelter_seeker.start_seeking(target, behavior.behavior);
     behavior.behavior = BehaviorType::SeekingShelter;
@@ -1256,10 +1304,14 @@ fn update_path_for_new_behavior(
     pois: &PointsOfInterest,
 ) {
     let poi_target = match new_behavior {
-        BehaviorType::WindowShopping => pois.find_nearest(pos, PointOfInterestType::ShopWindow, 20.0),
+        BehaviorType::WindowShopping => {
+            pois.find_nearest(pos, PointOfInterestType::ShopWindow, 20.0)
+        }
         BehaviorType::Resting => pois.find_nearest(pos, PointOfInterestType::Bench, 30.0),
         BehaviorType::TakingPhoto => pois.find_nearest(pos, PointOfInterestType::PhotoSpot, 40.0),
-        BehaviorType::SeekingShelter => pois.find_nearest(pos, PointOfInterestType::Shelter, SHELTER_SEARCH_RADIUS),
+        BehaviorType::SeekingShelter => {
+            pois.find_nearest(pos, PointOfInterestType::Shelter, SHELTER_SEARCH_RADIUS)
+        }
         _ => None,
     };
 
@@ -1340,14 +1392,17 @@ pub fn daily_behavior_update_system(
     time: Res<Time>,
     mut pois: Option<ResMut<PointsOfInterest>>,
     weather: Res<WeatherState>,
-    mut ped_query: Query<(
-        Entity,
-        &Transform,
-        &PedestrianState,
-        &mut DailyBehavior,
-        &mut ShelterSeeker,
-        Option<&mut AStarPath>,
-    ), With<Pedestrian>>,
+    mut ped_query: Query<
+        (
+            Entity,
+            &Transform,
+            &PedestrianState,
+            &mut DailyBehavior,
+            &mut ShelterSeeker,
+            Option<&mut AStarPath>,
+        ),
+        With<Pedestrian>,
+    >,
 ) {
     let dt = time.delta_secs();
     let current_time = time.elapsed_secs();
@@ -1358,7 +1413,9 @@ pub fn daily_behavior_update_system(
     let is_raining = weather.weather_type == WeatherType::Rainy;
     let rain_intensity = if is_raining { weather.intensity } else { 0.0 };
 
-    for (_entity, transform, state, mut behavior, mut shelter_seeker, mut astar_path) in ped_query.iter_mut() {
+    for (_entity, transform, state, mut behavior, mut shelter_seeker, mut astar_path) in
+        ped_query.iter_mut()
+    {
         let pos = transform.translation;
 
         if state.state == PedState::Fleeing {
@@ -1367,28 +1424,57 @@ pub fn daily_behavior_update_system(
         }
 
         if behavior.behavior == BehaviorType::SeekingShelter {
-            process_shelter_behavior(pos, is_raining, current_time, &mut behavior, &mut shelter_seeker, astar_path.as_deref_mut(), pois, &mut rng);
+            process_shelter_behavior(
+                pos,
+                is_raining,
+                current_time,
+                &mut behavior,
+                &mut shelter_seeker,
+                astar_path.as_deref_mut(),
+                pois,
+                &mut rng,
+            );
             continue;
         }
 
-        if is_raining && try_rain_shelter(pos, rain_intensity, &mut behavior, &mut shelter_seeker, astar_path.as_deref_mut(), pois, &mut rng) {
+        if is_raining
+            && try_rain_shelter(
+                pos,
+                rain_intensity,
+                &mut behavior,
+                &mut shelter_seeker,
+                astar_path.as_deref_mut(),
+                pois,
+                &mut rng,
+            )
+        {
             continue;
         }
 
-        update_behavior_timer(dt, is_raining, pos, &mut behavior, astar_path.as_deref_mut(), pois, &mut rng);
+        update_behavior_timer(
+            dt,
+            is_raining,
+            pos,
+            &mut behavior,
+            astar_path.as_deref_mut(),
+            pois,
+            &mut rng,
+        );
     }
 }
 
 /// 選擇下一個行為
-fn select_next_behavior(
-    rng: &mut impl Rng,
-    pos: Vec3,
-    pois: &PointsOfInterest,
-) -> BehaviorType {
+fn select_next_behavior(rng: &mut impl Rng, pos: Vec3, pois: &PointsOfInterest) -> BehaviorType {
     // 根據附近興趣點調整機率
-    let has_shop_nearby = pois.find_nearest(pos, PointOfInterestType::ShopWindow, 15.0).is_some();
-    let has_bench_nearby = pois.find_nearest(pos, PointOfInterestType::Bench, 20.0).is_some();
-    let has_photo_spot = pois.find_nearest(pos, PointOfInterestType::PhotoSpot, 30.0).is_some();
+    let has_shop_nearby = pois
+        .find_nearest(pos, PointOfInterestType::ShopWindow, 15.0)
+        .is_some();
+    let has_bench_nearby = pois
+        .find_nearest(pos, PointOfInterestType::Bench, 20.0)
+        .is_some();
+    let has_photo_spot = pois
+        .find_nearest(pos, PointOfInterestType::PhotoSpot, 30.0)
+        .is_some();
 
     let roll: f32 = rng.random();
 
@@ -1435,10 +1521,8 @@ pub fn behavior_animation_system(
                 let look_angle = (elapsed * 0.5).sin() * 0.3;
                 let base_rotation = transform.rotation;
                 let look_rotation = Quat::from_rotation_y(look_angle);
-                transform.rotation = base_rotation.slerp(
-                    base_rotation * look_rotation,
-                    time.delta_secs() * 1.0,
-                );
+                transform.rotation =
+                    base_rotation.slerp(base_rotation * look_rotation, time.delta_secs() * 1.0);
             }
             BehaviorType::TakingPhoto => {
                 // 拍照：舉起手（透過手臂旋轉模擬，這裡只做身體穩定）
@@ -1447,10 +1531,9 @@ pub fn behavior_animation_system(
             BehaviorType::Chatting => {
                 // 聊天：身體微微搖擺
                 let sway = (elapsed * 2.0).sin() * 0.02;
-                transform.rotation = transform.rotation.slerp(
-                    Quat::from_rotation_z(sway),
-                    time.delta_secs() * 2.0,
-                );
+                transform.rotation = transform
+                    .rotation
+                    .slerp(Quat::from_rotation_z(sway), time.delta_secs() * 2.0);
                 anim.speed = 0.0;
             }
             BehaviorType::Resting => {
@@ -1559,15 +1642,13 @@ pub fn witness_crime_detection_system(
     _time: Res<Time>,
     mut crime_events: MessageReader<CrimeEvent>,
     player_query: Query<&Transform, With<Player>>,
-    mut ped_query: Query<(
-        &Transform,
-        &mut PedestrianState,
-        &mut WitnessState,
-    ), With<Pedestrian>>,
+    mut ped_query: Query<(&Transform, &mut PedestrianState, &mut WitnessState), With<Pedestrian>>,
 ) {
     use witness_constants::*;
 
-    let Ok(player_transform) = player_query.single() else { return };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
     let fov_cos = (WITNESS_FOV_DEGREES / 2.0).to_radians().cos();
 
@@ -1583,7 +1664,13 @@ pub fn witness_crime_detection_system(
                 continue;
             }
 
-            if !can_witness_crime(ped_transform, crime_pos, witness_range_sq, fov_cos, witnessed_crime) {
+            if !can_witness_crime(
+                ped_transform,
+                crime_pos,
+                witness_range_sq,
+                fov_cos,
+                witnessed_crime,
+            ) {
                 continue;
             }
 
@@ -1646,19 +1733,19 @@ fn handle_call_completion(
 pub fn witness_phone_call_system(
     time: Res<Time>,
     player_query: Query<(&Transform, Option<&WeaponInventory>), With<Player>>,
-    mut ped_query: Query<(
-        Entity,
-        &Transform,
-        &mut PedestrianState,
-        &mut WitnessState,
-    ), With<Pedestrian>>,
+    mut ped_query: Query<
+        (Entity, &Transform, &mut PedestrianState, &mut WitnessState),
+        With<Pedestrian>,
+    >,
     mut witness_reports: MessageWriter<WitnessReport>,
 ) {
     use witness_constants::*;
 
     let dt = time.delta_secs();
 
-    let Ok((player_transform, weapon_inventory)) = player_query.single() else { return };
+    let Ok((player_transform, weapon_inventory)) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     let intimidation_dist = if is_player_armed(weapon_inventory) {
@@ -1724,7 +1811,9 @@ pub fn witness_visual_system(
         }
 
         // 檢查是否已有圖標
-        let has_icon = existing_icons.iter().any(|(_, icon)| icon.owner == ped_entity);
+        let has_icon = existing_icons
+            .iter()
+            .any(|(_, icon)| icon.owner == ped_entity);
         if has_icon {
             continue;
         }
@@ -1778,7 +1867,9 @@ pub fn witness_progress_ui_system(
     player_query: Query<&Transform, With<Player>>,
     ped_query: Query<(&Transform, &WitnessState), (With<Pedestrian>, Changed<WitnessState>)>,
 ) {
-    let Ok(player_transform) = player_query.single() else { return };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     // 找出最近的報警中行人
@@ -1904,9 +1995,15 @@ fn handle_panic_fade(
 
     panic_state.calm_down(calm_down_rate, dt);
 
-    if !panic_state.is_panicked() && ped_state.state == PedState::Fleeing && ped_state.flee_timer <= 0.0 {
+    if !panic_state.is_panicked()
+        && ped_state.state == PedState::Fleeing
+        && ped_state.flee_timer <= 0.0
+    {
         // 恢復恐慌前的狀態，若無則預設為 Walking
-        ped_state.state = panic_state.previous_state.take().unwrap_or(PedState::Walking);
+        ped_state.state = panic_state
+            .previous_state
+            .take()
+            .unwrap_or(PedState::Walking);
         ped_state.fear_level = 0.0;
     }
 }
@@ -1919,11 +2016,7 @@ pub fn panic_wave_propagation_system(
     time: Res<Time>,
     mut panic_manager: ResMut<PanicWaveManager>,
     ped_hash: Res<PedestrianSpatialHash>,
-    mut ped_query: Query<(
-        &Transform,
-        &mut PedestrianState,
-        &mut PanicState,
-    ), With<Pedestrian>>,
+    mut ped_query: Query<(&Transform, &mut PedestrianState, &mut PanicState), With<Pedestrian>>,
 ) {
     use panic_constants::*;
     let dt = time.delta_secs();
@@ -1933,7 +2026,8 @@ pub fn panic_wave_propagation_system(
     panic_manager.update(dt);
 
     // 階段 1：使用空間哈希找出被恐慌波影響的行人
-    let panic_triggers = collect_panic_triggers(&panic_manager.active_waves, &ped_hash, WAVE_FRONT_WIDTH);
+    let panic_triggers =
+        collect_panic_triggers(&panic_manager.active_waves, &ped_hash, WAVE_FRONT_WIDTH);
 
     // 階段 2：處理所有行人（更新計時器）
     for (_, _, mut panic_state) in ped_query.iter_mut() {
@@ -1942,7 +2036,9 @@ pub fn panic_wave_propagation_system(
 
     // 階段 3：應用恐慌觸發
     for (entity, intensity, source) in panic_triggers {
-        let Ok((_, mut ped_state, mut panic_state)) = ped_query.get_mut(entity) else { continue };
+        let Ok((_, mut ped_state, mut panic_state)) = ped_query.get_mut(entity) else {
+            continue;
+        };
         apply_panic_to_pedestrian(
             &mut ped_state,
             &mut panic_state,
@@ -1959,8 +2055,16 @@ pub fn panic_wave_propagation_system(
             continue;
         }
 
-        let still_in_wave = panic_manager.check_panic_at(ped_transform.translation).is_some();
-        handle_panic_fade(&mut ped_state, &mut panic_state, still_in_wave, PANIC_CALM_DOWN_RATE, dt);
+        let still_in_wave = panic_manager
+            .check_panic_at(ped_transform.translation)
+            .is_some();
+        handle_panic_fade(
+            &mut ped_state,
+            &mut panic_state,
+            still_in_wave,
+            PANIC_CALM_DOWN_RATE,
+            dt,
+        );
     }
 }
 
@@ -1979,11 +2083,7 @@ pub fn pedestrian_scream_system(
             let ped_pos = ped_transform.translation;
 
             // 產生新的恐慌波
-            panic_manager.create_from_scream(
-                ped_pos,
-                panic_state.panic_level,
-                current_time,
-            );
+            panic_manager.create_from_scream(ped_pos, panic_state.panic_level, current_time);
 
             // 標記已尖叫（設置冷卻）
             panic_state.do_scream();
@@ -2004,7 +2104,11 @@ pub fn gunshot_panic_trigger_system(
 
     // 只處理新增的槍擊事件
     if current_count > *last_processed_count {
-        for shot in gunshot_tracker.recent_shots.iter().skip(*last_processed_count) {
+        for shot in gunshot_tracker
+            .recent_shots
+            .iter()
+            .skip(*last_processed_count)
+        {
             let (shot_pos, _shot_time) = *shot;
             panic_manager.create_from_gunshot(shot_pos, current_time);
         }
@@ -2023,12 +2127,15 @@ pub fn panic_flee_direction_system(
     time: Res<Time>,
     config: Res<PedestrianConfig>,
     mut rng: Local<Option<rand::rngs::StdRng>>,
-    mut ped_query: Query<(
-        &mut Transform,
-        &PedestrianState,
-        &PanicState,
-        &mut WalkingAnimation,
-    ), With<Pedestrian>>,
+    mut ped_query: Query<
+        (
+            &mut Transform,
+            &PedestrianState,
+            &PanicState,
+            &mut WalkingAnimation,
+        ),
+        With<Pedestrian>,
+    >,
 ) {
     use panic_constants::*;
     use rand::SeedableRng;
@@ -2061,9 +2168,11 @@ pub fn panic_flee_direction_system(
             // 更新朝向
             if jittered_dir.length_squared() > 0.01 {
                 let target_rotation = Quat::from_rotation_y(
-                    (-jittered_dir.z).atan2(jittered_dir.x) - std::f32::consts::FRAC_PI_2
+                    (-jittered_dir.z).atan2(jittered_dir.x) - std::f32::consts::FRAC_PI_2,
                 );
-                transform.rotation = transform.rotation.slerp(target_rotation, dt * ROTATION_SLERP_SPEED);
+                transform.rotation = transform
+                    .rotation
+                    .slerp(target_rotation, dt * ROTATION_SLERP_SPEED);
             }
 
             // 更新動畫速度（恐慌時動畫更快）

@@ -189,81 +189,119 @@ pub fn trigger_system(
         };
 
         // 處理進入/離開狀態
-        if in_range && !track.was_inside {
-            // 剛進入
-            match trigger.trigger_type {
-                TriggerType::OnEnter => {
+        process_trigger_enter_exit(
+            &mut trigger,
+            track,
+            in_range,
+            entity,
+            event_type,
+            &mut events,
+        );
+
+        // 處理持續狀態
+        if in_range {
+            process_trigger_active(
+                &mut trigger,
+                track,
+                delta_ms,
+                entity,
+                event_type,
+                &mut events,
+                &mut interaction,
+            );
+        }
+
+        track.was_inside = in_range;
+    }
+}
+
+fn process_trigger_enter_exit(
+    trigger: &mut Trigger,
+    track: &mut TriggerTrackingState,
+    in_range: bool,
+    entity: Entity,
+    event_type: TriggerEventType,
+    events: &mut MessageWriter<TriggerEvent>,
+) {
+    if in_range && !track.was_inside {
+        // 剛進入
+        match trigger.trigger_type {
+            TriggerType::OnEnter => {
+                trigger.triggered = trigger.one_shot;
+                events.write(TriggerEvent::PlayerEntered {
+                    entity,
+                    trigger_type: event_type,
+                });
+            }
+            TriggerType::OnEnterDelayed { .. } => {
+                track.timer = 0.0;
+                track.triggered = false;
+            }
+            _ => {}
+        }
+    } else if !in_range && track.was_inside {
+        // 剛離開
+        if matches!(trigger.trigger_type, TriggerType::OnExit) {
+            trigger.triggered = trigger.one_shot;
+            events.write(TriggerEvent::PlayerExited {
+                entity,
+                trigger_type: event_type,
+            });
+        }
+        // 重置計時器
+        track.timer = 0.0;
+        track.triggered = false;
+    }
+}
+
+fn process_trigger_active(
+    trigger: &mut Trigger,
+    track: &mut TriggerTrackingState,
+    delta_ms: f32,
+    entity: Entity,
+    event_type: TriggerEventType,
+    events: &mut MessageWriter<TriggerEvent>,
+    interaction: &mut InteractionState,
+) {
+    match trigger.trigger_type {
+        TriggerType::OnInteract => {
+            if interaction.can_interact() {
+                trigger.triggered = trigger.one_shot;
+                events.write(TriggerEvent::PlayerInteracted {
+                    entity,
+                    trigger_type: event_type,
+                });
+                interaction.consume();
+            }
+        }
+        TriggerType::OnEnterDelayed { delay } => {
+            if !track.triggered {
+                track.timer += delta_ms;
+                if track.timer >= delay as f32 {
+                    track.triggered = true;
                     trigger.triggered = trigger.one_shot;
                     events.write(TriggerEvent::PlayerEntered {
                         entity,
                         trigger_type: event_type,
                     });
                 }
-                TriggerType::OnEnterDelayed { .. } => {
-                    track.timer = 0.0;
-                    track.triggered = false;
-                }
-                _ => {}
-            }
-        } else if !in_range && track.was_inside {
-            // 剛離開
-            if matches!(trigger.trigger_type, TriggerType::OnExit) {
-                trigger.triggered = trigger.one_shot;
-                events.write(TriggerEvent::PlayerExited {
-                    entity,
-                    trigger_type: event_type,
-                });
-            }
-            // 重置計時器
-            track.timer = 0.0;
-            track.triggered = false;
-        }
-
-        // 處理持續狀態
-        if in_range {
-            match trigger.trigger_type {
-                TriggerType::OnInteract => {
-                    if interaction.can_interact() {
-                        trigger.triggered = trigger.one_shot;
-                        events.write(TriggerEvent::PlayerInteracted {
-                            entity,
-                            trigger_type: event_type,
-                        });
-                        interaction.consume();
-                    }
-                }
-                TriggerType::OnEnterDelayed { delay } => {
-                    if !track.triggered {
-                        track.timer += delta_ms;
-                        if track.timer >= delay as f32 {
-                            track.triggered = true;
-                            trigger.triggered = trigger.one_shot;
-                            events.write(TriggerEvent::PlayerEntered {
-                                entity,
-                                trigger_type: event_type,
-                            });
-                        }
-                    }
-                }
-                TriggerType::OnStay { duration } => {
-                    if !track.triggered {
-                        track.timer += delta_ms;
-                        if track.timer >= duration as f32 {
-                            track.triggered = true;
-                            trigger.triggered = trigger.one_shot;
-                            events.write(TriggerEvent::PlayerStayed {
-                                entity,
-                                trigger_type: event_type,
-                                duration: track.timer / 1000.0,
-                            });
-                        }
-                    }
-                }
-                _ => {}
             }
         }
-
-        track.was_inside = in_range;
+        TriggerType::OnStay { duration } => {
+            if !track.triggered {
+                track.timer += delta_ms;
+                if track.timer >= duration as f32 {
+                    track.triggered = true;
+                    trigger.triggered = trigger.one_shot;
+                    events.write(TriggerEvent::PlayerStayed {
+                        entity,
+                        trigger_type: event_type,
+                        duration: track.timer / 1000.0,
+                    });
+                }
+            }
+        }
+        _ => {}
     }
 }
 

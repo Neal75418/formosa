@@ -1476,6 +1476,11 @@ fn select_next_behavior(rng: &mut impl Rng, pos: Vec3, pois: &PointsOfInterest) 
         .find_nearest(pos, PointOfInterestType::PhotoSpot, 30.0)
         .is_some();
 
+    let in_busy_area = pos.x.abs() <= 30.0 && pos.z.abs() <= 30.0;
+    if !in_busy_area && !has_shop_nearby && !has_bench_nearby && !has_photo_spot {
+        return BehaviorType::Walking;
+    }
+
     let roll: f32 = rng.random();
 
     // 行為機率分配

@@ -59,6 +59,7 @@ impl Plugin for VehiclePlugin {
                         .chain(),
                     update_vehicle_visuals.after(vehicle_physics_integration_system),
                     npc_vehicle_ai,
+                    npc_vehicle_motion_system.after(npc_vehicle_ai),
                 )
                     .in_set(GameSet::Vehicle)
                     .run_if(in_state(AppState::InGame)),

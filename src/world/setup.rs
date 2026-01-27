@@ -39,7 +39,7 @@ pub const Z_CHENGDU: f32 = 50.0; // 成都路 (南邊界，主幹道)
 
 // 道路寬度 (按真實比例)
 pub const W_ZHONGHUA: f32 = 40.0; // 中華路 (6-8 車道)
-pub const W_MAIN: f32 = 16.0; // 成都路, 康定路 (4 車道)
+pub const W_MAIN: f32 = 16.0; // 成都路, 康定路 (2 車道 + 寬人行道)
 pub const W_SECONDARY: f32 = 12.0; // 西寧南路, 漢口街 (2-4 車道)
 pub const W_PEDESTRIAN: f32 = 15.0; // 漢中街, 峨嵋街, 武昌街 (徒步區)
 pub const W_ALLEY: f32 = 8.0; // 昆明街 (小巷)
@@ -132,8 +132,8 @@ pub fn setup_world(
         affects_lightmapped_meshes: true,
     });
 
-    // 全域陰影品質設定 (4096x4096 解析度)
-    commands.insert_resource(DirectionalLightShadowMap { size: 4096 });
+    // 全域陰影品質設定 (2048x2048 解析度)
+    commands.insert_resource(DirectionalLightShadowMap { size: 2048 });
 
     // 主光源 (太陽) - 含級聯陰影配置
     // 初始角度會由 sun_moon_rotation_system 根據 WorldTime 自動更新
@@ -146,9 +146,9 @@ pub fn setup_world(
         },
         // 級聯陰影：近處銳利，遠處適當模糊
         CascadeShadowConfigBuilder {
-            num_cascades: 4,               // 4 層級聯
-            first_cascade_far_bound: 15.0, // 第一層 15m（最銳利）
-            maximum_distance: 200.0,       // 最大陰影距離 200m
+            num_cascades: 3,               // 3 層級聯
+            first_cascade_far_bound: 10.0, // 第一層 10m（最銳利）
+            maximum_distance: 120.0,       // 最大陰影距離 120m
             ..default()
         }
         .build(),

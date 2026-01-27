@@ -11,6 +11,9 @@ use crate::core::{
     GameState, WeatherState, WeatherType, COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC,
     COLLISION_GROUP_VEHICLE,
 };
+use crate::world::{
+    W_MAIN, W_SECONDARY, W_ZHONGHUA, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU, Z_HANKOU,
+};
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -174,20 +177,32 @@ pub fn vehicle_acceleration_system(
     let effective_traction = weather_traction * modifiers.traction;
     let effective_max_speed = vehicle.max_speed * modifiers.speed;
 
+    apply_vehicle_motion_physics(
+        &mut vehicle,
+        dt,
+        &config.physics,
+        &modifiers,
+        effective_traction,
+        effective_max_speed,
+    );
+}
+
+fn apply_vehicle_motion_physics(
+    vehicle: &mut Vehicle,
+    dt: f32,
+    physics_config: &crate::vehicle::config::VehiclePhysicsConfig,
+    modifiers: &VehicleDynamicsModifiers,
+    effective_traction: f32,
+    effective_max_speed: f32,
+) {
     if vehicle.throttle_input > 0.0 {
-        handle_acceleration(
-            &mut vehicle,
-            dt,
-            &config.physics,
-            &modifiers,
-            effective_traction,
-        );
+        handle_acceleration(vehicle, dt, physics_config, modifiers, effective_traction);
     } else if vehicle.brake_input > 0.0 && !vehicle.is_handbraking {
-        handle_braking(&mut vehicle, dt, &modifiers, effective_traction);
+        handle_braking(vehicle, dt, modifiers, effective_traction);
     } else {
         handle_friction(
-            &mut vehicle,
-            &config.physics,
+            vehicle,
+            physics_config,
             effective_traction,
             effective_max_speed,
         );
@@ -195,10 +210,10 @@ pub fn vehicle_acceleration_system(
 
     // Clamp Speed
     vehicle.current_speed = vehicle.current_speed.clamp(
-        -effective_max_speed * config.physics.reverse_speed_ratio,
+        -effective_max_speed * physics_config.reverse_speed_ratio,
         effective_max_speed,
     );
-    if vehicle.current_speed.abs() < config.physics.stop_speed_threshold
+    if vehicle.current_speed.abs() < physics_config.stop_speed_threshold
         && vehicle.throttle_input == 0.0
     {
         vehicle.current_speed = 0.0;
@@ -700,6 +715,18 @@ fn get_vehicle_height(vehicle_type: &VehicleType) -> f32 {
     }
 }
 
+#[derive(Clone, Copy)]
+enum ObstacleHitKind {
+    Front,
+    Side,
+}
+
+#[derive(Clone, Copy)]
+struct ObstacleHit {
+    distance: f32,
+    kind: ObstacleHitKind,
+}
+
 /// 檢查前方是否有障礙物（人或車）
 fn check_obstacle(
     vehicle_transform: &Transform,
@@ -707,7 +734,7 @@ fn check_obstacle(
     _vehicle_type: &VehicleType,
     rapier_context: &ReadRapierContext,
     config: &crate::vehicle::config::NpcDrivingConfig,
-) -> Option<f32> {
+) -> Option<ObstacleHit> {
     let rapier = rapier_context.single().ok()?;
     let vehicle_pos = vehicle_transform.translation;
     let vehicle_forward = vehicle_transform.forward().as_vec3();
@@ -723,14 +750,14 @@ fn check_obstacle(
             COLLISION_GROUP_VEHICLE | COLLISION_GROUP_CHARACTER | COLLISION_GROUP_STATIC,
         ))
         .exclude_collider(vehicle_entity);
-    // We can't exclude entity easily without entity ID.
-    // Ideally we pass entity to this function.
-    // For now, let's just raycast.
 
     if let Some((_entity, toi)) =
         rapier.cast_ray(ray_origin, vehicle_forward, max_toi, solid, groups)
     {
-        return Some(rapier_real_to_f32(toi));
+        return Some(ObstacleHit {
+            distance: rapier_real_to_f32(toi),
+            kind: ObstacleHitKind::Front,
+        });
     }
 
     // 側向射線（避免路邊擦撞）
@@ -748,7 +775,13 @@ fn check_obstacle(
             solid,
             groups,
         ) {
-            return Some(rapier_real_to_f32(toi));
+            let distance = rapier_real_to_f32(toi);
+            if distance <= config.obstacle_side_brake_distance {
+                return Some(ObstacleHit {
+                    distance,
+                    kind: ObstacleHitKind::Side,
+                });
+            }
         }
     }
 
@@ -767,7 +800,7 @@ fn update_npc_state_from_obstacle(
 ) {
     npc.stuck_timer += dt;
 
-    if let Some(distance) = check_obstacle(
+    if let Some(hit) = check_obstacle(
         transform,
         vehicle_entity,
         &vehicle.vehicle_type,
@@ -775,7 +808,7 @@ fn update_npc_state_from_obstacle(
         config,
     ) {
         let (new_state, reset_timer) =
-            determine_npc_reaction(distance, vehicle.current_speed, npc.stuck_timer, config);
+            determine_npc_reaction(hit, vehicle.current_speed, npc.stuck_timer, config);
         npc.state = new_state;
         if reset_timer {
             npc.stuck_timer = 0.0;
@@ -786,26 +819,39 @@ fn update_npc_state_from_obstacle(
 }
 
 fn determine_npc_reaction(
-    distance: f32,
+    hit: ObstacleHit,
     current_speed: f32,
     stuck_timer: f32,
     config: &crate::vehicle::config::NpcDrivingConfig,
 ) -> (NpcState, bool) {
-    if distance < config.obstacle_too_close_distance {
-        // Too close, check if stuck
-        if current_speed < 1.0 {
-            if stuck_timer > 2.0 {
-                (NpcState::Reversing, true)
+    match hit.kind {
+        ObstacleHitKind::Side => {
+            if hit.distance < config.obstacle_too_close_distance {
+                (NpcState::Braking, false)
+            } else if hit.distance < config.obstacle_side_brake_distance {
+                (NpcState::Braking, false)
             } else {
-                (NpcState::Stopped, false)
+                (NpcState::Cruising, false)
             }
-        } else {
-            (NpcState::Braking, false)
         }
-    } else if distance < config.obstacle_brake_distance {
-        (NpcState::Braking, false)
-    } else {
-        (NpcState::Cruising, false)
+        ObstacleHitKind::Front => {
+            if hit.distance < config.obstacle_too_close_distance {
+                // Too close, check if stuck
+                if current_speed < 1.0 {
+                    if stuck_timer > 2.0 {
+                        (NpcState::Reversing, true)
+                    } else {
+                        (NpcState::Stopped, false)
+                    }
+                } else {
+                    (NpcState::Braking, false)
+                }
+            } else if hit.distance < config.obstacle_brake_distance {
+                (NpcState::Braking, false)
+            } else {
+                (NpcState::Cruising, false)
+            }
+        }
     }
 }
 
@@ -1010,6 +1056,95 @@ fn handle_waiting_at_light_state(
     if !should_stop_for_traffic_light(vehicle_pos, vehicle_forward, traffic_light_query) {
         npc.state = NpcState::Cruising;
     }
+}
+
+/// NPC 車輛運動整合（使用 NPC 輸入更新速度與位置）
+pub fn npc_vehicle_motion_system(
+    time: Res<Time>,
+    weather: Res<WeatherState>,
+    config: Res<VehicleConfig>,
+    mut npc_query: Query<
+        (&mut Transform, &mut Vehicle, Option<&VehicleModifications>),
+        With<NpcVehicle>,
+    >,
+) {
+    let dt = time.delta_secs();
+
+    for (mut transform, mut vehicle, mods) in npc_query.iter_mut() {
+        let modifiers = VehicleDynamicsModifiers::new(mods, None);
+
+        let weather_traction = get_weather_traction_factor(&weather, &config.weather);
+        let effective_traction = weather_traction * modifiers.traction;
+        let effective_max_speed = vehicle.max_speed * modifiers.speed;
+
+        apply_vehicle_motion_physics(
+            &mut vehicle,
+            dt,
+            &config.physics,
+            &modifiers,
+            effective_traction,
+            effective_max_speed,
+        );
+
+        // Clamp Speed
+        vehicle.current_speed = vehicle.current_speed.clamp(
+            -effective_max_speed * config.physics.reverse_speed_ratio,
+            effective_max_speed,
+        );
+        if vehicle.current_speed.abs() < config.physics.stop_speed_threshold
+            && vehicle.throttle_input == 0.0
+            && vehicle.brake_input == 0.0
+        {
+            vehicle.current_speed = 0.0;
+        }
+
+        // Steering
+        if vehicle.current_speed.abs() > 0.5 {
+            apply_npc_steering(&mut transform, &mut vehicle, mods, &weather, &config, dt);
+        }
+
+        // Move
+        let forward = transform.forward().as_vec3();
+        transform.translation += forward * vehicle.current_speed * dt;
+    }
+}
+
+fn apply_npc_steering(
+    transform: &mut Transform,
+    vehicle: &mut Vehicle,
+    mods: Option<&VehicleModifications>,
+    weather: &WeatherState,
+    config: &VehicleConfig,
+    dt: f32,
+) {
+    let weather_handling = get_weather_handling_factor(weather, &config.weather);
+    let handling_mod = mods.map_or(1.0, |m| m.suspension.multiplier());
+    let effective_handling = weather_handling * handling_mod;
+
+    let speed_ratio = (vehicle.current_speed.abs() / vehicle.max_speed).clamp(0.0, 1.0);
+    let speed_turn_factor = if speed_ratio < 0.3 {
+        1.0
+    } else {
+        let high_speed_falloff = (speed_ratio - 0.3) / 0.7;
+        1.0 - high_speed_falloff * (1.0 - vehicle.high_speed_turn_factor)
+    };
+
+    let drift_turn_bonus = if vehicle.is_drifting {
+        1.0 + vehicle.drift_angle.abs() * vehicle.counter_steer_assist
+    } else {
+        1.0
+    };
+
+    let direction = vehicle.current_speed.signum();
+    let yaw_rate = vehicle.turn_speed
+        * vehicle.handling
+        * effective_handling
+        * speed_turn_factor
+        * drift_turn_bonus
+        * vehicle.steer_input
+        * direction;
+
+    transform.rotate_y(yaw_rate * dt);
 }
 
 // === 車輛生成輔助函數 ===
@@ -1301,6 +1436,15 @@ pub fn spawn_npc_vehicle(
         });
 }
 
+/// 道路人行道寬度（需與 world/setup.rs 一致）
+const ROAD_SIDEWALK_WIDTH: f32 = 4.0;
+
+/// 計算雙向車道中心偏移（以道路總寬度為基準）
+fn lane_offset(total_width: f32) -> f32 {
+    let drive_width = (total_width - ROAD_SIDEWALK_WIDTH * 2.0).max(0.0);
+    drive_width * 0.25
+}
+
 /// 系統：初始化交通 (在 Setup 階段運行)
 /// 使用共享材質資源以優化效能
 /// 生成 8-10 台 NPC 車輛和紅綠燈
@@ -1310,67 +1454,70 @@ pub fn spawn_initial_traffic(
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_mats: Res<super::VehicleMaterials>,
 ) {
-    // 首先初始化紅綠燈視覺資源
-    let traffic_visuals = TrafficLightVisuals::new(&mut meshes, &mut materials);
-
     // NPC 車輛路線 - 只走柏油路，避開徒步區
     // 可用道路：中華路 (X=75, 寬50m), 西寧南路 (X=-50), 成都路 (Z=50)
     // ★ 重要：
-    //   1. 每條路線必須形成閉環
+    //   1. 路線點必須在道路中心線左右偏移 (Lane Offset)
     //   2. 不同路線的車道必須錯開，避免重疊
-    //   3. 車寬約 2.5m，車道間距至少 8m
+    //   3. 車寬約 2.5m，車道間距至少 8m (主要道路為雙向各1車道)
 
-    // === 道路座標參考 ===
-    // Z_HANKOU = -80 (漢口街, 寬12) → 北 -86, 南 -74
-    // Z_CHENGDU = 50 (成都路, 寬16) → 北 42, 南 58
-    // X_ZHONGHUA = 80 (中華路, 寬20) → 西 70, 東 90
-    // X_XINING = -55 (西寧南路, 寬12) → 西 -61, 東 -49
-    // X_KANGDING = -100 (康定路, 寬16) → 西 -108, 東 -92
+    // === 道路座標參考（與 world/setup.rs 同步）===
+    let lane_offset_main = lane_offset(W_MAIN);
+    let lane_offset_secondary = lane_offset(W_SECONDARY);
+    let lane_offset_zhonghua = lane_offset(W_ZHONGHUA);
 
-    // 路線 A：外圈 (逆時針) - 使用實際道路座標
-    // 成都路北側車道 Z≈45，漢口街南側車道 Z≈-77
+    let z_chengdu_north = Z_CHENGDU - lane_offset_main;
+    let z_chengdu_south = Z_CHENGDU + lane_offset_main;
+    let z_hankou_north = Z_HANKOU - lane_offset_secondary;
+    let z_hankou_south = Z_HANKOU + lane_offset_secondary;
+
+    let x_zhonghua_east = X_ZHONGHUA + lane_offset_zhonghua;
+    let x_zhonghua_west = X_ZHONGHUA - lane_offset_zhonghua;
+    let x_zhonghua_mid_east = X_ZHONGHUA + lane_offset_zhonghua * 0.5;
+    let x_zhonghua_mid_west = X_ZHONGHUA - lane_offset_zhonghua * 0.5;
+    let x_xining_east = X_XINING + lane_offset_secondary;
+    let x_xining_west = X_XINING - lane_offset_secondary;
+    let x_kangding_east = X_KANGDING + lane_offset_main;
+    let x_kangding_west = X_KANGDING - lane_offset_main;
+
+    // 路線 A：外圈 (逆時針) - 走主要幹道外側
     let route_outer = vec![
-        Vec3::new(-52.0, 0.0, 45.0),  // 0: 西南角 (西寧/成都)
-        Vec3::new(85.0, 0.0, 45.0),   // 1: 東南角 (中華/成都)
-        Vec3::new(85.0, 0.0, -77.0),  // 2: 東北角 (中華/漢口)
-        Vec3::new(-52.0, 0.0, -77.0), // 3: 西北角 (西寧/漢口)
+        Vec3::new(x_xining_west, 0.0, z_chengdu_north), // 西南角
+        Vec3::new(x_zhonghua_east, 0.0, z_chengdu_north), // 東南角
+        Vec3::new(x_zhonghua_east, 0.0, z_hankou_south), // 東北角
+        Vec3::new(x_xining_west, 0.0, z_hankou_south),  // 西北角
     ];
 
-    // 路線 B：內圈 (順時針) - 成都路南側車道 Z≈58
-    // 公車起點往南移 3m (Z=58)，避開與中華路車輛和成都路車輛衝突
+    // 路線 B：內圈 (順時針) - 使用相反車道避免重疊
     let route_inner = vec![
-        Vec3::new(72.0, 0.0, 58.0),   // 0: 東南角（西側車道，更南）
-        Vec3::new(-58.0, 0.0, 58.0),  // 1: 西南角
-        Vec3::new(-58.0, 0.0, -83.0), // 2: 西北角 (漢口街北側)
-        Vec3::new(72.0, 0.0, -83.0),  // 3: 東北角
+        Vec3::new(x_zhonghua_west, 0.0, z_chengdu_south), // 東南角
+        Vec3::new(x_xining_east, 0.0, z_chengdu_south),   // 西南角
+        Vec3::new(x_xining_east, 0.0, z_hankou_north),    // 西北角
+        Vec3::new(x_zhonghua_west, 0.0, z_hankou_north),  // 東北角
     ];
 
-    // 路線 C：中華路直線 (南北向) - 在中華路上 (X=80, 寬20)
-    // 北行：X=88 (東側車道)，南行：X=72 (西側車道) - 避開與公車衝突
+    // 路線 C：中華路直線 (南北向) - 使用中間車道避免與外圈衝突
     let route_zhonghua = vec![
-        Vec3::new(88.0, 0.0, 55.0),  // 0: 南端 (成都路南側)
-        Vec3::new(88.0, 0.0, -83.0), // 1: 北端 (漢口街北側)
-        Vec3::new(72.0, 0.0, -83.0), // 2: U 型轉彎
-        Vec3::new(72.0, 0.0, 55.0),  // 3: 南端
+        Vec3::new(x_zhonghua_mid_east, 0.0, z_chengdu_south), // 南端
+        Vec3::new(x_zhonghua_mid_east, 0.0, z_hankou_north),  // 北端
+        Vec3::new(x_zhonghua_mid_west, 0.0, z_hankou_north),  // U 型轉彎
+        Vec3::new(x_zhonghua_mid_west, 0.0, z_chengdu_south), // 南端
     ];
 
-    // 路線 D：成都路直線 (東西向) - 在成都路上 (Z=50, 寬16)
-    // 東行：Z=44 (北側車道)，西行：Z=56 (南側車道)
-    // 調整避開與公車 (Z=58) 衝突
+    // 路線 D：成都路西段 (東西向) - 避開外圈主線
     let route_chengdu = vec![
-        Vec3::new(-90.0, 0.0, 44.0), // 0: 西端 (康定路東側)
-        Vec3::new(85.0, 0.0, 44.0),  // 1: 東端 (中華路)
-        Vec3::new(85.0, 0.0, 56.0),  // 2: U 型轉彎（Z=56，避開公車 Z=58）
-        Vec3::new(-90.0, 0.0, 56.0), // 3: 西端
+        Vec3::new(X_KANGDING, 0.0, z_chengdu_north), // 西端
+        Vec3::new(X_XINING, 0.0, z_chengdu_north),   // 東端
+        Vec3::new(X_XINING, 0.0, z_chengdu_south),   // U 型轉彎
+        Vec3::new(X_KANGDING, 0.0, z_chengdu_south), // 西端
     ];
 
-    // 路線 E：西寧路直線 (南北向) - 在西寧南路上 (X=-55, 寬12)
-    // 北行：X=-50 (東側車道)，南行：X=-60 (西側車道) - 避開與公車衝突
-    let route_xining = vec![
-        Vec3::new(-50.0, 0.0, 58.0),  // 0: 南端 (成都路南側偏南)
-        Vec3::new(-50.0, 0.0, -77.0), // 1: 北端 (漢口街)
-        Vec3::new(-60.0, 0.0, -77.0), // 2: U 型轉彎
-        Vec3::new(-60.0, 0.0, 58.0),  // 3: 南端
+    // 路線 E：康定路直線 (南北向) - 新增西邊界車流
+    let route_kangding = vec![
+        Vec3::new(x_kangding_east, 0.0, z_chengdu_south), // 南端
+        Vec3::new(x_kangding_east, 0.0, z_hankou_north),  // 北端
+        Vec3::new(x_kangding_west, 0.0, z_hankou_north),  // U 型轉彎
+        Vec3::new(x_kangding_west, 0.0, z_chengdu_south), // 南端
     ];
 
     // 車輛顏色池
@@ -1411,7 +1558,7 @@ pub fn spawn_initial_traffic(
             0,
             route_zhonghua.clone(),
         ),
-        // === 路線 D：成都路（U 型迴轉）===
+        // === 路線 D：成都路西段（U 型迴轉）===
         (
             route_chengdu[0],
             VehicleType::Car,
@@ -1419,13 +1566,13 @@ pub fn spawn_initial_traffic(
             0,
             route_chengdu.clone(),
         ),
-        // === 路線 E：西寧路（U 型迴轉）===
+        // === 路線 E：康定路（U 型迴轉）===
         (
-            route_xining[0],
+            route_kangding[0],
             VehicleType::Car,
             car_colors[5],
             0,
-            route_xining.clone(),
+            route_kangding.clone(),
         ),
     ];
 
@@ -1458,8 +1605,7 @@ pub fn spawn_initial_traffic(
 
     // 紅綠燈由 spawn_world_traffic_lights 系統統一生成，不在此處重複
 
-    // 儲存紅綠燈視覺資源
-    commands.insert_resource(traffic_visuals);
+    // 紅綠燈視覺資源由 setup_traffic_lights 初始化
 }
 
 /// 生成可騎乘的機車

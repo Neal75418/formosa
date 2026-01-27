@@ -47,6 +47,24 @@ pub struct ResumeButton;
 #[derive(Component)]
 pub struct QuitButton;
 
+/// 按鈕縮放動畫狀態
+#[derive(Component)]
+pub struct ButtonScaleState {
+    /// 目標縮放值
+    pub target: f32,
+    /// 當前縮放值
+    pub current: f32,
+}
+
+impl Default for ButtonScaleState {
+    fn default() -> Self {
+        Self {
+            target: 1.0,
+            current: 1.0,
+        }
+    }
+}
+
 /// 大地圖容器
 #[derive(Component)]
 pub struct FullMapContainer;

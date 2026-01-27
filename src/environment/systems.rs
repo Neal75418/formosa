@@ -494,31 +494,21 @@ pub fn setup_world_destructibles(
 
     // 創建材質快取（一次性創建，所有物件共用）
     let cache = DestructibleMaterialCache::new(&mut materials);
-
     // === 商店玻璃窗位置 ===
     let glass_windows = [
         // 便利商店 - 全家 (pos: -55, 5, -55)
         (Vec3::new(-55.0, 3.0, -50.5), Vec2::new(6.0, 4.0), Quat::IDENTITY),
         // 便利商店 - 7-11 (pos: 55, 5, -55)
         (Vec3::new(55.0, 3.0, -50.5), Vec2::new(6.0, 4.0), Quat::IDENTITY),
-        // 潮牌服飾店 (pos: -55, 5, 55)
-        (Vec3::new(-55.0, 3.5, 50.5), Vec2::new(7.0, 5.0), Quat::IDENTITY),
-        // 球鞋店 (pos: 55, 5, 55)
-        (Vec3::new(55.0, 3.5, 50.5), Vec2::new(7.0, 5.0), Quat::IDENTITY),
         // 刺青店 (pos: -25, 4, -55)
         (Vec3::new(-25.0, 2.5, -50.5), Vec2::new(4.0, 3.5), Quat::IDENTITY),
         // 速食店窗戶 (假設在 pos: 25, 4, -55)
         (Vec3::new(25.0, 2.5, -50.5), Vec2::new(5.0, 3.5), Quat::IDENTITY),
         // 咖啡店（假設在 pos: 0, 4.5, -55）
         (Vec3::new(0.0, 2.8, -50.5), Vec2::new(4.5, 4.0), Quat::IDENTITY),
-        // 銀行大窗 (pos: 0, 8, 55) - 較大的玻璃
-        (Vec3::new(0.0, 4.0, 50.5), Vec2::new(8.0, 6.0), Quat::IDENTITY),
         // 側面玻璃窗
         (Vec3::new(-50.5, 3.0, -25.0), Vec2::new(5.0, 4.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
         (Vec3::new(50.5, 3.0, 25.0), Vec2::new(5.0, 4.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
-        // 公車站玻璃（移到人行道上，避免擋住馬路）
-        (Vec3::new(30.0, 2.0, 8.0), Vec2::new(3.0, 2.5), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
-        (Vec3::new(-30.0, 2.0, -8.0), Vec2::new(3.0, 2.5), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
     ];
 
     let window_count = glass_windows.len();
@@ -617,4 +607,3 @@ pub fn spawn_metal_object(
     });
     spawn_metal_object_cached(commands, meshes, metal_material, position, size);
 }
-

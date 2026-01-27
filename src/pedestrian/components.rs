@@ -5,6 +5,7 @@
 #![allow(dead_code)] // Phase 5+ 預留功能
 
 use bevy::prelude::*;
+use crate::world::{W_MAIN, Z_CHENGDU};
 
 // ============================================================================
 // 行人組件
@@ -1035,6 +1036,9 @@ pub enum ShelterType {
 
 impl PointsOfInterest {
     pub fn setup_ximending() -> Self {
+        const SIDEWALK_WIDTH: f32 = 4.0;
+        let bus_stop_z = Z_CHENGDU - (W_MAIN / 2.0 - SIDEWALK_WIDTH / 2.0);
+
         Self {
             // 商店櫥窗位置（沿街道兩側）
             shop_windows: vec![
@@ -1068,8 +1072,8 @@ impl PointsOfInterest {
             // 庇護點（躲雨用）
             shelters: vec![
                 // 公車站（有遮雨棚）- 移到人行道上
-                ShelterPoint::new(Vec3::new(30.0, 0.25, 8.0), ShelterType::BusStop, 6),
-                ShelterPoint::new(Vec3::new(-30.0, 0.25, -8.0), ShelterType::BusStop, 6),
+                ShelterPoint::new(Vec3::new(30.0, 0.25, bus_stop_z), ShelterType::BusStop, 6),
+                ShelterPoint::new(Vec3::new(-30.0, 0.25, bus_stop_z), ShelterType::BusStop, 6),
                 // 便利商店門口（有雨遮）
                 ShelterPoint::new(Vec3::new(-55.0, 0.25, -52.0), ShelterType::Awning, 4),
                 ShelterPoint::new(Vec3::new(55.0, 0.25, -52.0), ShelterType::Awning, 4),

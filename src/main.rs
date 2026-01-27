@@ -37,6 +37,7 @@ mod wanted;
 mod world;
 
 use bevy::prelude::*;
+use bevy::window::PresentMode;
 // MonitorSelection 已移除：BorderlessFullscreen 在 macOS 26 有 bug
 use bevy_rapier3d::prelude::*;
 
@@ -48,6 +49,7 @@ fn main() {
                 title: "🏝️ 島嶼狂飆 Island Rampage".into(),
                 resolution: (1920u32, 1080u32).into(), // 1080p (Bevy 0.17: u32)
                 mode: bevy::window::WindowMode::Windowed, // 視窗模式（BorderlessFullscreen 在 macOS 26 有 bug）
+                present_mode: PresentMode::AutoVsync,
                 ..default()
             }),
             ..default()

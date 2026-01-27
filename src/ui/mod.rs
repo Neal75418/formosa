@@ -5,12 +5,39 @@
 #![allow(dead_code)]
 
 mod components;
+mod constants;
+mod crosshair;
+mod damage_indicator;
+mod delivery_app;
+mod enemy_health_bars;
+mod gps_navigation;
+mod hud;
+mod init;
+mod interaction_prompt;
+mod minimap;
 mod notification;
+mod pause_menu;
+mod story_mission_hud;
 mod systems;
+mod weapon_wheel;
+mod weather_hud;
 
 pub use components::*;
+pub use crosshair::*;
+pub use damage_indicator::*;
+pub use delivery_app::*;
+pub use enemy_health_bars::*;
+pub use gps_navigation::*;
+pub use hud::*;
+pub use init::*;
+pub use interaction_prompt::*;
+pub use minimap::*;
 pub use notification::*;
+pub use pause_menu::*;
+pub use story_mission_hud::*;
 pub use systems::*;
+pub use weapon_wheel::*;
+pub use weather_hud::*;
 
 use bevy::ecs::schedule::SystemCondition;
 use bevy::prelude::*;
@@ -28,8 +55,9 @@ impl Plugin for UiPlugin {
             // 暫停狀態進出
             .add_systems(OnEnter(AppState::Paused), on_enter_pause)
             .add_systems(OnExit(AppState::Paused), on_exit_pause)
-            // Startup
-            .add_systems(Startup, setup_chinese_font)
+            // Startup - UI Scale 最先初始化
+            .add_systems(Startup, setup_ui_scale)
+            .add_systems(Startup, setup_chinese_font.after(setup_ui_scale))
             .add_systems(Startup, (
                 setup_ui,
                 setup_delivery_app,
@@ -47,6 +75,7 @@ impl Plugin for UiPlugin {
                 core::handle_game_events,
                 toggle_pause,
                 button_hover_effect,
+                animate_button_scale.after(button_hover_effect),
                 toggle_map,
                 toggle_delivery_app,
                 update_delivery_app,
@@ -105,6 +134,8 @@ impl Plugin for UiPlugin {
             // 天氣 HUD
             .add_systems(Update, update_weather_hud.in_set(GameSet::Ui).run_if(ui_active.clone()))
             // 劇情任務 HUD
-            .add_systems(Update, update_story_mission_hud.in_set(GameSet::Ui).run_if(ui_active));
+            .add_systems(Update, update_story_mission_hud.in_set(GameSet::Ui).run_if(ui_active))
+            // UI Scale 動態更新（視窗大小改變時）
+            .add_systems(Update, update_ui_scale);
     }
 }

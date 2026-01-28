@@ -232,14 +232,18 @@ pub fn spawn_roadblock_system(
 
     // 計算路障位置（玩家前方）
     let player_pos = player_transform.translation;
-    let player_forward = player_velocity.linvel.normalize_or_zero();
-
-    // 如果速度太小，使用玩家面向方向
-    let spawn_direction = if player_forward.length() > 0.1 {
-        Vec3::new(player_forward.x, 0.0, player_forward.z).normalize()
-    } else {
-        player_transform.forward().as_vec3()
+    let player_velocity_vec = player_velocity.linvel;
+    let mut spawn_direction = {
+        let xz = Vec3::new(player_velocity_vec.x, 0.0, player_velocity_vec.z);
+        if xz.length_squared() > 0.01 {
+            xz.normalize()
+        } else {
+            player_transform.forward().as_vec3().normalize_or_zero()
+        }
     };
+    if spawn_direction.length_squared() < 1e-6 {
+        spawn_direction = Vec3::Z;
+    }
 
     let spawn_pos = Vec3::new(
         player_pos.x + spawn_direction.x * ROADBLOCK_SPAWN_DISTANCE,

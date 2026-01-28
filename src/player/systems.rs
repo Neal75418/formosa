@@ -352,7 +352,12 @@ pub fn enter_exit_vehicle(
         };
 
         // 計算上車側（玩家面向車輛的哪一側）
-        let to_vehicle = (vehicle_pos - player_pos).normalize();
+        let to_vehicle_delta = vehicle_pos - player_pos;
+        let to_vehicle = if to_vehicle_delta.length_squared() > 1e-6 {
+            to_vehicle_delta.normalize()
+        } else {
+            player_transform.forward().as_vec3()
+        };
         let vehicle_right = vehicle_transform.right();
         let from_right = to_vehicle.dot(*vehicle_right) > 0.0;
 
@@ -381,7 +386,14 @@ fn is_path_clear_to_vehicle(
     distance: f32,
     rapier_context: &RapierContext,
 ) -> bool {
-    let direction = (vehicle_pos - ray_origin).normalize();
+    if distance <= f32::EPSILON {
+        return true;
+    }
+    let direction_delta = vehicle_pos - ray_origin;
+    if direction_delta.length_squared() <= 1e-6 {
+        return true;
+    }
+    let direction = direction_delta.normalize();
     let filter = QueryFilter::new();
 
     match rapier_context.cast_ray(ray_origin, direction, distance as RapierReal, true, filter) {

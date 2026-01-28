@@ -365,7 +365,7 @@ pub fn setup_destructible_visuals(
 pub fn vehicle_destructible_collision_system(
     mut collision_events: MessageReader<CollisionEvent>,
     vehicle_query: Query<(&Transform, &Velocity), With<Vehicle>>,
-    destructible_query: Query<(Entity, &Transform, &mut Destructible)>,
+    destructible_query: Query<(Entity, &Transform, &Destructible)>,
     mut env_damage_events: MessageWriter<EnvironmentDamageEvent>,
 ) {
     for event in collision_events.read() {
@@ -373,12 +373,9 @@ pub fn vehicle_destructible_collision_system(
             continue;
         };
 
-        // 檢查是否為車輛與可破壞物件的碰撞
-        let (vehicle_entity, destructible_entity) = if vehicle_query.contains(*e1) && destructible_query.contains(*e2) {
-            (*e1, *e2)
-        } else if vehicle_query.contains(*e2) && destructible_query.contains(*e1) {
-            (*e2, *e1)
-        } else {
+        let Some((vehicle_entity, destructible_entity)) =
+            vehicle_destructible_pair(*e1, *e2, &vehicle_query, &destructible_query)
+        else {
             continue;
         };
 
@@ -390,24 +387,11 @@ pub fn vehicle_destructible_collision_system(
             continue;
         };
 
-        // 檢查是否可被車輛破壞
-        if !destructible.vehicle_vulnerable {
+        let Some(damage) = compute_vehicle_impact_damage(destructible, velocity) else {
             continue;
-        }
-
-        // 根據車速計算傷害
-        let speed = velocity.linvel.length();
-        if speed < 3.0 {
-            continue; // 速度太慢不造成破壞
-        }
-
-        let damage = if destructible.destructible_type.vehicle_one_hit() {
-            destructible.max_health * 2.0 // 直接摧毀
-        } else {
-            VEHICLE_IMPACT_DAMAGE * (speed / 10.0).min(2.0)
         };
-
-        let impact_direction = (dest_transform.translation - vehicle_transform.translation).normalize();
+        let impact_direction =
+            compute_vehicle_impact_direction(dest_transform, vehicle_transform, velocity);
 
         env_damage_events.write(EnvironmentDamageEvent {
             target: entity,
@@ -416,6 +400,58 @@ pub fn vehicle_destructible_collision_system(
             impact_position: Some(dest_transform.translation),
             impact_direction: Some(impact_direction),
         });
+    }
+}
+
+fn vehicle_destructible_pair(
+    e1: Entity,
+    e2: Entity,
+    vehicle_query: &Query<(&Transform, &Velocity), With<Vehicle>>,
+    destructible_query: &Query<(Entity, &Transform, &Destructible)>,
+) -> Option<(Entity, Entity)> {
+    let e1_is_vehicle = vehicle_query.contains(e1);
+    let e2_is_vehicle = vehicle_query.contains(e2);
+    let e1_is_destructible = destructible_query.contains(e1);
+    let e2_is_destructible = destructible_query.contains(e2);
+
+    if e1_is_vehicle && e2_is_destructible {
+        Some((e1, e2))
+    } else if e2_is_vehicle && e1_is_destructible {
+        Some((e2, e1))
+    } else {
+        None
+    }
+}
+
+fn compute_vehicle_impact_damage(destructible: &Destructible, velocity: &Velocity) -> Option<f32> {
+    if !destructible.vehicle_vulnerable {
+        return None;
+    }
+
+    let speed = velocity.linvel.length();
+    if speed < 3.0 {
+        return None;
+    }
+
+    let damage = if destructible.destructible_type.vehicle_one_hit() {
+        destructible.max_health * 2.0
+    } else {
+        VEHICLE_IMPACT_DAMAGE * (speed / 10.0).min(2.0)
+    };
+
+    Some(damage)
+}
+
+fn compute_vehicle_impact_direction(
+    dest_transform: &Transform,
+    vehicle_transform: &Transform,
+    velocity: &Velocity,
+) -> Vec3 {
+    let impact_delta = dest_transform.translation - vehicle_transform.translation;
+    if impact_delta.length_squared() > 1e-6 {
+        impact_delta.normalize()
+    } else {
+        velocity.linvel.normalize_or_zero()
     }
 }
 

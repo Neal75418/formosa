@@ -34,7 +34,7 @@ pub fn ai_perception_system(
     };
 
     // === GTA5 風格：天氣影響 AI 感知 ===
-    let weather_sight_multiplier = match weather.weather_type {
+    let mut weather_sight_multiplier = match weather.weather_type {
         WeatherType::Clear => config.weather_clear_sight,
         WeatherType::Cloudy => config.weather_cloudy_sight,
         WeatherType::Rainy => {
@@ -46,6 +46,9 @@ pub fn ai_perception_system(
         WeatherType::Stormy => 0.5 - weather.intensity * 0.15, // 暴風雨：視線極差
         WeatherType::Sandstorm => 0.3 - weather.intensity * 0.1, // 沙塵暴：幾乎看不見
     };
+    if weather_sight_multiplier < 0.0 {
+        weather_sight_multiplier = 0.0;
+    }
 
     for (enemy_entity, transform, mut perception, mut behavior) in &mut enemy_query {
         let my_pos = transform.translation;

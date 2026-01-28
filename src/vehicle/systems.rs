@@ -866,15 +866,21 @@ fn navigate_to_waypoint(
         return;
     }
 
-    let target = npc.waypoints[npc.current_wp_index];
+    let mut target = npc.waypoints[npc.current_wp_index];
     let dist_sq = transform.translation.distance_squared(target);
 
     if dist_sq < config.waypoint_arrival_distance_sq {
         npc.current_wp_index = (npc.current_wp_index + 1) % npc.waypoints.len();
+        target = npc.waypoints[npc.current_wp_index];
     }
 
     // 計算轉向
-    let target_dir = (target - transform.translation).normalize();
+    let to_target = target - transform.translation;
+    if to_target.length_squared() < 1e-6 {
+        vehicle.steer_input = 0.0;
+        return;
+    }
+    let target_dir = to_target.normalize();
     let forward = transform.forward().as_vec3();
     let right = transform.right().as_vec3();
 

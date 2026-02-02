@@ -389,7 +389,7 @@ fn apply_ranged_fire_effects(
     recoil_state: &mut RecoilState,
     camera_shake: &mut CameraShake,
 ) {
-    let recoil_mult = if is_aiming { 0.5 } else { 1.0 };
+    let recoil_mult = if is_aiming { AIM_RECOIL_MULTIPLIER } else { 1.0 };
     recoil_state.add_recoil(
         weapon.stats.recoil_vertical * recoil_mult,
         weapon.stats.recoil_horizontal * recoil_mult,
@@ -397,7 +397,7 @@ fn apply_ranged_fire_effects(
 
     let shake_intensity = get_camera_shake_intensity(weapon.stats.weapon_type);
     if shake_intensity > 0.0 {
-        camera_shake.trigger(shake_intensity, 0.08);
+        camera_shake.trigger(shake_intensity, CAMERA_SHAKE_DURATION);
     }
 }
 
@@ -623,6 +623,11 @@ pub fn fire_weapon_system(
 }
 
 /// 棍棒掃擊常數
+/// 攝影機震動持續時間（秒）
+const CAMERA_SHAKE_DURATION: f32 = 0.08;
+/// 瞄準時後座力倍率（減少 50%）
+const AIM_RECOIL_MULTIPLIER: f32 = 0.5;
+/// 棍棒掃擊檢測步數
 const STAFF_SWEEP_STEPS: usize = 5;
 
 /// 近戰攻擊

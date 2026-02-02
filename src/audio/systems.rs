@@ -1,4 +1,5 @@
 //! 音效系統
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 // Bevy 系統需要 Res<T> 按值傳遞
 #![allow(clippy::needless_pass_by_value)]

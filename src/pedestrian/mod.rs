@@ -3,9 +3,17 @@
 //! 處理街道上的路人 NPC，包括生成、移動、和對槍聲的反應。
 
 mod components;
+mod pathfinding;
+mod behavior;
+mod panic;
 mod systems;
 
 pub use components::*;
+#[allow(unused_imports)]
+pub use pathfinding::*;
+#[allow(unused_imports)]
+pub use behavior::*;
+pub use panic::*;
 pub use systems::*;
 
 use bevy::prelude::*;

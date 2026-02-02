@@ -1,6 +1,7 @@
 //! 劇情任務管理器
 //!
 //! 管理劇情任務狀態、進度追蹤、存檔讀檔
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};

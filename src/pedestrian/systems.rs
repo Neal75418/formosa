@@ -2,7 +2,7 @@
 //!
 //! 處理行人的生成、移動、反應等邏輯。
 
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::ecs::relationship::Relationship;
 use bevy::prelude::*;
@@ -11,12 +11,15 @@ use rand::Rng;
 use std::f32::consts::PI;
 
 use super::components::{
-    AStarPath, BehaviorType, DailyBehavior, GunshotTracker, HitByVehicle, PanicState, PanicWave,
-    PanicWaveManager, PathfindingGrid, PedState, Pedestrian, PedestrianArm, PedestrianConfig,
+    GunshotTracker, HitByVehicle, PedState, Pedestrian, PedestrianArm, PedestrianConfig,
     PedestrianLeg, PedestrianPaths, PedestrianState, PedestrianType, PedestrianVisuals,
-    PointOfInterestType, PointsOfInterest, ShelterSeeker, SidewalkPath, WalkingAnimation,
-    WitnessState, WitnessedCrime,
+    SidewalkPath, WalkingAnimation, WitnessState, WitnessedCrime,
 };
+use super::pathfinding::{AStarPath, PathfindingGrid};
+use super::behavior::{
+    BehaviorType, DailyBehavior, PointOfInterestType, PointsOfInterest, ShelterSeeker,
+};
+use super::panic::{PanicState, PanicWave, PanicWaveManager};
 use crate::ai::{AiMovement, PatrolPath};
 use crate::combat::{
     BodyPart, CombatState, Damageable, Health, HitReaction, WeaponInventory, WeaponType,
@@ -576,7 +579,7 @@ pub fn gunshot_tracking_system(
 
     // 檢查是否有新的射擊（last_shot_time 在最近 0.1 秒內更新）
     let shot_time_diff = current_time - combat_state.last_shot_time;
-    if shot_time_diff >= 0.0 && shot_time_diff < 0.1 {
+    if (0.0..0.1).contains(&shot_time_diff) {
         // 檢查這次射擊是否已經記錄過
         let player_pos = player_transform.translation;
         let already_recorded = tracker.recent_shots.iter().any(|(pos, t)| {
@@ -1119,12 +1122,11 @@ pub fn astar_movement_system(
         // 檢查是否到達當前路徑點
         let flat_dist = Vec3::new(target.x - current_pos.x, 0.0, target.z - current_pos.z).length();
 
-        if flat_dist < 1.5 {
-            if !path.advance() {
+        if flat_dist < 1.5
+            && !path.advance() {
                 // 到達終點，標記需要新路徑
                 path.needs_recalc = true;
             }
-        }
     }
 }
 
@@ -1888,7 +1890,7 @@ pub fn witness_progress_ui_system(
         // 使用 distance_squared 避免 sqrt
         let dist_sq = ped_transform.translation.distance_squared(player_pos);
         if dist_sq < WITNESS_UI_DISTANCE_SQ {
-            let is_closer = _nearest_witness.map_or(true, |(_, _, d)| dist_sq < d);
+            let is_closer = _nearest_witness.is_none_or(|(_, _, d)| dist_sq < d);
             if is_closer {
                 _nearest_witness = Some((ped_transform, witness, dist_sq));
             }

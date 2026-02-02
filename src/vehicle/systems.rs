@@ -1,5 +1,7 @@
 //! 載具系統
 
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
+
 use super::{
     DriftSmoke, NitroBoost, NitroFlame, NpcState, NpcVehicle, TireTrack, TrafficLight,
     TrafficLightBulb, TrafficLightState, TrafficLightVisuals, Vehicle, VehicleConfig,
@@ -826,9 +828,7 @@ fn determine_npc_reaction(
 ) -> (NpcState, bool) {
     match hit.kind {
         ObstacleHitKind::Side => {
-            if hit.distance < config.obstacle_too_close_distance {
-                (NpcState::Braking, false)
-            } else if hit.distance < config.obstacle_side_brake_distance {
+            if hit.distance < config.obstacle_side_brake_distance {
                 (NpcState::Braking, false)
             } else {
                 (NpcState::Cruising, false)

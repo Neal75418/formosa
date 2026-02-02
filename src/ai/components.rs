@@ -1,8 +1,7 @@
 //! AI 組件
 //!
 //! 定義 AI 狀態機、感知、巡邏等組件。
-
-#![allow(dead_code)] // 部分函數供未來擴展使用
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use crate::core::{clamp_dot, safe_normalize};

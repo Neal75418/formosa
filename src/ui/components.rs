@@ -1,4 +1,5 @@
 //! UI 組件
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use crate::core::calculate_fade_alpha;

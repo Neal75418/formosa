@@ -2,7 +2,7 @@
 //!
 //! 手榴彈、燃燒瓶、黏性炸彈等投擲武器
 
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -616,7 +616,9 @@ pub fn explosive_input_system(
         return;
     }
 
-    let selected = inventory.selected.unwrap();
+    let Some(selected) = inventory.selected else {
+        return;
+    };
 
     // G 鍵：投擲
     if keyboard.pressed(KeyCode::KeyG) {

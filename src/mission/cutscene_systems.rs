@@ -2,6 +2,8 @@
 //!
 //! 處理過場動畫播放、攝影機控制、淡入淡出等
 
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
+
 use bevy::prelude::*;
 
 use super::cutscene::*;

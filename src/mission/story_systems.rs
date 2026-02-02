@@ -2,6 +2,8 @@
 //!
 //! 處理任務觸發、目標追蹤、階段切換等核心邏輯
 
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
+
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::{FRAC_PI_2, TAU};
@@ -356,7 +358,7 @@ fn check_follow_target_complete(
     target_query: &Query<(&Transform, &MissionTargetEntity)>,
 ) -> bool {
     for (_transform, target_entity) in target_query {
-        if &target_entity.target_id == target_id && target_entity.mission_id == mission_id {
+        if target_entity.target_id == target_id && target_entity.mission_id == mission_id {
             // 如果目標已到達終點（路徑走完），任務完成
             let reached = !target_entity.waypoints.is_empty()
                 && target_entity.current_waypoint >= target_entity.waypoints.len();
@@ -373,7 +375,7 @@ fn check_escort_npc_complete(
     target_query: &Query<(&Transform, &MissionTargetEntity)>,
 ) -> bool {
     for (_transform, target_entity) in target_query {
-        if &target_entity.target_id == target_id
+        if target_entity.target_id == target_id
             && target_entity.mission_id == mission_id
             && target_entity.target_type == MissionTargetType::Escort
         {

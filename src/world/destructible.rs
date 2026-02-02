@@ -6,8 +6,7 @@
 //! - 街道家具破壞
 //! - 碎片物理
 //! - 破壞粒子效果
-
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;

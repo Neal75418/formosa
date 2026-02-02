@@ -1,8 +1,7 @@
 //! AI 小隊系統
 //!
 //! 實現 GTA 5 風格的 AI 包抄戰術，敵人會協調進攻。
-
-#![allow(dead_code)]
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use std::collections::HashMap;

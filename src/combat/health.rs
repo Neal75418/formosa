@@ -127,9 +127,12 @@ impl Armor {
         self.current <= 0.0
     }
 
+    /// 觸發火花特效的最低傷害閾值
+    const SIGNIFICANT_HIT_THRESHOLD: f32 = 15.0;
+
     /// 檢查護甲是否受到顯著傷害（用於觸發火花特效）
     pub fn took_significant_hit(&self, damage: f32) -> bool {
-        damage >= 15.0 && self.current > 0.0
+        damage >= Self::SIGNIFICANT_HIT_THRESHOLD && self.current > 0.0
     }
 }
 
@@ -191,12 +194,15 @@ impl DamageEvent {
 
 /// 爆頭傷害倍率
 pub const HEADSHOT_MULTIPLIER: f32 = 2.5;
+/// 頭部判定區域下限（相對於角色腳底，約肩膀高度）
+const HEAD_HITBOX_MIN_HEIGHT: f32 = 1.5;
+/// 頭部判定區域上限（相對於角色腳底，約頭頂高度）
+const HEAD_HITBOX_MAX_HEIGHT: f32 = 2.0;
 
 /// 檢查是否為爆頭（根據擊中位置和目標位置判斷）
-/// 假設角色高度約 2m，頭部在 1.5m - 2.0m 之間
 pub fn check_headshot(hit_position: Vec3, target_base_y: f32) -> bool {
-    let head_min = target_base_y + 1.5;
-    let head_max = target_base_y + 2.0;
+    let head_min = target_base_y + HEAD_HITBOX_MIN_HEIGHT;
+    let head_max = target_base_y + HEAD_HITBOX_MAX_HEIGHT;
     hit_position.y >= head_min && hit_position.y <= head_max
 }
 

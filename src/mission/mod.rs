@@ -8,8 +8,6 @@
 //!
 //! 注意：部分任務類型為將來擴展預留
 
-#![allow(dead_code)]
-
 // 一般任務系統
 mod data;
 mod systems;

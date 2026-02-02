@@ -144,7 +144,9 @@ pub fn update_gps_navigation(
         return;
     }
 
-    let destination = gps.destination.unwrap();
+    let Some(destination) = gps.destination else {
+        return;
+    };
 
     // 計算距離和方向
     let to_dest = destination - player_pos;
@@ -194,7 +196,9 @@ pub fn update_minimap_gps_marker(
         return;
     }
 
-    let destination = gps.destination.unwrap();
+    let Some(destination) = gps.destination else {
+        return;
+    };
 
     // 將世界座標轉換為小地圖座標
     let map_scale = 0.9;

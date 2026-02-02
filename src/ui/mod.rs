@@ -2,8 +2,6 @@
 //!
 //! 注意：部分 UI 組件為將來擴展預留
 
-#![allow(dead_code)]
-
 mod components;
 mod constants;
 mod crosshair;

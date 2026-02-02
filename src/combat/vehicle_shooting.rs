@@ -2,7 +2,7 @@
 //!
 //! 允許駕駛/乘客在車上射擊，限制武器類型和射擊角度
 
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -116,7 +116,7 @@ pub fn vehicle_shooting_input_system(
 
     // 檢查角度是否在允許範圍內（假設駕駛座）
     let in_range =
-        signed_angle >= -DRIVER_LEFT_ANGLE_LIMIT && signed_angle <= DRIVER_RIGHT_ANGLE_LIMIT;
+        (-DRIVER_LEFT_ANGLE_LIMIT..=DRIVER_RIGHT_ANGLE_LIMIT).contains(&signed_angle);
     combat_state.vehicle_aim_valid = in_range;
 }
 
@@ -216,7 +216,7 @@ pub fn vehicle_shooting_fire_system(
         true,
         filter,
     ) {
-        let hit_pos = muzzle_pos + aim_dir * hit_dist as f32;
+        let hit_pos = muzzle_pos + aim_dir * hit_dist;
 
         // 檢查是否命中可受傷目標
         if damageable_query.get(hit_entity).is_ok() {

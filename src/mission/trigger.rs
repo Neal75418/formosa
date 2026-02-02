@@ -1,6 +1,7 @@
 //! 任務觸發點組件
 //!
 //! 定義任務觸發區域、NPC 互動點等組件
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -10,10 +11,13 @@ use crate::core::InteractionState; // Fix missing type
 
 /// 觸發器類型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
+#[allow(clippy::enum_variant_names)] // On- prefix 表達事件時機語義，移除反而降低可讀性
 pub enum TriggerType {
     /// 進入區域自動觸發
     OnEnter,
     /// 需要按鍵互動
+    #[default]
     OnInteract,
     /// 進入區域後延遲觸發
     OnEnterDelayed { delay: u32 }, // 毫秒
@@ -23,11 +27,6 @@ pub enum TriggerType {
     OnStay { duration: u32 }, // 毫秒
 }
 
-impl Default for TriggerType {
-    fn default() -> Self {
-        Self::OnInteract
-    }
-}
 
 /// 觸發器形狀
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -481,6 +480,7 @@ impl ObjectiveMarkerType {
 
 /// 觸發器事件
 #[derive(Message, Debug, Clone)]
+#[allow(clippy::enum_variant_names)] // Player- prefix 明確表達事件主體，移除反而降低可讀性
 pub enum TriggerEvent {
     /// 玩家進入觸發區域
     PlayerEntered {

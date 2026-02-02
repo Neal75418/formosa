@@ -5,7 +5,7 @@
 //! - 警車 AI 駕駛（追逐、攔截、PIT 機動）
 //! - 警車損壞與爆炸
 
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 mod spawn;
 mod ai;

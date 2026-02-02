@@ -1,6 +1,7 @@
 //! 劇情任務資料結構
 //!
 //! 定義主線劇情任務的所有資料類型，支援多階段任務、解鎖條件和獎勵系統。
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,7 @@ pub enum StoryMissionStatus {
 
 /// 劇情任務類型
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum StoryMissionType {
     // === 戰鬥類 ===
     /// 刺殺：消滅特定目標
@@ -83,14 +85,10 @@ pub enum StoryMissionType {
     /// 純過場
     Cutscene,
     /// 對話任務
+    #[default]
     Dialogue,
 }
 
-impl Default for StoryMissionType {
-    fn default() -> Self {
-        Self::Dialogue
-    }
-}
 
 // ============================================================================
 // 任務目標

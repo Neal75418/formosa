@@ -2,7 +2,7 @@
 //!
 //! 處理傷害計算、死亡邏輯等。
 
-#![allow(dead_code)] // Phase 2+ 功能預留
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::ecs::system::SystemParam;
 use bevy::math::EulerRot;

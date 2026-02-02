@@ -2,8 +2,6 @@
 //!
 //! 注意：部分載具屬性為將來擴展預留
 
-#![allow(dead_code)]
-
 mod components;
 mod config;
 mod modifications;

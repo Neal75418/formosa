@@ -2,7 +2,7 @@
 //!
 //! 5 星通緝時出動，追蹤玩家並使用機槍射擊。
 
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;

@@ -2,8 +2,6 @@
 //!
 //! 處理可破壞物件、玻璃窗、碎片效果等。
 
-#![allow(dead_code)]
-
 mod components;
 mod systems;
 

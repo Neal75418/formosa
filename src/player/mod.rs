@@ -2,8 +2,6 @@
 //!
 //! 注意：部分玩家屬性為將來擴展預留
 
-#![allow(dead_code)]
-
 mod climb;
 mod components;
 mod config;

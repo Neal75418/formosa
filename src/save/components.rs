@@ -1,8 +1,7 @@
 //! 存檔系統組件
 //!
 //! 包含存檔資料結構和事件定義
-
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};

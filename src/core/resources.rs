@@ -1,4 +1,5 @@
 //! 遊戲資源
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -133,6 +134,13 @@ pub struct RecoilState {
 }
 
 impl RecoilState {
+    /// 垂直後座力最大值
+    const MAX_VERTICAL_RECOIL: f32 = 0.5;
+    /// 水平後座力最大值
+    const MAX_HORIZONTAL_RECOIL: f32 = 0.3;
+    /// 後座力恢復完成閾值（小於此值視為歸零）
+    const RECOVERY_THRESHOLD_SQ: f32 = 0.0001;
+
     /// 添加後座力
     pub fn add_recoil(&mut self, vertical: f32, horizontal: f32) {
         // 垂直後座力累加
@@ -141,14 +149,14 @@ impl RecoilState {
         let h_dir = if rand::random::<bool>() { 1.0 } else { -1.0 };
         self.current_offset.x += horizontal * h_dir;
         // 限制最大後座力
-        self.current_offset.y = self.current_offset.y.min(0.5);
-        self.current_offset.x = self.current_offset.x.clamp(-0.3, 0.3);
+        self.current_offset.y = self.current_offset.y.min(Self::MAX_VERTICAL_RECOIL);
+        self.current_offset.x = self.current_offset.x.clamp(-Self::MAX_HORIZONTAL_RECOIL, Self::MAX_HORIZONTAL_RECOIL);
         self.is_recovering = false;
     }
 
     /// 更新後座力恢復
     pub fn update_recovery(&mut self, recovery_rate: f32, dt: f32) {
-        if self.current_offset.length_squared() < 0.0001 {
+        if self.current_offset.length_squared() < Self::RECOVERY_THRESHOLD_SQ {
             self.current_offset = Vec2::ZERO;
             return;
         }

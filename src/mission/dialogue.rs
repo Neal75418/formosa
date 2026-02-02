@@ -1,6 +1,7 @@
 //! 對話系統資料結構
 //!
 //! 定義對話樹、對話節點、選項分支等資料結構
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -10,12 +11,14 @@ use super::story_data::{DialogueId, NpcId, StoryMissionId};
 
 /// 對話說話者類型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum DialogueSpeaker {
     /// 玩家角色
     Player,
     /// 特定 NPC（用 NpcId 識別）
     Npc(NpcId),
     /// 旁白（無頭像）
+    #[default]
     Narrator,
     /// 電台/電話（特殊 UI）
     Radio,
@@ -23,11 +26,6 @@ pub enum DialogueSpeaker {
     System,
 }
 
-impl Default for DialogueSpeaker {
-    fn default() -> Self {
-        Self::Narrator
-    }
-}
 
 /// 說話者情緒（影響頭像表情）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]

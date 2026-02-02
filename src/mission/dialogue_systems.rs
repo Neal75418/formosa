@@ -1,6 +1,7 @@
 //! 對話系統邏輯
 //!
 //! 處理對話顯示、打字效果、選項選擇等
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -104,7 +105,7 @@ fn create_mission2_dialogue() -> DialogueTree {
 
     // 節點 0：任務簡報
     tree.add_node(
-        DialogueNode::new(0, speaker.clone(), "好，來談正事。")
+        DialogueNode::new(0, speaker, "好，來談正事。")
             .with_emotion(SpeakerEmotion::Serious)
             .then(1),
     );
@@ -113,7 +114,7 @@ fn create_mission2_dialogue() -> DialogueTree {
     tree.add_node(
         DialogueNode::new(
             1,
-            speaker.clone(),
+            speaker,
             "工業區有個叫阿強的傢伙欠我一大筆錢。我需要你去「提醒」他該還錢了。",
         )
         .with_emotion(SpeakerEmotion::Serious)
@@ -124,7 +125,7 @@ fn create_mission2_dialogue() -> DialogueTree {
     tree.add_node(
         DialogueNode::new(
             2,
-            speaker.clone(),
+            speaker,
             "他躲在倉庫裡，身邊有幾個打手。先解決掉他們，然後把阿強帶到我這來。",
         )
         .with_emotion(SpeakerEmotion::Angry)
@@ -136,7 +137,7 @@ fn create_mission2_dialogue() -> DialogueTree {
     tree.add_node(
         DialogueNode::new(
             3,
-            speaker.clone(),
+            speaker,
             "好，地點我發到你手機了。記住，我要活的。",
         )
         .with_emotion(SpeakerEmotion::Neutral)

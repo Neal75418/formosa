@@ -6,8 +6,7 @@
 //! - 打架
 //! - 乞丐求助
 //! - 警察追捕逃犯
-
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 

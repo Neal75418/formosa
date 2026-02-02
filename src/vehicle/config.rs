@@ -3,6 +3,7 @@ use bevy::prelude::*;
 /// 車輛系統全域配置
 #[derive(Resource, Reflect)]
 #[reflect(Resource)]
+#[derive(Default)]
 pub struct VehicleConfig {
     pub weather: VehicleWeatherConfig,
     pub physics: VehiclePhysicsConfig,
@@ -10,16 +11,6 @@ pub struct VehicleConfig {
     pub npc: NpcDrivingConfig,
 }
 
-impl Default for VehicleConfig {
-    fn default() -> Self {
-        Self {
-            weather: VehicleWeatherConfig::default(),
-            physics: VehiclePhysicsConfig::default(),
-            input: VehicleInputConfig::default(),
-            npc: NpcDrivingConfig::default(),
-        }
-    }
-}
 
 /// 天氣影響配置
 #[derive(Debug, Clone, Reflect)]

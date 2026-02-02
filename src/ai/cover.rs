@@ -72,7 +72,7 @@ fn find_best_cover(
         }
 
         // 選擇最近的掩體
-        if best_cover.map_or(true, |(_, _, d)| distance_sq < d) {
+        if best_cover.is_none_or(|(_, _, d)| distance_sq < d) {
             best_cover = Some((cover_entity, cover_pos, distance_sq));
         }
     }

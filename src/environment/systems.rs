@@ -1,5 +1,7 @@
 //! 環境互動系統
 
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
+
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
@@ -253,7 +255,7 @@ pub fn destruction_effect_system(
 
         let mut spawned = 0;
         for _ in 0..debris_count {
-            let params = calculate_debris_params(&mut rng, &event, min_scale, max_scale);
+            let params = calculate_debris_params(&mut rng, event, min_scale, max_scale);
 
             let success = try_reuse_pooled_debris(&mut rng, &mut debris_pool, &mut debris_query, &params)
                 || try_create_new_debris(&mut commands, &mut debris_pool, &mesh, &material, &params);

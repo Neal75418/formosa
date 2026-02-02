@@ -223,14 +223,10 @@ fn spawn_pause_title_bar(parent: &mut ChildSpawnerCommands) {
     ));
 }
 
-/// 設置 UI（使用中文字體）
-pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
-    let font = chinese_font.font.clone();
+// === 分區設置函數 ===
 
-    // === 地圖常數定義 ===
-    // 常數已移至 world/setup.rs 且通過 spawn_map_layer 引用
-
-    // === 左下角：GTA 風格玩家狀態區（多層邊框）===
+/// 設置左下角 GTA 風格玩家狀態區（血量條、護甲條）
+fn setup_player_status_hud(commands: &mut Commands, font: &Handle<Font>) {
     // 外發光層
     commands
         .spawn((
@@ -334,7 +330,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                         spawn_status_bar_label(
                             row,
                             "100/100",
-                            &font,
+                            font,
                             14.0,
                             HealthLabelShadow,
                             HealthLabel,
@@ -405,7 +401,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                         spawn_status_bar_label(
                             row,
                             "50/100",
-                            &font,
+                            font,
                             14.0,
                             ArmorLabelShadow,
                             ArmorLabel,
@@ -413,8 +409,10 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                     });
             }); // 結束 PlayerStatusContainer
         }); // 結束外發光層
+}
 
-    // === 右上角：小地圖 (GTA 風格多層邊框) ===
+/// 設置右上角小地圖（GTA 風格多層邊框）
+fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
     // 外層發光框
     commands
         .spawn((
@@ -644,7 +642,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                         spawn_compass_marker(
                             parent,
                             "N",
-                            &font,
+                            font,
                             13.0,
                             COMPASS_NORTH,
                             20.0,
@@ -654,7 +652,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                         spawn_compass_marker(
                             parent,
                             "S",
-                            &font,
+                            font,
                             13.0,
                             Color::WHITE,
                             20.0,
@@ -664,7 +662,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                         spawn_compass_marker(
                             parent,
                             "E",
-                            &font,
+                            font,
                             13.0,
                             Color::WHITE,
                             20.0,
@@ -674,7 +672,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                         spawn_compass_marker(
                             parent,
                             "W",
-                            &font,
+                            font,
                             13.0,
                             Color::WHITE,
                             20.0,
@@ -698,7 +696,10 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                     });
             });
         });
+}
 
+/// 設置小地圖下方的時間、金錢、任務資訊顯示
+fn setup_info_displays(commands: &mut Commands, font: &Handle<Font>) {
     // === 小地圖下方：時間（帶背景）===
     commands
         .spawn((
@@ -770,7 +771,10 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
         },
         MissionInfo,
     ));
+}
 
+/// 設置左下角控制提示（GTA 風格）
+fn setup_control_hints(commands: &mut Commands, font: &Handle<Font>) {
     // === 左下角：控制提示（GTA 風格）===
     commands
         .spawn((
@@ -918,10 +922,12 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
         },
         UiText,
     ));
+}
 
-    // === 暫停選單（初始隱藏）- GTA 風格毛玻璃效果 ===
+/// 設置暫停選單（初始隱藏，GTA 風格毛玻璃效果）
+fn setup_pause_menu(commands: &mut Commands, font: &Handle<Font>) {
     spawn_full_screen_overlay(
-        &mut commands,
+        commands,
         PAUSE_BG_OUTER,
         PauseMenu,
         FlexDirection::Row,
@@ -1045,7 +1051,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                                 RESUME_BTN_BORDER,
                                 RESUME_BTN_NORMAL,
                                 "繼續遊戲",
-                                &font,
+                                font,
                                 ResumeButton,
                             );
 
@@ -1055,7 +1061,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                                 QUIT_BTN_BORDER,
                                 QUIT_BTN_NORMAL,
                                 "退出遊戲",
-                                &font,
+                                font,
                                 QuitButton,
                             );
 
@@ -1195,10 +1201,12 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                 });
             });
     });
+}
 
-    // === 2. 大地圖 (Full Map) - GTA 風格 ===
+/// 設置大地圖（GTA 風格，初始隱藏）
+fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
     spawn_full_screen_overlay(
-        &mut commands,
+        commands,
         FULLMAP_BG,
         FullMapContainer,
         FlexDirection::Column,
@@ -1453,7 +1461,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                             spawn_compass_marker(
                                 map,
                                 "N",
-                                &font,
+                                font,
                                 22.0,
                                 COMPASS_NORTH,
                                 36.0,
@@ -1463,7 +1471,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                             spawn_compass_marker(
                                 map,
                                 "S",
-                                &font,
+                                font,
                                 22.0,
                                 Color::WHITE,
                                 36.0,
@@ -1473,7 +1481,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                             spawn_compass_marker(
                                 map,
                                 "E",
-                                &font,
+                                font,
                                 22.0,
                                 Color::WHITE,
                                 36.0,
@@ -1483,7 +1491,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                             spawn_compass_marker(
                                 map,
                                 "W",
-                                &font,
+                                font,
                                 22.0,
                                 Color::WHITE,
                                 36.0,
@@ -1535,6 +1543,21 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                 ));
             });
     });
+}
+
+/// 設置 UI（使用中文字體）- 協調各分區設置函數
+pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
+    let font = chinese_font.font.clone();
+
+    // === 地圖常數定義 ===
+    // 常數已移至 world/setup.rs 且通過 spawn_map_layer 引用
+
+    setup_player_status_hud(&mut commands, &font);
+    setup_minimap_hud(&mut commands, &font);
+    setup_info_displays(&mut commands, &font);
+    setup_control_hints(&mut commands, &font);
+    setup_pause_menu(&mut commands, &font);
+    setup_full_map(&mut commands, &font);
 }
 
 /// 生成圖例項目

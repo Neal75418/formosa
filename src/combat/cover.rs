@@ -2,7 +2,7 @@
 //!
 //! 允許玩家進入掩體、探出射擊、掩體間移動
 
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 

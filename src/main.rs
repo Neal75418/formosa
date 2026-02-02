@@ -5,19 +5,6 @@
 // Bevy ECS 系統常見的 lint 豁免
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
-// 程式碼風格 lint 豁免（保持可讀性優先）
-#![allow(clippy::field_reassign_with_default)]
-#![allow(clippy::collapsible_if)]
-#![allow(clippy::enum_variant_names)]
-#![allow(clippy::unnecessary_map_or)]
-#![allow(clippy::wildcard_in_or_patterns)]
-#![allow(clippy::never_loop)]
-#![allow(clippy::clone_on_copy)]
-#![allow(clippy::derivable_impls)]
-#![allow(clippy::op_ref)]
-#![allow(clippy::manual_range_contains)]
-#![allow(clippy::unnecessary_cast)]
-#![allow(clippy::needless_borrow)]
 
 // === 模組 ===
 mod ai;

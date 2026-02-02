@@ -135,7 +135,7 @@ pub fn update_interaction_prompt_state(
         let distance = player_pos.distance(trigger_transform.translation);
 
         // 保留最近的觸發點
-        let is_closer = closest_trigger.map_or(true, |(_, d)| distance < d);
+        let is_closer = closest_trigger.is_none_or(|(_, d)| distance < d);
         if is_closer {
             closest_trigger = Some((trigger, distance));
         }

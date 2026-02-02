@@ -2,7 +2,7 @@
 //!
 //! 處理玩家進入/離開室內空間的邏輯
 
-#![allow(dead_code)]
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;

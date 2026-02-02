@@ -2,6 +2,8 @@
 //!
 //! 包含：準星 UI、命中標記、彈藥顯示、武器切換動畫、準星動態效果
 
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
+
 use bevy::prelude::*;
 
 use super::components::{
@@ -28,9 +30,23 @@ const CROSSHAIR_HIT_BOUNCE_SCALE: f32 = 1.3;
 /// 準星動態：命中反彈恢復速度
 const CROSSHAIR_HIT_BOUNCE_RECOVERY: f32 = 8.0;
 
+/// 大字陰影偏移量（用於彈藥數字等大字體）
+const LARGE_TEXT_SHADOW_OFFSET: f32 = 2.0;
+
 // === 設置系統 ===
 
 // === 輔助函數 ===
+
+/// 建立帶陰影的文字 Node（GTA 風格陰影效果）
+/// 回傳 (陰影 Node, 主文字 Node) 的 tuple，呼叫者可各自附加 marker component
+fn shadow_text_node(shadow_offset: f32) -> Node {
+    Node {
+        position_type: PositionType::Absolute,
+        left: Val::Px(shadow_offset),
+        top: Val::Px(shadow_offset),
+        ..default()
+    }
+}
 
 /// 生成準星的其中一條線（包含陰影與主線條）
 fn spawn_crosshair_line(parent: &mut ChildSpawnerCommands, direction: CrosshairDirection) {
@@ -387,12 +403,7 @@ pub fn setup_crosshair(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                                         ..default()
                                     },
                                     TextColor(TEXT_SHADOW_COLOR),
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        left: Val::Px(TEXT_SHADOW_OFFSET),
-                                        top: Val::Px(TEXT_SHADOW_OFFSET),
-                                        ..default()
-                                    },
+                                    shadow_text_node(TEXT_SHADOW_OFFSET),
                                     WeaponDisplayShadow,
                                 ));
                                 // 主文字
@@ -431,12 +442,7 @@ pub fn setup_crosshair(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                                         ..default()
                                     },
                                     TextColor(TEXT_SHADOW_COLOR),
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        left: Val::Px(2.0), // 大字用更大的偏移
-                                        top: Val::Px(2.0),
-                                        ..default()
-                                    },
+                                    shadow_text_node(LARGE_TEXT_SHADOW_OFFSET),
                                     CurrentAmmoShadow,
                                 ));
                                 // 主文字
@@ -463,12 +469,7 @@ pub fn setup_crosshair(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                                         ..default()
                                     },
                                     TextColor(TEXT_SHADOW_COLOR),
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        left: Val::Px(TEXT_SHADOW_OFFSET),
-                                        top: Val::Px(TEXT_SHADOW_OFFSET),
-                                        ..default()
-                                    },
+                                    shadow_text_node(TEXT_SHADOW_OFFSET),
                                 ));
                                 sep_container.spawn((
                                     Text::new("/"),
@@ -493,12 +494,7 @@ pub fn setup_crosshair(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                                         ..default()
                                     },
                                     TextColor(TEXT_SHADOW_COLOR),
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        left: Val::Px(TEXT_SHADOW_OFFSET),
-                                        top: Val::Px(TEXT_SHADOW_OFFSET),
-                                        ..default()
-                                    },
+                                    shadow_text_node(TEXT_SHADOW_OFFSET),
                                     ReserveAmmoShadow,
                                 ));
                                 // 主文字

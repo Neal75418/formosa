@@ -2,8 +2,6 @@
 //!
 //! 注意：部分功能為將來擴展預留
 
-#![allow(dead_code)]
-
 mod components;
 mod systems;
 

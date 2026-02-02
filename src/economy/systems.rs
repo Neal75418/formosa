@@ -2,7 +2,7 @@
 //!
 //! 處理金錢同步、商店互動、ATM 操作
 
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -61,7 +61,7 @@ fn format_money(amount: i32) -> String {
         .as_bytes()
         .rchunks(3)
         .rev()
-        .map(|chunk| std::str::from_utf8(chunk).unwrap())
+        .map(|chunk| std::str::from_utf8(chunk).unwrap_or("?"))
         .collect::<Vec<_>>()
         .join(",");
 

@@ -2,8 +2,6 @@
 //!
 //! 注意：部分資源欄位為將來擴展預留
 
-#![allow(dead_code)]
-
 mod events;
 pub mod math;
 mod resources;

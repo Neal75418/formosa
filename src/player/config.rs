@@ -3,6 +3,7 @@ use bevy::prelude::*;
 /// 玩家配置資源
 #[derive(Resource, Clone, Reflect)]
 #[reflect(Resource)]
+#[derive(Default)]
 pub struct PlayerConfig {
     /// 移動配置
     pub movement: PlayerMovementConfig,
@@ -10,14 +11,6 @@ pub struct PlayerConfig {
     pub interaction: PlayerInteractionConfig,
 }
 
-impl Default for PlayerConfig {
-    fn default() -> Self {
-        Self {
-            movement: PlayerMovementConfig::default(),
-            interaction: PlayerInteractionConfig::default(),
-        }
-    }
-}
 
 /// 玩家移動相關配置
 #[derive(Clone, Reflect)]

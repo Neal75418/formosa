@@ -2,6 +2,8 @@
 //!
 //! 取代 println! 輸出，在畫面右上角顯示遊戲訊息
 
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
+
 use bevy::prelude::*;
 use std::collections::VecDeque;
 

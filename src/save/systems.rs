@@ -3,8 +3,7 @@
 //! 處理存檔、讀檔、自動存檔邏輯
 //!
 //! 使用非同步 IO 避免阻塞主執行緒
-
-#![allow(dead_code)] // Phase 5+ 預留功能
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
@@ -72,26 +71,24 @@ pub fn handle_save_input(
     mut load_events: MessageWriter<LoadGameEvent>,
 ) {
     // F5 = 快速存檔
-    if keyboard.just_pressed(KeyCode::F5) {
-        if !save_manager.is_busy {
+    if keyboard.just_pressed(KeyCode::F5)
+        && !save_manager.is_busy {
             save_events.write(SaveGameEvent {
                 save_type: SaveType::QuickSave,
                 slot: None,
             });
             info!("快速存檔中...");
         }
-    }
 
     // F9 = 快速讀檔
-    if keyboard.just_pressed(KeyCode::F9) {
-        if !save_manager.is_busy {
+    if keyboard.just_pressed(KeyCode::F9)
+        && !save_manager.is_busy {
             load_events.write(LoadGameEvent {
                 load_type: LoadType::QuickLoad,
                 slot: None,
             });
             info!("快速讀檔中...");
         }
-    }
 }
 
 // ============================================================================
@@ -217,13 +214,13 @@ fn collect_save_data(
     _player_stats: &PlayerStats,
     vehicle_mod_query: &Query<(Entity, &VehicleId, &VehicleModifications)>,
 ) -> SaveData {
-    let mut save_data = SaveData::default();
-
-    // 時間戳
-    save_data.timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let mut save_data = SaveData {
+        timestamp: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        ..SaveData::default()
+    };
 
     // 玩家資料
     if let Ok((transform, _player, health, armor)) = player_query.single() {
@@ -327,7 +324,7 @@ pub fn handle_load_events(
         return;
     }
 
-    for event in events.read() {
+    if let Some(event) = events.read().next() {
         save_manager.is_busy = true;
 
         // 決定讀檔路徑
@@ -347,7 +344,6 @@ pub fn handle_load_events(
         task_tracker.load_task = Some(task);
 
         info!("讀檔任務已啟動: {:?}", load_path);
-        break; // 一次只處理一個讀檔事件
     }
 }
 
@@ -663,8 +659,8 @@ pub fn handle_auto_save(
     if save_manager.auto_save_enabled {
         save_manager.time_since_auto_save += time.delta_secs();
 
-        if save_manager.time_since_auto_save >= save_manager.auto_save_interval {
-            if !save_manager.is_busy {
+        if save_manager.time_since_auto_save >= save_manager.auto_save_interval
+            && !save_manager.is_busy {
                 save_events.write(SaveGameEvent {
                     save_type: SaveType::AutoSave,
                     slot: None,
@@ -672,7 +668,6 @@ pub fn handle_auto_save(
                 save_manager.time_since_auto_save = 0.0;
                 info!("定時自動存檔");
             }
-        }
     }
 }
 

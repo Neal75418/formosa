@@ -5,6 +5,8 @@
 //! - Climb（攀爬）：中等高度牆面（1.0-1.8m），抓住邊緣往上爬
 //! - HighClimb（高位攀爬）：較高牆面（1.8-2.5m），需要更長時間
 
+#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
+
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -319,7 +321,7 @@ pub fn detect_climbable_obstacle(
     }
 
     // 檢查高度是否在有效範圍內
-    if edge_height < MIN_VAULT_HEIGHT || edge_height > MAX_CLIMB_HEIGHT {
+    if !(MIN_VAULT_HEIGHT..=MAX_CLIMB_HEIGHT).contains(&edge_height) {
         return ClimbDetectionResult::default();
     }
 

@@ -256,6 +256,10 @@ fn try_start_npc_mission(
             dialogue_id,
             participants: HashMap::new(),
         });
+        trace!("任務 {:?} 開場對話已觸發: {:?}", mission_id, dialogue_id);
+    } else {
+        // 無開場對話是正常情況（部分任務不需要對話）
+        trace!("任務 {:?} 無開場對話，直接開始", mission_id);
     }
     true
 }
@@ -549,7 +553,7 @@ fn mission_phase_system(
         let rewards = mission.rewards.clone();
         manager.grant_rewards(&rewards, &mut wallet, &mut respect, &mut unlocks);
 
-        if let Some((completed_id, spawned_entities)) = manager.complete_current_mission() {
+        if let Some((completed_id, spawned_entities)) = manager.complete_current_mission(&database) {
             cleanup_mission_entities(&mut commands, spawned_entities);
             mission_events.write(StoryMissionEvent::Completed {
                 mission_id: completed_id,

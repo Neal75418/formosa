@@ -6,6 +6,7 @@
 
 use bevy::prelude::*;
 
+use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
 use crate::core::{InteractionState, PlayerStats, WorldTime};
 use crate::player::Player;
 use crate::ui::MoneyDisplay;
@@ -55,7 +56,8 @@ pub fn update_money_ui(
 
 /// 格式化金錢（加入千分位分隔符）
 fn format_money(amount: i32) -> String {
-    let abs_amount = amount.abs();
+    // 使用 unsigned_abs() 避免 i32::MIN.abs() 導致的整數溢位 panic
+    let abs_amount = amount.unsigned_abs();
     let formatted = abs_amount
         .to_string()
         .as_bytes()
@@ -85,11 +87,11 @@ pub fn handle_shop_interaction(
     mut menu_state: ResMut<ShopMenuState>,
     mut money_events: MessageWriter<MoneyChangedEvent>,
     shop_inventory: Res<ShopInventory>,
-    player_query: Query<&Transform, With<Player>>,
+    mut player_query: Query<(&Transform, &mut Health, &mut Armor, &mut WeaponInventory), With<Player>>,
     shop_query: Query<(Entity, &Transform, &Shop, &Interactable)>,
     mut interaction: ResMut<InteractionState>,
 ) {
-    let Ok(player_transform) = player_query.single() else {
+    let Ok((player_transform, mut health, mut armor, mut weapon_inventory)) = player_query.single_mut() else {
         return;
     };
     let player_pos = player_transform.translation;
@@ -102,6 +104,9 @@ pub fn handle_shop_interaction(
             &mut menu_state,
             &mut money_events,
             &shop_inventory,
+            &mut health,
+            &mut armor,
+            &mut weapon_inventory,
         );
         return;
     }
@@ -158,18 +163,82 @@ fn try_purchase_item(
     item: &ShopItem,
     wallet: &mut PlayerWallet,
     money_events: &mut MessageWriter<MoneyChangedEvent>,
+    health: &mut Health,
+    armor: &mut Armor,
+    weapon_inventory: &mut WeaponInventory,
 ) {
-    if wallet.spend_cash(item.price) {
-        money_events.write(MoneyChangedEvent {
-            amount: -item.price,
-            reason: MoneyChangeReason::Purchase,
-            new_balance: wallet.cash,
-        });
-        info!("購買成功: {} (-${})", item.name, item.price);
-        // TODO: 實際給予物品效果
-    } else {
+    if !wallet.spend_cash(item.price) {
         warn!("餘額不足！需要 ${}, 只有 ${}", item.price, wallet.cash);
+        return;
     }
+
+    // 根據物品類別給予效果
+    match item.category {
+        ItemCategory::Food | ItemCategory::Drink => {
+            let healed = health.heal(item.effect_value);
+            info!("購買成功: {} (-${}) - 回復 {} HP", item.name, item.price, healed);
+        }
+        ItemCategory::Armor => {
+            let added = armor.add(item.effect_value);
+            info!("購買成功: {} (-${}) - 護甲 +{}", item.name, item.price, added);
+        }
+        ItemCategory::Weapon => {
+            // 根據 item.id 確定武器類型
+            let weapon = match item.id.as_str() {
+                "weapon_pistol" => Weapon::new(WeaponStats::pistol()),
+                "weapon_smg" => Weapon::new(WeaponStats::smg()),
+                "weapon_shotgun" => Weapon::new(WeaponStats::shotgun()),
+                "weapon_rifle" => Weapon::new(WeaponStats::rifle()),
+                _ => {
+                    warn!("未知武器 ID: {}", item.id);
+                    return;
+                }
+            };
+            if weapon_inventory.add_weapon(weapon) {
+                info!("購買成功: {} (-${})", item.name, item.price);
+            } else {
+                info!("購買成功: {} (-${}) - 已有此武器，補充彈藥", item.name, item.price);
+            }
+        }
+        ItemCategory::Ammo => {
+            // 根據 item.id 確定彈藥類型並補充
+            let weapon_type = match item.id.as_str() {
+                "ammo_pistol" => WeaponType::Pistol,
+                "ammo_smg" => WeaponType::SMG,
+                "ammo_shotgun" => WeaponType::Shotgun,
+                "ammo_rifle" => WeaponType::Rifle,
+                _ => {
+                    warn!("未知彈藥 ID: {}", item.id);
+                    return;
+                }
+            };
+            // 找到對應武器並補充彈藥
+            let ammo_added = item.effect_value as u32;
+            let mut found = false;
+            for weapon in &mut weapon_inventory.weapons {
+                if weapon.stats.weapon_type == weapon_type {
+                    weapon.reserve_ammo = (weapon.reserve_ammo + ammo_added).min(weapon.stats.max_ammo);
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                info!("購買成功: {} (-${}) - 彈藥 +{}", item.name, item.price, ammo_added);
+            } else {
+                info!("購買成功: {} (-${}) - 尚未擁有此武器，彈藥已儲存", item.name, item.price);
+            }
+        }
+        ItemCategory::Clothing | ItemCategory::VehiclePart => {
+            // 服裝和車輛配件暫不實現
+            info!("購買成功: {} (-${}) - 功能開發中", item.name, item.price);
+        }
+    }
+
+    money_events.write(MoneyChangedEvent {
+        amount: -item.price,
+        reason: MoneyChangeReason::Purchase,
+        new_balance: wallet.cash,
+    });
 }
 
 /// 處理商店選單輸入
@@ -179,6 +248,9 @@ fn handle_shop_menu_input(
     menu_state: &mut ShopMenuState,
     money_events: &mut MessageWriter<MoneyChangedEvent>,
     shop_inventory: &ShopInventory,
+    health: &mut Health,
+    armor: &mut Armor,
+    weapon_inventory: &mut WeaponInventory,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
         menu_state.is_open = false;
@@ -195,7 +267,7 @@ fn handle_shop_menu_input(
     let purchase_pressed = keyboard.just_pressed(KeyCode::Enter);
     if purchase_pressed {
         if let Some(item) = items.get(menu_state.selected_index) {
-            try_purchase_item(item, wallet, money_events);
+            try_purchase_item(item, wallet, money_events, health, armor, weapon_inventory);
         }
     }
 }

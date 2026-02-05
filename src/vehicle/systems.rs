@@ -26,10 +26,10 @@ use bevy_rapier3d::prelude::*;
 // ============================================================================
 
 /// 將 bevy_rapier3d 的 Real 類型轉換為 f32
-/// 用於避免與 bevy::prelude::Real 的命名衝突
+/// 用於避免與 bevy::prelude::Real 的命名衝突，並確保未來版本兼容性
 #[inline]
 fn rapier_real_to_f32(r: bevy_rapier3d::prelude::Real) -> f32 {
-    r
+    r as f32  // 明確轉換，即使當前版本 Real == f32
 }
 
 /// 切換載具剛體型態並補齊必要物理組件
@@ -373,7 +373,11 @@ pub fn vehicle_steering_system(
     let effective_handling = weather_handling * handling_mod;
 
     // Turning Logic
-    let speed_ratio = (vehicle.current_speed.abs() / vehicle.max_speed).clamp(0.0, 1.0);
+    let speed_ratio = if vehicle.max_speed > 0.0 {
+        (vehicle.current_speed.abs() / vehicle.max_speed).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let speed_turn_factor = if speed_ratio < 0.3 {
         1.0
     } else {
@@ -810,10 +814,21 @@ fn update_npc_state_from_obstacle(
         config,
     ) {
         let (new_state, reset_timer) =
-            determine_npc_reaction(hit, vehicle.current_speed, npc.stuck_timer, config);
+            determine_npc_reaction(hit.clone(), vehicle.current_speed, npc.stuck_timer, config);
         npc.state = new_state;
         if reset_timer {
             npc.stuck_timer = 0.0;
+        }
+
+        // === 避障轉向：遇到前方障礙物時嘗試繞行 ===
+        if matches!(hit.kind, ObstacleHitKind::Front) && hit.distance < config.obstacle_brake_distance {
+            // 基於車輛位置生成一致的轉向方向（避免來回抖動）
+            let pos_hash = (transform.translation.x * 1000.0) as i32;
+            let turn_direction = if pos_hash % 2 == 0 { 1.0 } else { -1.0 };
+
+            // 距離越近，轉向越急
+            let urgency = 1.0 - (hit.distance / config.obstacle_brake_distance).clamp(0.0, 1.0);
+            vehicle.steer_input = turn_direction * urgency * 0.8;
         }
     } else {
         npc.state = NpcState::Cruising;
@@ -1289,6 +1304,9 @@ pub fn spawn_npc_vehicle(
                 .spawn((
                     Transform::default(),
                     GlobalTransform::default(),
+                    Visibility::default(),
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
                     VehicleVisualRoot,
                 ))
                 .with_children(|parent| {
@@ -1668,6 +1686,9 @@ pub fn spawn_scooter(
                 .spawn((
                     Transform::default(),
                     GlobalTransform::default(),
+                    Visibility::default(),
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
                     VehicleVisualRoot,
                 ))
                 .with_children(|parent| {

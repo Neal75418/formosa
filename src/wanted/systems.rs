@@ -398,11 +398,51 @@ fn calc_facing_rotation(direction: Vec3) -> Quat {
 }
 
 /// 處理巡邏狀態
-fn handle_patrolling_state(officer: &mut PoliceOfficer, wanted_stars: u8) {
+/// 巡邏移動速度
+const PATROL_SPEED: f32 = 2.5;
+/// 到達巡邏點的距離閾值
+const PATROL_WAYPOINT_THRESHOLD: f32 = 1.5;
+
+fn handle_patrolling_state(
+    officer: &mut PoliceOfficer,
+    transform: &mut Transform,
+    controller: &mut KinematicCharacterController,
+    police_pos: Vec3,
+    wanted_stars: u8,
+    dt: f32,
+) {
+    // 如果有通緝星，切換到警覺狀態
     if wanted_stars > 0 {
         officer.state = PoliceState::Alerted;
         officer.target_player = true;
+        return;
     }
+
+    // 如果沒有巡邏路徑，保持原地（等待設置路徑）
+    if officer.patrol_route.is_empty() {
+        controller.translation = Some(Vec3::ZERO);
+        return;
+    }
+
+    // 獲取當前目標巡邏點
+    let target = officer.patrol_route[officer.patrol_index];
+    let to_target = target - police_pos;
+    let distance = to_target.length();
+
+    // 到達巡邏點，切換到下一個
+    if distance < PATROL_WAYPOINT_THRESHOLD {
+        officer.patrol_index = (officer.patrol_index + 1) % officer.patrol_route.len();
+        return;
+    }
+
+    // 移動向目標
+    let direction = to_target.normalize();
+    controller.translation = Some(direction * PATROL_SPEED * dt);
+
+    // 面向移動方向（使用標準 Bevy 坐標系統慣例）
+    let target_yaw = (-direction.x).atan2(-direction.z);
+    let target_rotation = Quat::from_rotation_y(target_yaw);
+    transform.rotation = transform.rotation.slerp(target_rotation, dt * 5.0);
 }
 
 /// 處理警覺狀態
@@ -547,7 +587,7 @@ pub fn police_ai_system(
 
         match officer.state {
             PoliceState::Patrolling => {
-                handle_patrolling_state(&mut officer, wanted.stars);
+                handle_patrolling_state(&mut officer, &mut transform, &mut controller, police_pos, wanted.stars, dt);
             }
             PoliceState::Alerted => {
                 handle_alerted_state(&mut officer, &mut transform, &mut controller, police_pos, distance, movement, &wanted, &config, dt);

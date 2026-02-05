@@ -23,6 +23,7 @@ use crate::ui::{
     trigger_damage_indicator, ChineseFont, DamageIndicatorState, FloatingDamageNumber,
     FloatingDamageTracker, NotificationQueue,
 };
+use crate::economy::CashPickup;
 use crate::wanted::{CrimeEvent, PoliceOfficer};
 
 /// 傷害系統資源參數包（解決 Bevy 16 參數限制）
@@ -62,6 +63,12 @@ const HEADSHOT_HEIGHT_THRESHOLD: f32 = 0.85;
 const CHEST_HEIGHT: f32 = 1.0;
 /// 重生計時器時長（秒）
 const RESPAWN_TIMER_DURATION: f32 = 3.0;
+
+// === 敵人掉落常數 ===
+/// 敵人死亡掉落金額最小值
+const ENEMY_DROP_MIN: i32 = 50;
+/// 敵人死亡掉落金額最大值
+const ENEMY_DROP_MAX: i32 = 200;
 
 // === 衝量強度常數 ===
 /// 子彈衝量強度
@@ -700,12 +707,19 @@ fn manage_ragdoll_limit(
     new_entity: Entity,
     current_time: f32,
 ) {
-    if ragdoll_tracker.ragdolls.len() >= ragdoll_tracker.max_count {
+    // max_count = 0 表示不保留任何屍體
+    if ragdoll_tracker.max_count == 0 {
+        return;
+    }
+    // 超過限制時移除最舊的屍體
+    while ragdoll_tracker.ragdolls.len() >= ragdoll_tracker.max_count {
         if let Some((oldest_entity, _)) = ragdoll_tracker.ragdolls.first().copied() {
             if let Ok(mut entity_commands) = commands.get_entity(oldest_entity) {
                 entity_commands.despawn();
             }
             ragdoll_tracker.ragdolls.remove(0);
+        } else {
+            break;
         }
     }
     ragdoll_tracker.ragdolls.push((new_entity, current_time));
@@ -789,6 +803,16 @@ fn handle_enemy_death(
     if let Some(ref blood) = blood_visuals {
         spawn_blood_particles(commands, blood_pos, impulse_dir, blood);
     }
+
+    // 掉落金錢（隨機金額）
+    let mut rng = rand::rng();
+    let drop_amount = rng.random_range(ENEMY_DROP_MIN..=ENEMY_DROP_MAX);
+    commands.spawn((
+        Name::new("CashDrop"),
+        Transform::from_translation(enemy_pos + Vec3::Y * 0.5),
+        GlobalTransform::default(),
+        CashPickup::new(drop_amount),
+    ));
 
     // 設置布娃娃物理
     setup_ragdoll_physics(

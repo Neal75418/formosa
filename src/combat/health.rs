@@ -134,6 +134,14 @@ impl Armor {
     pub fn took_significant_hit(&self, damage: f32) -> bool {
         damage >= Self::SIGNIFICANT_HIT_THRESHOLD && self.current > 0.0
     }
+
+    /// 增加護甲值（購買/撿取護甲時使用）
+    pub fn add(&mut self, amount: f32) -> f32 {
+        let space = self.max - self.current;
+        let actual = amount.min(space);
+        self.current += actual;
+        actual
+    }
 }
 
 // ============================================================================

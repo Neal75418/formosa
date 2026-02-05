@@ -1,18 +1,33 @@
 //! 世界系統模組
 
+mod buildings;
+mod characters;
 mod components;
-mod setup;
-mod time_weather;
+mod constants;
+mod destructible;
 mod interior;
 mod random_events;
-mod destructible;
+mod roads;
+mod setup;
+mod street_furniture;
+mod time_weather;
 
+// 公開 API re-exports (允許外部使用 crate::world::* 存取)
+#[allow(unused_imports)]
+pub use buildings::*;
+#[allow(unused_imports)]
+pub use characters::*;
 pub use components::*;
-pub use setup::*;
-pub use time_weather::*;
+pub use constants::*;
+pub use destructible::*;
 pub use interior::*;
 pub use random_events::*;
-pub use destructible::*;
+#[allow(unused_imports)]
+pub use roads::*;
+pub use setup::*;
+#[allow(unused_imports)]
+pub use street_furniture::*;
+pub use time_weather::*;
 
 use bevy::prelude::*;
 use crate::core::{AppState, GameSet, InteractionSet};

@@ -108,7 +108,9 @@ pub fn vehicle_shooting_input_system(
 
     // 計算相對於車輛的瞄準角度
     let vehicle_forward = vehicle_transform.forward();
-    let aim_dir = Vec3::new(camera_settings.yaw.cos(), 0.0, camera_settings.yaw.sin()).normalize();
+    // 使用 Bevy 坐標系統：yaw 角的 forward 方向是 (-sin(yaw), 0, -cos(yaw))
+    let yaw = camera_settings.yaw;
+    let aim_dir = Vec3::new(-yaw.sin(), 0.0, -yaw.cos());
 
     let angle = vehicle_forward.dot(aim_dir).acos().to_degrees();
     let cross = vehicle_forward.cross(aim_dir).y;

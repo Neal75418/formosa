@@ -16,21 +16,124 @@ pub struct Player {
     pub vertical_velocity: f32,
     pub is_grounded: bool,
     pub money: u32,
+    // === 加速度系統 ===
+    /// 當前實際移動速度（平滑過渡）
+    pub current_speed: f32,
+    /// 加速時間（從靜止到最大速度）
+    pub acceleration_time: f32,
+    /// 減速時間（從最大速度到靜止）
+    pub deceleration_time: f32,
+    /// 上次移動方向（用於慣性滑行）
+    pub last_movement_direction: Vec3,
 }
 
 impl Default for Player {
     fn default() -> Self {
         Self {
-            speed: 10.0,           // 提高基礎速度（原 8.0）
+            speed: 10.0,           // 基礎走路速度
             rotation_speed: 3.0,
-            sprint_speed: 18.0,    // 提高衝刺速度（原 15.0）
+            sprint_speed: 18.0,    // 衝刺速度
             is_sprinting: false,
             jump_force: 12.0,
             vertical_velocity: 0.0,
             is_grounded: true,
             money: 5000,
+            // 加速度系統
+            current_speed: 0.0,           // 初始靜止
+            acceleration_time: 0.3,       // 0.3 秒從靜止到全速
+            deceleration_time: 0.4,       // 0.4 秒從全速到靜止
+            last_movement_direction: Vec3::Z, // 初始面向 +Z
         }
     }
+}
+
+// ============================================================================
+// 衝刺狀態機
+// ============================================================================
+
+/// 衝刺狀態（用於動畫和效果系統）
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum SprintState {
+    /// 靜止或慢走
+    #[default]
+    Idle,
+    /// 正在加速到衝刺 (progress: 0.0 → 1.0)
+    Accelerating { progress: f32 },
+    /// 全速衝刺中
+    Sprinting,
+    /// 正在從衝刺減速 (progress: 1.0 → 0.0)
+    Decelerating { progress: f32 },
+}
+
+impl SprintState {
+    /// 衝刺門檻（超過此速度比例視為進入衝刺）
+    const SPRINT_THRESHOLD: f32 = 0.85;
+    /// 走路門檻（低於此速度比例視為走路）
+    const WALK_THRESHOLD: f32 = 0.6;
+
+    /// 根據當前速度和目標速度更新狀態
+    pub fn update(&mut self, current_speed: f32, walk_speed: f32, sprint_speed: f32, dt: f32) {
+        let speed_ratio = current_speed / sprint_speed;
+
+        match *self {
+            SprintState::Idle => {
+                // 開始加速
+                if speed_ratio > Self::WALK_THRESHOLD {
+                    *self = SprintState::Accelerating { progress: speed_ratio / Self::SPRINT_THRESHOLD };
+                }
+            }
+            SprintState::Accelerating { progress } => {
+                let new_progress = (current_speed - walk_speed) / (sprint_speed * Self::SPRINT_THRESHOLD - walk_speed);
+                let clamped = new_progress.clamp(0.0, 1.0);
+                if clamped >= 1.0 {
+                    *self = SprintState::Sprinting;
+                } else if clamped <= 0.0 {
+                    *self = SprintState::Idle;
+                } else {
+                    *self = SprintState::Accelerating { progress: clamped };
+                }
+                let _ = (progress, dt); // 避免 unused warning
+            }
+            SprintState::Sprinting => {
+                // 開始減速
+                if speed_ratio < Self::SPRINT_THRESHOLD {
+                    *self = SprintState::Decelerating { progress: speed_ratio / Self::SPRINT_THRESHOLD };
+                }
+            }
+            SprintState::Decelerating { progress } => {
+                let new_progress = speed_ratio / Self::SPRINT_THRESHOLD;
+                if new_progress >= Self::SPRINT_THRESHOLD {
+                    *self = SprintState::Sprinting;
+                } else if new_progress <= Self::WALK_THRESHOLD / Self::SPRINT_THRESHOLD {
+                    *self = SprintState::Idle;
+                } else {
+                    *self = SprintState::Decelerating { progress: new_progress };
+                }
+                let _ = (progress, dt); // 避免 unused warning
+            }
+        }
+    }
+
+    /// 是否處於衝刺相關狀態（用於動畫選擇）
+    pub fn is_sprint_related(&self) -> bool {
+        !matches!(self, SprintState::Idle)
+    }
+
+    /// 獲取動畫混合權重 (0.0 = 走路, 1.0 = 衝刺)
+    pub fn animation_blend(&self) -> f32 {
+        match *self {
+            SprintState::Idle => 0.0,
+            SprintState::Accelerating { progress } => progress,
+            SprintState::Sprinting => 1.0,
+            SprintState::Decelerating { progress } => progress,
+        }
+    }
+}
+
+/// 衝刺狀態組件（附加到玩家實體）
+#[derive(Component, Default)]
+pub struct PlayerSprintState {
+    pub state: SprintState,
 }
 
 /// 閃避狀態
@@ -60,7 +163,7 @@ impl DodgeState {
     pub fn start_dodge(&mut self, direction: Vec3) {
         if self.cooldown <= 0.0 && !self.is_dodging {
             self.is_dodging = true;
-            self.dodge_direction = direction.normalize();
+            self.dodge_direction = direction.normalize_or_zero();
             self.dodge_timer = Self::DODGE_DURATION;
             self.cooldown = Self::DODGE_COOLDOWN;
         }

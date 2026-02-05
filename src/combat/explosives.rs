@@ -1116,8 +1116,12 @@ pub fn explosion_effect_update_system(
     for (entity, mut transform, mut effect) in &mut effect_query {
         effect.lifetime += time.delta_secs();
 
-        // 爆炸擴散然後縮小
-        let progress = effect.lifetime / effect.max_lifetime;
+        // 爆炸擴散然後縮小（防止除零）
+        let progress = if effect.max_lifetime > 0.0 {
+            (effect.lifetime / effect.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         let scale = if progress < 0.3 {
             // 快速擴張
             effect.radius * (progress / 0.3)
@@ -1148,7 +1152,12 @@ pub fn shockwave_effect_update_system(
     for (entity, mut transform, material_handle, mut effect) in &mut effect_query {
         effect.lifetime += time.delta_secs();
 
-        let progress = effect.lifetime / effect.max_lifetime;
+        // 防止除零
+        let progress = if effect.max_lifetime > 0.0 {
+            (effect.lifetime / effect.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
 
         // 線性擴張
         let scale = effect.max_radius * progress;

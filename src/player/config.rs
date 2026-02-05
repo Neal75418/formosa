@@ -15,12 +15,16 @@ pub struct PlayerConfig {
 /// 玩家移動相關配置
 #[derive(Clone, Reflect)]
 pub struct PlayerMovementConfig {
-    /// 旋轉速度（越大越快）
+    /// 旋轉速度（越大越快）- 舊版固定值，保留向後兼容
     pub rotation_speed: f32,
     /// 重力加速度
     pub gravity: f32,
     /// 最大下墜速度
     pub max_fall_speed: f32,
+    /// 走路時轉向速度
+    pub turn_speed_walk: f32,
+    /// 衝刺時轉向速度（較慢，高速時不易急轉）
+    pub turn_speed_sprint: f32,
 }
 
 impl Default for PlayerMovementConfig {
@@ -29,6 +33,8 @@ impl Default for PlayerMovementConfig {
             rotation_speed: 25.0,
             gravity: 30.0,
             max_fall_speed: 50.0,
+            turn_speed_walk: 30.0,   // 走路時靈活轉向
+            turn_speed_sprint: 15.0, // 衝刺時轉向較慢（更真實）
         }
     }
 }

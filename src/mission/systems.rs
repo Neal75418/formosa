@@ -170,7 +170,8 @@ fn update_delivery_mission(
 /// 計算外送評價
 fn calculate_delivery_rating(active: &ActiveMission) -> DeliveryRating {
     if let Some(limit) = active.data.time_limit {
-        let remaining_ratio = (limit - active.time_elapsed) / limit;
+        // 確保比率不會變成負數（超時情況）
+        let remaining_ratio = ((limit - active.time_elapsed) / limit).max(0.0);
         DeliveryRating::from_time_ratio(remaining_ratio)
     } else {
         DeliveryRating::ThreeStars // 無時限任務給 3 星

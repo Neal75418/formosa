@@ -391,6 +391,9 @@ fn handle_approaching_state(helicopter: &mut PoliceHelicopter, horizontal_distan
     }
 }
 
+/// 玩家脫逃所需時間（秒）
+const PLAYER_ESCAPE_TIME: f32 = 15.0;
+
 /// 處理懸停狀態
 fn handle_hovering_state(
     helicopter: &mut PoliceHelicopter,
@@ -400,6 +403,20 @@ fn handle_hovering_state(
 ) {
     helicopter.hover_timer += dt;
 
+    // 玩家可見性追蹤（脫逃機制）
+    if !player_visible {
+        helicopter.search_timer += dt;
+        // 超過脫逃時間，直升機放棄追蹤回到接近狀態（重新搜索）
+        if helicopter.search_timer > PLAYER_ESCAPE_TIME {
+            helicopter.state = HelicopterState::Approaching;
+            helicopter.search_timer = 0.0;
+            helicopter.hover_timer = 0.0;
+            return;
+        }
+    } else {
+        helicopter.search_timer = 0.0;
+    }
+
     if helicopter.hover_timer > 2.0 && player_visible {
         helicopter.state = HelicopterState::Attacking;
     } else if horizontal_distance_sq > HELICOPTER_ATTACK_RANGE_FAR_SQ {
@@ -408,7 +425,24 @@ fn handle_hovering_state(
 }
 
 /// 處理追擊狀態
-fn handle_pursuing_state(helicopter: &mut PoliceHelicopter, horizontal_distance_sq: f32) {
+fn handle_pursuing_state(
+    helicopter: &mut PoliceHelicopter,
+    horizontal_distance_sq: f32,
+    player_visible: bool,
+    dt: f32,
+) {
+    // 玩家可見性追蹤（脫逃機制）
+    if !player_visible {
+        helicopter.search_timer += dt;
+        if helicopter.search_timer > PLAYER_ESCAPE_TIME {
+            helicopter.state = HelicopterState::Approaching;
+            helicopter.search_timer = 0.0;
+            return;
+        }
+    } else {
+        helicopter.search_timer = 0.0;
+    }
+
     if horizontal_distance_sq < HELICOPTER_ATTACK_RANGE_CLOSE_SQ {
         helicopter.state = HelicopterState::Hovering;
         helicopter.hover_timer = 0.0;
@@ -482,7 +516,7 @@ pub fn helicopter_ai_system(
                 handle_hovering_state(&mut helicopter, horizontal_distance_sq, wanted.player_visible, dt);
             }
             HelicopterState::Pursuing => {
-                handle_pursuing_state(&mut helicopter, horizontal_distance_sq);
+                handle_pursuing_state(&mut helicopter, horizontal_distance_sq, wanted.player_visible, dt);
             }
             HelicopterState::Attacking => {
                 handle_attacking_state(&mut helicopter, horizontal_distance_sq, wanted.player_visible, dt);
@@ -569,12 +603,13 @@ fn handle_normal_flight(
         HELICOPTER_MAX_ALTITUDE,
     );
 
-    // 面向目標
+    // 面向目標（使用標準 Bevy 坐標系統慣例）
     if horizontal_dir != Vec3::ZERO {
-        let target_rotation = Quat::from_rotation_y(
-            (-horizontal_dir.z).atan2(horizontal_dir.x) - std::f32::consts::FRAC_PI_2
-        );
-        transform.rotation = transform.rotation.slerp(target_rotation, HELICOPTER_TURN_RATE * dt);
+        let target_rotation =
+            Quat::from_rotation_y((-horizontal_dir.x).atan2(-horizontal_dir.z));
+        transform.rotation = transform
+            .rotation
+            .slerp(target_rotation, HELICOPTER_TURN_RATE * dt);
     }
 }
 

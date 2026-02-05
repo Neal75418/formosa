@@ -143,7 +143,7 @@ fn spawn_enemy(
                 // 打手：70% 突擊, 20% 側翼, 10% 壓制
                 if role_roll < config.thug_rusher_threshold {
                     SquadRole::Rusher
-                } else if role_roll < config.gangster_flanker_threshold {
+                } else if role_roll < config.thug_flanker_threshold {
                     SquadRole::Flanker
                 } else {
                     SquadRole::Suppressor
@@ -680,24 +680,21 @@ fn spawn_leg(
 // 敵人死亡系統
 // ============================================================================
 
-/// 敵人死亡處理系統
-/// 注意：布娃娃系統已在 combat/damage.rs 處理敵人死亡
-/// 此系統僅作為後備，處理任何未被布娃娃系統處理的死亡事件
+/// 敵人死亡處理系統（已棄用）
+///
+/// 注意：此系統的功能已整合至 `combat/damage.rs::death_system`：
+/// - 布娃娃效果
+/// - 血液粒子
+/// - 金錢掉落
+///
+/// 保留此函數以維持 API 相容性，但實際上不做任何處理。
+/// 敵人死亡的完整流程現在由 death_system 統一處理，避免競爭條件。
+#[allow(unused_variables)]
 pub fn enemy_death_system(
-    mut commands: Commands,
-    mut death_events: MessageReader<DeathEvent>,
-    // 排除已有 Ragdoll 組件的敵人（由布娃娃系統處理）
-    enemy_query: Query<Entity, (With<Enemy>, Without<Ragdoll>)>,
+    commands: Commands,
+    death_events: MessageReader<DeathEvent>,
+    enemy_query: Query<(&Transform, Entity), (With<Enemy>, Without<Ragdoll>)>,
 ) {
-    for event in death_events.read() {
-        // 檢查是否為敵人（且沒有 Ragdoll 組件）
-        if enemy_query.get(event.entity).is_ok() {
-            // 移除敵人實體及其子實體（視覺網格）
-            // Bevy 0.17: despawn() 預設會移除子實體
-            if let Ok(mut entity_commands) = commands.get_entity(event.entity) {
-                entity_commands.despawn();
-            }
-            // TODO: 掉落物品、經驗值
-        }
-    }
+    // 此系統已棄用，所有敵人死亡處理已移至 death_system
+    // 保留空實現以維持系統註冊相容性
 }

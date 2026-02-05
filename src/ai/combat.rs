@@ -21,10 +21,10 @@ use crate::player::Player;
 #[inline]
 fn update_weapon_state(weapon: &mut Weapon, dt: f32) -> bool {
     if weapon.fire_cooldown > 0.0 {
-        weapon.fire_cooldown -= dt;
+        weapon.fire_cooldown = (weapon.fire_cooldown - dt).max(0.0);
     }
     if weapon.is_reloading {
-        weapon.reload_timer -= dt;
+        weapon.reload_timer = (weapon.reload_timer - dt).max(0.0);
         if weapon.reload_timer <= 0.0 {
             weapon.finish_reload();
         }

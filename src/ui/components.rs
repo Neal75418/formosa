@@ -588,13 +588,21 @@ impl FloatingDamageNumber {
 
     /// 計算當前透明度 (0.0 ~ 1.0)
     pub fn alpha(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         calculate_fade_alpha(progress, 0.3)
     }
 
     /// 計算當前縮放
     pub fn scale(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         // 彈出效果：開始時放大，然後縮小
         if progress < 0.1 {
             self.initial_scale * (1.0 + progress * 3.0)  // 快速放大

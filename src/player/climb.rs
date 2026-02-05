@@ -304,7 +304,8 @@ pub fn detect_climbable_obstacle(
     // Step 2: 向上掃描找到邊緣高度
     let scan_origin = obstacle_front + forward * 0.05; // 稍微往前一點
     let mut edge_height = 0.0;
-    let max_steps = ((MAX_CLIMB_HEIGHT - CHEST_HEIGHT) / EDGE_SCAN_STEP) as i32;
+    // 確保 max_steps 非負，防止常數配置錯誤時產生無限迴圈
+    let max_steps = ((MAX_CLIMB_HEIGHT - CHEST_HEIGHT) / EDGE_SCAN_STEP).max(0.0) as i32;
 
     for i in 0..=max_steps {
         let h = i as f32 * EDGE_SCAN_STEP;
@@ -481,14 +482,18 @@ pub fn climb_detection_system(
         }
 
         // 觸發條件（需要站在地面上）：
-        // 1. 衝刺中 + 前進輸入 → 自動觸發（跑酷風格）
+        // 1. 高速移動 + 前進輸入 → 自動觸發（跑酷風格）
+        //    - 衝刺時自動觸發
+        //    - 或速度超過 8.0 m/s 時（接近衝刺門檻）
         // 2. 按下 Space 鍵 → 手動觸發（靠近障礙物時）
         if !player.is_grounded {
             continue;
         }
 
-        let auto_trigger = player.is_sprinting
-            && (keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp));
+        // 放寬自動觸發條件：不只衝刺，高速走路也能觸發
+        let is_moving_fast = player.is_sprinting || player.current_speed > 8.0;
+        let is_moving_forward = keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp);
+        let auto_trigger = is_moving_fast && is_moving_forward;
         let manual_trigger = keyboard.just_pressed(KeyCode::Space);
 
         if auto_trigger || manual_trigger {

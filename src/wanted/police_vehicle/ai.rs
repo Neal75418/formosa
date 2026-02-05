@@ -48,7 +48,8 @@ fn can_attempt_pit(
     car_forward: Vec3,
     to_player: Vec3,
 ) -> bool {
-    if distance_sq >= PIT_MANEUVER_DISTANCE_SQ * 4.0 || pit_cooldown > 0.0 || wanted_stars < 3 {
+    // 降低 PIT 門檻：2 星即可啟用（原為 3 星）
+    if distance_sq >= PIT_MANEUVER_DISTANCE_SQ * 4.0 || pit_cooldown > 0.0 || wanted_stars < 2 {
         return false;
     }
     let angle = clamp_dot(car_forward.dot(safe_normalize(to_player))).acos();
@@ -291,23 +292,27 @@ pub fn police_car_collision_system(
         let relative_speed = (police_vehicle.current_speed - player_vehicle_data.current_speed).abs();
         // 速度因子：低速碰撞傷害減少，高速碰撞傷害增加
         let speed_factor = (relative_speed / COLLISION_REFERENCE_SPEED).clamp(0.3, 2.0);
-        let damage = POLICE_CAR_COLLISION_DAMAGE * speed_factor;
 
-        // 警車受傷（也受速度因子影響）
-        health.take_damage(50.0 * speed_factor, elapsed);
+        // 平衡碰撞傷害：使用相同基礎值，警車稍耐撞（減少 20%）
+        let base_damage = POLICE_CAR_COLLISION_DAMAGE * speed_factor;
+        let player_damage = base_damage;
+        let police_damage = base_damage * 0.8; // 警車更耐撞
+
+        // 警車受傷
+        health.take_damage(police_damage, elapsed);
 
         // 對玩家造成傷害
         damage_events.write(DamageEvent {
             target: player_vehicle,
-            amount: damage,
+            amount: player_damage,
             source: DamageSource::Explosion, // 使用爆炸類型表示碰撞
             attacker: Some(police_entity),
             hit_position: Some(transform.translation),
             is_headshot: false,
         });
 
-        info!("警車碰撞！相對速度: {:.1} m/s, 傷害: {:.1}, 警車血量: {:.0}",
-              relative_speed, damage, health.current);
+        info!("警車碰撞！相對速度: {:.1} m/s, 玩家傷害: {:.1}, 警車傷害: {:.1}, 警車血量: {:.0}",
+              relative_speed, player_damage, police_damage, health.current);
     }
 }
 

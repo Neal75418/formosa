@@ -136,16 +136,24 @@ impl StoryMissionManager {
     }
 
     /// 完成當前任務並返回任務 ID 和需要清理的實體
-    pub fn complete_current_mission(&mut self) -> Option<(StoryMissionId, Vec<Entity>)> {
+    pub fn complete_current_mission(
+        &mut self,
+        database: &StoryMissionDatabase,
+    ) -> Option<(StoryMissionId, Vec<Entity>)> {
         let active = self.current_mission.take()?;
         let mission_id = active.mission_id;
+
+        // 從資料庫獲取任務定義
+        let mission = database.get(mission_id);
 
         // 完成表現追蹤並計算評分
         if let Some(mut performance) = self.current_performance.take() {
             performance.completion_time = self.total_play_time - performance.start_time;
 
-            // 預設目標時間為 5 分鐘，實際應從任務定義取得
-            let target_time = 300.0; // TODO: 從任務資料取得
+            // 從任務定義獲取目標時間（estimated_time 是分鐘，轉換為秒）
+            let target_time = mission
+                .map(|m| m.estimated_time * 60.0)
+                .unwrap_or(300.0);
             let rating = performance.calculate_rating(target_time);
 
             // 更新最佳評分
@@ -158,31 +166,42 @@ impl StoryMissionManager {
                 self.mission_ratings.insert(mission_id, rating);
             }
 
-            // 計算獎勵
-            let base_reward = 1000; // TODO: 從任務資料取得
+            // 從任務定義獲取基礎獎勵
+            let base_reward = mission
+                .map(|m| m.rewards.money as i32)
+                .unwrap_or(1000);
             let final_reward = (base_reward as f32 * rating.bonus_multiplier()) as i32;
+
+            // 從任務定義獲取任務名稱
+            let mission_name = mission
+                .map(|m| m.title.clone())
+                .unwrap_or_else(|| format!("任務 {:?}", mission_id));
+
+            // 從任務定義獲取解鎖物品
+            let unlocked_items = mission
+                .map(|m| {
+                    let mut items = m.rewards.unlock_weapons.clone();
+                    items.extend(m.rewards.unlock_vehicles.clone());
+                    items
+                })
+                .unwrap_or_default();
+
+            // 從任務定義獲取解鎖任務
+            let unlocked_missions = mission
+                .map(|m| m.rewards.unlock_missions.clone())
+                .unwrap_or_default();
 
             // 儲存完成結果供 UI 顯示
             self.last_completion_result = Some(MissionCompletionResult {
                 mission_id,
-                mission_name: format!("任務 {:?}", mission_id), // TODO: 從任務資料取得
+                mission_name,
                 rating,
                 performance,
                 base_reward,
                 final_reward,
-                unlocked_items: Vec::new(), // TODO: 從任務獎勵取得
-                unlocked_missions: Vec::new(),
+                unlocked_items,
+                unlocked_missions,
             });
-
-            // self.player_money += final_reward; // Moved to result usage or needs EconomyManager passed in.
-            // complete_current_mission signature update?
-            // Actually, complete_current_mission returns MissionCompletionResult.
-            // The Caller (system) should handle applying rewards to EconomyManager using the result.
-            // But we have `final_reward` calculation here.
-            // I'll leave the money addition to the caller for now, or update signature?
-            // The caller is `mission_event_handler`. It has access to resources.
-            // So I will REMOVE `self.player_money += final_reward;` here.
-            // The caller will use `last_completion_result` to update economy.
         }
 
         self.set_mission_status(mission_id, StoryMissionStatus::Completed);

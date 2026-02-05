@@ -429,7 +429,11 @@ impl TireTrack {
 
     /// 計算當前透明度
     pub fn alpha(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         calculate_fade_alpha(progress, 0.7)
     }
 }
@@ -459,13 +463,21 @@ impl DriftSmoke {
 
     /// 計算當前透明度（煙霧會擴散變淡）
     pub fn alpha(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         (1.0 - progress).max(0.0)
     }
 
     /// 計算當前縮放（煙霧會擴散變大）
     pub fn scale(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         self.initial_scale * (1.0 + progress * 2.0)  // 最終是初始的 3 倍大
     }
 }
@@ -495,7 +507,11 @@ impl NitroFlame {
 
     /// 計算當前顏色（從藍白漸變到橙紅）
     pub fn color(&self) -> Color {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         if progress < 0.3 {
             // 藍白色（核心高溫）
             Color::srgba(0.8, 0.9, 1.0, 1.0 - progress)
@@ -510,7 +526,11 @@ impl NitroFlame {
 
     /// 計算當前縮放（火焰會逐漸縮小消散）
     pub fn scale(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         self.initial_scale * (1.0 - progress * 0.5)
     }
 }
@@ -960,7 +980,12 @@ impl VehicleDamageSmoke {
     }
 
     pub fn alpha(&self) -> f32 {
-        (1.0 - self.lifetime / self.max_lifetime).max(0.0)
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        (1.0 - progress).max(0.0)
     }
 }
 
@@ -985,7 +1010,11 @@ impl VehicleFire {
     }
 
     pub fn scale(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         (1.0 - progress * 0.5).max(0.3)
     }
 }
@@ -1252,7 +1281,11 @@ impl VehicleExplosion {
 
     /// 計算當前縮放（先擴大後縮小）
     pub fn scale(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         if progress < 0.3 {
             // 快速擴大
             progress / 0.3 * 1.5
@@ -1263,7 +1296,11 @@ impl VehicleExplosion {
     }
 
     pub fn alpha(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         (1.0 - progress).max(0.0)
     }
 }

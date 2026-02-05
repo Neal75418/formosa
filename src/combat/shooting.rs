@@ -128,7 +128,7 @@ pub fn weapon_cooldown_system(
     for mut inventory in player_query.iter_mut() {
         if let Some(weapon) = inventory.current_weapon_mut() {
             if weapon.fire_cooldown > 0.0 {
-                weapon.fire_cooldown -= dt;
+                weapon.fire_cooldown = (weapon.fire_cooldown - dt).max(0.0);
             }
         }
     }

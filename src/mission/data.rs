@@ -531,7 +531,7 @@ impl MissionManager {
         let id = self.next_mission_id;
         self.next_mission_id += 1;
 
-        let start_pos = checkpoints[0];
+        let start_pos = *checkpoints.first().expect("Race must have at least one checkpoint");
         let end_pos = *checkpoints.last().unwrap_or(&start_pos);
 
         MissionData {

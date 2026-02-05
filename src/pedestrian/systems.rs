@@ -1060,8 +1060,17 @@ pub fn astar_path_calculation_system(
                 path.needs_recalc = false;
                 path.recalc_cooldown = 2.0; // 2 秒冷卻
             } else {
-                // 找不到路徑，重設冷卻
-                path.recalc_cooldown = 5.0;
+                // 找不到路徑時，隨機移動而非完全停止
+                // 生成隨機方向（水平面上）
+                let random_angle = (start.x * 12.9898 + start.z * 78.233).sin() * 43758.5453;
+                let angle = random_angle.fract() * std::f32::consts::TAU;
+                let random_dir = Vec3::new(angle.cos(), 0.0, angle.sin());
+                let fallback_target = start + random_dir * 5.0;
+
+                path.waypoints = vec![fallback_target];
+                path.current_index = 0;
+                path.needs_recalc = false;
+                path.recalc_cooldown = 1.0; // 縮短冷卻時間，更快嘗試重新尋路
             }
         }
     }
@@ -2172,11 +2181,10 @@ pub fn panic_flee_direction_system(
             let movement = jittered_dir * speed * dt;
             transform.translation += movement;
 
-            // 更新朝向
+            // 更新朝向（使用標準 Bevy 坐標系統慣例）
             if jittered_dir.length_squared() > 0.01 {
-                let target_rotation = Quat::from_rotation_y(
-                    (-jittered_dir.z).atan2(jittered_dir.x) - std::f32::consts::FRAC_PI_2,
-                );
+                let target_rotation =
+                    Quat::from_rotation_y((-jittered_dir.x).atan2(-jittered_dir.z));
                 transform.rotation = transform
                     .rotation
                     .slerp(target_rotation, dt * ROTATION_SLERP_SPEED);

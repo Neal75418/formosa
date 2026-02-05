@@ -2,7 +2,7 @@
 
 use super::PlayerConfig;
 use super::{
-    ClimbState, DodgeState, DoubleTapTracker, Player, VehicleTransitionPhase,
+    ClimbState, DodgeState, DoubleTapTracker, Player, PlayerSprintState, VehicleTransitionPhase,
     VehicleTransitionState,
 };
 use crate::combat::{CombatState, PlayerCoverState, RespawnState};
@@ -14,10 +14,10 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *}; // 引入 Rapier 物理引擎類型 (RapierContext, QueryFilter 等)
 
 /// 將 Rapier 的 Real 類型轉換為 f32
-/// 注意：bevy_rapier3d 0.32 的 Real 就是 f32，但因與 bevy::prelude::Real 衝突需明確轉換
+/// 注意：bevy_rapier3d 0.32 的 Real 目前就是 f32，但使用明確轉換確保未來版本兼容性
 #[inline]
 fn rapier_real_to_f32(r: bevy_rapier3d::prelude::Real) -> f32 {
-    r
+    r as f32  // 明確轉換，即使當前版本 Real == f32
 }
 
 /// 玩家輸入處理（按住 Shift 衝刺）
@@ -86,7 +86,7 @@ fn calculate_movement_input(
 fn calculate_world_direction(input: Vec3, yaw: f32) -> Vec3 {
     let forward = Vec3::new(-yaw.sin(), 0.0, -yaw.cos());
     let right = Vec3::new(yaw.cos(), 0.0, -yaw.sin());
-    (forward * (-input.z) + right * input.x).normalize()
+    (forward * (-input.z) + right * input.x).normalize_or_zero()
 }
 
 // /// 角色旋轉速度 (Moved to Config)
@@ -137,18 +137,19 @@ pub fn player_movement(
     config: Res<PlayerConfig>,
     mut query: Query<(
         &mut Transform,
-        &Player,
+        &mut Player,
         &DodgeState,
         &PlayerCoverState,
         &ClimbState,
         &mut KinematicCharacterController,
+        &mut PlayerSprintState,
     )>,
 ) {
     if respawn_state.is_dead || game_state.player_in_vehicle {
         return;
     }
 
-    let Ok((mut transform, player, dodge, cover_state, climb_state, mut controller)) =
+    let Ok((mut transform, mut player, dodge, cover_state, climb_state, mut controller, mut sprint_state)) =
         query.single_mut()
     else {
         return;
@@ -171,19 +172,54 @@ pub fn player_movement(
         transform.rotation = Quat::from_rotation_y(yaw + std::f32::consts::PI);
     }
 
-    if input == Vec3::ZERO {
+    // === 加速度系統：平滑過渡速度 ===
+    let has_input = input != Vec3::ZERO;
+    let target_speed = if has_input {
+        if player.is_sprinting {
+            player.sprint_speed
+        } else {
+            player.speed
+        }
+    } else {
+        0.0 // 沒有輸入時減速到 0
+    };
+
+    // 指數衰減插值（比線性更自然）
+    // 使用 .max(f32::EPSILON) 防止除零（配置錯誤時的保護）
+    let accel_rate = if target_speed > player.current_speed {
+        1.0 / player.acceleration_time.max(f32::EPSILON)
+    } else {
+        1.0 / player.deceleration_time.max(f32::EPSILON)
+    };
+    // 公式：current = lerp(current, target, 1 - exp(-rate * dt))
+    let blend = 1.0 - (-accel_rate * dt).exp();
+    player.current_speed = player.current_speed + (target_speed - player.current_speed) * blend;
+
+    // 速度過低時視為停止（避免無限趨近 0）
+    if player.current_speed < 0.1 && !has_input {
+        player.current_speed = 0.0;
         controller.translation = Some(Vec3::ZERO);
         return;
     }
 
-    let direction = calculate_world_direction(input.normalize(), yaw);
-    let speed = if player.is_sprinting {
-        player.sprint_speed
+    // 計算移動方向
+    let direction = if has_input {
+        let new_dir = calculate_world_direction(input.normalize(), yaw);
+        // 儲存當前移動方向供慣性滑行使用
+        player.last_movement_direction = new_dir;
+        new_dir
     } else {
-        player.speed
+        // 沒有輸入時使用上次的移動方向（慣性滑行）
+        player.last_movement_direction
     };
 
-    controller.translation = Some(direction * speed * dt);
+    controller.translation = Some(direction * player.current_speed * dt);
+
+    // === 動態轉向速度：高速時轉向較慢（更真實） ===
+    let speed_ratio = (player.current_speed / player.sprint_speed).clamp(0.0, 1.0);
+    let dynamic_rotation_speed = config.movement.turn_speed_walk
+        + (config.movement.turn_speed_sprint - config.movement.turn_speed_walk) * speed_ratio;
+
     update_character_rotation(
         &mut transform,
         direction,
@@ -191,8 +227,11 @@ pub fn player_movement(
         combat_state.is_aiming,
         is_forward_movement,
         dt,
-        config.movement.rotation_speed,
+        dynamic_rotation_speed,
     );
+
+    // === 更新衝刺狀態機（用於動畫/音效系統） ===
+    sprint_state.state.update(player.current_speed, player.speed, player.sprint_speed, dt);
 }
 
 /// 玩家跳躍

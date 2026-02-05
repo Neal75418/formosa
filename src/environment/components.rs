@@ -182,7 +182,11 @@ impl Debris {
 
     /// 計算當前透明度
     pub fn alpha(&self) -> f32 {
-        let progress = self.lifetime / self.max_lifetime;
+        let progress = if self.max_lifetime > 0.0 {
+            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         calculate_fade_alpha(progress, 0.7)
     }
 }

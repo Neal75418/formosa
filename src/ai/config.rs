@@ -72,6 +72,8 @@ pub struct AiConfig {
     pub gangster_flanker_threshold: f32,
     /// Thug 衝鋒者機率
     pub thug_rusher_threshold: f32,
+    /// Thug 側翼者機率（累積）
+    pub thug_flanker_threshold: f32,
 
     // === 距離平方常數 ===
     /// 掩體到達距離平方 (1.5²)
@@ -113,6 +115,7 @@ impl Default for AiConfig {
             gangster_rusher_threshold: 0.5,
             gangster_flanker_threshold: 0.9,
             thug_rusher_threshold: 0.7,
+            thug_flanker_threshold: 0.9, // 70% Rusher, 20% Flanker, 10% Defender
             cover_arrival_sq: 2.25,
             flank_arrival_sq: 4.0,
             flank_self_filter_distance_sq: 0.25,

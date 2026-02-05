@@ -233,6 +233,8 @@ pub fn ai_decision_system(
         ),
         With<Enemy>,
     >,
+    // 用於查詢目標實體的當前位置
+    transforms_query: Query<&Transform, Without<Enemy>>,
 ) {
     let current_time = time.elapsed_secs();
     let dt = time.delta_secs();
@@ -246,6 +248,13 @@ pub fn ai_decision_system(
 
         // 更新狀態計時器
         behavior.tick(dt);
+
+        // 更新目標位置（確保逃跑方向基於最新位置）
+        if let Some(target_entity) = behavior.target {
+            if let Ok(target_transform) = transforms_query.get(target_entity) {
+                behavior.last_known_target_pos = Some(target_transform.translation);
+            }
+        }
 
         // 檢查是否應該逃跑
         if check_start_flee(

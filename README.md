@@ -2,192 +2,125 @@
 
 # 🏝️ 島嶼狂飆 Island Rampage
 
-**一款以台灣為舞台的 3D 開放世界動作冒險遊戲**
+**以台灣為舞台的 3D 開放世界動作冒險遊戲**
 
 *A GTA-style open-world action game set in Taiwan*
 
-[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/) [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/) [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE) [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/Neal75418/island-rampage)
+[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/) [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/) [![Tests](https://img.shields.io/badge/Tests-235_passing-brightgreen?style=for-the-badge)](/) [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 
 </div>
 
 ---
 
-## 🎮 遊戲簡介
+## 遊戲簡介
 
-在霓虹燈閃爍的台灣街頭，體驗最道地的開放世界冒險！
+在霓虹燈閃爍的台灣街頭，體驗最道地的開放世界冒險。從西門町的繁華街道開始，駕駛各式車輛、與警察周旋、完成任務、累積財富。
 
-從西門町的繁華街道開始，駕駛各式車輛、與警察周旋、完成任務、累積財富。
+## 功能總覽
 
-## ✨ 已實現功能
+| 系統 | 內容 |
+|------|------|
+| **戰鬥** | 多種槍械、近戰武器、爆炸物（手榴彈/汽油彈/C4）、掩體系統、車上射擊 |
+| **載具** | 轎車/機車/巴士/計程車、偷車動畫、6 項改裝、氮氣加速、損壞系統 |
+| **通緝** | 5 星等級、警車追逐 AI、警用直升機（探照燈）、路障、投降/逮捕 |
+| **開放世界** | 西門町場景、可破壞環境、行人 AI（恐慌波+目擊者報警）、交通系統、隨機事件 |
+| **天氣** | 日夜循環、晴/陰/雨/霧/暴風雨/沙塵暴、動態光照、霓虹燈閃爍 |
+| **經濟** | 金錢系統、商店、ATM |
+| **任務** | 劇情任務、對話系統、過場動畫、NPC 關係 |
+| **存檔** | 非同步 IO、JSON 序列化 |
 
-### 🎯 戰鬥系統
-- **射擊** - 多種武器（手槍、步槍、霰彈槍、衝鋒槍）
-- **近戰** - 棍棒、刀具
-- **爆炸物** - 手榴彈、汽油彈、C4 炸藥
-- **掩體** - AI 掩護點系統
-- **車上射擊** - 駕駛中射擊
+## 技術棧
 
-### 🚗 載具系統
-- **多種車輛** - 轎車、跑車、SUV、機車
-- **偷車動畫** - 完整的偷車流程
-- **車輛改裝** - 引擎/變速箱/懸吊/煞車/輪胎/裝甲升級
-- **氮氣加速** - 瞬間爆發加速
-- **車輛損壞** - 視覺損壞效果
-
-### 👮 通緝系統
-- **5 星通緝等級** - 從輕微犯罪到全城追捕
-- **警車追逐** - AI 警車包圍戰術
-- **警用直升機** - 5 星時出動，探照燈追蹤
-- **路障系統** - 動態路障封鎖
-- **投降/逮捕** - 可選擇投降或逃跑
-
-### 🌆 開放世界
-- **西門町場景** - 霓虹招牌、街道、建築
-- **可破壞環境** - 玻璃窗、木製障礙、金屬物件
-- **行人 AI** - 恐慌反應、逃跑行為
-- **交通系統** - 紅綠燈、車流
-- **隨機事件** - 街頭搶劫、車禍等
-
-### 💰 經濟與進度
-- **金錢系統** - 賺取與消費
-- **任務系統** - 劇情任務、評分機制
-- **存檔系統** - 非同步 IO、JSON 序列化
-
-### ⚡ 效能優化
-- **空間哈希** - O(1) 碰撞/視野檢測
-- **物件池** - 碎片重用，減少記憶體分配
-
-## 🛠️ 技術棧
-
-| 項目 |                  技術                  |
-|:--:|:------------------------------------:|
-| 語言 |               Rust 🦀                |
+| 項目 | 技術 |
+|:----:|:----:|
+| 語言 | Rust 2021 Edition |
 | 引擎 | [Bevy](https://bevyengine.org/) 0.17 |
-| 物理 |            bevy_rapier3d             |
-| 風格 |             Low-poly 霓虹風             |
+| 物理 | bevy_rapier3d 0.32 |
+| 風格 | Low-poly 霓虹風 |
 
-## 🚀 開發
+**規模**：121 個 .rs 檔案 · ~61,700 行 · 235 個單元測試
+
+## 開發
 
 ### 環境需求
 
 - Rust 1.75+
-- 支援 Vulkan/Metal/DX12 的顯示卡
+- 支援 Vulkan / Metal / DX12 的顯示卡
 
-### 運行遊戲
+### 運行
 
 ```bash
-# 開發模式
-cargo run
-
-# 發布模式（最佳效能）
-cargo run --release
-
-# 測試
-cargo test
+cargo run                # 開發模式
+cargo run --release      # 發布模式（最佳效能）
+cargo test               # 執行測試
+cargo clippy             # 靜態分析
 ```
 
 ### 操作方式
 
-|  按鍵   |        動作         |
-|:-----:|:-----------------:|
-| WASD  |        移動         |
-|  Q/E  |    斜向前進（左前/右前）    |
-| Space |        跳躍         |
-| Shift |     衝刺 / 氮氣加速     |
-| 滑鼠左鍵  |      射擊 / 攻擊      |
-| 滑鼠右鍵  |        瞄準         |
-|   R   |        換彈         |
-|   F   | 情境互動（上下車/任務/商店/門） |
-|   X   |        偷車         |
-|   G   |       投擲爆炸物       |
-|  1-4  |       切換武器        |
-|  Tab  |       武器輪盤        |
-|  Esc  |       暫停選單        |
+| 按鍵 | 動作 |
+|:----:|:----:|
+| WASD | 移動 / 轉向加速 |
+| Q/E | 斜向前進 |
+| Space | 跳躍 / 煞車 |
+| Shift | 衝刺 / 氮氣 |
+| 滑鼠左鍵 | 射擊 / 攻擊 |
+| 滑鼠右鍵 | 瞄準 |
+| R | 換彈 |
+| F | 互動（上下車/任務/商店/門） |
+| X | 偷車 |
+| G | 投擲爆炸物 |
+| 1-4 | 切換武器 |
+| Tab | 武器輪盤 |
+| Esc | 暫停選單 |
 
-## 📍 開發進度
+## 專案結構
 
-### ✅ Phase 1：核心系統
-- [x] 玩家移動與控制
-- [x] 金錢/購物系統
-- [x] 存檔/讀取系統
-- [x] 任務評分機制
+```
+src/
+├── core/           資源、空間哈希、物件池、狀態機
+├── player/         玩家控制（移動、攀爬、閃避）
+├── combat/         戰鬥系統（射擊、爆炸、掩體、傷害）
+├── vehicle/        載具系統（駕駛、改裝、偷車、效果）
+├── wanted/         通緝系統（警察、直升機、路障）
+├── pedestrian/     行人 AI（恐慌波、目擊者、日常行為）
+│   └── systems/    7 個子模組
+├── ai/             敵人 AI（感知、決策、戰鬥、小隊）
+├── economy/        經濟系統
+├── mission/        任務、對話、過場動畫
+├── world/          世界生成、天氣、隨機事件
+│   ├── buildings/  建築物分類
+│   └── time_weather/ 日夜循環、天氣效果
+├── environment/    可破壞物件、碎片
+├── ui/             HUD、小地圖、武器輪盤、GPS
+├── camera/         攝影機控制
+├── audio/          音效系統
+└── save/           存檔系統
+```
 
-### ✅ Phase 2：戰鬥系統
-- [x] 射擊系統
-- [x] 掩體系統
-- [x] 車上射擊
-- [x] 爆炸物
+## 開發進度
 
-### ✅ Phase 3：通緝系統
-- [x] 警車追逐 AI
-- [x] 路障系統
-- [x] 投降/逮捕機制
+### 已完成
 
-### ✅ Phase 4：開放世界
-- [x] 隨機事件
-- [x] 可破壞環境
-- [x] 偷車動畫
+- [x] **Phase 1** — 核心系統（玩家控制、經濟、存檔）
+- [x] **Phase 2** — 戰鬥系統（射擊、掩體、爆炸物）
+- [x] **Phase 3** — 通緝系統（警車 AI、路障、逮捕）
+- [x] **Phase 4** — 開放世界（隨機事件、可破壞環境、偷車）
+- [x] **Phase 5** — 進階功能（直升機、近戰、車輛改裝、效能優化）
+- [x] **Phase 6** — 代碼品質（模組拆分、複雜度優化、配置提取）
+- [x] **Phase 7** — 架構重構（God Module 拆分、元件分解、註解審查）
 
-### ✅ Phase 5：進階功能
-- [x] 警用直升機
-- [x] 近戰武器
-- [x] 車輛改裝系統
-- [x] 空間哈希優化
+### 未來規劃
 
-### ✅ Phase 6：代碼品質重構
-- [x] 模組拆分 (AI, Combat)
-- [x] 認知複雜度優化 (Save, Trigger, Vehicle)
-- [x] 重複代碼消除
-- [x] 配置參數提取 (Config Resources)
-
-### 🔮 Phase 7：未來規劃
-- [ ] 手機系統（任務接取、地圖）
-- [ ] 游泳/潛水
+- [ ] 手機系統（任務接取、聯絡人、GPS）
+- [ ] 游泳 / 潛水
 - [ ] 車內廣播電台
-- [ ] 攀爬系統
+- [ ] 攀爬 / 跑酷
 - [ ] 多角色切換
 
-## 📂 專案結構
+## 授權
 
-```
-island-rampage/
-├── src/
-│   ├── main.rs              # 程式入口
-│   ├── core/                # 核心系統（資源、事件、空間哈希）
-│   ├── player/              # 玩家控制
-│   ├── combat/              # 戰鬥系統（射擊、爆炸、掩體）
-│   ├── vehicle/             # 載具系統（駕駛、改裝、偷車）
-│   ├── wanted/              # 通緝系統（警察、直升機、路障）
-│   ├── pedestrian/          # 行人 AI
-│   ├── economy/             # 經濟系統
-│   ├── mission/             # 任務系統
-│   ├── save/                # 存檔系統
-│   ├── world/               # 世界生成
-│   ├── environment/         # 環境互動（可破壞物件）
-│   ├── ui/                  # 使用者介面
-│   ├── audio/               # 音效系統
-│   └── ai/                  # AI 系統
-├── assets/                  # 遊戲資源
-├── Cargo.toml              # Rust 依賴
-└── README.md               # 本文件
-```
-
-## 🧪 測試
-
-```bash
-# 執行所有測試（178 個）
-cargo test
-
-# 執行特定模組測試
-cargo test --package island-rampage economy::tests
-
-# 檢查程式碼
-cargo clippy
-```
-
-## 📜 授權
-
-Copyright © 2024-2025 Neal Chen. All Rights Reserved.
+Copyright &copy; 2024-2025 Neal Chen. All Rights Reserved.
 
 本軟體為專有軟體，未經授權不得複製、修改或散布。
 

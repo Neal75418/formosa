@@ -34,11 +34,13 @@ jobs:
       - name: Setup sccache
         run: |
           SCCACHE_VER="v0.9.1"
+          INSTALL_DIR="${HOME}/.cargo/bin"
+          mkdir -p "${INSTALL_DIR}"
           if ! command -v sccache &> /dev/null; then
             echo "Downloading sccache ${SCCACHE_VER}..."
             curl -fsSL "https://github.com/mozilla/sccache/releases/download/${SCCACHE_VER}/sccache-${SCCACHE_VER}-x86_64-unknown-linux-musl.tar.gz" \
-              | tar xz --strip-components=1 -C /usr/local/bin/ "sccache-${SCCACHE_VER}-x86_64-unknown-linux-musl/sccache"
-            chmod +x /usr/local/bin/sccache
+              | tar xz --strip-components=1 -C "${INSTALL_DIR}" "sccache-${SCCACHE_VER}-x86_64-unknown-linux-musl/sccache"
+            chmod +x "${INSTALL_DIR}/sccache"
           fi
           sccache --version
 

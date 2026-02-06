@@ -54,11 +54,12 @@ jobs:
       - name: Check Rust version
         run: rustc --version && cargo --version
 
-      - name: Clippy
-        run: cargo clippy -- -D warnings
-
+      # test 先跑（完整 codegen），clippy 再跑（重用 sccache 產物）
       - name: Test
         run: cargo test
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
 
       - name: sccache stats
         if: always()

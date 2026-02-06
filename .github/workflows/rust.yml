@@ -18,6 +18,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  SCCACHE_DIR: /tmp/sccache
+  SCCACHE_CACHE_SIZE: 2G
+  RUSTC_WRAPPER: sccache
 
 jobs:
   ci:
@@ -29,16 +32,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cargo cache
+      - name: Setup sccache
+        run: |
+          if ! command -v sccache &> /dev/null; then
+            echo "Installing sccache..."
+            cargo install sccache --locked
+          fi
+          sccache --version
+
+      - name: Cache (cargo registry + sccache)
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+            /tmp/sccache
+          key: ${{ runner.os }}-sccache-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-sccache-
 
       - name: Check Rust version
         run: rustc --version && cargo --version
@@ -48,3 +59,7 @@ jobs:
 
       - name: Test
         run: cargo test
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats

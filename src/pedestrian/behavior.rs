@@ -1,7 +1,6 @@
 //! 每日行為系統
 //!
 //! 定義行人的日常行為類型、興趣點和躲雨行為。
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use crate::world::{W_MAIN, Z_CHENGDU};
@@ -112,6 +111,7 @@ pub struct ShelterPoint {
 }
 
 impl ShelterPoint {
+    /// 建立新實例
     pub fn new(position: Vec3, shelter_type: ShelterType, capacity: usize) -> Self {
         Self {
             position,
@@ -137,6 +137,7 @@ pub enum ShelterType {
 }
 
 impl PointsOfInterest {
+    /// 設定西門町行人生成區域
     pub fn setup_ximending() -> Self {
         const SIDEWALK_WIDTH: f32 = 4.0;
         let bus_stop_z = Z_CHENGDU - (W_MAIN / 2.0 - SIDEWALK_WIDTH / 2.0);

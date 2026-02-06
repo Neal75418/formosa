@@ -13,7 +13,9 @@ use super::constants::{
 };
 use crate::combat::{Enemy, Health};
 
-// === 敵人血條尺寸常數 ===
+// ============================================================================
+// 敵人血條尺寸常數
+// ============================================================================
 const ENEMY_HEALTH_BAR_WIDTH: f32 = 70.0;
 const ENEMY_HEALTH_BAR_HEIGHT: f32 = 10.0;
 const ENEMY_HEALTH_BAR_GLOW_PADDING: f32 = 3.0;

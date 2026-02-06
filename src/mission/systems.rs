@@ -1,6 +1,5 @@
 //! 任務系統
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use super::{
@@ -12,11 +11,15 @@ use crate::core::{InteractionState, PlayerStats};
 use crate::ui::NotificationQueue;
 use crate::vehicle::Vehicle;
 
-// === 任務標記顏色常數 ===
+// ============================================================================
+// 任務標記顏色常數
+// ============================================================================
 const MARKER_COLOR_START: Color = Color::srgba(0.9, 0.8, 0.2, 0.7);  // 黃色 - 起點/取餐點
 const MARKER_COLOR_END: Color = Color::srgba(0.2, 0.8, 0.2, 0.7);    // 綠色 - 終點/送達點
 
-// === 任務互動距離常數 (使用平方距離優化) ===
+// ============================================================================
+// 任務互動距離常數 (使用平方距離優化)
+// ============================================================================
 const DELIVERY_INTERACT_DIST_SQ: f32 = 64.0;  // 8.0 * 8.0
 const MISSION_INTERACT_DIST_SQ: f32 = 25.0;   // 5.0 * 5.0
 const VEHICLE_INTERACT_DIST_SQ: f32 = 9.0;    // 3.0 * 3.0

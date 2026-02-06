@@ -2,7 +2,6 @@
 //!
 //! 允許駕駛/乘客在車上射擊，限制武器類型和射擊角度
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -26,10 +25,8 @@ const DRIVER_LEFT_ANGLE_LIMIT: f32 = 90.0;
 /// 駕駛右側射擊角度限制（度）
 const DRIVER_RIGHT_ANGLE_LIMIT: f32 = 45.0;
 /// 乘客左側射擊角度限制（度）
-#[allow(dead_code)]
 const PASSENGER_LEFT_ANGLE_LIMIT: f32 = 45.0;
 /// 乘客右側射擊角度限制（度）
-#[allow(dead_code)]
 const PASSENGER_RIGHT_ANGLE_LIMIT: f32 = 90.0;
 
 // ============================================================================

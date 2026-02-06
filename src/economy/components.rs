@@ -1,7 +1,6 @@
 //! 經濟系統組件
 //!
 //! 包含錢包、商店、ATM、商品等定義
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -142,6 +141,7 @@ pub struct Shop {
 }
 
 impl Shop {
+    /// 建立新實例
     pub fn new(shop_type: ShopType, name: impl Into<String>) -> Self {
         Self {
             shop_type,
@@ -209,6 +209,7 @@ pub struct ShopItem {
 }
 
 impl ShopItem {
+    /// 建立新實例
     pub fn new(id: impl Into<String>, name: impl Into<String>, category: ItemCategory, price: i32) -> Self {
         Self {
             id: id.into(),
@@ -221,16 +222,19 @@ impl ShopItem {
         }
     }
 
+    /// 設定描述
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = desc.into();
         self
     }
 
+    /// 設定效果
     pub fn with_effect(mut self, value: f32) -> Self {
         self.effect_value = value;
         self
     }
 
+    /// 設定庫存
     pub fn with_stock(mut self, stock: i32) -> Self {
         self.stock = stock;
         self
@@ -247,6 +251,7 @@ pub struct ShopInventory {
 }
 
 impl ShopInventory {
+    /// 建立新實例
     pub fn new() -> Self {
         let mut inventory = Self::default();
         inventory.init_convenience_store();
@@ -460,6 +465,7 @@ pub struct CashPickup {
 }
 
 impl CashPickup {
+    /// 建立新實例
     pub fn new(amount: i32) -> Self {
         Self {
             amount,

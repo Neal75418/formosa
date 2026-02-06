@@ -1,5 +1,4 @@
 //! 音效系統
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 // Bevy 系統需要 Res<T> 按值傳遞
 #![allow(clippy::needless_pass_by_value)]
@@ -372,10 +371,10 @@ pub fn setup_player_sounds(mut commands: Commands) {
 /// 初始化 UI 音效資源
 pub fn setup_ui_sounds(mut commands: Commands) {
     // UI 音效（音檔待添加）
-    // 所需音檔 (assets/audio/):
-    //   mission_start.ogg, mission_complete.ogg, mission_fail.ogg
-    //   checkpoint.ogg, money_gain.ogg
-    //   wanted_up.ogg, wanted_clear.ogg
+    // 所需音檔（assets/audio/）：
+    //   mission_start.ogg、mission_complete.ogg、mission_fail.ogg
+    //   checkpoint.ogg、money_gain.ogg
+    //   wanted_up.ogg、wanted_clear.ogg
     commands.insert_resource(UISounds::default());
     info!("🎮 UI 音效系統已初始化（音檔待添加）");
 }

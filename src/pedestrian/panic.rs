@@ -1,7 +1,6 @@
 //! 群體恐慌傳播系統（GTA5 風格）
 //!
 //! 實現恐慌波傳播機制，包括恐慌波管理和行人恐慌狀態。
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use super::components::PedState;
@@ -37,9 +36,15 @@ pub struct PanicWaveManager {
     pub active_waves: Vec<PanicWave>,
 }
 
+/// 同時存在的最大恐慌波數量
+const MAX_ACTIVE_WAVES: usize = 32;
+
 impl PanicWaveManager {
     /// 添加新的恐慌波
     pub fn add_wave(&mut self, origin: Vec3, max_radius: f32, speed: f32, intensity: f32, spawn_time: f32) {
+        if self.active_waves.len() >= MAX_ACTIVE_WAVES {
+            self.active_waves.remove(0);
+        }
         self.active_waves.push(PanicWave {
             origin,
             current_radius: 0.0,
@@ -236,5 +241,224 @@ impl PanicState {
     /// 是否處於恐慌狀態
     pub fn is_panicked(&self) -> bool {
         self.panic_level > PANIC_IS_PANICKED_THRESHOLD
+    }
+}
+
+// ============================================================================
+// 單元測試
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // === PanicWaveManager 測試 ===
+
+    #[test]
+    fn test_panic_wave_manager_add_wave() {
+        let mut manager = PanicWaveManager::default();
+        assert!(manager.active_waves.is_empty());
+
+        manager.add_wave(Vec3::ZERO, 15.0, 8.0, 1.0, 0.0);
+        assert_eq!(manager.active_waves.len(), 1);
+        assert_eq!(manager.active_waves[0].current_radius, 0.0);
+    }
+
+    #[test]
+    fn test_panic_wave_manager_update_expands_radius() {
+        let mut manager = PanicWaveManager::default();
+        manager.add_wave(Vec3::ZERO, 15.0, 8.0, 1.0, 0.0);
+
+        manager.update(1.0);
+        assert_eq!(manager.active_waves[0].current_radius, 8.0);
+
+        manager.update(0.5);
+        assert_eq!(manager.active_waves[0].current_radius, 12.0);
+    }
+
+    #[test]
+    fn test_panic_wave_manager_update_removes_expired() {
+        let mut manager = PanicWaveManager::default();
+        manager.add_wave(Vec3::ZERO, 10.0, 20.0, 1.0, 0.0);
+
+        // 傳播速度 20m/s，0.6s 後半徑 12m > max 10m，應被移除
+        manager.update(0.6);
+        assert!(manager.active_waves.is_empty());
+    }
+
+    #[test]
+    fn test_panic_wave_manager_check_panic_at_in_front() {
+        let mut manager = PanicWaveManager::default();
+        manager.add_wave(Vec3::ZERO, 30.0, 10.0, 1.0, 0.0);
+
+        // 波前還在原點，10m 處的行人不在波前內
+        let result = manager.check_panic_at(Vec3::new(10.0, 0.0, 0.0));
+        assert!(result.is_none());
+
+        // 更新 1 秒後，波前在 8m-10m（速度 10m/s，波前寬度 2m）
+        manager.update(1.0);
+        // 9m 處應在波前範圍內
+        let result = manager.check_panic_at(Vec3::new(9.0, 0.0, 0.0));
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().intensity, 1.0);
+    }
+
+    #[test]
+    fn test_panic_wave_manager_check_panic_at_behind_front() {
+        let mut manager = PanicWaveManager::default();
+        manager.add_wave(Vec3::ZERO, 30.0, 10.0, 1.0, 0.0);
+
+        // 更新 2 秒後，波前在 18m-20m
+        manager.update(2.0);
+
+        // 5m 處已經被波前通過，不再觸發
+        let result = manager.check_panic_at(Vec3::new(5.0, 0.0, 0.0));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_panic_wave_manager_check_panic_at_best_intensity() {
+        let mut manager = PanicWaveManager::default();
+        // 兩個波源，不同強度
+        manager.add_wave(Vec3::ZERO, 30.0, 10.0, 0.5, 0.0);
+        manager.add_wave(Vec3::new(20.0, 0.0, 0.0), 30.0, 10.0, 1.0, 0.0);
+
+        // 更新 1 秒
+        manager.update(1.0);
+
+        // 波 2 的 9m 處（即 x=11）在波前內
+        let result = manager.check_panic_at(Vec3::new(11.0, 0.0, 0.0));
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().intensity, 1.0);
+    }
+
+    #[test]
+    fn test_panic_wave_from_gunshot() {
+        let mut manager = PanicWaveManager::default();
+        manager.create_from_gunshot(Vec3::new(5.0, 0.0, 5.0), 1.0);
+
+        assert_eq!(manager.active_waves.len(), 1);
+        let wave = &manager.active_waves[0];
+        assert_eq!(wave.max_radius, PANIC_WAVE_GUNSHOT_MAX_RADIUS);
+        assert_eq!(wave.propagation_speed, PANIC_WAVE_GUNSHOT_SPEED);
+        assert_eq!(wave.intensity, 1.0);
+    }
+
+    #[test]
+    fn test_panic_wave_from_scream() {
+        let mut manager = PanicWaveManager::default();
+        manager.create_from_scream(Vec3::ZERO, 0.8, 1.0);
+
+        let wave = &manager.active_waves[0];
+        assert_eq!(wave.max_radius, PANIC_WAVE_DEFAULT_MAX_RADIUS);
+        assert_eq!(wave.propagation_speed, PANIC_WAVE_DEFAULT_SPEED);
+        assert!((wave.intensity - 0.64).abs() < 0.001); // 0.8 * 0.8
+    }
+
+    #[test]
+    fn test_panic_wave_manager_max_waves() {
+        let mut manager = PanicWaveManager::default();
+        // 填滿到上限
+        for i in 0..MAX_ACTIVE_WAVES {
+            manager.add_wave(Vec3::new(i as f32, 0.0, 0.0), 10.0, 5.0, 1.0, 0.0);
+        }
+        assert_eq!(manager.active_waves.len(), MAX_ACTIVE_WAVES);
+
+        // 再加一個，應該淘汰最舊的
+        manager.add_wave(Vec3::new(999.0, 0.0, 0.0), 10.0, 5.0, 1.0, 0.0);
+        assert_eq!(manager.active_waves.len(), MAX_ACTIVE_WAVES);
+        // 最新的在末尾
+        assert_eq!(manager.active_waves.last().unwrap().origin.x, 999.0);
+        // 最舊的（index 0）被移除，現在 index 0 是原來的 index 1
+        assert_eq!(manager.active_waves[0].origin.x, 1.0);
+    }
+
+    // === PanicState 測試 ===
+
+    #[test]
+    fn test_panic_state_default() {
+        let state = PanicState::default();
+        assert_eq!(state.panic_level, 0.0);
+        assert!(state.panic_source.is_none());
+        assert!(!state.is_panicked());
+        assert!(state.can_spread_panic);
+    }
+
+    #[test]
+    fn test_panic_state_trigger() {
+        let mut state = PanicState::default();
+        state.trigger_panic(0.5, Vec3::new(10.0, 0.0, 0.0));
+
+        assert_eq!(state.panic_level, 0.5);
+        assert_eq!(state.panic_source, Some(Vec3::new(10.0, 0.0, 0.0)));
+        assert!(state.is_panicked());
+    }
+
+    #[test]
+    fn test_panic_state_trigger_cumulative() {
+        let mut state = PanicState::default();
+        state.trigger_panic(0.3, Vec3::ZERO);
+        state.trigger_panic(0.5, Vec3::ZERO);
+        assert!((state.panic_level - 0.8).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_panic_state_trigger_clamped() {
+        let mut state = PanicState::default();
+        state.trigger_panic(0.8, Vec3::ZERO);
+        state.trigger_panic(0.5, Vec3::ZERO);
+        assert_eq!(state.panic_level, 1.0); // 不超過 1.0
+    }
+
+    #[test]
+    fn test_panic_state_can_scream() {
+        let mut state = PanicState::default();
+        assert!(!state.can_scream()); // 恐慌度不夠
+
+        state.trigger_panic(0.8, Vec3::ZERO);
+        assert!(state.can_scream()); // 恐慌度 >= 0.7
+
+        state.do_scream();
+        assert!(!state.can_scream()); // 已經尖叫過
+    }
+
+    #[test]
+    fn test_panic_state_calm_down() {
+        let mut state = PanicState::default();
+        state.trigger_panic(1.0, Vec3::ZERO);
+
+        state.calm_down(0.5, 1.0); // 每秒降低 0.5
+        assert!((state.panic_level - 0.5).abs() < 0.001);
+
+        state.calm_down(0.5, 2.0); // 再降低 1.0
+        assert_eq!(state.panic_level, 0.0);
+        assert!(state.panic_source.is_none()); // 完全平息後清除來源
+        assert!(state.can_spread_panic); // 重置傳播能力
+    }
+
+    #[test]
+    fn test_panic_state_flee_direction() {
+        let mut state = PanicState::default();
+        assert!(state.flee_direction(Vec3::ZERO).is_none());
+
+        state.trigger_panic(1.0, Vec3::new(10.0, 0.0, 0.0));
+        let dir = state.flee_direction(Vec3::ZERO).unwrap();
+        // 應該遠離恐慌源（負 X 方向）
+        assert!(dir.x < 0.0);
+    }
+
+    // === PanicWave 測試 ===
+
+    #[test]
+    fn test_panic_wave_flee_direction() {
+        let wave = PanicWave::new(Vec3::ZERO, 30.0, 10.0, 1.0, 0.0);
+        let dir = wave.flee_direction(Vec3::new(5.0, 0.0, 0.0));
+        assert!((dir.x - 1.0).abs() < 0.001); // 遠離原點
+    }
+
+    #[test]
+    fn test_panic_wave_intensity_clamped() {
+        let wave = PanicWave::new(Vec3::ZERO, 30.0, 10.0, 1.5, 0.0);
+        assert_eq!(wave.intensity, 1.0); // 被 clamp 到 1.0
     }
 }

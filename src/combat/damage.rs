@@ -2,7 +2,6 @@
 //!
 //! 處理傷害計算、死亡邏輯等。
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::ecs::system::SystemParam;
 use bevy::math::EulerRot;
@@ -39,6 +38,51 @@ pub struct DamageSystemResources<'w> {
     pub font: Option<Res<'w, ChineseFont>>,
 }
 
+/// 死亡處理系統資源參數包
+#[derive(SystemParam)]
+pub struct DeathSystemResources<'w> {
+    pub notifications: ResMut<'w, NotificationQueue>,
+    pub respawn_state: ResMut<'w, RespawnState>,
+    pub ragdoll_tracker: ResMut<'w, RagdollTracker>,
+    pub killcam: ResMut<'w, KillCamState>,
+    pub blood_visuals: Option<Res<'w, BloodVisuals>>,
+    pub time: Res<'w, Time>,
+}
+
+/// 死亡處理系統查詢參數包
+#[derive(SystemParam)]
+pub struct DeathSystemQueries<'w, 's> {
+    pub player: Query<'w, 's, (Entity, &'static Transform), With<Player>>,
+    pub enemies: Query<'w, 's, (Entity, &'static Transform), (With<Enemy>, Without<Ragdoll>)>,
+    pub all_enemies: Query<'w, 's, Entity, (With<Enemy>, Without<Ragdoll>)>,
+    pub pedestrians: Query<
+        'w,
+        's,
+        (Entity, &'static Transform, &'static Children),
+        (
+            With<Pedestrian>,
+            Without<Player>,
+            Without<Enemy>,
+        ),
+    >,
+    pub police: Query<
+        'w,
+        's,
+        &'static Transform,
+        (With<PoliceOfficer>, Without<Player>, Without<Enemy>),
+    >,
+    pub body_parts: Query<
+        'w,
+        's,
+        (
+            &'static BodyPart,
+            &'static Transform,
+            &'static Mesh3d,
+            &'static MeshMaterial3d<StandardMaterial>,
+        ),
+    >,
+}
+
 /// 玩家重生狀態
 #[derive(Resource, Default)]
 pub struct RespawnState {
@@ -50,7 +94,9 @@ pub struct RespawnState {
 /// 重生位置（西門町漢中街起點）
 pub const RESPAWN_POSITION: Vec3 = Vec3::new(5.0, 0.7, -5.0);
 
-// === 傷害系統常數 ===
+// ============================================================================
+// 傷害系統常數
+// ============================================================================
 /// 命中標記顯示時長（秒）
 const HIT_MARKER_DURATION: f32 = 0.2;
 /// 浮動傷害數字頭頂偏移
@@ -64,13 +110,17 @@ const CHEST_HEIGHT: f32 = 1.0;
 /// 重生計時器時長（秒）
 const RESPAWN_TIMER_DURATION: f32 = 3.0;
 
-// === 敵人掉落常數 ===
+// ============================================================================
+// 敵人掉落常數
+// ============================================================================
 /// 敵人死亡掉落金額最小值
 const ENEMY_DROP_MIN: i32 = 50;
 /// 敵人死亡掉落金額最大值
 const ENEMY_DROP_MAX: i32 = 200;
 
-// === 衝量強度常數 ===
+// ============================================================================
+// 衝量強度常數
+// ============================================================================
 /// 子彈衝量強度
 const IMPULSE_BULLET: f32 = 350.0;
 /// 爆炸衝量強度
@@ -86,7 +136,9 @@ const IMPULSE_FIRE: f32 = 150.0;
 /// 環境傷害衝量強度
 const IMPULSE_ENVIRONMENT: f32 = 200.0;
 
-// === 傾斜強度常數 ===
+// ============================================================================
+// 傾斜強度常數
+// ============================================================================
 /// 子彈傾斜強度
 const TILT_BULLET: f32 = 120.0;
 /// 爆炸傾斜強度
@@ -98,7 +150,9 @@ const TILT_MELEE: f32 = 80.0;
 /// 預設傾斜強度
 const TILT_DEFAULT: f32 = 100.0;
 
-// === 布娃娃物理常數 ===
+// ============================================================================
+// 布娃娃物理常數
+// ============================================================================
 /// 布娃娃重力縮放
 const RAGDOLL_GRAVITY_SCALE: f32 = 2.0;
 /// 布娃娃向上推力因子
@@ -118,7 +172,9 @@ const RAGDOLL_BLINK_BASE_RATE: f32 = 4.0;
 /// 布娃娃閃爍最大加速
 const RAGDOLL_BLINK_ACCELERATION: f32 = 12.0;
 
-// === 血液粒子常數 ===
+// ============================================================================
+// 血液粒子常數
+// ============================================================================
 /// 血液粒子最小速度
 const BLOOD_PARTICLE_MIN_SPEED: f32 = 4.0;
 /// 血液粒子最大速度
@@ -131,9 +187,18 @@ const BLOOD_PARTICLE_MAX_LIFETIME: f32 = 1.0;
 const BLOOD_PARTICLE_MIN_SCALE: f32 = 0.03;
 /// 血液粒子最大縮放
 const BLOOD_PARTICLE_MAX_SCALE: f32 = 0.06;
+/// 粒子觸地高度閾值
+const PARTICLE_GROUND_HEIGHT: f32 = 0.05;
+/// 粒子觸地後生命週期加速倍率
+const PARTICLE_GROUND_LIFETIME_ACCEL: f32 = 3.0;
+/// 粒子最小縮放比例
+const PARTICLE_MIN_SCALE_RATIO: f32 = 0.3;
+/// 粒子基礎縮放
+const PARTICLE_BASE_SCALE: f32 = 0.05;
 
-// === 傷害系統輔助函數 ===
-
+// ============================================================================
+// 傷害系統輔助函數
+// ============================================================================
 /// 計算掩體傷害減免（含攻擊方向檢測）
 #[inline]
 fn calculate_cover_reduction(
@@ -155,18 +220,15 @@ fn calculate_cover_reduction(
     };
 
     // 檢查攻擊方向是否與掩體保護方向一致
-    if let Some(attacker_entity) = attacker {
-        if let Ok(attacker_transform) = transform_query.get(attacker_entity) {
-            // 計算攻擊方向（水平面）
-            let attack_dir = target_pos - attacker_transform.translation;
-            let attack_dir_2d = Vec3::new(attack_dir.x, 0.0, attack_dir.z).normalize_or_zero();
-            let cover_dir_2d = Vec3::new(cover.cover_direction.x, 0.0, cover.cover_direction.z)
-                .normalize_or_zero();
+    if let Some(attacker_transform) = attacker.and_then(|e| transform_query.get(e).ok()) {
+        let attack_dir = target_pos - attacker_transform.translation;
+        let attack_dir_2d = Vec3::new(attack_dir.x, 0.0, attack_dir.z).normalize_or_zero();
+        let cover_dir_2d = Vec3::new(cover.cover_direction.x, 0.0, cover.cover_direction.z)
+            .normalize_or_zero();
 
-            // 如果攻擊從掩體背面來（夾角 > 90°），掩體無效
-            if attack_dir_2d.dot(cover_dir_2d) < 0.0 {
-                return 0.0;
-            }
+        // 如果攻擊從掩體背面來（夾角 > 90°），掩體無效
+        if attack_dir_2d.dot(cover_dir_2d) < 0.0 {
+            return 0.0;
         }
     }
 
@@ -546,8 +608,9 @@ pub fn damage_system(
     }
 }
 
-// === 死亡系統輔助函數 ===
-
+// ============================================================================
+// 死亡系統輔助函數
+// ============================================================================
 /// 處理玩家死亡，返回 true 表示是玩家死亡事件（應跳過後續處理）
 #[inline]
 fn handle_player_death(
@@ -711,18 +774,18 @@ fn manage_ragdoll_limit(
     if ragdoll_tracker.max_count == 0 {
         return;
     }
-    // 超過限制時移除最舊的屍體
+    // 超過限制時移除最舊的屍體 - O(1) 操作
     while ragdoll_tracker.ragdolls.len() >= ragdoll_tracker.max_count {
-        if let Some((oldest_entity, _)) = ragdoll_tracker.ragdolls.first().copied() {
+        if let Some((oldest_entity, _)) = ragdoll_tracker.ragdolls.front().copied() {
             if let Ok(mut entity_commands) = commands.get_entity(oldest_entity) {
                 entity_commands.despawn();
             }
-            ragdoll_tracker.ragdolls.remove(0);
+            ragdoll_tracker.ragdolls.pop_front();
         } else {
             break;
         }
     }
-    ragdoll_tracker.ragdolls.push((new_entity, current_time));
+    ragdoll_tracker.ragdolls.push_back((new_entity, current_time));
 }
 
 /// 設置布娃娃物理組件
@@ -825,42 +888,23 @@ fn handle_enemy_death(
 }
 
 /// 死亡處理系統
-#[allow(clippy::too_many_arguments)]
 pub fn death_system(
     mut death_events: MessageReader<DeathEvent>,
     mut commands: Commands,
-    player_query: Query<(Entity, &Transform), With<Player>>,
-    enemy_query: Query<(Entity, &Transform), (With<Enemy>, Without<Ragdoll>)>,
-    all_enemies_query: Query<Entity, (With<Enemy>, Without<Ragdoll>)>,
-    pedestrian_query: Query<
-        (Entity, &Transform, &Children),
-        (With<Pedestrian>, Without<Player>, Without<Enemy>),
-    >,
-    police_query: Query<&Transform, (With<PoliceOfficer>, Without<Player>, Without<Enemy>)>,
-    body_parts_query: Query<(
-        &BodyPart,
-        &Transform,
-        &Mesh3d,
-        &MeshMaterial3d<StandardMaterial>,
-    )>,
+    queries: DeathSystemQueries,
+    mut res: DeathSystemResources,
     mut crime_events: MessageWriter<CrimeEvent>,
-    mut notifications: ResMut<NotificationQueue>,
-    mut respawn_state: ResMut<RespawnState>,
-    mut ragdoll_tracker: ResMut<RagdollTracker>,
-    mut killcam: ResMut<KillCamState>,
-    blood_visuals: Option<Res<BloodVisuals>>,
-    time: Res<Time>,
 ) {
-    let current_time = time.elapsed_secs();
-    let player_entity = player_query.single().ok().map(|(e, _)| e);
+    let current_time = res.time.elapsed_secs();
+    let player_entity = queries.player.single().ok().map(|(e, _)| e);
 
     for event in death_events.read() {
         // 玩家死亡
         if handle_player_death(
             event.entity,
-            &player_query,
-            &mut respawn_state,
-            &mut notifications,
+            &queries.player,
+            &mut res.respawn_state,
+            &mut res.notifications,
         ) {
             continue;
         }
@@ -870,9 +914,9 @@ pub fn death_system(
             event.entity,
             event.killer,
             player_entity,
-            &police_query,
+            &queries.police,
             &mut crime_events,
-            &mut notifications,
+            &mut res.notifications,
         );
 
         // 計算衝擊方向和強度
@@ -882,10 +926,10 @@ pub fn death_system(
         let impulse_strength = get_impulse_strength(event.cause);
 
         // 行人死亡 - 骨骼布娃娃效果
-        if let Ok((ped_entity, ped_transform, children)) = pedestrian_query.get(event.entity) {
+        if let Ok((ped_entity, ped_transform, children)) = queries.pedestrians.get(event.entity) {
             // 生成血液粒子
             let blood_pos = ped_transform.translation + Vec3::Y * CHEST_HEIGHT;
-            if let Some(ref blood) = blood_visuals {
+            if let Some(ref blood) = res.blood_visuals {
                 spawn_blood_particles(&mut commands, blood_pos, impulse_dir, blood);
             }
 
@@ -895,13 +939,13 @@ pub fn death_system(
                 ped_entity,
                 ped_transform,
                 children,
-                &body_parts_query,
+                &queries.body_parts,
                 impulse_dir,
                 impulse_strength,
             ) {
                 manage_ragdoll_limit(
                     &mut commands,
-                    &mut ragdoll_tracker,
+                    &mut res.ragdoll_tracker,
                     ragdoll_entity,
                     current_time,
                 );
@@ -910,17 +954,17 @@ pub fn death_system(
         }
 
         // 敵人死亡 - 傳統布娃娃效果（保持向後兼容）
-        if let Ok((_, enemy_transform)) = enemy_query.get(event.entity) {
-            notifications.success("擊殺敵人！");
+        if let Ok((_, enemy_transform)) = queries.enemies.get(event.entity) {
+            res.notifications.success("擊殺敵人！");
             handle_enemy_death(
                 &mut commands,
                 event,
                 enemy_transform,
                 player_entity,
-                &all_enemies_query,
-                &mut killcam,
-                &mut ragdoll_tracker,
-                &blood_visuals,
+                &queries.all_enemies,
+                &mut res.killcam,
+                &mut res.ragdoll_tracker,
+                &res.blood_visuals,
                 current_time,
             );
         }
@@ -1056,8 +1100,9 @@ pub fn ragdoll_update_system(
     }
 }
 
-// === 布娃娃視覺輔助函數 ===
-
+// ============================================================================
+// 布娃娃視覺輔助函數
+// ============================================================================
 /// 計算布娃娃閃爍可見性
 #[inline]
 fn calculate_ragdoll_blink_visibility(ragdoll: &Ragdoll) -> Option<bool> {
@@ -1134,17 +1179,17 @@ pub fn blood_particle_update_system(
         transform.translation += particle.velocity * dt;
 
         // 如果碰到地面，停止移動
-        if transform.translation.y < 0.05 {
-            transform.translation.y = 0.05;
+        if transform.translation.y < PARTICLE_GROUND_HEIGHT {
+            transform.translation.y = PARTICLE_GROUND_HEIGHT;
             particle.velocity = Vec3::ZERO;
             // 加速消失
-            particle.lifetime += dt * 3.0;
+            particle.lifetime += dt * PARTICLE_GROUND_LIFETIME_ACCEL;
         }
 
         // 根據生命週期縮小粒子
         let life_ratio = 1.0 - (particle.lifetime / particle.max_lifetime);
-        let scale = life_ratio.max(0.3);
-        transform.scale = Vec3::splat(scale * 0.05);
+        let scale = life_ratio.max(PARTICLE_MIN_SCALE_RATIO);
+        transform.scale = Vec3::splat(scale * PARTICLE_BASE_SCALE);
     }
 }
 
@@ -1206,8 +1251,9 @@ fn spawn_floating_damage_number(
 #[derive(Component)]
 pub struct DamageNumberBillboard;
 
-// === 浮動傷害數字輔助函數 ===
-
+// ============================================================================
+// 浮動傷害數字輔助函數
+// ============================================================================
 /// 計算 Billboard 旋轉
 #[inline]
 fn calculate_billboard_rotation(transform_pos: Vec3, camera_pos: Option<Vec3>) -> Option<Quat> {

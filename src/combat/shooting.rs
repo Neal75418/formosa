@@ -7,12 +7,7 @@ use bevy::math::EulerRot;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-/// 將 Rapier 的 Real 類型 (f32) 轉換為 f32
-/// 注意：bevy_rapier3d 0.32 的 Real 就是 f32，所以直接返回
-#[inline]
-fn real_to_f32(r: bevy_rapier3d::prelude::Real) -> f32 {
-    r
-}
+use crate::core::rapier_real_to_f32;
 
 use super::components::*;
 use super::health::{check_headshot, BLEED_CHANCE, HEADSHOT_MULTIPLIER, *};
@@ -29,8 +24,9 @@ use crate::core::{
 use crate::player::Player;
 use crate::ui::NotificationQueue;
 
-// === Lifetime Trait 用於統一特效消失邏輯 ===
-
+// ============================================================================
+// Lifetime Trait 用於統一特效消失邏輯
+// ============================================================================
 /// 具有生命週期的組件 trait
 trait HasLifetime {
     fn lifetime(&self) -> f32;
@@ -74,10 +70,10 @@ pub fn shooting_input_system(
 ) {
     // 死亡時或在車上時不處理射擊輸入
     if respawn_state.is_dead || game_state.player_in_vehicle {
-        input.fire_pressed = false;
-        input.fire_held = false;
-        input.aim_pressed = false;
-        input.reload_pressed = false;
+        input.is_fire_pressed = false;
+        input.is_fire_held = false;
+        input.is_aim_pressed = false;
+        input.is_reload_pressed = false;
         input.weapon_switch = None;
         input.mouse_wheel = 0.0;
         return;
@@ -92,12 +88,12 @@ pub fn shooting_input_system(
         .unwrap_or(false);
 
     // 射擊：R 鍵（與 UI 提示一致）
-    input.fire_pressed = keyboard.just_pressed(KeyCode::KeyR);
-    input.fire_held = keyboard.pressed(KeyCode::KeyR);
+    input.is_fire_pressed = keyboard.just_pressed(KeyCode::KeyR);
+    input.is_fire_held = keyboard.pressed(KeyCode::KeyR);
     // 近戰武器狀態下不啟用瞄準模式（沒有準星）
-    input.aim_pressed = !is_melee && mouse.pressed(MouseButton::Right);
+    input.is_aim_pressed = !is_melee && mouse.pressed(MouseButton::Right);
     // 換彈：T 鍵
-    input.reload_pressed = keyboard.just_pressed(KeyCode::KeyT);
+    input.is_reload_pressed = keyboard.just_pressed(KeyCode::KeyT);
 
     // 武器切換 (1-4 數字鍵)
     input.weapon_switch = None;
@@ -186,10 +182,10 @@ fn update_reload_progress(weapon: &mut Weapon, dt: f32) -> bool {
 /// 嘗試開始換彈，返回是否成功開始
 fn try_start_reload(
     weapon: &mut Weapon,
-    reload_pressed: bool,
+    is_reload_pressed: bool,
     notifications: &mut NotificationQueue,
 ) -> bool {
-    if reload_pressed && weapon.start_reload() {
+    if is_reload_pressed && weapon.start_reload() {
         notifications.info("換彈中...");
         return true;
     }
@@ -267,14 +263,15 @@ pub fn reload_system(
         }
 
         // 嘗試開始換彈
-        if try_start_reload(weapon, input.reload_pressed, &mut notifications) {
+        if try_start_reload(weapon, input.is_reload_pressed, &mut notifications) {
             play_reload_sound_if_available(&mut commands, &weapon_sounds, &audio_manager, false);
         }
     }
 }
 
-// === 射擊系統輔助函數 ===
-
+// ============================================================================
+// 射擊系統輔助函數
+// ============================================================================
 /// 角色方向向量
 struct CharacterVectors {
     forward: Vec3,
@@ -327,7 +324,7 @@ fn calculate_aim_point(
         true,
         aim_filter,
     ) {
-        camera_pos + cam_forward * real_to_f32(toi)
+        camera_pos + cam_forward * rapier_real_to_f32(toi)
     } else {
         camera_pos + cam_forward * MAX_AIM_DISTANCE
     }
@@ -363,9 +360,9 @@ fn calculate_muzzle_position(
 #[inline]
 fn should_fire(input: &ShootingInput, weapon: &Weapon) -> bool {
     let trigger_pressed = if weapon.stats.is_automatic {
-        input.fire_held
+        input.is_fire_held
     } else {
-        input.fire_pressed
+        input.is_fire_pressed
     };
     trigger_pressed && weapon.can_fire()
 }
@@ -424,12 +421,12 @@ fn generate_shotgun_pattern(pellet_count: u32, base_spread: f32) -> Vec<Vec2> {
     let inner_count = remaining.min(6); // 內圈最多 6 顆
     let outer_count = remaining.saturating_sub(6); // 剩餘的放外圈
 
-    // 內圈（較準確，50% 散佈半徑）
-    let inner_radius = spread_rad * 0.5;
+    // 內圈（較準確，佔總散佈半徑的 SHOTGUN_INNER_RADIUS_RATIO）
+    let inner_radius = spread_rad * SHOTGUN_INNER_RADIUS_RATIO;
     for i in 0..inner_count {
         let angle = (i as f32 / inner_count as f32) * TAU;
         // 加入少量隨機偏移使其更自然
-        let jitter = (rand::random::<f32>() - 0.5) * 0.1;
+        let jitter = (rand::random::<f32>() - 0.5) * SHOTGUN_INNER_JITTER;
         pattern.push(Vec2::new(
             angle.cos() * inner_radius * (1.0 + jitter),
             angle.sin() * inner_radius * (1.0 + jitter),
@@ -441,7 +438,7 @@ fn generate_shotgun_pattern(pellet_count: u32, base_spread: f32) -> Vec<Vec2> {
     for i in 0..outer_count {
         // 外圈與內圈錯開，更均勻分布
         let angle = (i as f32 / outer_count.max(1) as f32) * TAU + TAU / 12.0;
-        let jitter = (rand::random::<f32>() - 0.5) * 0.15;
+        let jitter = (rand::random::<f32>() - 0.5) * SHOTGUN_OUTER_JITTER;
         pattern.push(Vec2::new(
             angle.cos() * outer_radius * (1.0 + jitter),
             angle.sin() * outer_radius * (1.0 + jitter),
@@ -627,6 +624,13 @@ pub fn fire_weapon_system(
 const CAMERA_SHAKE_DURATION: f32 = 0.08;
 /// 瞄準時後座力倍率（減少 50%）
 const AIM_RECOIL_MULTIPLIER: f32 = 0.5;
+
+/// 霰彈槍內圈半徑比例（佔總散佈的 50%）
+const SHOTGUN_INNER_RADIUS_RATIO: f32 = 0.5;
+/// 霰彈槍內圈隨機偏移量
+const SHOTGUN_INNER_JITTER: f32 = 0.1;
+/// 霰彈槍外圈隨機偏移量
+const SHOTGUN_OUTER_JITTER: f32 = 0.15;
 /// 棍棒掃擊檢測步數
 const STAFF_SWEEP_STEPS: usize = 5;
 
@@ -680,7 +684,7 @@ fn fire_melee(
                 true,
                 filter,
             ) {
-                let hit_pos = origin + direction * real_to_f32(toi);
+                let hit_pos = origin + direction * rapier_real_to_f32(toi);
                 damage_events.write(
                     DamageEvent::new(hit_entity, weapon.stats.damage, DamageSource::Melee)
                         .with_attacker(attacker)
@@ -726,7 +730,7 @@ fn fire_staff_sweep(
             if !hit_entities.contains(&hit_entity) {
                 hit_entities.push(hit_entity);
 
-                let hit_pos = origin + rotated_dir * real_to_f32(toi);
+                let hit_pos = origin + rotated_dir * rapier_real_to_f32(toi);
                 damage_events.write(
                     DamageEvent::new(hit_entity, weapon.stats.damage, DamageSource::Melee)
                         .with_attacker(attacker)
@@ -755,7 +759,7 @@ fn fire_knife_attack(
         true,
         filter,
     ) {
-        let hit_pos = origin + direction * real_to_f32(toi);
+        let hit_pos = origin + direction * rapier_real_to_f32(toi);
 
         // 發送傷害事件
         damage_events.write(
@@ -841,8 +845,8 @@ fn fire_bullet_with_offset(
         true,
         filter,
     ) {
-        let hit_pos = origin + spread_dir * real_to_f32(toi);
-        let distance = real_to_f32(toi);
+        let hit_pos = origin + spread_dir * rapier_real_to_f32(toi);
+        let distance = rapier_real_to_f32(toi);
 
         // 生成子彈拖尾（使用武器專屬風格）
         spawn_bullet_tracer(commands, visuals, origin, hit_pos, tracer_style);
@@ -1039,7 +1043,7 @@ pub fn punch_animation_trigger_system(
     }
 
     // 檢查是否按下攻擊鍵
-    if !input.fire_pressed {
+    if !input.is_fire_pressed {
         return;
     }
 
@@ -1363,8 +1367,8 @@ pub fn holding_pose_system(
         return;
     };
 
-    // 使用 ShootingInput 中的 aim_pressed，確保系統順序正確
-    let is_aiming = input.aim_pressed;
+    // 使用 ShootingInput 中的 is_aim_pressed，確保系統順序正確
+    let is_aiming = input.is_aim_pressed;
     let is_melee = weapon.stats.weapon_type.is_melee();
 
     for child in children.iter() {

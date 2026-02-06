@@ -6,7 +6,6 @@
 //! - 街道家具破壞
 //! - 碎片物理
 //! - 破壞粒子效果
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -52,6 +51,7 @@ pub struct DebrisPool {
 }
 
 impl DebrisPool {
+    /// 建立新實例
     pub fn new(max_size: usize) -> Self {
         Self {
             pool: EntityPool::new(max_size),
@@ -109,6 +109,7 @@ pub struct DestructibleVisuals {
 }
 
 impl DestructibleVisuals {
+    /// 建立新實例
     pub fn new(
         meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,
@@ -246,6 +247,7 @@ pub struct Destructible {
 }
 
 impl Destructible {
+    /// 建立新實例
     pub fn new(destructible_type: DestructibleType) -> Self {
         let max_health = destructible_type.max_health();
         Self {
@@ -829,7 +831,6 @@ fn spawn_debris_pooled<F: bevy::ecs::query::QueryFilter>(
 }
 
 /// 生成碎片（舊版，不使用物件池 - 用於無池情況）
-#[allow(dead_code)]
 fn spawn_debris(
     commands: &mut Commands,
     visuals: &DestructibleVisuals,

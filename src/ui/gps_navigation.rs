@@ -11,9 +11,9 @@ use super::components::{
 use crate::mission::{MissionManager, MissionType};
 use crate::player::Player;
 
-// === GPS 顏色常數 ===
-#[allow(dead_code)]
-const GPS_ROUTE_COLOR: Color = Color::srgba(0.4, 0.8, 1.0, 0.8); // 淡藍色路線
+// ============================================================================
+// GPS 顏色常數
+// ============================================================================
 const GPS_MARKER_COLOR: Color = Color::srgba(1.0, 0.85, 0.0, 0.9); // 黃色目標點
 
 /// 設置 GPS UI 元素

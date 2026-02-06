@@ -1,7 +1,6 @@
 //! UI 常數定義
 //!
 //! 所有 UI 系統共用的顏色、尺寸常數
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -14,6 +13,7 @@ pub const BASE_RESOLUTION_HEIGHT: f32 = 1080.0;
 
 /// 按鈕基礎尺寸
 pub const BUTTON_BASE_WIDTH: f32 = 220.0;
+/// 按鈕基礎高度
 pub const BUTTON_BASE_HEIGHT: f32 = 48.0;
 /// 按鈕懸停時的縮放比例 (1.08 = 放大 8%)
 pub const BUTTON_HOVER_SCALE: f32 = 1.08;

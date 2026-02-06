@@ -1,4 +1,4 @@
-// use super::visuals::TracerStyle; // Removed
+//! 武器系統（類型、屬性、彈藥、冷卻）
 
 /// 彈道視覺風格
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -17,7 +17,7 @@ use bevy::prelude::*;
 // ============================================================================
 
 /// 武器類型
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum WeaponType {
     #[default]
@@ -77,11 +77,24 @@ impl WeaponType {
             WeaponType::Fist | WeaponType::Staff | WeaponType::Knife
         )
     }
+
+    /// 取得穩定的存檔鍵值（不受 enum 重命名影響）
+    pub fn save_key(&self) -> &'static str {
+        match self {
+            WeaponType::Fist => "Fist",
+            WeaponType::Staff => "Staff",
+            WeaponType::Knife => "Knife",
+            WeaponType::Pistol => "Pistol",
+            WeaponType::SMG => "SMG",
+            WeaponType::Shotgun => "Shotgun",
+            WeaponType::Rifle => "Rifle",
+        }
+    }
 }
 
 /// 近戰動畫類型
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[allow(dead_code)]
+#[allow(dead_code)] // TODO: 用於近戰動畫系統
 pub enum MeleeAnimationType {
     #[default]
     Punch, // 拳頭
@@ -90,7 +103,7 @@ pub enum MeleeAnimationType {
     Stab,  // 刀刺
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // TODO: 用於近戰動畫系統
 impl MeleeAnimationType {
     /// 從武器類型推斷動畫類型
     pub fn from_weapon(weapon_type: WeaponType) -> Self {
@@ -105,7 +118,6 @@ impl MeleeAnimationType {
 
 /// 武器數據（定義武器屬性）
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct WeaponStats {
     pub weapon_type: WeaponType,
     pub damage: f32,        // 單發傷害
@@ -116,6 +128,7 @@ pub struct WeaponStats {
     pub reload_time: f32,   // 換彈時間（秒）
     pub spread: f32,        // 散射角度（度）
     pub pellet_count: u32,  // 彈丸數量（霰彈槍用）
+    #[allow(dead_code)] // TODO: 用於拋射物系統
     pub bullet_speed: f32,  // 子彈速度
     pub is_automatic: bool, // 是否全自動
     // === 距離傷害衰減 ===
@@ -334,6 +347,7 @@ pub struct Weapon {
 }
 
 impl Weapon {
+    /// 建立新實例
     pub fn new(stats: WeaponStats) -> Self {
         let current_ammo = stats.magazine_size;
         let reserve_ammo = stats.max_ammo;
@@ -394,11 +408,55 @@ impl Weapon {
         self.is_reloading = false;
         self.reload_timer = 0.0;
     }
+
+    /// 推進射擊冷卻計時器
+    pub fn tick_cooldown(&mut self, dt: f32) {
+        if self.fire_cooldown > 0.0 {
+            self.fire_cooldown = (self.fire_cooldown - dt).max(0.0);
+        }
+    }
+
+    /// 推進換彈計時器，完成時自動換彈
+    /// 返回 true 表示本幀正在換彈（應跳過攻擊）
+    pub fn tick_reload(&mut self, dt: f32) -> bool {
+        if !self.is_reloading {
+            return false;
+        }
+        self.reload_timer = (self.reload_timer - dt).max(0.0);
+        if self.reload_timer <= 0.0 {
+            self.finish_reload();
+        }
+        true
+    }
+
+    /// 是否正在冷卻中
+    pub fn is_cooling_down(&self) -> bool {
+        self.fire_cooldown > 0.0
+    }
+
+    /// 設定射擊冷卻時間
+    pub fn set_fire_cooldown(&mut self, cooldown: f32) {
+        self.fire_cooldown = cooldown;
+    }
+
+    /// 重置射擊冷卻為武器射速
+    pub fn reset_fire_cooldown(&mut self) {
+        self.fire_cooldown = self.stats.fire_rate;
+    }
+
+    /// 取得武器有效射程
+    pub fn effective_range(&self) -> f32 {
+        self.stats.range
+    }
+
+    /// 取得武器基礎傷害
+    pub fn base_damage(&self) -> f32 {
+        self.stats.damage
+    }
 }
 
 /// 玩家武器庫存
 #[derive(Component, Debug)]
-#[allow(dead_code)]
 pub struct WeaponInventory {
     pub weapons: Vec<Weapon>,
     pub current_index: usize,
@@ -416,7 +474,6 @@ impl Default for WeaponInventory {
     }
 }
 
-#[allow(dead_code)]
 impl WeaponInventory {
     /// 取得當前武器
     pub fn current_weapon(&self) -> Option<&Weapon> {
@@ -429,6 +486,7 @@ impl WeaponInventory {
     }
 
     /// 切換到下一把武器
+    #[allow(dead_code)] // TODO: 用於武器輪盤快捷切換
     pub fn next_weapon(&mut self) {
         if !self.weapons.is_empty() {
             self.current_index = (self.current_index + 1) % self.weapons.len();
@@ -436,6 +494,7 @@ impl WeaponInventory {
     }
 
     /// 切換到上一把武器
+    #[allow(dead_code)] // TODO: 用於武器輪盤快捷切換
     pub fn prev_weapon(&mut self) {
         if !self.weapons.is_empty() {
             self.current_index = if self.current_index == 0 {
@@ -474,6 +533,7 @@ impl WeaponInventory {
     }
 
     /// 檢查是否有指定類型武器
+    #[allow(dead_code)] // TODO: 用於武器撿取邏輯
     pub fn has_weapon(&self, weapon_type: WeaponType) -> bool {
         self.weapons
             .iter()

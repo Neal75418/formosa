@@ -1,7 +1,6 @@
 //! 任務觸發點組件
 //!
 //! 定義任務觸發區域、NPC 互動點等組件
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -113,6 +112,7 @@ impl Default for Trigger {
 }
 
 impl Trigger {
+    /// 建立新實例
     pub fn new(action: TriggerAction) -> Self {
         Self {
             action,
@@ -120,26 +120,31 @@ impl Trigger {
         }
     }
 
+    /// 設定類型
     pub fn with_type(mut self, trigger_type: TriggerType) -> Self {
         self.trigger_type = trigger_type;
         self
     }
 
+    /// 設定形狀
     pub fn with_shape(mut self, shape: TriggerShape) -> Self {
         self.shape = shape;
         self
     }
 
+    /// 設定為一次性觸發
     pub fn one_shot(mut self) -> Self {
         self.one_shot = true;
         self
     }
 
+    /// 設定提示文字
     pub fn with_prompt(mut self, text: impl Into<String>) -> Self {
         self.prompt_text = Some(text.into());
         self
     }
 
+    /// 設定前置旗標條件
     pub fn requires_flag(mut self, flag: impl Into<String>) -> Self {
         self.required_flag = Some(flag.into());
         self

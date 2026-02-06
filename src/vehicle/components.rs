@@ -1,5 +1,4 @@
 //! 載具組件
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy::pbr::StandardMaterial;
@@ -112,12 +111,24 @@ impl VehicleMaterials {
 }
 
 /// 載具類型
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VehicleType {
     Scooter,    // 機車
     Car,        // 汽車
     Taxi,       // 計程車
     Bus,        // 公車
+}
+
+impl VehicleType {
+    /// 取得穩定的存檔鍵值（不受 enum 重命名影響）
+    pub fn save_key(&self) -> &'static str {
+        match self {
+            VehicleType::Scooter => "Scooter",
+            VehicleType::Car => "Car",
+            VehicleType::Taxi => "Taxi",
+            VehicleType::Bus => "Bus",
+        }
+    }
 }
 
 /// 載具物理模式
@@ -129,97 +140,175 @@ pub enum VehiclePhysicsMode {
     Kinematic,
 }
 
-/// 載具組件（GTA 風格街機物理）
+/// 載具核心組件（僅包含基本屬性，子系統拆分為獨立元件）
 #[derive(Component)]
 pub struct Vehicle {
-    // === 基本屬性 ===
     pub vehicle_type: VehicleType,
     pub max_speed: f32,
     pub acceleration: f32,
     pub turn_speed: f32,
     pub current_speed: f32,
     pub is_occupied: bool,
-
-    // === 機車傾斜系統 ===
-    pub lean_angle: f32,        // 當前傾斜角度 (弧度)
-    pub max_lean_angle: f32,    // 最大傾斜角度 (弧度)
-
-    // === 加速系統（非線性扭力曲線）===
-    pub power_band_low: f32,    // 低速扭力倍率 (0~30% 速度)
-    pub power_band_peak: f32,   // 峰值扭力倍率 (30~70% 速度)
-    pub top_end_falloff: f32,   // 高速衰減倍率 (70~100% 速度)
-
-    // === 煞車系統 ===
-    pub braking_power: f32,     // 煞車力道基礎值
-    pub brake_force: f32,       // 一般煞車力道
-    pub handbrake_force: f32,   // 手煞車力道（漂移用）
-
-    // === 轉向/操控 ===
-    pub handling: f32,                  // 操控靈敏度
-    pub high_speed_turn_factor: f32,    // 高速轉向衰減 (0.0~1.0)
-    pub steering_response: f32,         // 轉向響應速度
-    pub counter_steer_assist: f32,      // 反打救車輔助
-
-    // === 漂移系統 ===
-    pub drift_threshold: f32,   // 漂移觸發角度
-    pub drift_grip: f32,        // 漂移中的抓地力
-    pub is_drifting: bool,      // 漂移狀態
-    pub drift_angle: f32,       // 當前漂移角度
-    pub is_handbraking: bool,   // 手煞車狀態
-
-    // === 車身動態（汽車/公車用）===
-    pub body_roll_factor: f32,  // 車身側傾係數
-    pub body_pitch_factor: f32, // 車身前後傾係數
-    pub body_roll: f32,         // 當前側傾角
-    pub body_pitch: f32,        // 當前前後傾角
-    pub suspension_stiffness: f32, // 懸吊硬度（影響傾斜恢復速度）
-
-    // === 輸入狀態 ===
-    pub throttle_input: f32,    // 油門輸入 (0.0~1.0)
-    pub brake_input: f32,       // 煞車輸入 (0.0~1.0)
-    pub steer_input: f32,       // 轉向輸入 (-1.0~1.0)
-    pub wheel_spin: f32,        // 輪胎打滑程度 (0.0~1.0)
 }
 
-impl Default for Vehicle {
-    /// 預設值：所有車輛共用的初始狀態
+// ============================================================================
+// 車輛子元件（從 Vehicle 上帝元件拆分而來）
+// ============================================================================
+
+/// 機車傾斜系統元件
+#[derive(Component)]
+pub struct VehicleLean {
+    /// 當前傾斜角度 (弧度)
+    pub lean_angle: f32,
+    /// 最大傾斜角度 (弧度)
+    pub max_lean_angle: f32,
+}
+
+impl Default for VehicleLean {
     fn default() -> Self {
         Self {
-            vehicle_type: VehicleType::Car,
-            max_speed: 30.0,
-            acceleration: 10.0,
-            turn_speed: 2.0,
-            current_speed: 0.0,
-            is_occupied: false,
-
             lean_angle: 0.0,
             max_lean_angle: 0.0,
+        }
+    }
+}
 
+/// 加速系統（非線性扭力曲線）元件
+#[derive(Component)]
+pub struct VehiclePowerBand {
+    /// 低速扭力倍率 (0~30% 速度)
+    pub power_band_low: f32,
+    /// 峰值扭力倍率 (30~70% 速度)
+    pub power_band_peak: f32,
+    /// 高速衰減倍率 (70~100% 速度)
+    pub top_end_falloff: f32,
+}
+
+impl Default for VehiclePowerBand {
+    fn default() -> Self {
+        Self {
             power_band_low: 1.0,
             power_band_peak: 1.0,
             top_end_falloff: 0.5,
+        }
+    }
+}
 
+/// 煞車系統元件
+#[derive(Component)]
+pub struct VehicleBraking {
+    /// 煞車力道基礎值
+    pub braking_power: f32,
+    /// 一般煞車力道
+    pub brake_force: f32,
+    /// 手煞車力道（漂移用）
+    pub handbrake_force: f32,
+}
+
+impl Default for VehicleBraking {
+    fn default() -> Self {
+        Self {
             braking_power: 0.7,
             brake_force: 20.0,
             handbrake_force: 30.0,
+        }
+    }
+}
 
+/// 轉向/操控系統元件
+#[derive(Component)]
+pub struct VehicleSteering {
+    /// 操控靈敏度
+    pub handling: f32,
+    /// 高速轉向衰減 (0.0~1.0)
+    pub high_speed_turn_factor: f32,
+    /// 轉向響應速度
+    pub steering_response: f32,
+    /// 反打救車輔助
+    pub counter_steer_assist: f32,
+}
+
+impl Default for VehicleSteering {
+    fn default() -> Self {
+        Self {
             handling: 1.0,
             high_speed_turn_factor: 0.3,
             steering_response: 5.0,
             counter_steer_assist: 0.4,
+        }
+    }
+}
 
+/// 漂移系統元件
+#[derive(Component)]
+pub struct VehicleDrift {
+    /// 漂移觸發角度
+    pub drift_threshold: f32,
+    /// 漂移中的抓地力
+    pub drift_grip: f32,
+    /// 漂移狀態
+    pub is_drifting: bool,
+    /// 當前漂移角度
+    pub drift_angle: f32,
+    /// 手煞車狀態
+    pub is_handbraking: bool,
+}
+
+impl Default for VehicleDrift {
+    fn default() -> Self {
+        Self {
             drift_threshold: 0.4,
             drift_grip: 0.5,
             is_drifting: false,
             drift_angle: 0.0,
             is_handbraking: false,
+        }
+    }
+}
 
+/// 車身動態（汽車/公車用）元件
+#[derive(Component)]
+pub struct VehicleBodyDynamics {
+    /// 車身側傾係數
+    pub body_roll_factor: f32,
+    /// 車身前後傾係數
+    pub body_pitch_factor: f32,
+    /// 當前側傾角
+    pub body_roll: f32,
+    /// 當前前後傾角
+    pub body_pitch: f32,
+    /// 懸吊硬度（影響傾斜恢復速度）
+    pub suspension_stiffness: f32,
+}
+
+impl Default for VehicleBodyDynamics {
+    fn default() -> Self {
+        Self {
             body_roll_factor: 0.05,
             body_pitch_factor: 0.05,
             body_roll: 0.0,
             body_pitch: 0.0,
             suspension_stiffness: 4.0,
+        }
+    }
+}
 
+/// 車輛輸入狀態元件
+#[derive(Component)]
+pub struct VehicleInput {
+    /// 油門輸入 (0.0~1.0)
+    pub throttle_input: f32,
+    /// 煞車輸入 (0.0~1.0)
+    pub brake_input: f32,
+    /// 轉向輸入 (-1.0~1.0)
+    pub steer_input: f32,
+    /// 輪胎打滑程度 (0.0~1.0)
+    pub wheel_spin: f32,
+}
+
+impl Default for VehicleInput {
+    fn default() -> Self {
+        Self {
             throttle_input: 0.0,
             brake_input: 0.0,
             steer_input: 0.0,
@@ -228,131 +317,216 @@ impl Default for Vehicle {
     }
 }
 
-impl Vehicle {
+impl Default for Vehicle {
+    fn default() -> Self {
+        Self {
+            vehicle_type: VehicleType::Car,
+            max_speed: 30.0,
+            acceleration: 10.0,
+            turn_speed: 2.0,
+            current_speed: 0.0,
+            is_occupied: false,
+        }
+    }
+}
+
+// ============================================================================
+// 車輛預設配置（工廠方法）
+// ============================================================================
+
+/// 車輛預設配置，用於生成車輛時一次設定所有子元件
+pub struct VehiclePreset {
+    pub vehicle: Vehicle,
+    pub lean: VehicleLean,
+    pub power_band: VehiclePowerBand,
+    pub braking: VehicleBraking,
+    pub steering: VehicleSteering,
+    pub drift: VehicleDrift,
+    pub body_dynamics: VehicleBodyDynamics,
+    pub input: VehicleInput,
+}
+
+impl VehiclePreset {
+    /// 轉換為元件 tuple（可直接用於 Bevy spawn）
+    #[allow(clippy::type_complexity)]
+    pub fn into_components(
+        self,
+    ) -> (
+        Vehicle,
+        VehicleLean,
+        VehiclePowerBand,
+        VehicleBraking,
+        VehicleSteering,
+        VehicleDrift,
+        VehicleBodyDynamics,
+        VehicleInput,
+    ) {
+        (
+            self.vehicle,
+            self.lean,
+            self.power_band,
+            self.braking,
+            self.steering,
+            self.drift,
+            self.body_dynamics,
+            self.input,
+        )
+    }
+
     /// 機車 - 台灣街頭最常見的交通工具
     /// 特色：靈活、加速快、可傾斜過彎、容易漂移
     pub fn scooter() -> Self {
         Self {
-            vehicle_type: VehicleType::Scooter,
-            max_speed: 22.0,           // 約 80 km/h
-            acceleration: 18.0,        // 機車加速快
-            turn_speed: 4.0,           // 轉向靈活
-
-            // 機車傾斜
-            max_lean_angle: 0.5,       // 約 28 度傾斜
-
-            // 加速系統（機車低速扭力強）
-            power_band_low: 1.3,
-            power_band_peak: 1.0,
-            top_end_falloff: 0.7,      // 高速衰減明顯
-
-            // 煞車
-            braking_power: 0.85,
-            brake_force: 25.0,
-            handbrake_force: 35.0,     // 機車拉手煞容易甩尾
-
-            // 轉向
-            handling: 1.5,
-            high_speed_turn_factor: 0.5, // 高速仍可轉向
-            steering_response: 8.0,      // 快速響應
-            counter_steer_assist: 0.3,
-
-            // 漂移
-            drift_threshold: 0.3,
-            drift_grip: 0.6,
-
-            // 車身動態（機車用 lean 不用 roll）
-            body_roll_factor: 0.0,
-            body_pitch_factor: 0.15,   // 輕微前後傾
-            suspension_stiffness: 5.0,
-
-            ..Default::default()
+            vehicle: Vehicle {
+                vehicle_type: VehicleType::Scooter,
+                max_speed: 22.0,
+                acceleration: 18.0,
+                turn_speed: 4.0,
+                ..Default::default()
+            },
+            lean: VehicleLean {
+                max_lean_angle: 0.5,
+                ..Default::default()
+            },
+            power_band: VehiclePowerBand {
+                power_band_low: 1.3,
+                power_band_peak: 1.0,
+                top_end_falloff: 0.7,
+            },
+            braking: VehicleBraking {
+                braking_power: 0.85,
+                brake_force: 25.0,
+                handbrake_force: 35.0,
+            },
+            steering: VehicleSteering {
+                handling: 1.5,
+                high_speed_turn_factor: 0.5,
+                steering_response: 8.0,
+                counter_steer_assist: 0.3,
+            },
+            drift: VehicleDrift {
+                drift_threshold: 0.3,
+                drift_grip: 0.6,
+                ..Default::default()
+            },
+            body_dynamics: VehicleBodyDynamics {
+                body_roll_factor: 0.0,
+                body_pitch_factor: 0.15,
+                suspension_stiffness: 5.0,
+                ..Default::default()
+            },
+            input: VehicleInput::default(),
         }
     }
 
     /// 汽車 - 平衡型，GTA 風格漂移
     pub fn car() -> Self {
         Self {
-            vehicle_type: VehicleType::Car,
-            max_speed: 35.0,
-            acceleration: 12.0,
-            turn_speed: 2.0,
-
-            // 加速系統（中速區最強）
-            power_band_peak: 1.2,
-
-            // 煞車
-            handbrake_force: 40.0,     // 手煞車漂移關鍵
-
-            // 轉向
-            counter_steer_assist: 0.5,   // GTA 風格救車
-
-            // 車身動態（明顯側傾）
-            body_roll_factor: 0.08,
-            body_pitch_factor: 0.06,   // 加速後仰/煞車前傾
-
-            ..Default::default()
+            vehicle: Vehicle {
+                vehicle_type: VehicleType::Car,
+                max_speed: 35.0,
+                acceleration: 12.0,
+                turn_speed: 2.0,
+                ..Default::default()
+            },
+            lean: VehicleLean::default(),
+            power_band: VehiclePowerBand {
+                power_band_peak: 1.2,
+                ..Default::default()
+            },
+            braking: VehicleBraking {
+                handbrake_force: 40.0,
+                ..Default::default()
+            },
+            steering: VehicleSteering {
+                counter_steer_assist: 0.5,
+                ..Default::default()
+            },
+            drift: VehicleDrift::default(),
+            body_dynamics: VehicleBodyDynamics {
+                body_roll_factor: 0.08,
+                body_pitch_factor: 0.06,
+                ..Default::default()
+            },
+            input: VehicleInput::default(),
         }
     }
 
     /// 計程車 - 平衡型，略高操控性
     pub fn taxi() -> Self {
         Self {
-            vehicle_type: VehicleType::Taxi,
-            acceleration: 11.0,
-            turn_speed: 2.2,
-
-            power_band_low: 1.1,
-            power_band_peak: 1.1,
-            top_end_falloff: 0.6,
-
-            braking_power: 0.75,
-            brake_force: 22.0,
-            handbrake_force: 38.0,
-
-            handling: 1.1,
-            high_speed_turn_factor: 0.35,
-            steering_response: 5.5,
-            counter_steer_assist: 0.45,
-
-            body_roll_factor: 0.07,
-            suspension_stiffness: 4.5,
-
-            ..Default::default()
+            vehicle: Vehicle {
+                vehicle_type: VehicleType::Taxi,
+                acceleration: 11.0,
+                turn_speed: 2.2,
+                ..Default::default()
+            },
+            lean: VehicleLean::default(),
+            power_band: VehiclePowerBand {
+                power_band_low: 1.1,
+                power_band_peak: 1.1,
+                top_end_falloff: 0.6,
+            },
+            braking: VehicleBraking {
+                braking_power: 0.75,
+                brake_force: 22.0,
+                handbrake_force: 38.0,
+            },
+            steering: VehicleSteering {
+                handling: 1.1,
+                high_speed_turn_factor: 0.35,
+                steering_response: 5.5,
+                counter_steer_assist: 0.45,
+            },
+            drift: VehicleDrift::default(),
+            body_dynamics: VehicleBodyDynamics {
+                body_roll_factor: 0.07,
+                suspension_stiffness: 4.5,
+                ..Default::default()
+            },
+            input: VehicleInput::default(),
         }
     }
 
     /// 公車 - 笨重、難漂移、誇張傾斜（有趣）
     pub fn bus() -> Self {
         Self {
-            vehicle_type: VehicleType::Bus,
-            max_speed: 15.0,
-            acceleration: 8.0,
-            turn_speed: 1.8,  // 提高以改善轉彎能力
-
-            // 柴油引擎低速扭力大
-            power_band_low: 1.5,
-            power_band_peak: 0.8,
-            top_end_falloff: 0.3,      // 高速無力
-
-            braking_power: 0.6,
-            brake_force: 15.0,         // 煞車較弱
-            handbrake_force: 25.0,
-
-            handling: 0.7,
-            high_speed_turn_factor: 0.15, // 高速幾乎轉不動
-            steering_response: 2.0,       // 慢響應
-            counter_steer_assist: 0.2,
-
-            drift_threshold: 0.6,      // 難進入漂移
-            drift_grip: 0.3,
-
-            // 誇張側傾（有趣的視覺效果）
-            body_roll_factor: 0.15,
-            body_pitch_factor: 0.10,   // 明顯點頭
-            suspension_stiffness: 2.0, // 軟懸吊
-
-            ..Default::default()
+            vehicle: Vehicle {
+                vehicle_type: VehicleType::Bus,
+                max_speed: 15.0,
+                acceleration: 8.0,
+                turn_speed: 1.8,
+                ..Default::default()
+            },
+            lean: VehicleLean::default(),
+            power_band: VehiclePowerBand {
+                power_band_low: 1.5,
+                power_band_peak: 0.8,
+                top_end_falloff: 0.3,
+            },
+            braking: VehicleBraking {
+                braking_power: 0.6,
+                brake_force: 15.0,
+                handbrake_force: 25.0,
+            },
+            steering: VehicleSteering {
+                handling: 0.7,
+                high_speed_turn_factor: 0.15,
+                steering_response: 2.0,
+                counter_steer_assist: 0.2,
+            },
+            drift: VehicleDrift {
+                drift_threshold: 0.6,
+                drift_grip: 0.3,
+                ..Default::default()
+            },
+            body_dynamics: VehicleBodyDynamics {
+                body_roll_factor: 0.15,
+                body_pitch_factor: 0.10,
+                suspension_stiffness: 2.0,
+                ..Default::default()
+            },
+            input: VehicleInput::default(),
         }
     }
 }
@@ -420,6 +594,7 @@ impl Default for TireTrack {
 }
 
 impl TireTrack {
+    /// 建立新實例
     pub fn new(points: Vec<(Vec3, f32)>) -> Self {
         Self {
             points,
@@ -452,6 +627,7 @@ pub struct DriftSmoke {
 }
 
 impl DriftSmoke {
+    /// 建立新實例
     pub fn new(velocity: Vec3, max_lifetime: f32) -> Self {
         Self {
             velocity,
@@ -496,6 +672,7 @@ pub struct NitroFlame {
 }
 
 impl NitroFlame {
+    /// 建立新實例
     pub fn new(velocity: Vec3) -> Self {
         Self {
             velocity,
@@ -553,6 +730,7 @@ pub struct VehicleEffectVisuals {
 }
 
 impl VehicleEffectVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             smoke_mesh: meshes.add(Sphere::new(0.5)),
@@ -605,6 +783,7 @@ pub struct VehicleEffectTracker {
 }
 
 impl VehicleEffectTracker {
+    /// 建立新實例
     pub fn new() -> Self {
         Self {
             smoke_count: 0,
@@ -923,6 +1102,7 @@ pub struct VehicleDamageVisuals {
 }
 
 impl VehicleDamageVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             smoke_mesh: meshes.add(Sphere::new(0.3)),
@@ -970,6 +1150,7 @@ pub struct VehicleDamageSmoke {
 }
 
 impl VehicleDamageSmoke {
+    /// 建立新實例
     pub fn new(velocity: Vec3, is_heavy: bool) -> Self {
         Self {
             velocity,
@@ -979,6 +1160,7 @@ impl VehicleDamageSmoke {
         }
     }
 
+    /// 計算透明度
     pub fn alpha(&self) -> f32 {
         let progress = if self.max_lifetime > 0.0 {
             (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
@@ -1001,6 +1183,7 @@ pub struct VehicleFire {
 }
 
 impl VehicleFire {
+    /// 建立新實例
     pub fn new(velocity: Vec3) -> Self {
         Self {
             velocity,
@@ -1009,6 +1192,7 @@ impl VehicleFire {
         }
     }
 
+    /// 計算縮放
     pub fn scale(&self) -> f32 {
         let progress = if self.max_lifetime > 0.0 {
             (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
@@ -1192,6 +1376,7 @@ pub struct TrafficLightVisuals {
 }
 
 impl TrafficLightVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             pole_mesh: meshes.add(Cylinder::new(0.1, 4.0)),
@@ -1264,10 +1449,11 @@ pub struct VehicleExplosion {
     /// 傷害
     pub damage: f32,
     /// 是否已造成傷害
-    pub damage_dealt: bool,
+    pub has_damage_dealt: bool,
 }
 
 impl VehicleExplosion {
+    /// 建立新實例
     pub fn new(center: Vec3, radius: f32, damage: f32) -> Self {
         Self {
             lifetime: 0.0,
@@ -1275,7 +1461,7 @@ impl VehicleExplosion {
             center,
             radius,
             damage,
-            damage_dealt: false,
+            has_damage_dealt: false,
         }
     }
 
@@ -1295,6 +1481,7 @@ impl VehicleExplosion {
         }
     }
 
+    /// 計算透明度
     pub fn alpha(&self) -> f32 {
         let progress = if self.max_lifetime > 0.0 {
             (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)

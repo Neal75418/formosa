@@ -1,24 +1,34 @@
+//! AI 感知系統（視覺、聽覺、天氣影響）
+
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use super::{AiBehavior, AiConfig, AiPerception, AiUpdateTimer};
+use super::{AiBehavior, AiConfig, AiPerception};
 use crate::combat::Enemy;
 use crate::core::{WeatherState, WeatherType, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::player::Player;
+
+/// 感知系統本地計時器（避免資源競爭）
+#[derive(Default)]
+pub struct PerceptionTimer(Option<Timer>);
 
 /// AI 感知系統：檢測玩家位置
 /// GTA 5 風格：60° FOV + 視線遮擋檢測 + 天氣影響
 pub fn ai_perception_system(
     time: Res<Time>,
-    mut timer: ResMut<AiUpdateTimer>,
+    mut local_timer: Local<PerceptionTimer>,
     config: Res<AiConfig>,
     weather: Res<WeatherState>,
     player_query: Query<(Entity, &Transform), With<Player>>,
     mut enemy_query: Query<(Entity, &Transform, &mut AiPerception, &mut AiBehavior), With<Enemy>>,
     rapier_context: ReadRapierContext,
 ) {
-    timer.perception_timer.tick(time.delta());
-    if !timer.perception_timer.just_finished() {
+    // 初始化本地計時器（只執行一次）
+    let timer = local_timer.0.get_or_insert_with(|| {
+        Timer::from_seconds(0.1, TimerMode::Repeating)
+    });
+    timer.tick(time.delta());
+    if !timer.just_finished() {
         return;
     }
 

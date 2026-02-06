@@ -1,11 +1,13 @@
 //! 存檔系統組件
 //!
 //! 包含存檔資料結構和事件定義
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+use crate::combat::WeaponType;
+use crate::core::WeatherType;
 
 // ============================================================================
 // 存檔資料結構
@@ -79,8 +81,8 @@ pub struct PlayerSaveData {
 /// 武器存檔資料
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct WeaponSaveData {
-    /// 武器類型 ID
-    pub weapon_type: String,
+    /// 武器類型
+    pub weapon_type: WeaponType,
     /// 當前彈匣彈藥
     pub current_ammo: u32,
     /// 備用彈藥
@@ -93,7 +95,7 @@ pub struct WorldSaveData {
     /// 當前遊戲內時間（小時）
     pub world_hour: f32,
     /// 天氣類型
-    pub weather: String,
+    pub weather: WeatherType,
     /// 天氣強度
     pub weather_intensity: f32,
     /// 已解鎖的安全屋
@@ -109,7 +111,7 @@ impl Default for WorldSaveData {
     fn default() -> Self {
         Self {
             world_hour: 8.0,
-            weather: "Clear".to_string(),
+            weather: WeatherType::Clear,
             weather_intensity: 1.0,
             unlocked_safehouses: vec!["safehouse_ximending".to_string()],
             owned_vehicles: Vec::new(),

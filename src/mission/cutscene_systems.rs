@@ -2,7 +2,6 @@
 //!
 //! 處理過場動畫播放、攝影機控制、淡入淡出等
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -136,8 +135,9 @@ fn setup_cutscene_ui(mut commands: Commands) {
 // 事件處理
 // ============================================================================
 
-// === 過場動畫事件處理輔助函數 ===
-
+// ============================================================================
+// 過場動畫事件處理輔助函數
+// ============================================================================
 /// 處理過場動畫開始事件
 fn handle_cutscene_start(
     cutscene_id: CutsceneId,
@@ -161,7 +161,7 @@ fn handle_cutscene_start(
         cutscene_state.fade_state = FadeState::fade_in(1.0, Color::BLACK);
     }
 
-    info!("過場動畫開始: {} (ID: {})", cutscene.name, cutscene_id);
+    info!("🎬 過場動畫開始: {} (ID: {})", cutscene.name, cutscene_id);
 }
 
 /// 處理過場動畫跳過事件
@@ -249,7 +249,7 @@ fn cutscene_playback_system(
             cutscene_state.fade_state = FadeState::fade_out(0.5, Color::BLACK);
         }
         events.write(CutsceneEvent::Completed(cutscene_id));
-        info!("過場動畫完成: {}", cutscene_id);
+        info!("🎬 過場動畫完成: {}", cutscene_id);
     }
 }
 

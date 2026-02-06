@@ -11,7 +11,9 @@ use super::components::{
 };
 use crate::mission::{get_current_mission_info, StoryMissionDatabase, StoryMissionManager};
 
-// === 劇情任務 HUD 顏色常數 ===
+// ============================================================================
+// 劇情任務 HUD 顏色常數
+// ============================================================================
 const STORY_HUD_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.7);
 const STORY_HUD_TITLE_COLOR: Color = Color::srgb(1.0, 0.85, 0.0); // 金黃色標題
 const STORY_HUD_PHASE_COLOR: Color = Color::srgb(0.9, 0.9, 0.9); // 白色描述

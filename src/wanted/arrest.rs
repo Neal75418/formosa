@@ -5,7 +5,6 @@
 //! - 警察逮捕流程
 //! - 敵人投降（低血量或被包圍）
 //! - 監獄/警局釋放點
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -209,7 +208,7 @@ pub fn player_surrender_input_system(
 
         if surrender_state.surrender_hold_timer >= SURRENDER_HOLD_TIME && !surrender_state.has_surrendered {
             surrender_state.has_surrendered = true;
-            info!("玩家投降！");
+            info!("🏳️ 玩家投降！通緝等級: {} 星", wanted.stars);
         }
     } else if !surrender_state.has_surrendered {
         // 放開按鍵且尚未投降，取消投降
@@ -277,7 +276,7 @@ pub fn police_arrest_system(
             surrender_state.being_arrested = true;
             surrender_state.arresting_officer = Some(police_entity);
             surrender_state.arrest_progress = 0.0;
-            info!("警察開始逮捕玩家！");
+            info!("🚔 警察開始逮捕玩家！");
             break;
         }
     }

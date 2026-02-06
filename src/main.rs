@@ -5,8 +5,12 @@
 // Bevy ECS 系統常見的 lint 豁免
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
+// 遊戲開發中，許多系統已定義但尚未整合，統一在 crate 級別允許
+#![allow(dead_code)]
 
-// === 模組 ===
+// ============================================================================
+// 模組
+// ============================================================================
 mod ai;
 mod audio;
 mod camera;
@@ -42,8 +46,6 @@ fn main() {
             ..default()
         }))
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
-        // === 遊戲事件 ===
-        .add_message::<core::GameEvent>()
         // === 戰鬥插件 ===
         .add_plugins(combat::CombatPlugin)
         // === AI 插件 ===

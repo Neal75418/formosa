@@ -1,3 +1,5 @@
+//! AI 實體生命週期（生成、死亡、模型建構）
+
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
@@ -83,6 +85,11 @@ pub fn enemy_spawn_system(
         spawn_pos,
         enemy_type,
         &mut rng,
+    );
+
+    debug!(
+        "生成敵人: {:?} 於 ({:.1}, {:.1})，目前數量: {}",
+        enemy_type, spawn_pos.x, spawn_pos.z, current_count + 1
     );
 }
 
@@ -221,7 +228,6 @@ struct EnemyAppearance {
     eye_iris: Handle<StandardMaterial>,
     lip: Handle<StandardMaterial>,
     hair_style: HairStyle,
-    #[allow(dead_code)]
     has_beard: bool,
 }
 

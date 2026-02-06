@@ -1,8 +1,9 @@
+//! 戰鬥視覺效果（子彈拖尾、布娃娃）
+
 use super::weapon::TracerStyle;
 use super::weapon::WeaponType;
 use bevy::prelude::*;
-use std::collections::HashMap; // For Ragdoll? No, Ragdoll struct here is simple one.
-                               // Wait, simple Ragdoll doesn't use BodyPartType.
+use std::collections::{HashMap, VecDeque};
 
 // ============================================================================
 // 射擊視覺效果
@@ -16,9 +17,10 @@ pub struct WeaponModel {
 
 /// 子彈拖尾效果標記
 #[derive(Component)]
-#[allow(dead_code)]
 pub struct BulletTracer {
+    #[allow(dead_code)] // TODO: 用於子彈拖尾渲染
     pub start_pos: Vec3,
+    #[allow(dead_code)] // TODO: 用於子彈拖尾渲染
     pub end_pos: Vec3,
     pub lifetime: f32,
 }
@@ -52,6 +54,7 @@ pub struct BloodParticle {
 }
 
 impl BloodParticle {
+    /// 建立新實例
     pub fn new(velocity: Vec3, max_lifetime: f32) -> Self {
         Self {
             velocity,
@@ -71,6 +74,7 @@ pub struct BloodVisuals {
 }
 
 impl BloodVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             particle_mesh: meshes.add(Sphere::new(0.04)),
@@ -92,17 +96,16 @@ impl BloodVisuals {
 ///布娃娃狀態組件
 /// 當敵人死亡時，添加此組件來啟用物理布娃娃效果
 #[derive(Component)]
-#[allow(dead_code)]
 pub struct Ragdoll {
     /// 布娃娃持續時間計時器
     pub lifetime: f32,
     /// 最大持續時間（秒）
     pub max_lifetime: f32,
-    /// 是否已完成物理轉換
+    #[allow(dead_code)] // TODO: 用於布娃娃物理轉換
     pub physics_applied: bool,
-    /// 衝擊力方向
+    #[allow(dead_code)] // TODO: 用於布娃娃衝擊力
     pub impulse_direction: Vec3,
-    /// 衝擊力大小
+    #[allow(dead_code)] // TODO: 用於布娃娃衝擊力
     pub impulse_strength: f32,
 }
 
@@ -132,8 +135,8 @@ impl Ragdoll {
 /// 布娃娃追蹤器（限制屍體數量）
 #[derive(Resource)]
 pub struct RagdollTracker {
-    /// 追蹤的布娃娃實體和生成時間
-    pub ragdolls: Vec<(Entity, f32)>,
+    /// 追蹤的布娃娃實體和生成時間（使用 VecDeque 以 O(1) 移除舊記錄）
+    pub ragdolls: VecDeque<(Entity, f32)>,
     /// 最大屍體數量
     pub max_count: usize,
 }
@@ -141,7 +144,7 @@ pub struct RagdollTracker {
 impl Default for RagdollTracker {
     fn default() -> Self {
         Self {
-            ragdolls: Vec::new(),
+            ragdolls: VecDeque::new(),
             max_count: 10,
         }
     }
@@ -165,6 +168,7 @@ pub struct ArmorShardParticle {
 }
 
 impl ArmorShardParticle {
+    /// 建立新實例
     pub fn new(velocity: Vec3, angular_velocity: Vec3, max_lifetime: f32) -> Self {
         Self {
             velocity,
@@ -187,6 +191,7 @@ pub struct ArmorSparkParticle {
 }
 
 impl ArmorSparkParticle {
+    /// 建立新實例
     pub fn new(velocity: Vec3, max_lifetime: f32) -> Self {
         Self {
             velocity,
@@ -210,6 +215,7 @@ pub struct ArmorEffectVisuals {
 }
 
 impl ArmorEffectVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         // 碎片 Mesh（小三角形）
         let shard_mesh = meshes.add(Cuboid::new(0.03, 0.015, 0.02));
@@ -268,6 +274,7 @@ pub struct CombatVisuals {
 }
 
 impl CombatVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         let mut tracers = HashMap::new();
 
@@ -404,6 +411,7 @@ pub struct WeaponPart {
 }
 
 impl WeaponVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         // === 材質定義 ===
         // 金屬槍身（深灰/黑色）

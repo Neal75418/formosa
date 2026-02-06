@@ -5,7 +5,6 @@
 //! - 路障破壞物理
 //! - 警察站位和射擊
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -142,6 +141,7 @@ pub struct RoadblockVisuals {
 }
 
 impl RoadblockVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             barrier_mesh: meshes.add(Cuboid::new(3.0, 1.0, 0.3)),
@@ -441,7 +441,7 @@ fn cleanup_roadblock(commands: &mut Commands, roadblock: &Roadblock, entity: Ent
 fn handle_active_roadblock(roadblock: &mut Roadblock, distance: f32) {
     if roadblock.health <= 0.0 {
         roadblock.state = RoadblockState::Breached;
-        info!("路障被突破！");
+        info!("🚧 路障被突破！");
     } else if distance > ROADBLOCK_DESPAWN_DISTANCE {
         roadblock.state = RoadblockState::Retreating;
     }
@@ -474,7 +474,7 @@ pub fn roadblock_update_system(
             RoadblockState::Ready => {
                 if distance < ROADBLOCK_ACTIVE_DISTANCE {
                     roadblock.state = RoadblockState::Active;
-                    info!("路障啟動！");
+                    info!("🚧 路障啟動！");
                 }
             }
             RoadblockState::Active => {

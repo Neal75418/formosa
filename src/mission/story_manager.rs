@@ -1,7 +1,6 @@
 //! 劇情任務管理器
 //!
 //! 管理劇情任務狀態、進度追蹤、存檔讀檔
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -11,6 +10,7 @@ use super::economy::RespectManager;
 use super::relationship::RelationshipManager;
 use super::story_data::*;
 use super::unlocks::UnlockManager;
+use crate::combat::WeaponType;
 use crate::economy::PlayerWallet;
 
 /// 劇情任務管理器資源
@@ -107,15 +107,6 @@ impl StoryMissionManager {
         }
 
         // 檢查解鎖條件
-        // 檢查解鎖條件 (Need external managers, so defaulting to true here or changing signature?
-        // Changing signature is hard because this is called by systems that might not have them yet?
-        // Actually, start_mission is usually called from interaction logic.
-        // Let's comment this out for now and require check_unlock_conditions to be called EXTERNALLY before start_mission if strict check needed.
-        // Or update start_mission signature?
-        // Let's update check_unlock_conditions signature first in a separate chunk, and call it here.
-        // Wait, start_mission needs Economy/Unlock managers to check conditions!
-        // So I must update start_mission signature.
-        // pub fn start_mission(&mut self, mission: &StoryMission, economy: &EconomyManager, unlocks: &UnlockManager)
         if !self.check_unlock_conditions(&mission.unlock_conditions, wallet, respect, unlocks) {
             return Err("不滿足解鎖條件".to_string());
         }
@@ -177,12 +168,12 @@ impl StoryMissionManager {
                 .map(|m| m.title.clone())
                 .unwrap_or_else(|| format!("任務 {:?}", mission_id));
 
-            // 從任務定義獲取解鎖物品
-            let unlocked_items = mission
+            // 從任務定義獲取解鎖物品（轉為顯示用字串）
+            let unlocked_items: Vec<String> = mission
                 .map(|m| {
-                    let mut items = m.rewards.unlock_weapons.clone();
-                    items.extend(m.rewards.unlock_vehicles.clone());
-                    items
+                    let weapons: Vec<String> = m.rewards.unlock_weapons.iter().map(|w| w.save_key().to_string()).collect();
+                    let vehicles: Vec<String> = m.rewards.unlock_vehicles.iter().map(|v| v.save_key().to_string()).collect();
+                    weapons.into_iter().chain(vehicles).collect()
                 })
                 .unwrap_or_default();
 
@@ -416,12 +407,12 @@ impl StoryMissionManager {
 
         // 解鎖武器
         for weapon in &rewards.unlock_weapons {
-            unlocks.unlock_item(weapon.clone());
+            unlocks.unlock_item(weapon.save_key());
         }
 
         // 解鎖載具
         for vehicle in &rewards.unlock_vehicles {
-            unlocks.unlock_item(vehicle.clone());
+            unlocks.unlock_item(vehicle.save_key());
         }
 
         // 解鎖區域
@@ -647,7 +638,7 @@ impl SaveData {
             .to_json()
             .map_err(|e| SaveError::SerializationError(e.to_string()))?;
         std::fs::write(path, json).map_err(|e| SaveError::IoError(e.to_string()))?;
-        info!("遊戲存檔已儲存到: {:?}", path);
+        info!("💾 遊戲存檔已儲存: {:?}", path);
         Ok(())
     }
 
@@ -666,7 +657,7 @@ impl SaveData {
             );
         }
 
-        info!("遊戲存檔已載入: {:?}", path);
+        info!("💾 遊戲存檔已載入: {:?}", path);
         Ok(data)
     }
 
@@ -1043,7 +1034,7 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
         .with_rewards(
             MissionRewards::money(2000)
                 .with_respect(100)
-                .unlock_weapon("rifle".to_string())
+                .unlock_weapon(WeaponType::Rifle)
                 .set_flag("chapter1_complete".to_string()),
         );
 

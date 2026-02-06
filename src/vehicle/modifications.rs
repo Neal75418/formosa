@@ -1,7 +1,6 @@
 //! 車輛改裝系統
 //!
 //! 允許玩家購買和安裝車輛改裝，提升性能
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -225,6 +224,7 @@ pub struct NitroBoost {
 }
 
 impl NitroBoost {
+    /// 建立新實例
     pub fn new() -> Self {
         Self {
             is_active: false,
@@ -311,7 +311,7 @@ pub fn purchase_modification_system(
 ) {
     for event in events.read() {
         let Ok((mut mods, health)) = vehicle_query.get_mut(event.vehicle) else {
-            warn!("Vehicle {:?} not found for modification", event.vehicle);
+            warn!("找不到車輛 {:?}，無法套用改裝", event.vehicle);
             continue;
         };
 
@@ -368,7 +368,7 @@ pub fn purchase_nitro_system(
 ) {
     for event in events.read() {
         let Ok((mut mods, nitro)) = vehicle_query.get_mut(event.vehicle) else {
-            warn!("Vehicle {:?} not found for nitro", event.vehicle);
+            warn!("找不到車輛 {:?}，無法啟用氮氣", event.vehicle);
             continue;
         };
 

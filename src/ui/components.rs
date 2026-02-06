@@ -1,5 +1,4 @@
 //! UI 組件
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use crate::core::calculate_fade_alpha;
@@ -74,8 +73,9 @@ pub struct FullMapContainer;
 #[derive(Component)]
 pub struct FullMapPlayerMarker;
 
-// === 外送 App UI 組件 ===
-
+// ============================================================================
+// 外送 App UI 組件
+// ============================================================================
 /// 外送 App 容器
 #[derive(Component)]
 pub struct DeliveryAppContainer;
@@ -130,8 +130,9 @@ pub struct ChineseFont {
     pub font: Handle<Font>,
 }
 
-// === 戰鬥 UI 組件 ===
-
+// ============================================================================
+// 戰鬥 UI 組件
+// ============================================================================
 /// 準星容器
 #[derive(Component)]
 pub struct Crosshair;
@@ -186,8 +187,9 @@ pub struct AmmoBulletIcon {
 #[derive(Component)]
 pub struct WeaponDisplay;
 
-// === 敵人 UI 組件 ===
-
+// ============================================================================
+// 敵人 UI 組件
+// ============================================================================
 /// 敵人血條（世界空間）
 #[derive(Component)]
 pub struct EnemyHealthBar {
@@ -216,8 +218,9 @@ pub struct EnemyHealthBarGlow {
     pub enemy_entity: Entity,
 }
 
-// === 受傷指示器組件 ===
-
+// ============================================================================
+// 受傷指示器組件
+// ============================================================================
 /// 受傷指示器容器（螢幕邊緣暈影）
 #[derive(Component)]
 pub struct DamageIndicator;
@@ -258,8 +261,9 @@ impl Default for DamageIndicatorState {
     }
 }
 
-// === GTA 風格 HUD 組件 ===
-
+// ============================================================================
+// GTA 風格 HUD 組件
+// ============================================================================
 /// 玩家狀態容器（左下角）
 #[derive(Component)]
 pub struct PlayerStatusContainer;
@@ -306,8 +310,9 @@ pub struct ReserveAmmoText;
 #[derive(Component)]
 pub struct WeaponAreaContainer;
 
-// === GTA 風格控制提示組件 ===
-
+// ============================================================================
+// GTA 風格控制提示組件
+// ============================================================================
 /// 控制提示容器
 #[derive(Component)]
 pub struct ControlHintContainer;
@@ -324,8 +329,9 @@ pub struct ControlSpeedDisplay;
 #[derive(Component)]
 pub struct ControlKeyArea;
 
-// === GTA 風格動畫組件 ===
-
+// ============================================================================
+// GTA 風格動畫組件
+// ============================================================================
 /// HUD 動畫狀態資源
 #[derive(Resource)]
 pub struct HudAnimationState {
@@ -408,8 +414,9 @@ pub struct MinimapScanLine;
 #[derive(Component)]
 pub struct MinimapPlayerGlow;
 
-// === GPS 導航系統組件 (GTA5 風格) ===
-
+// ============================================================================
+// GPS 導航系統組件 (GTA5 風格)
+// ============================================================================
 /// GPS 導航狀態資源
 #[derive(Resource, Default)]
 pub struct GpsNavigationState {
@@ -478,8 +485,9 @@ pub struct GpsDirectionArrow;
 #[derive(Component)]
 pub struct GpsDistanceDisplay;
 
-// === 文字陰影組件 ===
-
+// ============================================================================
+// 文字陰影組件
+// ============================================================================
 /// 血量標籤陰影
 #[derive(Component)]
 pub struct HealthLabelShadow;
@@ -500,8 +508,9 @@ pub struct CurrentAmmoShadow;
 #[derive(Component)]
 pub struct ReserveAmmoShadow;
 
-// === 天氣 HUD 組件 ===
-
+// ============================================================================
+// 天氣 HUD 組件
+// ============================================================================
 /// 天氣 HUD 容器
 #[derive(Component)]
 pub struct WeatherHudContainer;
@@ -542,8 +551,9 @@ pub struct RainDropIcon {
 #[derive(Component)]
 pub struct WeatherNameText;
 
-// === 浮動傷害數字組件 ===
-
+// ============================================================================
+// 浮動傷害數字組件
+// ============================================================================
 /// 浮動傷害數字（世界空間）
 /// GTA 5 風格：傷害數字從敵人位置向上飄動並淡出
 #[derive(Component)]
@@ -567,6 +577,7 @@ pub struct FloatingDamageNumber {
 }
 
 impl FloatingDamageNumber {
+    /// 建立新實例
     pub fn new(position: Vec3, damage: f32, is_headshot: bool) -> Self {
         Self {
             start_position: position,
@@ -629,6 +640,7 @@ pub struct FloatingDamageTracker {
 }
 
 impl FloatingDamageTracker {
+    /// 建立新實例
     pub fn new() -> Self {
         Self {
             active_count: 0,
@@ -903,6 +915,7 @@ pub struct MissionFailState {
 }
 
 impl MissionFailState {
+    /// 顯示
     pub fn show(&mut self, reason: String, can_retry: bool) {
         self.is_showing = true;
         self.fail_reason = Some(reason);
@@ -911,6 +924,7 @@ impl MissionFailState {
         self.show_timer = 0.0;
     }
 
+    /// 隱藏
     pub fn hide(&mut self) {
         self.is_showing = false;
         self.fail_reason = None;
@@ -931,12 +945,14 @@ pub struct MissionResultState {
 }
 
 impl MissionResultState {
+    /// 顯示
     pub fn show(&mut self) {
         self.is_showing = true;
         self.show_timer = 0.0;
         self.confirmed = false;
     }
 
+    /// 隱藏
     pub fn hide(&mut self) {
         self.is_showing = false;
         self.show_timer = 0.0;

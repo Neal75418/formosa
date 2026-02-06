@@ -6,28 +6,44 @@
 
 use bevy::prelude::*;
 
-// === 西門町地圖常數定義 (Game Units) ===
-
+// ============================================================================
+// 西門町地圖常數定義 (Game Units)
+// ============================================================================
+/// 道路 Y 軸高度
 pub const ROAD_Y: f32 = 0.05;
 
 // 道路 X 軸位置 (南北向道路，由東到西)
+/// 中華路 X 座標
 pub const X_ZHONGHUA: f32 = 80.0;   // 中華路 (東邊界，主幹道)
+/// 漢中街 X 座標
 pub const X_HAN: f32 = 0.0;         // 漢中街 (徒步區中軸)
+/// 西寧南路 X 座標
 pub const X_XINING: f32 = -55.0;    // 西寧南路
+/// 康定路 X 座標
 pub const X_KANGDING: f32 = -100.0; // 康定路 (西邊界)
 
 // 道路 Z 軸位置 (東西向道路，由北到南)
+/// 漢口街 Z 座標
 pub const Z_HANKOU: f32 = -80.0;  // 漢口街 (北邊界)
+/// 武昌街 Z 座標
 pub const Z_WUCHANG: f32 = -50.0; // 武昌街二段 (徒步區北)
+/// 昆明街 Z 座標
 pub const Z_KUNMING: f32 = -25.0; // 昆明街 (武昌與峨嵋之間)
+/// 峨眉街 Z 座標
 pub const Z_EMEI: f32 = 0.0;      // 峨嵋街 (徒步區中軸)
+/// 成都路 Z 座標
 pub const Z_CHENGDU: f32 = 50.0;  // 成都路 (南邊界，主幹道)
 
 // 道路寬度 (按真實比例)
+/// 中華路路寬
 pub const W_ZHONGHUA: f32 = 40.0;   // 中華路 (6-8 車道)
+/// 主要道路路寬
 pub const W_MAIN: f32 = 16.0;       // 成都路, 康定路 (2 車道 + 寬人行道)
+/// 次要道路路寬
 pub const W_SECONDARY: f32 = 12.0;  // 西寧南路, 漢口街 (2-4 車道)
+/// 行人專用區路寬
 pub const W_PEDESTRIAN: f32 = 15.0; // 漢中街, 峨嵋街, 武昌街 (徒步區)
+/// 小巷路寬
 pub const W_ALLEY: f32 = 8.0;       // 昆明街 (小巷)
 
 /// 建築物與道路之間的緩衝距離（公尺）
@@ -39,6 +55,7 @@ pub struct BuildingTracker {
 }
 
 impl BuildingTracker {
+    /// 建立新實例
     pub fn new() -> Self {
         Self { bounds: Vec::new() }
     }

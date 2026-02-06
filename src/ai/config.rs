@@ -1,3 +1,5 @@
+//! AI 設定常數與參數
+
 use bevy::prelude::*;
 
 /// AI 配置資源

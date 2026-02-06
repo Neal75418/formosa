@@ -16,8 +16,9 @@ const CAMERA_FOLLOW_SPEED: f32 = 3.0;
 #[derive(Component)]
 pub struct GameCamera;
 
-// === 攝影機輸入輔助函數 ===
-
+// ============================================================================
+// 攝影機輸入輔助函數
+// ============================================================================
 /// 處理鍵盤旋轉（目前未使用，Q/E 改為斜向移動）
 #[inline]
 fn handle_keyboard_rotation(_keyboard: &ButtonInput<KeyCode>, _camera_settings: &mut CameraSettings, _delta_secs: f32) {

@@ -3,7 +3,6 @@
 //! 處理存檔、讀檔、自動存檔邏輯
 //!
 //! 使用非同步 IO 避免阻塞主執行緒
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
@@ -12,7 +11,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
-use crate::core::{PlayerStats, WeatherState, WeatherType, WorldTime};
+use crate::core::{PlayerStats, WeatherState, WorldTime};
 use crate::economy::PlayerWallet;
 use crate::mission::{RelationshipManager, RespectManager, StoryMissionManager, UnlockManager};
 use crate::player::Player;
@@ -77,7 +76,7 @@ pub fn handle_save_input(
                 save_type: SaveType::QuickSave,
                 slot: None,
             });
-            info!("快速存檔中...");
+            info!("💾 快速存檔中...");
         }
 
     // F9 = 快速讀檔
@@ -87,7 +86,7 @@ pub fn handle_save_input(
                 load_type: LoadType::QuickLoad,
                 slot: None,
             });
-            info!("快速讀檔中...");
+            info!("💾 快速讀檔中...");
         }
 }
 
@@ -170,7 +169,7 @@ pub fn handle_save_events(
         let task = task_pool.spawn(async move { perform_save_async(json, path).await });
         task_tracker.save_task = Some(task);
 
-        info!("存檔任務已啟動: {:?}", save_path);
+        info!("💾 存檔任務已啟動: {:?}", save_path);
         break; // 一次只處理一個存檔事件
     }
 }
@@ -183,7 +182,7 @@ pub fn poll_save_task(
     if let Some(ref mut task) = task_tracker.save_task {
         if let Some(result) = future::block_on(future::poll_once(task)) {
             match result {
-                Ok(path) => info!("存檔完成: {:?}", path),
+                Ok(path) => info!("💾 存檔完成: {:?}", path),
                 Err(e) => error!("存檔失敗: {:?}", e),
             }
             task_tracker.save_task = None;
@@ -250,7 +249,7 @@ fn collect_save_data(
             .weapons
             .iter()
             .map(|w| WeaponSaveData {
-                weapon_type: format!("{:?}", w.stats.weapon_type),
+                weapon_type: w.stats.weapon_type,
                 current_ammo: w.current_ammo,
                 reserve_ammo: w.reserve_ammo,
             })
@@ -260,7 +259,7 @@ fn collect_save_data(
 
     // 世界資料
     save_data.world.world_hour = world_time.hour;
-    save_data.world.weather = format!("{:?}", weather_state.weather_type);
+    save_data.world.weather = weather_state.weather_type;
     save_data.world.weather_intensity = weather_state.intensity;
 
     // 任務資料
@@ -269,7 +268,7 @@ fn collect_save_data(
         .iter()
         .map(|id| format!("{:?}", id))
         .collect();
-    save_data.missions.unlocked_items = unlocks.unlocked_items.clone();
+    save_data.missions.unlocked_items = unlocks.unlocked_items.iter().cloned().collect();
     save_data.missions.unlocked_areas = unlocks
         .unlocked_areas
         .iter()
@@ -343,7 +342,7 @@ pub fn handle_load_events(
         let task = task_pool.spawn(async move { perform_load_async(path).await });
         task_tracker.load_task = Some(task);
 
-        info!("讀檔任務已啟動: {:?}", load_path);
+        info!("💾 讀檔任務已啟動: {:?}", load_path);
     }
 }
 
@@ -356,7 +355,7 @@ pub fn poll_load_task(
         if let Some(result) = future::block_on(future::poll_once(task)) {
             match result {
                 Ok(save_data) => {
-                    info!("讀檔完成，等待套用資料");
+                    info!("💾 讀檔完成，等待套用資料");
                     task_tracker.pending_load_data = Some(save_data);
                 }
                 Err(e) => {
@@ -411,7 +410,7 @@ pub fn apply_pending_load_data(
             &mut vehicle_mod_query,
         );
         save_manager.is_busy = false;
-        info!("存檔資料已套用");
+        info!("💾 存檔資料已套用");
     }
 }
 
@@ -518,14 +517,11 @@ fn apply_weapon_data(
     if let Ok(mut inventory) = weapon_query.single_mut() {
         inventory.weapons.clear();
         for saved_weapon in &save_data.player.weapons {
-            if let Some(stats) = weapon_stats_from_type_str(&saved_weapon.weapon_type) {
-                let mut weapon = Weapon::new(stats);
-                weapon.current_ammo = saved_weapon.current_ammo;
-                weapon.reserve_ammo = saved_weapon.reserve_ammo;
-                inventory.weapons.push(weapon);
-            } else {
-                warn!("無法解析武器類型: {}, 跳過", saved_weapon.weapon_type);
-            }
+            let stats = weapon_stats_from_type(saved_weapon.weapon_type);
+            let mut weapon = Weapon::new(stats);
+            weapon.current_ammo = saved_weapon.current_ammo;
+            weapon.reserve_ammo = saved_weapon.reserve_ammo;
+            inventory.weapons.push(weapon);
         }
 
         if inventory.weapons.is_empty() {
@@ -552,7 +548,7 @@ fn apply_world_data(
     save_data: &SaveData,
 ) {
     world_time.hour = save_data.world.world_hour;
-    weather_state.weather_type = parse_weather_type(&save_data.world.weather);
+    weather_state.weather_type = save_data.world.weather;
     weather_state.intensity = save_data.world.weather_intensity.clamp(0.0, 2.0);
     info!(
         "還原天氣: {:?}, 強度: {}",
@@ -567,7 +563,7 @@ fn apply_mission_data(
     save_data: &SaveData,
 ) {
     story_manager.completed_count = save_data.missions.completed_missions.len() as u32;
-    unlocks.unlocked_items = save_data.missions.unlocked_items.clone();
+    unlocks.unlocked_items = save_data.missions.unlocked_items.iter().cloned().collect();
     unlocks.unlocked_areas = save_data
         .missions
         .unlocked_areas
@@ -651,7 +647,7 @@ pub fn handle_auto_save(
                 slot: None,
             });
             save_manager.time_since_auto_save = 0.0;
-            info!("自動存檔觸發: {:?}", event.reason);
+            info!("💾 自動存檔: {:?}", event.reason);
         }
     }
 
@@ -666,7 +662,7 @@ pub fn handle_auto_save(
                     slot: None,
                 });
                 save_manager.time_since_auto_save = 0.0;
-                info!("定時自動存檔");
+                info!("💾 定時自動存檔");
             }
     }
 }
@@ -711,12 +707,7 @@ fn validate_save_data(data: &SaveData) -> Result<(), SaveError> {
     validate_world_data(&data.world)?;
     validate_vehicle_data(&data.world)?;
 
-    // 武器類型驗證（僅警告）
-    for weapon in &data.player.weapons {
-        if !is_valid_weapon_type(&weapon.weapon_type) {
-            warn!("未知武器類型: {}, 讀檔時將跳過", weapon.weapon_type);
-        }
-    }
+    // 武器類型已由 serde 反序列化時驗證，無需額外檢查
 
     Ok(())
 }
@@ -776,56 +767,15 @@ fn validate_vehicle_data(world: &WorldSaveData) -> Result<(), SaveError> {
     Ok(())
 }
 
-/// 檢查武器類型是否有效
-fn is_valid_weapon_type(weapon_type: &str) -> bool {
-    parse_weapon_type(weapon_type).is_some()
-}
-
-/// 解析武器類型字串為 WeaponType
-fn parse_weapon_type(weapon_type: &str) -> Option<WeaponType> {
+/// 根據武器類型取得 WeaponStats
+fn weapon_stats_from_type(weapon_type: WeaponType) -> WeaponStats {
     match weapon_type {
-        "Fist" => Some(WeaponType::Fist),
-        "Staff" => Some(WeaponType::Staff),
-        "Knife" => Some(WeaponType::Knife),
-        "Pistol" => Some(WeaponType::Pistol),
-        "SMG" => Some(WeaponType::SMG),
-        "Shotgun" => Some(WeaponType::Shotgun),
-        "Rifle" => Some(WeaponType::Rifle),
-        // 相容舊存檔的別名
-        "AssaultRifle" => Some(WeaponType::Rifle),
-        "Sniper" => Some(WeaponType::Rifle),
-        "RPG" => Some(WeaponType::Shotgun), // 暫時映射
-        "Melee" => Some(WeaponType::Fist),
-        _ => None,
-    }
-}
-
-/// 根據武器類型字串取得 WeaponStats
-fn weapon_stats_from_type_str(weapon_type: &str) -> Option<WeaponStats> {
-    match weapon_type {
-        "Fist" | "Melee" => Some(WeaponStats::fist()),
-        "Staff" => Some(WeaponStats::staff()),
-        "Knife" => Some(WeaponStats::knife()),
-        "Pistol" => Some(WeaponStats::pistol()),
-        "SMG" => Some(WeaponStats::smg()),
-        "Shotgun" | "RPG" => Some(WeaponStats::shotgun()),
-        "Rifle" | "AssaultRifle" | "Sniper" => Some(WeaponStats::rifle()),
-        _ => None,
-    }
-}
-
-/// 解析天氣類型字串為 WeatherType
-fn parse_weather_type(weather: &str) -> WeatherType {
-    match weather {
-        "Clear" => WeatherType::Clear,
-        "Cloudy" => WeatherType::Cloudy,
-        "Rainy" => WeatherType::Rainy,
-        "Foggy" => WeatherType::Foggy,
-        "Stormy" => WeatherType::Stormy,
-        "Sandstorm" => WeatherType::Sandstorm,
-        _ => {
-            warn!("未知天氣類型: {}, 使用預設 Clear", weather);
-            WeatherType::Clear
-        }
+        WeaponType::Fist => WeaponStats::fist(),
+        WeaponType::Staff => WeaponStats::staff(),
+        WeaponType::Knife => WeaponStats::knife(),
+        WeaponType::Pistol => WeaponStats::pistol(),
+        WeaponType::SMG => WeaponStats::smg(),
+        WeaponType::Shotgun => WeaponStats::shotgun(),
+        WeaponType::Rifle => WeaponStats::rifle(),
     }
 }

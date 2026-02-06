@@ -2,7 +2,6 @@
 //!
 //! 5 星通緝時出動，追蹤玩家並使用機槍射擊。
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -137,6 +136,7 @@ pub struct HelicopterRotor {
 }
 
 impl HelicopterRotor {
+    /// 主旋翼旋轉部件
     pub fn main() -> Self {
         Self {
             rotation_speed: MAIN_ROTOR_SPEED,
@@ -144,6 +144,7 @@ impl HelicopterRotor {
         }
     }
 
+    /// 尾旋翼旋轉部件
     pub fn tail() -> Self {
         Self {
             rotation_speed: TAIL_ROTOR_SPEED,
@@ -307,7 +308,7 @@ pub fn spawn_helicopter_system(
     // 生成直升機實體
     let _helicopter_id = spawn_helicopter(&mut commands, &visuals, spawn_pos);
 
-    info!("警用直升機出動！位置: {:?}", spawn_pos);
+    info!("🚁 警用直升機出動: {:?}", spawn_pos);
 
     // 重置冷卻（count 由下一幀的 query 自動更新）
     spawn_state.cooldown = HELICOPTER_SPAWN_COOLDOWN;
@@ -812,7 +813,7 @@ pub fn helicopter_damage_system(
         if helicopter.state == HelicopterState::Crashing && transform.translation.y <= 0.5 {
             commands.entity(entity).despawn();
             spawn_state.count = spawn_state.count.saturating_sub(1);
-            info!("直升機墜毀！");
+            info!("🚁 直升機墜毀！");
         }
     }
 }

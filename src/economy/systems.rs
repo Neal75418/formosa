@@ -2,7 +2,6 @@
 //!
 //! 處理金錢同步、商店互動、ATM 操作
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -137,14 +136,15 @@ pub fn handle_shop_interaction(
             menu_state.shop_type = Some(shop.shop_type);
             menu_state.selected_index = 0;
             interaction.consume();
-            info!("開啟商店: {}", shop.name);
+            info!("🏪 開啟商店: {}", shop.name);
             break;
         }
     }
 }
 
-// === 商店選單輔助函數 ===
-
+// ============================================================================
+// 商店選單輔助函數
+// ============================================================================
 /// 處理商店選單導航（上下選擇）
 fn handle_shop_navigation(keyboard: &ButtonInput<KeyCode>, selected_index: &mut usize, item_count: usize) {
     let up_pressed = keyboard.just_pressed(KeyCode::KeyW) || keyboard.just_pressed(KeyCode::ArrowUp);
@@ -176,11 +176,11 @@ fn try_purchase_item(
     match item.category {
         ItemCategory::Food | ItemCategory::Drink => {
             let healed = health.heal(item.effect_value);
-            info!("購買成功: {} (-${}) - 回復 {} HP", item.name, item.price, healed);
+            info!("🛒 購買: {} (-${}), 回復 {} HP", item.name, item.price, healed);
         }
         ItemCategory::Armor => {
             let added = armor.add(item.effect_value);
-            info!("購買成功: {} (-${}) - 護甲 +{}", item.name, item.price, added);
+            info!("🛒 購買: {} (-${}), 護甲 +{}", item.name, item.price, added);
         }
         ItemCategory::Weapon => {
             // 根據 item.id 確定武器類型
@@ -195,9 +195,9 @@ fn try_purchase_item(
                 }
             };
             if weapon_inventory.add_weapon(weapon) {
-                info!("購買成功: {} (-${})", item.name, item.price);
+                info!("🛒 購買: {} (-${})", item.name, item.price);
             } else {
-                info!("購買成功: {} (-${}) - 已有此武器，補充彈藥", item.name, item.price);
+                info!("🛒 購買: {} (-${}), 已有此武器，補充彈藥", item.name, item.price);
             }
         }
         ItemCategory::Ammo => {
@@ -223,14 +223,13 @@ fn try_purchase_item(
                 }
             }
             if found {
-                info!("購買成功: {} (-${}) - 彈藥 +{}", item.name, item.price, ammo_added);
+                info!("🛒 購買: {} (-${}), 彈藥 +{}", item.name, item.price, ammo_added);
             } else {
-                info!("購買成功: {} (-${}) - 尚未擁有此武器，彈藥已儲存", item.name, item.price);
+                info!("🛒 購買: {} (-${}), 尚未擁有此武器，彈藥已儲存", item.name, item.price);
             }
         }
         ItemCategory::Clothing | ItemCategory::VehiclePart => {
-            // 服裝和車輛配件暫不實現
-            info!("購買成功: {} (-${}) - 功能開發中", item.name, item.price);
+            info!("🛒 購買: {} (-${}), 功能開發中", item.name, item.price);
         }
     }
 
@@ -326,14 +325,15 @@ pub fn handle_atm_interaction(
             menu_state.mode = AtmMode::Main;
             menu_state.input_amount = 0;
             interaction.consume();
-            info!("開啟 ATM: {}", atm.name);
+            info!("🏧 開啟 ATM: {}", atm.name);
             break;
         }
     }
 }
 
-// === ATM 選單輔助函數 ===
-
+// ============================================================================
+// ATM 選單輔助函數
+// ============================================================================
 /// 處理 ATM ESC 按鍵
 /// 返回 true 表示已處理並應返回
 fn handle_atm_escape(keyboard: &ButtonInput<KeyCode>, menu_state: &mut AtmMenuState) -> bool {
@@ -380,7 +380,7 @@ fn handle_atm_withdraw(
             reason: MoneyChangeReason::AtmWithdraw,
             new_balance: wallet.cash,
         });
-        info!("提款成功: ${}", amount);
+        info!("🏧 提款: ${}", amount);
         menu_state.mode = AtmMode::Main;
         menu_state.input_amount = 0;
     } else {
@@ -406,7 +406,7 @@ fn handle_atm_deposit(
             reason: MoneyChangeReason::AtmDeposit,
             new_balance: wallet.cash,
         });
-        info!("存款成功: ${}", amount);
+        info!("🏧 存款: ${}", amount);
         menu_state.mode = AtmMode::Main;
         menu_state.input_amount = 0;
     } else {
@@ -548,7 +548,7 @@ pub fn update_cash_pickups(
                 reason: MoneyChangeReason::Pickup,
                 new_balance: wallet.cash,
             });
-            info!("撿取 ${}", pickup.amount);
+            info!("💰 撿取 ${}", pickup.amount);
             commands.entity(entity).despawn();
         }
     }

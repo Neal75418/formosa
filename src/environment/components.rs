@@ -1,5 +1,4 @@
 //! 環境互動組件
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use crate::core::{EntityPool, calculate_fade_alpha};
@@ -164,6 +163,7 @@ pub struct Debris {
 }
 
 impl Debris {
+    /// 建立新實例
     pub fn new(material: DestructibleMaterial, velocity: Vec3) -> Self {
         Self {
             material,
@@ -211,6 +211,7 @@ pub struct DestructionEvent {
 }
 
 impl DestructionEvent {
+    /// 建立新實例
     pub fn new(entity: Entity, position: Vec3, material: DestructibleMaterial, size: Vec3) -> Self {
         Self {
             entity,
@@ -221,6 +222,7 @@ impl DestructionEvent {
         }
     }
 
+    /// 設定衝擊方向
     pub fn with_impact_direction(mut self, direction: Vec3) -> Self {
         self.impact_direction = Some(direction);
         self
@@ -244,6 +246,7 @@ pub struct DebrisPool {
 }
 
 impl DebrisPool {
+    /// 建立新實例
     pub fn new(max_size: usize) -> Self {
         Self {
             pool: EntityPool::new(max_size),
@@ -337,6 +340,7 @@ pub struct DestructibleVisuals {
 }
 
 impl DestructibleVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             // 玻璃碎片（三角形薄片）

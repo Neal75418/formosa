@@ -1,7 +1,6 @@
 //! AI 小隊系統
 //!
 //! 實現 GTA 5 風格的 AI 包抄戰術，敵人會協調進攻。
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -136,6 +135,9 @@ impl SquadMember {
 // 小隊管理器
 // ============================================================================
 
+/// 同時追蹤的最大小隊目標數量
+const MAX_SQUAD_TARGETS: usize = 64;
+
 /// 小隊管理器資源
 /// 追蹤所有活躍小隊及其成員
 #[derive(Resource, Default, Debug)]
@@ -149,6 +151,7 @@ pub struct SquadManager {
 }
 
 impl SquadManager {
+    /// 建立新實例
     pub fn new() -> Self {
         Self {
             next_squad_id: 1,
@@ -167,6 +170,14 @@ impl SquadManager {
     /// 設定小隊的主要目標
     pub fn set_squad_target(&mut self, squad_id: u32, target: Vec3) {
         self.squad_targets.insert(squad_id, target);
+        // 超過上限時移除最舊（ID 最小）的條目
+        while self.squad_targets.len() > MAX_SQUAD_TARGETS {
+            if let Some(&oldest_id) = self.squad_targets.keys().min() {
+                self.squad_targets.remove(&oldest_id);
+            } else {
+                break;
+            }
+        }
     }
 
     /// 清除小隊目標
@@ -310,8 +321,9 @@ pub fn evaluate_flank_quality(target_pos: Vec3, ally_positions: &[Vec3]) -> f32 
 // 小隊協調系統 (GTA 5 風格包抄戰術)
 // ============================================================================
 
-// === 小隊協調系統輔助函數 ===
-
+// ============================================================================
+// 小隊協調系統輔助函數
+// ============================================================================
 /// 檢查是否在戰鬥狀態中可執行包抄
 /// 返回 true 表示應該跳過此敵人
 #[inline]

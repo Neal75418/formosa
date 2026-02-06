@@ -15,8 +15,9 @@ use super::components::{
 use super::constants::*;
 use super::minimap::spawn_map_layer;
 
-// === 輔助函數 ===
-
+// ============================================================================
+// 輔助函數
+// ============================================================================
 /// 生成狀態條填充（填充層+高光層）
 fn spawn_status_bar_fill(
     parent: &mut ChildSpawnerCommands,
@@ -223,8 +224,9 @@ fn spawn_pause_title_bar(parent: &mut ChildSpawnerCommands) {
     ));
 }
 
-// === 分區設置函數 ===
-
+// ============================================================================
+// 分區設置函數
+// ============================================================================
 /// 設置左下角 GTA 風格玩家狀態區（血量條、護甲條）
 fn setup_player_status_hud(commands: &mut Commands, font: &Handle<Font>) {
     // 外發光層

@@ -884,18 +884,6 @@ fn test_punch_animation_default() {
 }
 
 #[test]
-fn test_punch_animation_progress() {
-    let mut anim = PunchAnimation::default();
-    assert_eq!(anim.progress(), 0.0);
-
-    anim.timer = 0.15;
-    assert_eq!(anim.progress(), 0.5);
-
-    anim.timer = 0.3;
-    assert_eq!(anim.progress(), 1.0);
-}
-
-#[test]
 fn test_punch_animation_is_finished() {
     let mut anim = PunchAnimation::default();
     assert!(!anim.is_finished());
@@ -939,4 +927,84 @@ fn test_bleed_constants() {
     assert_eq!(BLEED_DAMAGE_PER_SECOND, 5.0);
     assert_eq!(BLEED_DURATION, 4.0);
     assert_eq!(BLEED_CHANCE, 0.35);
+}
+
+// ============================================================================
+// Weapon 方法封裝測試（#16 新增方法）
+// ============================================================================
+
+#[test]
+fn test_weapon_tick_cooldown() {
+    let mut weapon = Weapon::new(WeaponStats::pistol());
+    weapon.fire_cooldown = 1.0;
+    weapon.tick_cooldown(0.3);
+    assert!((weapon.fire_cooldown - 0.7).abs() < 0.001);
+
+    weapon.tick_cooldown(1.0);
+    assert_eq!(weapon.fire_cooldown, 0.0);
+}
+
+#[test]
+fn test_weapon_tick_cooldown_already_zero() {
+    let mut weapon = Weapon::new(WeaponStats::pistol());
+    weapon.tick_cooldown(0.5);
+    assert_eq!(weapon.fire_cooldown, 0.0);
+}
+
+#[test]
+fn test_weapon_tick_reload() {
+    let mut weapon = Weapon::new(WeaponStats::pistol());
+    weapon.consume_ammo();
+    weapon.start_reload();
+    assert!(weapon.is_reloading);
+
+    let still_reloading = weapon.tick_reload(0.5);
+    assert!(still_reloading);
+    assert!(weapon.is_reloading);
+
+    let still_reloading = weapon.tick_reload(5.0);
+    assert!(still_reloading);
+    assert!(!weapon.is_reloading);
+    assert_eq!(weapon.current_ammo, 12);
+}
+
+#[test]
+fn test_weapon_tick_reload_not_reloading() {
+    let mut weapon = Weapon::new(WeaponStats::pistol());
+    assert!(!weapon.tick_reload(0.5));
+}
+
+#[test]
+fn test_weapon_is_cooling_down() {
+    let mut weapon = Weapon::new(WeaponStats::pistol());
+    assert!(!weapon.is_cooling_down());
+
+    weapon.fire_cooldown = 0.5;
+    assert!(weapon.is_cooling_down());
+}
+
+#[test]
+fn test_weapon_set_fire_cooldown() {
+    let mut weapon = Weapon::new(WeaponStats::pistol());
+    weapon.set_fire_cooldown(0.75);
+    assert_eq!(weapon.fire_cooldown, 0.75);
+}
+
+#[test]
+fn test_weapon_reset_fire_cooldown() {
+    let mut weapon = Weapon::new(WeaponStats::pistol());
+    weapon.reset_fire_cooldown();
+    assert_eq!(weapon.fire_cooldown, weapon.stats.fire_rate);
+}
+
+#[test]
+fn test_weapon_effective_range() {
+    let weapon = Weapon::new(WeaponStats::rifle());
+    assert_eq!(weapon.effective_range(), weapon.stats.range);
+}
+
+#[test]
+fn test_weapon_base_damage() {
+    let weapon = Weapon::new(WeaponStats::shotgun());
+    assert_eq!(weapon.base_damage(), weapon.stats.damage);
 }

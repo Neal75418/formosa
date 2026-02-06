@@ -1,11 +1,10 @@
 //! 對話系統資料結構
 //!
 //! 定義對話樹、對話節點、選項分支等資料結構
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use super::story_data::{DialogueId, NpcId, StoryMissionId};
 
@@ -330,8 +329,8 @@ impl DialogueTree {
 pub struct DialogueState {
     /// 當前進行中的對話樹
     pub active_dialogue: Option<ActiveDialogue>,
-    /// 對話歷史記錄（用於回顧）
-    pub history: Vec<DialogueHistoryEntry>,
+    /// 對話歷史記錄（用於回顧）- 使用 VecDeque 以 O(1) 移除舊記錄
+    pub history: VecDeque<DialogueHistoryEntry>,
     /// 最大歷史記錄數
     pub max_history: usize,
 }

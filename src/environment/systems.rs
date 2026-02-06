@@ -1,6 +1,5 @@
 //! 環境互動系統
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -23,8 +22,9 @@ pub fn setup_destructible_visuals(
     info!("💥 可破壞環境系統已初始化（含碎片物件池）");
 }
 
-// === 可破壞物件輔助函數 ===
-
+// ============================================================================
+// 可破壞物件輔助函數
+// ============================================================================
 /// 處理單個可破壞物件的傷害
 fn process_destructible_damage(
     commands: &mut Commands,
@@ -101,8 +101,9 @@ pub fn destructible_damage_system(
     }
 }
 
-// === 碎片生成輔助函數 ===
-
+// ============================================================================
+// 碎片生成輔助函數
+// ============================================================================
 /// 碎片生成參數
 struct DebrisSpawnParams {
     position: Vec3,
@@ -271,8 +272,9 @@ pub fn destruction_effect_system(
     }
 }
 
-// === 碎片更新輔助函數 ===
-
+// ============================================================================
+// 碎片更新輔助函數
+// ============================================================================
 /// 處理碎片的物理更新
 fn update_debris_physics(debris: &mut Debris, transform: &mut Transform, dt: f32) {
     // 重力
@@ -369,6 +371,7 @@ pub struct DestructibleMaterialCache {
 }
 
 impl DestructibleMaterialCache {
+    /// 建立新實例
     pub fn new(materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             glass: materials.add(StandardMaterial {

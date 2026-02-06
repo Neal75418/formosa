@@ -56,22 +56,28 @@ impl Plugin for CombatPlugin {
             .add_systems(Startup, setup_explosive_visuals)
             // 武器模型在 PostStartup 生成，確保玩家實體已完全創建
             .add_systems(PostStartup, spawn_player_weapons)
-            // 更新系統 - 第一組（武器和射擊）
+            // 更新系統 - 第一組（武器和射擊）- 使用精確依賴
             .add_systems(
                 Update,
                 (
+                    // 獨立系統（可並行）
                     spawn_player_weapons,
                     weapon_visibility_system,
                     weapon_visibility_init_system,
+                    weapon_cooldown_system, // 純計時器更新，無依賴
+                    // 輸入處理
                     shooting_input_system,
-                    holding_pose_system,
-                    weapon_cooldown_system,
-                    reload_system,
-                    punch_animation_trigger_system,
-                    fire_weapon_system,
-                    punch_animation_update_system,
+                    // 依賴輸入的系統
+                    (
+                        holding_pose_system,
+                        reload_system,
+                        fire_weapon_system,
+                        punch_animation_trigger_system,
+                    )
+                        .after(shooting_input_system),
+                    // 動畫更新依賴觸發
+                    punch_animation_update_system.after(punch_animation_trigger_system),
                 )
-                    .chain()
                     .run_if(in_state(AppState::InGame)),
             )
             // 更新系統 - 傷害處理（參數過多，無法使用 run_if，改在系統內部檢查暫停）

@@ -1,6 +1,8 @@
 //! 存檔系統單元測試
 
 use super::components::*;
+use crate::combat::WeaponType;
+use crate::core::WeatherType;
 use std::path::PathBuf;
 
 // ============================================================================
@@ -128,12 +130,12 @@ fn test_player_save_data_with_weapons() {
     let player_data = PlayerSaveData {
         weapons: vec![
             WeaponSaveData {
-                weapon_type: "pistol".to_string(),
+                weapon_type: WeaponType::Pistol,
                 current_ammo: 12,
                 reserve_ammo: 60,
             },
             WeaponSaveData {
-                weapon_type: "smg".to_string(),
+                weapon_type: WeaponType::SMG,
                 current_ammo: 30,
                 reserve_ammo: 120,
             },
@@ -145,9 +147,9 @@ fn test_player_save_data_with_weapons() {
     let loaded: PlayerSaveData = serde_json::from_str(&json).expect("Deserialization failed");
 
     assert_eq!(loaded.weapons.len(), 2);
-    assert_eq!(loaded.weapons[0].weapon_type, "pistol");
+    assert_eq!(loaded.weapons[0].weapon_type, WeaponType::Pistol);
     assert_eq!(loaded.weapons[0].current_ammo, 12);
-    assert_eq!(loaded.weapons[1].weapon_type, "smg");
+    assert_eq!(loaded.weapons[1].weapon_type, WeaponType::SMG);
 }
 
 // ============================================================================
@@ -159,7 +161,7 @@ fn test_world_save_data_default() {
     let world_data = WorldSaveData::default();
 
     assert_eq!(world_data.world_hour, 8.0);
-    assert_eq!(world_data.weather, "Clear");
+    assert_eq!(world_data.weather, WeatherType::Clear);
     assert_eq!(world_data.weather_intensity, 1.0);
     assert!(!world_data.unlocked_safehouses.is_empty());
 }

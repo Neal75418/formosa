@@ -1,10 +1,12 @@
 //! 劇情任務資料結構
 //!
 //! 定義主線劇情任務的所有資料類型，支援多階段任務、解鎖條件和獎勵系統。
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::combat::{EnemyType, WeaponType};
+use crate::vehicle::VehicleType;
 
 /// 劇情任務 ID
 pub type StoryMissionId = u32;
@@ -227,12 +229,12 @@ pub enum FailCondition {
 pub struct EnemySpawnData {
     /// 生成位置
     pub position: Vec3,
-    /// 敵人類型標記
-    pub enemy_type: String,
+    /// 敵人類型
+    pub enemy_type: EnemyType,
     /// 巡邏路徑
     pub patrol_path: Option<Vec<Vec3>>,
     /// 武器覆蓋
-    pub weapon_override: Option<String>,
+    pub weapon_override: Option<WeaponType>,
     /// 是否為 Boss
     #[serde(default)]
     pub is_boss: bool,
@@ -411,10 +413,10 @@ pub struct MissionRewards {
     pub respect: u32,
     /// 解鎖武器
     #[serde(default)]
-    pub unlock_weapons: Vec<String>,
+    pub unlock_weapons: Vec<WeaponType>,
     /// 解鎖車輛
     #[serde(default)]
-    pub unlock_vehicles: Vec<String>,
+    pub unlock_vehicles: Vec<VehicleType>,
     /// 解鎖區域
     #[serde(default)]
     pub unlock_areas: Vec<AreaId>,
@@ -448,13 +450,13 @@ impl MissionRewards {
     }
 
     /// 解鎖武器
-    pub fn unlock_weapon(mut self, weapon: String) -> Self {
+    pub fn unlock_weapon(mut self, weapon: WeaponType) -> Self {
         self.unlock_weapons.push(weapon);
         self
     }
 
     /// 解鎖車輛
-    pub fn unlock_vehicle(mut self, vehicle: String) -> Self {
+    pub fn unlock_vehicle(mut self, vehicle: VehicleType) -> Self {
         self.unlock_vehicles.push(vehicle);
         self
     }

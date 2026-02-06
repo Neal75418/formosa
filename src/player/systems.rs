@@ -6,18 +6,23 @@ use super::{
     VehicleTransitionState,
 };
 use crate::combat::{CombatState, PlayerCoverState, RespawnState};
-use crate::core::{GameState, InteractionState};
+use crate::core::{ease_in_out_cubic, rapier_real_to_f32, GameState, InteractionState};
 use crate::pedestrian::Pedestrian;
 use crate::vehicle::{apply_vehicle_physics_mode, NpcVehicle, Vehicle, VehiclePhysicsMode};
 use crate::wanted::CrimeEvent;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *}; // 引入 Rapier 物理引擎類型 (RapierContext, QueryFilter 等)
 
-/// 將 Rapier 的 Real 類型轉換為 f32
-/// 注意：bevy_rapier3d 0.32 的 Real 目前就是 f32，但使用明確轉換確保未來版本兼容性
-#[inline]
-fn rapier_real_to_f32(r: bevy_rapier3d::prelude::Real) -> f32 {
-    r as f32  // 明確轉換，即使當前版本 Real == f32
+/// 玩家移動系統資源參數包
+#[derive(SystemParam)]
+pub struct PlayerMovementState<'w> {
+    pub time: Res<'w, Time>,
+    pub game_state: Res<'w, GameState>,
+    pub respawn_state: Res<'w, RespawnState>,
+    pub combat_state: Res<'w, CombatState>,
+    pub camera_settings: Res<'w, crate::core::CameraSettings>,
+    pub config: Res<'w, PlayerConfig>,
 }
 
 /// 玩家輸入處理（按住 Shift 衝刺）
@@ -125,16 +130,10 @@ fn update_character_rotation(
 /// - 滑鼠左右鍵同時按 = 直走（跟隨視角方向）
 /// - 瞄準時角色面向攝影機方向
 /// - 閃避期間不處理普通移動（由閃避系統接管）
-#[allow(clippy::too_many_arguments)]
 pub fn player_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse_button: Res<ButtonInput<MouseButton>>,
-    time: Res<Time>,
-    game_state: Res<GameState>,
-    respawn_state: Res<RespawnState>,
-    combat_state: Res<CombatState>,
-    camera_settings: Res<crate::core::CameraSettings>,
-    config: Res<PlayerConfig>,
+    state: PlayerMovementState,
     mut query: Query<(
         &mut Transform,
         &mut Player,
@@ -145,7 +144,7 @@ pub fn player_movement(
         &mut PlayerSprintState,
     )>,
 ) {
-    if respawn_state.is_dead || game_state.player_in_vehicle {
+    if state.respawn_state.is_dead || state.game_state.player_in_vehicle {
         return;
     }
 
@@ -161,14 +160,14 @@ pub fn player_movement(
     }
 
     let input = calculate_movement_input(&keyboard, &mouse_button, cover_state.is_in_cover);
-    let yaw = camera_settings.yaw;
-    let dt = time.delta_secs();
+    let yaw = state.camera_settings.yaw;
+    let dt = state.time.delta_secs();
 
     // 判斷是否為「向前移動」（W 鍵或滑鼠雙鍵直走，且沒有後退）
     let is_forward_movement = input.z < 0.0 && input.z.abs() >= input.x.abs();
 
     // 瞄準時始終更新朝向
-    if combat_state.is_aiming && input == Vec3::ZERO {
+    if state.combat_state.is_aiming && input == Vec3::ZERO {
         transform.rotation = Quat::from_rotation_y(yaw + std::f32::consts::PI);
     }
 
@@ -217,14 +216,14 @@ pub fn player_movement(
 
     // === 動態轉向速度：高速時轉向較慢（更真實） ===
     let speed_ratio = (player.current_speed / player.sprint_speed).clamp(0.0, 1.0);
-    let dynamic_rotation_speed = config.movement.turn_speed_walk
-        + (config.movement.turn_speed_sprint - config.movement.turn_speed_walk) * speed_ratio;
+    let dynamic_rotation_speed = state.config.movement.turn_speed_walk
+        + (state.config.movement.turn_speed_sprint - state.config.movement.turn_speed_walk) * speed_ratio;
 
     update_character_rotation(
         &mut transform,
         direction,
         yaw,
-        combat_state.is_aiming,
+        state.combat_state.is_aiming,
         is_forward_movement,
         dt,
         dynamic_rotation_speed,
@@ -470,8 +469,9 @@ fn can_enter_vehicle(
     Some(distance)
 }
 
-// === 閃避系統 ===
-
+// ============================================================================
+// 閃避系統
+// ============================================================================
 /// 閃避偵測系統（雙擊方向鍵觸發閃避）
 pub fn dodge_detection_system(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -597,6 +597,7 @@ pub fn vehicle_transition_animation_system(
 
     // 根據當前階段處理動畫
     let progress = ease_in_out_cubic(transition.progress.clamp(0.0, 1.0));
+    let ground_y = config.interaction.exit_ground_offset;
 
     match transition.phase {
         VehicleTransitionPhase::WalkingToVehicle => {
@@ -605,11 +606,12 @@ pub fn vehicle_transition_animation_system(
                 .start_position
                 .lerp(transition.target_position, progress);
             player_transform.translation = new_pos;
-            player_transform.translation.y = 0.7; // 保持正確高度
+            player_transform.translation.y = ground_y;
 
             // 面向車輛
-            let to_vehicle = (vehicle_pos - player_transform.translation).normalize();
-            if to_vehicle.length_squared() > 0.01 {
+            let to_vehicle_delta = vehicle_pos - player_transform.translation;
+            if to_vehicle_delta.length_squared() > 0.01 {
+                let to_vehicle = to_vehicle_delta.normalize();
                 let target_rotation = Quat::from_rotation_y((-to_vehicle.x).atan2(-to_vehicle.z));
                 player_transform.rotation = player_transform.rotation.slerp(target_rotation, 0.2);
             }
@@ -635,7 +637,7 @@ pub fn vehicle_transition_animation_system(
             if progress > 0.3 {
                 set_player_visibility(&mut visibility_query, true);
                 player_transform.translation = vehicle_pos;
-                player_transform.translation.y = 0.7;
+                player_transform.translation.y = ground_y;
             }
         }
         VehicleTransitionPhase::ExitingVehicle => {
@@ -644,21 +646,26 @@ pub fn vehicle_transition_animation_system(
                 .start_position
                 .lerp(transition.target_position, progress);
             player_transform.translation = new_pos;
-            player_transform.translation.y = 0.7;
+            player_transform.translation.y = ground_y;
             set_player_visibility(&mut visibility_query, true);
         }
         VehicleTransitionPhase::ClosingDoorExit => {
             // 門正在關閉
             player_transform.translation = transition.target_position;
-            player_transform.translation.y = 0.7;
+            player_transform.translation.y = ground_y;
         }
         VehicleTransitionPhase::WalkingAway => {
             // 玩家走離車輛（小距離移動）
-            let away_dir = (transition.target_position - vehicle_pos).normalize();
+            let away_delta = transition.target_position - vehicle_pos;
+            let away_dir = if away_delta.length_squared() > 1e-6 {
+                away_delta.normalize()
+            } else {
+                Vec3::Z // 預設朝前走
+            };
             let final_pos = transition.target_position + away_dir * 0.5;
             let new_pos = transition.target_position.lerp(final_pos, progress);
             player_transform.translation = new_pos;
-            player_transform.translation.y = 0.7;
+            player_transform.translation.y = ground_y;
         }
         VehicleTransitionPhase::None => {}
     }
@@ -782,11 +789,3 @@ fn handle_exit_vehicle_complete(
     game_state.current_vehicle = None;
 }
 
-/// 緩入緩出曲線（用於平滑位置插值）
-fn ease_in_out_cubic(t: f32) -> f32 {
-    if t < 0.5 {
-        4.0 * t * t * t
-    } else {
-        1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
-    }
-}

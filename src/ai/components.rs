@@ -1,7 +1,6 @@
 //! AI 組件
 //!
 //! 定義 AI 狀態機、感知、巡邏等組件。
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use crate::core::{clamp_dot, safe_normalize};
@@ -21,6 +20,32 @@ pub enum AiState {
     Attack,     // 攻擊：在攻擊範圍內，開火
     Flee,       // 逃跑：血量過低
     TakingCover, // 躲掩體：血量低時尋找掩體
+}
+
+impl AiState {
+    /// 檢查是否可以從當前狀態轉換到目標狀態
+    pub fn can_transition_to(&self, target: &AiState) -> bool {
+        if self == target {
+            return true;
+        }
+        matches!(
+            (self, target),
+            // Idle 可以進入巡邏、警戒，或直接看到目標時追逐/逃跑
+            (AiState::Idle, AiState::Patrol | AiState::Alert | AiState::Chase | AiState::Flee)
+            // Patrol 可以回到閒置、進入警戒，或直接看到目標時追逐/逃跑
+            | (AiState::Patrol, AiState::Idle | AiState::Alert | AiState::Chase | AiState::Flee)
+            // Alert 是中樞狀態，可以轉換到大部分狀態
+            | (AiState::Alert, AiState::Chase | AiState::Attack | AiState::Flee | AiState::Idle | AiState::Patrol)
+            // Chase 可以進入攻擊、回到警戒或開始逃跑
+            | (AiState::Chase, AiState::Attack | AiState::Alert | AiState::Flee)
+            // Attack 可以追逐、警戒、逃跑或躲掩體
+            | (AiState::Attack, AiState::Chase | AiState::Alert | AiState::Flee | AiState::TakingCover)
+            // Flee 可以回到閒置或警戒（脫離威脅後）
+            | (AiState::Flee, AiState::Idle | AiState::Alert)
+            // TakingCover 可以回到警戒、攻擊或逃跑
+            | (AiState::TakingCover, AiState::Alert | AiState::Attack | AiState::Flee)
+        )
+    }
 }
 
 /// AI 行為組件
@@ -66,6 +91,12 @@ impl AiBehavior {
     /// 設定新狀態
     pub fn set_state(&mut self, new_state: AiState, time: f32) {
         if self.state != new_state {
+            debug_assert!(
+                self.state.can_transition_to(&new_state),
+                "Invalid AI state transition: {:?} -> {:?}",
+                self.state,
+                new_state
+            );
             self.state = new_state;
             self.state_timer = 0.0;
             self.last_state_change = time;
@@ -115,7 +146,7 @@ pub struct AiPerception {
     /// 是否能看到目標
     pub can_see_target: bool,
     /// 是否聽到聲音
-    pub heard_noise: bool,
+    pub has_heard_noise: bool,
     /// 聽到聲音的位置
     pub noise_position: Option<Vec3>,
 }
@@ -127,19 +158,21 @@ impl Default for AiPerception {
             sight_range: 30.0,       // 30 公尺視距
             hearing_range: 50.0,     // 50 公尺聽力
             can_see_target: false,
-            heard_noise: false,
+            has_heard_noise: false,
             noise_position: None,
         }
     }
 }
 
 impl AiPerception {
+    /// 設定感知範圍（視距與聽力距離）
     pub fn with_range(mut self, sight: f32, hearing: f32) -> Self {
         self.sight_range = sight;
         self.hearing_range = hearing;
         self
     }
 
+    /// 設定視野角度
     pub fn with_fov(mut self, fov: f32) -> Self {
         self.fov = fov;
         self
@@ -202,6 +235,7 @@ impl Default for PatrolPath {
 }
 
 impl PatrolPath {
+    /// 建立新實例
     pub fn new(waypoints: Vec<Vec3>) -> Self {
         Self {
             waypoints,
@@ -272,6 +306,7 @@ impl Default for AiMovement {
 }
 
 impl AiMovement {
+    /// 取得目前速度
     pub fn current_speed(&self) -> f32 {
         if self.is_running {
             self.run_speed
@@ -332,20 +367,24 @@ impl Default for AiCombat {
 }
 
 impl AiCombat {
+    /// 是否可攻擊
     pub fn can_attack(&self) -> bool {
         self.cooldown_timer <= 0.0 && self.burst_fired == 0
     }
 
+    /// 是否在射程內
     pub fn is_in_range(&self, my_pos: Vec3, target_pos: Vec3) -> bool {
         let attack_range_sq = self.attack_range * self.attack_range;
         my_pos.distance_squared(target_pos) <= attack_range_sq
     }
 
+    /// 開始攻擊
     pub fn start_attack(&mut self) {
         self.burst_fired = 0;
         self.burst_timer = 0.0;
     }
 
+    /// 計時器滴答
     pub fn tick(&mut self, dt: f32) {
         if self.cooldown_timer > 0.0 {
             self.cooldown_timer -= dt;
@@ -368,6 +407,7 @@ impl AiCombat {
         }
     }
 
+    /// 是否應連射下一發
     pub fn should_fire_next(&self) -> bool {
         self.burst_fired > 0 && self.burst_fired < self.burst_count && self.burst_timer <= 0.0
     }

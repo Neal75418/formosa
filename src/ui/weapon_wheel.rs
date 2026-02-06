@@ -13,12 +13,12 @@ use super::constants::BUTTON_BORDER_GRAY_60;
 use crate::combat::WeaponInventory;
 use crate::player::Player;
 
-// === 武器輪盤顏色常數 ===
+// ============================================================================
+// 武器輪盤顏色常數
+// ============================================================================
 const WEAPON_WHEEL_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.7);
 const WEAPON_WHEEL_SLOT_NORMAL: Color = Color::srgba(0.2, 0.2, 0.25, 0.8);
 const WEAPON_WHEEL_SLOT_SELECTED: Color = Color::srgba(0.85, 0.75, 0.3, 0.9);
-#[allow(dead_code)]
-const WEAPON_WHEEL_SLOT_EMPTY: Color = Color::srgba(0.15, 0.15, 0.18, 0.5);
 const WEAPON_WHEEL_TEXT: Color = Color::srgb(0.95, 0.95, 0.95);
 const WEAPON_WHEEL_AMMO: Color = Color::srgb(0.85, 0.85, 0.3);
 

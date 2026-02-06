@@ -40,7 +40,6 @@ pub use weather_hud::*;
 use bevy::ecs::schedule::SystemCondition;
 use bevy::prelude::*;
 use crate::core::{AppState, GameSet};
-use crate::core;
 
 /// UI 系統插件
 pub struct UiPlugin;
@@ -70,7 +69,6 @@ impl Plugin for UiPlugin {
             ).after(setup_chinese_font))
             // Update（核心 + UI 第一組）
             .add_systems(Update, (
-                core::handle_game_events,
                 toggle_pause,
                 button_hover_effect,
                 animate_button_scale.after(button_hover_effect),

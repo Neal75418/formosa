@@ -2,7 +2,6 @@
 //!
 //! GTA5 風格的多關節布娃娃物理，每個身體部位獨立模擬。
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -41,6 +40,7 @@ pub struct BodyPart {
 }
 
 impl BodyPart {
+    /// 頭部部件
     pub fn head() -> Self {
         Self {
             part_type: BodyPartType::Head,
@@ -51,6 +51,7 @@ impl BodyPart {
         }
     }
 
+    /// 軀幹部件
     pub fn torso() -> Self {
         Self {
             part_type: BodyPartType::Torso,
@@ -61,6 +62,7 @@ impl BodyPart {
         }
     }
 
+    /// 左臂部件
     pub fn left_arm() -> Self {
         Self {
             part_type: BodyPartType::LeftArm,
@@ -71,6 +73,7 @@ impl BodyPart {
         }
     }
 
+    /// 右臂部件
     pub fn right_arm() -> Self {
         Self {
             part_type: BodyPartType::RightArm,
@@ -81,6 +84,7 @@ impl BodyPart {
         }
     }
 
+    /// 左腿部件
     pub fn left_leg() -> Self {
         Self {
             part_type: BodyPartType::LeftLeg,
@@ -91,6 +95,7 @@ impl BodyPart {
         }
     }
 
+    /// 右腿部件
     pub fn right_leg() -> Self {
         Self {
             part_type: BodyPartType::RightLeg,
@@ -101,6 +106,7 @@ impl BodyPart {
         }
     }
 
+    /// 左腳部件
     pub fn left_foot() -> Self {
         Self {
             part_type: BodyPartType::LeftFoot,
@@ -111,6 +117,7 @@ impl BodyPart {
         }
     }
 
+    /// 右腳部件
     pub fn right_foot() -> Self {
         Self {
             part_type: BodyPartType::RightFoot,

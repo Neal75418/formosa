@@ -11,7 +11,9 @@ use super::components::{
 };
 use crate::core::{WeatherState, WeatherType};
 
-// === 天氣 HUD 顏色常數 ===
+// ============================================================================
+// 天氣 HUD 顏色常數
+// ============================================================================
 const WEATHER_HUD_BG: Color = Color::srgba(0.05, 0.08, 0.12, 0.9);
 const WEATHER_HUD_BORDER: Color = Color::srgba(0.3, 0.45, 0.55, 0.7);
 
@@ -21,8 +23,6 @@ const SUN_GLOW: Color = Color::srgba(1.0, 0.9, 0.4, 0.5);
 const CLOUD_COLOR: Color = Color::srgb(0.85, 0.88, 0.92);
 const CLOUD_DARK: Color = Color::srgb(0.6, 0.65, 0.7);
 const RAIN_COLOR: Color = Color::srgb(0.4, 0.7, 0.95);
-#[allow(dead_code)]
-const FOG_COLOR: Color = Color::srgba(0.75, 0.78, 0.82, 0.8);
 
 /// 設置天氣 HUD
 pub fn setup_weather_hud(mut commands: Commands, chinese_font: Res<ChineseFont>) {

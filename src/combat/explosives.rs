@@ -2,7 +2,6 @@
 //!
 //! 手榴彈、燃燒瓶、黏性炸彈等投擲武器
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -119,6 +118,7 @@ pub struct Explosive {
 }
 
 impl Explosive {
+    /// 建立手榴彈
     pub fn grenade(thrower: Entity) -> Self {
         Self {
             explosive_type: ExplosiveType::Grenade,
@@ -130,6 +130,7 @@ impl Explosive {
         }
     }
 
+    /// 建立汽油彈
     pub fn molotov(thrower: Entity) -> Self {
         Self {
             explosive_type: ExplosiveType::Molotov,
@@ -141,6 +142,7 @@ impl Explosive {
         }
     }
 
+    /// 建立黏性炸彈
     pub fn sticky_bomb(thrower: Entity) -> Self {
         Self {
             explosive_type: ExplosiveType::StickyBomb,
@@ -193,6 +195,7 @@ pub struct SmokeParticle {
 }
 
 impl SmokeParticle {
+    /// 建立新實例
     pub fn new(velocity: Vec3, lifetime: f32) -> Self {
         Self {
             velocity,
@@ -220,6 +223,7 @@ pub struct FireParticle {
 }
 
 impl FireParticle {
+    /// 建立新實例
     pub fn new(lifetime: f32) -> Self {
         use rand::Rng;
         let mut rng = rand::rng();
@@ -275,6 +279,7 @@ pub struct ExplosionEffect {
 }
 
 impl ExplosionEffect {
+    /// 建立新實例
     pub fn new(radius: f32, max_damage: f32, max_lifetime: f32) -> Self {
         Self {
             radius,
@@ -299,6 +304,7 @@ pub struct ShockwaveEffect {
 }
 
 impl ShockwaveEffect {
+    /// 建立新實例
     pub fn new(max_radius: f32) -> Self {
         Self {
             max_radius,
@@ -485,6 +491,7 @@ pub struct ExplosiveVisuals {
 }
 
 impl ExplosiveVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             // 手榴彈：深綠色橢圓
@@ -737,8 +744,9 @@ pub fn handle_throw_event_system(
     }
 }
 
-// === 爆炸物更新輔助函數 ===
-
+// ============================================================================
+// 爆炸物更新輔助函數
+// ============================================================================
 /// 更新手榴彈：倒數計時並引爆
 /// 返回 true 表示已引爆需要銷毀實體
 #[inline]

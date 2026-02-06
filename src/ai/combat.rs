@@ -1,3 +1,5 @@
+//! AI 攻擊系統（射擊、近戰、精度計算）
+
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -10,27 +12,22 @@ use crate::combat::{
 use crate::core::{ease_in_out_quad, ease_out_cubic, ease_out_quad};
 use crate::player::Player;
 
+/// 近戰攻擊冷卻時間（秒）
+const MELEE_FIRE_COOLDOWN: f32 = 0.5;
+
 // ============================================================================
 // 攻擊系統
 // ============================================================================
 
-// === 攻擊系統輔助函數 ===
-
+// ============================================================================
+// 攻擊系統輔助函數
+// ============================================================================
 /// 更新武器冷卻和換彈狀態
 /// 返回 true 表示正在換彈，應跳過攻擊
 #[inline]
 fn update_weapon_state(weapon: &mut Weapon, dt: f32) -> bool {
-    if weapon.fire_cooldown > 0.0 {
-        weapon.fire_cooldown = (weapon.fire_cooldown - dt).max(0.0);
-    }
-    if weapon.is_reloading {
-        weapon.reload_timer = (weapon.reload_timer - dt).max(0.0);
-        if weapon.reload_timer <= 0.0 {
-            weapon.finish_reload();
-        }
-        return true;
-    }
-    false
+    weapon.tick_cooldown(dt);
+    weapon.tick_reload(dt)
 }
 
 /// 檢查是否滿足攻擊前置條件
@@ -50,7 +47,7 @@ fn execute_melee_attack(
     enemy_entity: Entity,
     weapon: &mut Weapon,
 ) -> bool {
-    if weapon.fire_cooldown > 0.0 {
+    if weapon.is_cooling_down() {
         return false;
     }
 
@@ -69,7 +66,7 @@ fn execute_melee_attack(
         }
     }
 
-    weapon.fire_cooldown = 0.5;
+    weapon.set_fire_cooldown(MELEE_FIRE_COOLDOWN);
     true
 }
 
@@ -189,7 +186,7 @@ fn execute_ranged_attack(
     let mut rng = rand::rng();
     let hit_roll: f32 = rng.random();
     let effective_accuracy =
-        calculate_effective_accuracy(config, combat.accuracy, weapon.stats.range, target_distance);
+        calculate_effective_accuracy(config, combat.accuracy, weapon.effective_range(), target_distance);
     let tracer_end = calculate_tracer_end(
         config,
         hit_roll,
@@ -198,7 +195,7 @@ fn execute_ranged_attack(
         player_entity,
         enemy_entity,
         muzzle_pos,
-        weapon.stats.damage,
+        weapon.base_damage(),
         damage_events,
     );
 
@@ -209,7 +206,7 @@ fn execute_ranged_attack(
 
     // 消耗彈藥並更新狀態
     weapon.consume_ammo();
-    weapon.fire_cooldown = weapon.stats.fire_rate;
+    weapon.reset_fire_cooldown();
     combat.fire_once();
     true
 }
@@ -304,8 +301,9 @@ pub fn ai_attack_system(
 // 敵人揮拳動畫系統
 // ============================================================================
 
-// === 揮拳動畫輔助函數 ===
-
+// ============================================================================
+// 揮拳動畫輔助函數
+// ============================================================================
 /// 應用蓄力階段動畫
 #[inline]
 fn apply_wind_up_animation(transform: &mut Transform, arm: &EnemyArm, t: f32, wind_up_end: f32) {
@@ -379,13 +377,13 @@ pub fn enemy_punch_animation_system(
         let t = anim.timer;
 
         // 進入 Strike 階段時發送傷害事件
-        if anim.phase == PunchPhase::Strike && !anim.damage_dealt {
+        if anim.phase == PunchPhase::Strike && !anim.has_damage_dealt {
             if let (Some(target), Some(attacker)) = (anim.target, anim.attacker) {
                 damage_events.write(
                     DamageEvent::new(target, MELEE_DAMAGE, DamageSource::Melee)
                         .with_attacker(attacker),
                 );
-                anim.damage_dealt = true;
+                anim.has_damage_dealt = true;
             }
         }
 

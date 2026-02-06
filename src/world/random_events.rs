@@ -6,7 +6,6 @@
 //! - 打架
 //! - 乞丐求助
 //! - 警察追捕逃犯
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -149,6 +148,7 @@ pub struct RandomEvent {
 }
 
 impl RandomEvent {
+    /// 建立新實例
     pub fn new(event_type: RandomEventType, position: Vec3) -> Self {
         Self {
             event_type,
@@ -309,7 +309,7 @@ pub fn random_event_spawn_system(
         position: event_pos,
     });
 
-    info!("隨機事件生成: {:?} at ({:.1}, {:.1})", event_type, event_pos.x, event_pos.z);
+    info!("🎲 隨機事件: {:?} 於 ({:.1}, {:.1})", event_type, event_pos.x, event_pos.z);
 }
 
 // ============================================================================
@@ -446,7 +446,7 @@ pub fn handle_event_completed_system(
         if event.success && event.reward > 0 {
             wallet.add_cash(event.reward);
             manager.total_rewards += event.reward;
-            info!("事件完成！獲得 ${}", event.reward);
+            info!("🎲 事件完成！獎勵 ${}", event.reward);
         } else if event.reward < 0 {
             // 負獎勵表示需要支付（如幫助乞丐）
             // 使用 spend_up_to 確保統計正確

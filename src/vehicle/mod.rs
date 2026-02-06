@@ -4,15 +4,23 @@
 
 mod components;
 mod config;
+mod effects;
 mod modifications;
+mod spawning;
 mod systems;
 mod theft;
+mod traffic_lights;
+mod vehicle_damage;
 
 pub use components::*;
 pub use config::*;
+pub use effects::*;
 pub use modifications::*;
+pub use spawning::*;
 pub use systems::*;
 pub use theft::*;
+pub use traffic_lights::*;
+pub use vehicle_damage::*;
 
 use crate::core::{AppState, GameSet};
 use crate::world;

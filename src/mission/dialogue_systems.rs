@@ -1,7 +1,6 @@
 //! 對話系統邏輯
 //!
 //! 處理對話顯示、打字效果、選項選擇等
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -184,8 +183,9 @@ pub struct CameraFocusData {
     pub original_position: Option<Vec3>,
 }
 
-// === 對話事件處理輔助函數 ===
-
+// ============================================================================
+// 對話事件處理輔助函數
+// ============================================================================
 /// 處理對話開始事件
 fn handle_dialogue_start(
     dialogue_id: DialogueId,
@@ -209,7 +209,7 @@ fn handle_dialogue_start(
     }
 
     dialogue_state.active_dialogue = Some(active);
-    info!("對話開始: {} (ID: {})", tree.name, dialogue_id);
+    info!("💬 對話開始: {} (ID: {})", tree.name, dialogue_id);
 }
 
 /// 處理跳轉節點事件
@@ -318,8 +318,9 @@ pub fn dialogue_typing_system(
     }
 }
 
-// === 對話輸入輔助函數 ===
-
+// ============================================================================
+// 對話輸入輔助函數
+// ============================================================================
 /// 取得選項對應的數字鍵
 fn get_choice_key(index: usize) -> Option<KeyCode> {
     match index {
@@ -451,8 +452,9 @@ pub fn dialogue_input_system(
     }
 }
 
-// === 自動前進輔助函數 ===
-
+// ============================================================================
+// 自動前進輔助函數
+// ============================================================================
 /// 執行自動前進（跳轉或結束對話）
 fn perform_auto_advance(next_node: Option<u32>, events: &mut MessageWriter<DialogueEvent>) {
     match next_node {
@@ -931,9 +933,9 @@ fn dialogue_history_system(
         timestamp: time.elapsed_secs(),
     };
 
-    dialogue_state.history.push(entry);
+    dialogue_state.history.push_back(entry);
 
-    // 限制歷史記錄數量
+    // 限制歷史記錄數量 - O(1) 操作
     let max_history = if dialogue_state.max_history > 0 {
         dialogue_state.max_history
     } else {
@@ -941,6 +943,6 @@ fn dialogue_history_system(
     };
 
     while dialogue_state.history.len() > max_history {
-        dialogue_state.history.remove(0);
+        dialogue_state.history.pop_front();
     }
 }

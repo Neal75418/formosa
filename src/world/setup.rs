@@ -1,17 +1,25 @@
+//! 世界場景建構（西門町街道、建築、裝飾）
+
 #![allow(clippy::too_many_arguments)]
 
-// === 外部 Crate ===
+// ============================================================================
+// 外部 Crate
+// ============================================================================
 use bevy::light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, ShadowFilteringMethod};
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-// === 其他模組 (crate::) ===
+// ============================================================================
+// 其他模組 (crate::)
+// ============================================================================
 use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::player::Player;
-use crate::vehicle::{spawn_scooter, Vehicle, VehicleModifications};
+use crate::vehicle::{spawn_scooter, VehicleModifications, VehiclePreset};
 
-// === 本模組 (super::) ===
+// ============================================================================
+// 本模組 (super::)
+// ============================================================================
 // 組件與類型 (只匯入實際使用的)
 use super::{Moon, NeonSign, Sun, WorldMaterials, spawn_neon_sign};
 // 建築系統
@@ -33,11 +41,13 @@ use super::street_furniture::{
     spawn_trash_can, spawn_vending_machine,
 };
 
+
+/// 場景建構入口 — 依序初始化各子系統
 pub fn setup_world(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>, // 新增：用於載入貼圖和模型
+    asset_server: Res<AssetServer>,
 ) {
     // === 初始化共用材質快取 ===
     let world_mats = WorldMaterials::new(&mut materials);
@@ -46,6 +56,25 @@ pub fn setup_world(
     // === 初始化建築物重疊追蹤器 ===
     let mut building_tracker = BuildingTracker::new();
 
+    setup_camera_and_lighting(&mut commands, &mut meshes, &mut materials);
+    setup_ground(&mut commands, &mut meshes, &mut materials);
+    setup_roads(&mut commands, &mut meshes, &mut materials, &asset_server);
+    setup_buildings(&mut commands, &mut meshes, &mut materials, &mut building_tracker);
+    setup_player_and_vehicles(&mut commands, &mut meshes, &mut materials);
+    setup_neon_signs(&mut commands, &mut meshes, &mut materials, &building_tracker);
+    setup_street_furniture(&mut commands, &mut meshes, &mut materials);
+    setup_zebra_crossings(&mut commands, &mut meshes, &world_mats);
+    setup_special_elements(&mut commands, &mut meshes, &mut materials);
+
+    info!("✅ 西門町 (重構版) 載入完成！");
+}
+
+/// 攝影機、光源、月亮設定
+fn setup_camera_and_lighting(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
     // === 0. 攝影機與光照 ===
     // 遊戲主攝影機 (由 camera_follow 系統接管位置，這裡只需生成)
     commands.spawn((
@@ -116,6 +145,15 @@ pub fn setup_world(
         Transform::from_xyz(0.0, 200.0, -500.0), // 初始位置（會被系統更新）
     ));
 
+    info!("📷 攝影機與光源已設置");
+}
+
+/// 地面生成
+fn setup_ground(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
     // === 1. 地面 (擴大至完整西門町範圍) ===
     // 地圖範圍：X: -120 ~ +100, Z: -100 ~ +70
     commands.spawn((
@@ -129,7 +167,15 @@ pub fn setup_world(
         RigidBody::Fixed,
         Collider::cuboid(200.0, 0.1, 200.0),
     ));
+}
 
+/// 道路材質與道路網格生成
+fn setup_roads(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    asset_server: &Res<AssetServer>,
+) {
     // === 道路材質 (支援貼圖載入) ===
     // 嘗試載入貼圖，若載入失敗則使用純色 fallback
 
@@ -165,9 +211,9 @@ pub fn setup_world(
 
     // 中華路 (東邊界) - 主幹道，貫穿南北
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         road_mat.clone(),
         line_mat.clone(),
         Vec3::new(X_ZHONGHUA, ROAD_Y, -15.0),
@@ -178,9 +224,9 @@ pub fn setup_world(
 
     // 西寧南路 - 貫穿南北
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         road_mat.clone(),
         line_mat.clone(),
         Vec3::new(X_XINING, ROAD_Y, -15.0),
@@ -191,9 +237,9 @@ pub fn setup_world(
 
     // 康定路 (西邊界) - 貫穿南北
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         road_mat.clone(),
         line_mat.clone(),
         Vec3::new(X_KANGDING, ROAD_Y, -15.0),
@@ -208,9 +254,9 @@ pub fn setup_world(
     let hanzhong_len = Z_CHENGDU - Z_WUCHANG - W_PEDESTRIAN;
     let hanzhong_center_z = (Z_WUCHANG + Z_CHENGDU) / 2.0;
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         pedestrian_mat.clone(),
         line_mat.clone(),
         Vec3::new(X_HAN, ROAD_Y + 0.15, hanzhong_center_z),
@@ -223,9 +269,9 @@ pub fn setup_world(
 
     // 漢口街 (北邊界) - 車行道
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         road_mat.clone(),
         line_mat.clone(),
         Vec3::new(-10.0, ROAD_Y, Z_HANKOU),
@@ -236,9 +282,9 @@ pub fn setup_world(
 
     // 成都路 (南邊界) - 主幹道
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         road_mat.clone(),
         line_mat.clone(),
         Vec3::new(-10.0, ROAD_Y, Z_CHENGDU),
@@ -262,9 +308,9 @@ pub fn setup_world(
 
     // 武昌街二段 - 徒步區 (分東西兩段)
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         pedestrian_mat.clone(),
         line_mat.clone(),
         Vec3::new(west_center, ROAD_Y + 0.15, Z_WUCHANG),
@@ -273,9 +319,9 @@ pub fn setup_world(
         RoadType::Pedestrian,
     );
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         pedestrian_mat.clone(),
         line_mat.clone(),
         Vec3::new(east_center, ROAD_Y + 0.15, Z_WUCHANG),
@@ -286,9 +332,9 @@ pub fn setup_world(
 
     // 昆明街 - 小巷 (分東西兩段，連接武昌與峨嵋)
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         pedestrian_mat.clone(),
         line_mat.clone(),
         Vec3::new(west_center, ROAD_Y + 0.15, Z_KUNMING),
@@ -297,9 +343,9 @@ pub fn setup_world(
         RoadType::Pedestrian,
     );
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         pedestrian_mat.clone(),
         line_mat.clone(),
         Vec3::new(east_center, ROAD_Y + 0.15, Z_KUNMING),
@@ -310,9 +356,9 @@ pub fn setup_world(
 
     // 峨嵋街 - 徒步區 (分東西兩段)
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         pedestrian_mat.clone(),
         line_mat.clone(),
         Vec3::new(west_center, ROAD_Y + 0.15, Z_EMEI),
@@ -321,9 +367,9 @@ pub fn setup_world(
         RoadType::Pedestrian,
     );
     spawn_road_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         pedestrian_mat.clone(),
         line_mat.clone(),
         Vec3::new(east_center, ROAD_Y + 0.15, Z_EMEI),
@@ -331,7 +377,15 @@ pub fn setup_world(
         W_PEDESTRIAN,
         RoadType::Pedestrian,
     );
+}
 
+/// 地標建築與商店生成
+fn setup_buildings(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    building_tracker: &mut BuildingTracker,
+) {
     // === 3. 地標建築 (根據真實西門町位置) ===
 
     // 定義 helper closure 來計算貼合位置
@@ -342,10 +396,10 @@ pub fn setup_world(
 
     // 萬年大樓 (西寧/峨嵋 NW 角) - 西門町最著名的購物中心之一
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_XINING,
         W_SECONDARY,
         -1.0,
@@ -361,10 +415,10 @@ pub fn setup_world(
 
     // 獅子林大樓 (西寧/武昌 NW 角)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_XINING,
         W_SECONDARY,
         -1.0,
@@ -381,10 +435,10 @@ pub fn setup_world(
     // 電影公園 (西寧/武昌與昆明之間，西側) - 縮小尺寸確保不侵入道路
     // 原本 25x20 剛好貼邊，改為 23x18 留 1m 間距
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_XINING,
         W_SECONDARY,
         -1.0,
@@ -400,10 +454,10 @@ pub fn setup_world(
 
     // 唐吉訶德 Don Quijote (西寧東側/武昌南側) - 黃色顯眼大樓
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_XINING,
         W_SECONDARY,
         1.0,
@@ -421,10 +475,10 @@ pub fn setup_world(
 
     // 誠品西門店 (峨嵋北側, 漢中西側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_HAN,
         W_PEDESTRIAN,
         -1.0,
@@ -440,10 +494,10 @@ pub fn setup_world(
 
     // 誠品武昌店 (武昌南側, 漢中西側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_HAN,
         W_PEDESTRIAN,
         -1.0,
@@ -459,10 +513,10 @@ pub fn setup_world(
 
     // Uniqlo (漢中東側，峨嵋北側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_HAN,
         W_PEDESTRIAN,
         1.0,
@@ -478,10 +532,10 @@ pub fn setup_world(
 
     // H&M (漢中東側，成都北側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_HAN,
         W_PEDESTRIAN,
         1.0,
@@ -499,10 +553,10 @@ pub fn setup_world(
 
     // 捷運西門站6號出口 (中華/成都 NW 角)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_ZHONGHUA,
         W_ZHONGHUA,
         -1.0,
@@ -518,10 +572,10 @@ pub fn setup_world(
 
     // 西門紅樓 (中華路西側，成都路南側) - 歷史地標
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_ZHONGHUA,
         W_ZHONGHUA,
         -1.0,
@@ -537,10 +591,10 @@ pub fn setup_world(
 
     // 錢櫃 KTV (中華路東側，成都路北側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_ZHONGHUA,
         W_ZHONGHUA,
         1.0,
@@ -556,10 +610,10 @@ pub fn setup_world(
 
     // 鴨肉扁 (中華路西側，武昌街南側) - 著名小吃
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_ZHONGHUA,
         W_ZHONGHUA,
         -1.0,
@@ -575,10 +629,10 @@ pub fn setup_world(
 
     // 新光三越 (中華路西側，峨嵋北側) - 大型百貨
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_ZHONGHUA,
         W_ZHONGHUA,
         -1.0,
@@ -594,10 +648,10 @@ pub fn setup_world(
 
     // 統一元氣館 (中華路西側，峨嵋與成都之間) - 辦公大樓
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(X_ZHONGHUA - W_ZHONGHUA / 2.0 - 10.0, 15.0, 25.0),
         16.0,
         30.0,
@@ -607,10 +661,10 @@ pub fn setup_world(
 
     // 遠東百貨 (中華路東側，漢口街南側) - 大型商場
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_ZHONGHUA,
         W_ZHONGHUA,
         1.0,
@@ -626,10 +680,10 @@ pub fn setup_world(
 
     // 台北車站方向商業大樓 (中華路東側，武昌北側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_ZHONGHUA,
         W_ZHONGHUA,
         1.0,
@@ -647,10 +701,10 @@ pub fn setup_world(
 
     // 阿宗麵線 (成都路北側，西寧與漢中之間)
     spawn_building_at_linear(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Z_CHENGDU,
         W_MAIN,
         -1.0, // 成都路北側
@@ -667,10 +721,10 @@ pub fn setup_world(
     // 西門國小 (康定路東側，漢口街南側) - 縮小尺寸確保不侵入道路
     // 原本 30x25 剛好貼邊，改為 28x23 留 1m 間距
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_KANGDING,
         W_MAIN,
         1.0,
@@ -686,10 +740,10 @@ pub fn setup_world(
 
     // 便利商店區 (康定路東側，峨嵋北側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_KANGDING,
         W_MAIN,
         1.0,
@@ -706,10 +760,10 @@ pub fn setup_world(
     // === 4. 裝飾：便利商店與小店 (沿街填充) ===
     // 漢中街西側 - KFC
     spawn_building_at_linear(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_HAN,
         W_PEDESTRIAN,
         -1.0,
@@ -723,10 +777,10 @@ pub fn setup_world(
 
     // 峨嵋街南側 - 小吃攤
     spawn_building_at_linear(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Z_EMEI,
         W_PEDESTRIAN,
         1.0,
@@ -742,10 +796,10 @@ pub fn setup_world(
 
     // 國賓影城 (武昌北側，漢中東側偏東) - 往北移 2m 避免海報進入道路
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(41.0, 16.0, -68.0),
         22.0,
         32.0,
@@ -755,10 +809,10 @@ pub fn setup_world(
 
     // 樂聲影城 (武昌南側)
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(36.0, 14.0, -34.0),
         18.0,
         28.0,
@@ -769,10 +823,10 @@ pub fn setup_world(
     // 日新威秀 (更東邊) - 確保不侵入漢口街 (南邊界 Z=-74)
     // 建築深度 20，所以 Z 中心需 >= -74 + 10 + 2 = -62
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(59.0, 15.0, -62.0),
         20.0,
         30.0,
@@ -784,10 +838,10 @@ pub fn setup_world(
 
     // 全家便利商店 (漢口街南側，西寧東側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_XINING,
         W_SECONDARY,
         1.0,
@@ -803,10 +857,10 @@ pub fn setup_world(
 
     // 麥當勞 (漢口街南側，漢中西側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_HAN,
         W_PEDESTRIAN,
         -1.0,
@@ -822,10 +876,10 @@ pub fn setup_world(
 
     // 摩斯漢堡 (漢口街南側，漢中東側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_HAN,
         W_PEDESTRIAN,
         1.0,
@@ -842,10 +896,10 @@ pub fn setup_world(
     // 湯姆熊遊戲中心 (漢口街南側偏東) - 確保不侵入漢口街 (南邊界 Z=-74)
     // 建築深度 15，所以 Z 中心需 >= -74 + 7.5 + 2 = -64.5，取 -64
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(40.0, 10.0, -64.0),
         18.0,
         20.0,
@@ -859,10 +913,10 @@ pub fn setup_world(
 
     // 肯德基 (成都路北側，西寧東側偏東) - 移到 Z=33 避開道路
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(-20.0, 6.0, 33.0),
         10.0,
         12.0,
@@ -872,10 +926,10 @@ pub fn setup_world(
 
     // 50嵐飲料 (成都路北側，漢中東側偏東) - 移到 Z=33
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(14.0, 4.0, 33.0),
         6.0,
         8.0,
@@ -885,10 +939,10 @@ pub fn setup_world(
 
     // 夾娃娃機店 (成都路北側) - 移到 Z=33
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(26.0, 5.0, 33.0),
         8.0,
         10.0,
@@ -898,10 +952,10 @@ pub fn setup_world(
 
     // 潮牌店 (峨嵋街北側，漢中東側偏東) - Z=-8 OK (建築南邊 -8+5=-3 不在道路內)
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(28.0, 7.0, -10.0),
         10.0,
         14.0,
@@ -911,10 +965,10 @@ pub fn setup_world(
 
     // 古著店 (峨嵋街北側) - 移到 Z=-10
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(40.0, 6.0, -10.0),
         8.0,
         12.0,
@@ -924,10 +978,10 @@ pub fn setup_world(
 
     // 球鞋專賣店 (峨嵋街南側偏東) - 移到 Z=14 避開道路
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(52.0, 7.5, 14.0),
         12.0,
         15.0,
@@ -939,10 +993,10 @@ pub fn setup_world(
 
     // 刺青店 (昆明街南側)
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(20.0, 6.0, -17.0),
         8.0,
         12.0,
@@ -952,10 +1006,10 @@ pub fn setup_world(
 
     // 潮流刺青 (昆明街南側)
     try_spawn_rich_building(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         Vec3::new(30.0, 5.0, -17.0),
         6.0,
         10.0,
@@ -966,10 +1020,10 @@ pub fn setup_world(
     // 康定路南段補充
     // 大創 (康定路東側，成都路南側) - 移到這裡避免與峨嵋停車場重疊
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_KANGDING,
         W_MAIN,
         1.0,
@@ -985,10 +1039,10 @@ pub fn setup_world(
 
     // 彈珠台 (康定路東側，成都北側)
     spawn_building_at_corner(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         X_KANGDING,
         W_MAIN,
         1.0,
@@ -1003,7 +1057,14 @@ pub fn setup_world(
     );
 
     info!("🏢 已新增 21 棟建築填補空白區域");
+}
 
+/// 玩家、停車場、載具生成
+fn setup_player_and_vehicles(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
     // === 6. 玩家與 NPC ===
     // 玩家生成：漢中街徒步區中央（開闘區域，避免被建築擋住視線）
     // 位置：漢中街與峨嵋街交叉口附近，四周較空曠
@@ -1011,9 +1072,9 @@ pub fn setup_world(
 
     // 使用人形角色生成函數
     spawn_player_character(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         start_pos,
         Player {
             speed: 8.0,
@@ -1026,9 +1087,9 @@ pub fn setup_world(
     // 峨嵋立體停車場 (康定路與峨嵋街交叉口)
     // 保持原位置 X=-75, Z=20，由移動大創來避免重疊
     spawn_parking_garage(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         Vec3::new(X_KANGDING + 25.0, 10.0, Z_EMEI + 20.0),
         22.0,
         22.0,
@@ -1038,15 +1099,15 @@ pub fn setup_world(
 
     // === 7. 共享載具材質與機車停放區 ===
     // 初始化共享材質（效能優化：減少重複材質創建）
-    let vehicle_mats = crate::vehicle::VehicleMaterials::new(&mut materials);
+    let vehicle_mats = crate::vehicle::VehicleMaterials::new(materials);
     commands.insert_resource(vehicle_mats.clone());
 
     // 徒步區閒置車輛 - 只放置一台機車和一台汽車讓玩家使用
     // 漢中街徒步區旁（玩家起始點旁）
     spawn_scooter(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         &vehicle_mats,
         Vec3::new(12.0, 0.0, -8.0),
         Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
@@ -1055,16 +1116,24 @@ pub fn setup_world(
 
     // 徒步區閒置汽車（漢中街，稍南）
     spawn_vehicle(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         Vec3::new(-8.0, 0.0, -15.0),
-        Vehicle::car(),
+        VehiclePreset::car(),
         Color::srgb(0.2, 0.3, 0.6),
     ); // 深藍色汽車
 
     info!("🚗 已生成 1 台機車和 1 台汽車於徒步區");
+}
 
+/// 霓虹燈招牌生成
+fn setup_neon_signs(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    building_tracker: &BuildingTracker,
+) {
     // === 8. 霓虹燈招牌 ===
     // 西門町的靈魂 - 五光十色的霓虹燈
     // 座標計算公式: x = road1_center + align1 * (road1_width/2 + building_width/2)
@@ -1074,10 +1143,10 @@ pub fn setup_world(
     // 建築: X_XINING(-55) + (-1)*(12/2+20/2) = -71, Z_EMEI(0) + (-1)*(15/2+18/2) = -16.5
     // 招牌貼在南面（面向峨嵋街）: z + depth/2 = -16.5 + 9 = -7.5
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "萬年大樓",
         Vec3::new(-71.0, 20.0, -7.5), // 南面牆上
         Vec3::new(6.0, 1.5, 0.3),
@@ -1089,10 +1158,10 @@ pub fn setup_world(
     // 建築: X_ZHONGHUA(80) + 1*(40/2+16/2) = 108, Z_CHENGDU(50) + (-1)*(16/2+16/2) = 34
     // 招牌貼在西面（面向中華路）: x - width/2 = 108 - 8 = 100
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "錢櫃KTV",
         Vec3::new(100.0, 15.0, 34.0), // 西面牆上
         Vec3::new(5.0, 1.2, 0.3),
@@ -1104,10 +1173,10 @@ pub fn setup_world(
     // 建築: X_ZHONGHUA(80) + (-1)*(40/2+22/2) = 49, Z_CHENGDU(50) + 1*(16/2+22/2) = 69
     // 招牌貼在北面（面向成都路）: z - depth/2 = 69 - 11 = 58
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "西門紅樓",
         Vec3::new(49.0, 10.0, 58.0), // 北面牆上
         Vec3::new(4.0, 1.0, 0.3),
@@ -1119,10 +1188,10 @@ pub fn setup_world(
     // 建築: X_HAN(0) + (-1)*(15/2+20/2) = -17.5, Z_EMEI(0) + (-1)*(15/2+16/2) = -15.5
     // 招牌貼在東面（面向漢中街）: x + width/2 = -17.5 + 10 = -7.5
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "誠品西門",
         Vec3::new(-7.5, 14.0, -15.5), // 東面牆上
         Vec3::new(4.0, 1.0, 0.3),
@@ -1134,10 +1203,10 @@ pub fn setup_world(
     // 建築位於成都路北側，西寧與漢中之間
     // 中心: x=(-55+0)/2=-27.5, z=50+(-1)*(16/2+6/2)=39
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "阿宗麵線",
         Vec3::new(-27.5, 5.0, 42.0), // 南面牆上 (z+3)
         Vec3::new(3.0, 0.8, 0.3),
@@ -1149,10 +1218,10 @@ pub fn setup_world(
     // 建築: X_XINING(-55) + 1*(12/2+28/2) = -35, Z_WUCHANG(-50) + 1*(15/2+22/2) = -31.5
     // 招牌貼在南面: z + depth/2 = -31.5 + 11 = -20.5
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "Don Don Donki",
         Vec3::new(-35.0, 25.0, -20.5), // 南面牆上
         Vec3::new(5.0, 1.2, 0.3),
@@ -1164,10 +1233,10 @@ pub fn setup_world(
     // 建築: X_HAN(0) + 1*(15/2+15/2) = 15, Z_EMEI(0) + (-1)*(15/2+12/2) = -13.5
     // 招牌貼在西面（面向漢中街）: x - width/2 = 15 - 7.5 = 7.5
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "Uniqlo",
         Vec3::new(7.5, 9.0, -13.5), // 西面牆上
         Vec3::new(3.5, 1.0, 0.3),
@@ -1179,10 +1248,10 @@ pub fn setup_world(
     // 建築: X_HAN(0) + (-1)*(15/2+18/2) = -16.5, Z_WUCHANG(-50) + 1*(15/2+14/2) = -35.5
     // 招牌貼在東面: x + width/2 = -16.5 + 9 = -7.5
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "誠品武昌",
         Vec3::new(-7.5, 11.0, -35.5), // 東面牆上
         Vec3::new(4.0, 1.0, 0.3),
@@ -1194,10 +1263,10 @@ pub fn setup_world(
     // 獅子林: X_XINING(-55) + (-1)*(12/2+22/2) = -72, Z_WUCHANG(-50) + (-1)*(15/2+18/2) = -66.5
     // 招牌貼在南面: z + depth/2 = -66.5 + 9 = -57.5
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "獅子林",
         Vec3::new(-72.0, 17.0, -57.5), // 南面牆上
         Vec3::new(3.0, 0.8, 0.3),
@@ -1209,10 +1278,10 @@ pub fn setup_world(
     // 建築: X_HAN(0) + 1*(15/2+18/2) = 16.5, Z_CHENGDU(50) + (-1)*(16/2+14/2) = 35
     // 招牌貼在西面: x - width/2 = 16.5 - 9 = 7.5
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "H&M",
         Vec3::new(7.5, 13.0, 35.0), // 西面牆上
         Vec3::new(3.0, 1.5, 0.3),
@@ -1224,10 +1293,10 @@ pub fn setup_world(
 
     // 國賓影城 - 紅色閃爍
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "國賓影城",
         Vec3::new(41.0, 25.0, -58.0), // 建築南面
         Vec3::new(5.0, 1.2, 0.3),
@@ -1237,10 +1306,10 @@ pub fn setup_world(
 
     // 樂聲影城 - 青色閃爍
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "樂聲影城",
         Vec3::new(36.0, 20.0, -26.0), // 建築南面
         Vec3::new(4.0, 1.0, 0.3),
@@ -1250,10 +1319,10 @@ pub fn setup_world(
 
     // 麥當勞 M - 金色穩定
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "麥當勞",
         Vec3::new(-17.0, 8.0, -72.0), // 漢口街麥當勞上
         Vec3::new(2.5, 2.5, 0.3),
@@ -1263,10 +1332,10 @@ pub fn setup_world(
 
     // 湯姆熊 - 橘色閃爍
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "湯姆熊",
         Vec3::new(40.0, 15.0, -64.0), // 湯姆熊遊樂場（配合建築位置更新）
         Vec3::new(4.5, 1.0, 0.3),
@@ -1276,10 +1345,10 @@ pub fn setup_world(
 
     // 刺青街 TATTOO - 紫色故障風格
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "刺青店",
         Vec3::new(20.0, 8.0, -17.0), // 刺青店
         Vec3::new(3.5, 0.8, 0.3),
@@ -1289,10 +1358,10 @@ pub fn setup_world(
 
     // 潮牌店 HYPE - 紅色穩定
     try_spawn_neon_sign(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &building_tracker,
+        commands,
+        meshes,
+        materials,
+        building_tracker,
         "潮牌店",
         Vec3::new(28.0, 10.0, -8.0), // 潮牌店
         Vec3::new(3.0, 0.8, 0.3),
@@ -1301,7 +1370,14 @@ pub fn setup_world(
     );
 
     info!("✨ 已生成 16 個霓虹燈招牌");
+}
 
+/// 路燈、自動販賣機、垃圾桶生成
+fn setup_street_furniture(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
     // === 9. 街道家具 - Phase 5 ===
 
     // 路燈 (優化後 - 間隔約 25-30 米，避免過於密集)
@@ -1346,7 +1422,7 @@ pub fn setup_world(
     ];
 
     for pos in lamppost_positions {
-        spawn_lamppost(&mut commands, &mut meshes, &mut materials, pos);
+        spawn_lamppost(commands, meshes, materials, pos);
     }
     info!("💡 已生成 {} 盞路燈", lamppost_positions.len());
 
@@ -1361,9 +1437,9 @@ pub fn setup_world(
 
     for (pos, rot, variant) in vending_positions {
         spawn_vending_machine(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
+            commands,
+            meshes,
+            materials,
             pos,
             rot,
             variant,
@@ -1382,10 +1458,17 @@ pub fn setup_world(
     ];
 
     for pos in trash_positions {
-        spawn_trash_can(&mut commands, &mut meshes, &mut materials, pos);
+        spawn_trash_can(commands, meshes, materials, pos);
     }
     info!("🗑️ 已生成 {} 個垃圾桶", trash_positions.len());
+}
 
+/// 斑馬線生成
+fn setup_zebra_crossings(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    world_mats: &WorldMaterials,
+) {
     // === 10. 斑馬線系統 - Phase A ===
     // 主要交叉口配置 (center_x, center_z, road1_width, road2_width)
     // road1 = 南北向道路 (X), road2 = 東西向道路 (Z)
@@ -1409,8 +1492,8 @@ pub fn setup_world(
         // 每個交叉口生成 4 條斑馬線 (東西南北各一)
         // 北側斑馬線 (東西向)
         spawn_zebra_crossing(
-            &mut commands,
-            &mut meshes,
+            commands,
+            meshes,
             &zebra_mat,
             Vec3::new(cx, ROAD_Y + 0.01, cz - road_ew_w / 2.0 - 2.5),
             road_ns_w,
@@ -1418,8 +1501,8 @@ pub fn setup_world(
         );
         // 南側斑馬線 (東西向)
         spawn_zebra_crossing(
-            &mut commands,
-            &mut meshes,
+            commands,
+            meshes,
             &zebra_mat,
             Vec3::new(cx, ROAD_Y + 0.01, cz + road_ew_w / 2.0 + 2.5),
             road_ns_w,
@@ -1427,8 +1510,8 @@ pub fn setup_world(
         );
         // 西側斑馬線 (南北向)
         spawn_zebra_crossing(
-            &mut commands,
-            &mut meshes,
+            commands,
+            meshes,
             &zebra_mat,
             Vec3::new(cx - road_ns_w / 2.0 - 2.5, ROAD_Y + 0.01, cz),
             road_ew_w,
@@ -1436,8 +1519,8 @@ pub fn setup_world(
         );
         // 東側斑馬線 (南北向)
         spawn_zebra_crossing(
-            &mut commands,
-            &mut meshes,
+            commands,
+            meshes,
             &zebra_mat,
             Vec3::new(cx + road_ns_w / 2.0 + 2.5, ROAD_Y + 0.01, cz),
             road_ew_w,
@@ -1450,7 +1533,14 @@ pub fn setup_world(
         zebra_count,
         intersections.len()
     );
+}
 
+/// 電影看板、塗鴉牆、掩體點生成
+fn setup_special_elements(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
     // === 11. 特色元素 - Phase 6 ===
 
     // 電影看板 (武昌街電影街)
@@ -1478,26 +1568,24 @@ pub fn setup_world(
     ];
 
     for (pos, color, _genre) in billboard_configs {
-        spawn_movie_billboard(&mut commands, &mut meshes, &mut materials, pos, color);
+        spawn_movie_billboard(commands, meshes, materials, pos, color);
     }
     info!("🎬 已生成 {} 個電影看板", billboard_configs.len());
 
     // 塗鴉牆（移到康定路西側，避開道路與建築）
     // 位置：康定路西緣再外推 2m，Z 位於峨嵋～成都之間
     let graffiti_pos = Vec3::new(X_KANGDING - W_MAIN / 2.0 - 7.5 - 2.0, 2.5, Z_EMEI + 18.0);
-    spawn_graffiti_wall(&mut commands, &mut meshes, &mut materials, graffiti_pos);
+    spawn_graffiti_wall(commands, meshes, materials, graffiti_pos);
 
     // === 12. AI 掩體點生成 ===
-    spawn_cover_points(&mut commands);
+    spawn_cover_points(commands);
 
     // NPC (由 spawn_initial_traffic 系統統一管理)
-
-    info!("✅ 西門町 (重構版) 載入完成！");
 }
 
-// === 保留的輔助函數 ===
-// 道路/建築/街道設施等已移至獨立模組
-
+// ============================================================================
+// 輔助函數
+// ============================================================================
 fn spawn_building_at_corner(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -1617,15 +1705,17 @@ fn spawn_vehicle(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     pos: Vec3,
-    v_type: Vehicle,
+    preset: VehiclePreset,
     color: Color,
 ) {
     use crate::vehicle::{
         VehicleHealth, VehicleId, VehiclePhysicsMode, VehicleType, VehicleVisualRoot,
     };
 
+    let vehicle_type = preset.vehicle.vehicle_type;
+
     // 根據類型定義尺寸變數
-    let (chassis_size, wheel_offset_z) = match v_type.vehicle_type {
+    let (chassis_size, wheel_offset_z) = match vehicle_type {
         VehicleType::Car | VehicleType::Taxi => (Vec3::new(2.0, 0.6, 4.0), 1.2),
         VehicleType::Bus => (Vec3::new(2.8, 1.2, 8.0), 2.5),
         _ => (Vec3::new(2.0, 0.6, 4.0), 1.2),
@@ -1637,10 +1727,10 @@ fn spawn_vehicle(
             GlobalTransform::default(),
             Visibility::default(),
             Collider::cuboid(chassis_size.x / 2.0, 0.75, chassis_size.z / 2.0),
-            VehicleHealth::for_vehicle_type(v_type.vehicle_type), // 車輛血量
+            VehicleHealth::for_vehicle_type(vehicle_type),        // 車輛血量
             VehicleId::new(),                                     // 穩定識別碼（用於存檔）
             VehicleModifications::default(),                      // 改裝狀態（用於存檔）
-            v_type,                                               // Vehicle Component
+            preset.into_components(),                             // Vehicle + 7 個子元件
             RigidBody::KinematicPositionBased,                    // 閒置車輛預設 Kinematic
             VehiclePhysicsMode::Kinematic,
             CollisionGroups::new(

@@ -6,7 +6,6 @@
 //! - 熱線啟動小遊戲
 //! - 車主反應 AI
 //! - 警報系統
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -235,6 +234,7 @@ pub struct TheftVisuals {
 }
 
 impl TheftVisuals {
+    /// 建立新實例
     pub fn new(
         meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,
@@ -467,7 +467,7 @@ fn handle_hotwire_complete(
     });
 
     theft_state.next_stage(TheftState::Entered, 0.0);
-    info!("偷車成功！");
+    info!("🚗 偷車成功: 車輛 {:?}", vehicle_entity);
 }
 
 /// 處理車主對偷車事件的反應
@@ -865,7 +865,6 @@ fn spawn_glass_shards(
 }
 
 /// 生成熱線火花
-#[allow(dead_code)]
 fn spawn_hotwire_sparks(
     commands: &mut Commands,
     visuals: &TheftVisuals,

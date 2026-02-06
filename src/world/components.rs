@@ -1,5 +1,4 @@
 //! 世界組件
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use rand::Rng;
@@ -25,7 +24,6 @@ pub struct Moon {
 
 /// 共用材質快取（減少重複材質創建）
 #[derive(Resource, Clone)]
-#[allow(dead_code)]  // 逐步遷移中，部分材質暫未使用
 pub struct WorldMaterials {
     // 基礎色
     pub white: Handle<StandardMaterial>,
@@ -119,13 +117,11 @@ impl WorldMaterials {
 #[derive(Component)]
 pub struct Building {
     pub name: String,
-    #[allow(dead_code)] // 保留給未來系統使用（如任務、NPC 行為）
     pub building_type: BuildingType,
 }
 
 /// 建築物類型
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // 保留給未來擴展
 pub enum BuildingType {
     Shop,
     ConvenienceStore,
@@ -145,7 +141,6 @@ pub struct StreetLight {
 
 /// 街道家具類型
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub enum StreetFurnitureType {
     Lamppost,       // 路燈柱
     TrashCan,       // 垃圾桶
@@ -158,10 +153,8 @@ pub enum StreetFurnitureType {
 /// 街道家具組件
 #[derive(Component)]
 pub struct StreetFurniture {
-    #[allow(dead_code)]  // 保留給未來系統使用（如互動、任務）
     pub furniture_type: StreetFurnitureType,
-    #[allow(dead_code)]
-    pub can_interact: bool,  // 是否可互動（未來功能）
+    pub can_interact: bool,
 }
 
 /// 霓虹燈招牌
@@ -410,7 +403,6 @@ impl Default for BuildingWindow {
     }
 }
 
-#[allow(dead_code)]  // 保留給未來不同建築類型使用
 impl BuildingWindow {
     /// 住宅窗戶
     pub fn residential() -> Self {

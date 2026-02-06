@@ -5,8 +5,10 @@
 use bevy::prelude::*;
 use bevy::mesh::VertexAttributeValues;
 
-// === 道路系統輔助結構 ===
-
+// ============================================================================
+// 道路系統輔助結構
+// ============================================================================
+/// 道路類型
 #[derive(PartialEq)]
 pub enum RoadType {
     Asphalt,    // 柏油車道 (有黃線，兩側有人行道)
@@ -21,6 +23,7 @@ pub struct RoadLayout {
 }
 
 impl RoadLayout {
+    /// 建立新實例
     pub fn new(width_x: f32, width_z: f32) -> Self {
         let is_horizontal = width_x > width_z;
         let (road_len, total_width) = if is_horizontal {

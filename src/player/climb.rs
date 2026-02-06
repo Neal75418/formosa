@@ -5,7 +5,6 @@
 //! - Climb（攀爬）：中等高度牆面（1.0-1.8m），抓住邊緣往上爬
 //! - HighClimb（高位攀爬）：較高牆面（1.8-2.5m），需要更長時間
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -31,7 +30,9 @@ pub const LANDING_CHECK_DEPTH: f32 = 0.8;
 /// 邊緣高度掃描步進
 pub const EDGE_SCAN_STEP: f32 = 0.1;
 
-// === 動畫位置偏移常數 ===
+// ============================================================================
+// 動畫位置偏移常數
+// ============================================================================
 /// 接近障礙物時的垂直偏移（玩家身體低於邊緣）
 pub const APPROACH_OFFSET: f32 = 0.3;
 /// 手抓邊緣時的垂直偏移（手在邊緣下方）
@@ -156,7 +157,11 @@ impl ClimbState {
         self.edge_position = edge_pos;
         self.landing_position = landing_pos;
         self.obstacle_height = height;
-        self.climb_direction = direction.normalize();
+        self.climb_direction = if direction.length_squared() > 1e-6 {
+            direction.normalize()
+        } else {
+            Vec3::Z // 預設朝前
+        };
     }
 
     /// 取得當前階段的持續時間
@@ -289,7 +294,10 @@ pub fn detect_climbable_obstacle(
     rapier: &RapierContext,
 ) -> ClimbDetectionResult {
     let filter = QueryFilter::default().exclude_collider(player_entity);
-    let forward = player_forward.normalize();
+    let forward = player_forward.normalize_or_zero();
+    if forward == Vec3::ZERO {
+        return ClimbDetectionResult::default();
+    }
 
     // Step 1: 前方射線檢測障礙物（從胸口高度發射）
     let chest_origin = player_pos + Vec3::Y * CHEST_HEIGHT;

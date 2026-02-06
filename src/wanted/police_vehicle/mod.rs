@@ -5,7 +5,6 @@
 //! - 警車 AI 駕駛（追逐、攔截、PIT 機動）
 //! - 警車損壞與爆炸
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 mod spawn;
 mod ai;
@@ -27,6 +26,7 @@ pub const POLICE_CAR_SPAWN_DISTANCE_MAX: f32 = 80.0;
 pub const POLICE_CAR_DESPAWN_DISTANCE: f32 = 120.0;
 /// 預計算距離平方（避免 sqrt）
 pub const POLICE_CAR_DESPAWN_DISTANCE_SQ: f32 = POLICE_CAR_DESPAWN_DISTANCE * POLICE_CAR_DESPAWN_DISTANCE;
+/// 警車遠距離消失距離平方
 pub const POLICE_CAR_DESPAWN_FAR_DISTANCE_SQ: f32 = (POLICE_CAR_DESPAWN_DISTANCE * 1.5) * (POLICE_CAR_DESPAWN_DISTANCE * 1.5);
 /// 警車最大數量（依通緝等級）
 pub const MAX_POLICE_CARS_PER_STAR: u32 = 1;
@@ -34,14 +34,17 @@ pub const MAX_POLICE_CARS_PER_STAR: u32 = 1;
 pub const POLICE_CAR_SPAWN_INTERVAL: f32 = 8.0;
 /// PIT 機動距離（側面撞擊範圍）
 pub const PIT_MANEUVER_DISTANCE: f32 = 3.0;
+/// PIT 攻擊觸發距離平方
 pub const PIT_MANEUVER_DISTANCE_SQ: f32 = PIT_MANEUVER_DISTANCE * PIT_MANEUVER_DISTANCE;
 /// 追逐切換距離
 pub const CHASE_SWITCH_DISTANCE: f32 = 30.0;
+/// 切換追擊模式距離平方
 pub const CHASE_SWITCH_DISTANCE_SQ: f32 = CHASE_SWITCH_DISTANCE * CHASE_SWITCH_DISTANCE;
 /// PIT 機動角度（與目標車輛的夾角，弧度）
 pub const PIT_MANEUVER_ANGLE: f32 = 0.5; // 約 30 度
 /// 攔截距離（前方阻擋）
 pub const INTERCEPT_DISTANCE: f32 = 20.0;
+/// 攔截模式觸發距離平方
 pub const INTERCEPT_DISTANCE_SQ: f32 = INTERCEPT_DISTANCE * INTERCEPT_DISTANCE;
 /// 追逐速度倍率
 pub const CHASE_SPEED_MULTIPLIER: f32 = 1.2;
@@ -49,9 +52,11 @@ pub const CHASE_SPEED_MULTIPLIER: f32 = 1.2;
 pub const POLICE_CAR_COLLISION_DAMAGE: f32 = 15.0;
 /// PIT 放棄距離（15 公尺）
 pub const PIT_ABANDON_DISTANCE: f32 = 15.0;
+/// PIT 放棄距離平方
 pub const PIT_ABANDON_DISTANCE_SQ: f32 = PIT_ABANDON_DISTANCE * PIT_ABANDON_DISTANCE;
 /// 攔截放棄距離（50 公尺）
 pub const INTERCEPT_ABANDON_DISTANCE: f32 = 50.0;
+/// 攔截放棄距離平方
 pub const INTERCEPT_ABANDON_DISTANCE_SQ: f32 = INTERCEPT_ABANDON_DISTANCE * INTERCEPT_ABANDON_DISTANCE;
 /// 前方檢測點積閾值（cos(45°) ≈ 0.7）
 pub const FRONT_DOT_THRESHOLD: f32 = 0.7;
@@ -156,6 +161,7 @@ pub struct PoliceCarVisuals {
 }
 
 impl PoliceCarVisuals {
+    /// 建立新實例
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             body_mesh: meshes.add(Cuboid::new(2.0, 0.8, 4.5)),

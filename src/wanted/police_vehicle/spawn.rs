@@ -5,7 +5,7 @@ use bevy_rapier3d::prelude::*;
 
 use crate::player::Player;
 use crate::core::GameState;
-use crate::vehicle::{Vehicle, VehicleHealth, VehicleId, VehicleModifications};
+use crate::vehicle::{VehicleHealth, VehicleId, VehicleModifications, VehiclePreset};
 use crate::wanted::WantedLevel;
 
 use super::{
@@ -127,7 +127,7 @@ fn spawn_police_car(
                 siren_active: true,
                 ..default()
             },
-            Vehicle::car(),
+            VehiclePreset::car().into_components(),
             VehicleHealth::new(1500.0), // 警車較耐打
             VehicleId::new(),  // 穩定識別碼（用於存檔）
             VehicleModifications::default(),  // 改裝狀態（用於存檔）

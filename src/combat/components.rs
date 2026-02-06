@@ -11,6 +11,7 @@ use bevy::prelude::*;
 // ============================================================================
 
 // 其他常數
+/// 近戰基礎傷害
 pub const MELEE_DAMAGE: f32 = 15.0;
 
 /// 戰鬥狀態（全域資源）
@@ -30,10 +31,10 @@ pub struct CombatState {
 /// 射擊輸入緩衝
 #[derive(Resource, Default)]
 pub struct ShootingInput {
-    pub fire_pressed: bool,           // 射擊鍵按下
-    pub fire_held: bool,              // 射擊鍵持續按住
-    pub aim_pressed: bool,            // 瞄準鍵按住
-    pub reload_pressed: bool,         // 換彈鍵按下
+    pub is_fire_pressed: bool,           // 射擊鍵按下
+    pub is_fire_held: bool,              // 射擊鍵持續按住
+    pub is_aim_pressed: bool,            // 瞄準鍵按住
+    pub is_reload_pressed: bool,         // 換彈鍵按下
     pub weapon_switch: Option<usize>, // 切換武器 (1-4)
     pub mouse_wheel: f32,             // 滑鼠滾輪
 }
@@ -44,13 +45,13 @@ pub struct ShootingInput {
 
 /// 敵人標記
 #[derive(Component)]
-#[allow(dead_code)]
 pub struct Enemy {
+    #[allow(dead_code)] // TODO: 用於 AI 行為差異化
     pub enemy_type: EnemyType,
 }
 
 /// 敵人類型
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum EnemyType {
     Gangster, // 小混混
     Thug,     // 打手
@@ -58,6 +59,7 @@ pub enum EnemyType {
 }
 
 impl EnemyType {
+    /// 取得生命值
     pub fn health(&self) -> f32 {
         match self {
             EnemyType::Gangster => 50.0,
@@ -66,6 +68,7 @@ impl EnemyType {
         }
     }
 
+    /// 取得武器資訊
     pub fn weapon(&self) -> WeaponStats {
         match self {
             EnemyType::Gangster => WeaponStats::pistol(),
@@ -84,6 +87,7 @@ pub struct PlayerArm {
 }
 
 impl PlayerArm {
+    /// 左側部件
     pub fn left(position: Vec3, rotation: Quat) -> Self {
         Self {
             is_right: false,
@@ -92,6 +96,7 @@ impl PlayerArm {
         }
     }
 
+    /// 右側部件
     pub fn right(position: Vec3, rotation: Quat) -> Self {
         Self {
             is_right: true,
@@ -132,12 +137,6 @@ pub trait PunchAnimatable {
         (duration * 0.33, duration * 0.66, duration)
     }
 
-    /// 取得當前進度 (0.0 - 1.0)
-    #[allow(dead_code)]
-    fn progress(&self) -> f32 {
-        (self.get_timer() / self.get_duration()).clamp(0.0, 1.0)
-    }
-
     /// 檢查動畫是否完成
     fn is_finished(&self) -> bool {
         self.get_timer() >= self.get_duration()
@@ -159,7 +158,6 @@ pub trait PunchAnimatable {
 
 /// 揮拳動畫組件
 #[derive(Component, Debug)]
-#[allow(dead_code)]
 pub struct PunchAnimation {
     pub timer: f32,        // 動畫計時器
     pub duration: f32,     // 總時長
@@ -176,7 +174,6 @@ impl Default for PunchAnimation {
     }
 }
 
-#[allow(dead_code)]
 impl PunchAnimatable for PunchAnimation {
     fn get_timer(&self) -> f32 {
         self.timer
@@ -200,6 +197,7 @@ pub struct EnemyArm {
 }
 
 impl EnemyArm {
+    /// 左側部件
     pub fn left(position: Vec3, rotation: Quat) -> Self {
         Self {
             is_right: false,
@@ -208,6 +206,7 @@ impl EnemyArm {
         }
     }
 
+    /// 右側部件
     pub fn right(position: Vec3, rotation: Quat) -> Self {
         Self {
             is_right: true,
@@ -225,7 +224,7 @@ pub struct EnemyPunchAnimation {
     pub phase: PunchPhase,        // 當前階段
     pub target: Option<Entity>,   // 攻擊目標
     pub attacker: Option<Entity>, // 攻擊者
-    pub damage_dealt: bool,       // 是否已造成傷害
+    pub has_damage_dealt: bool,       // 是否已造成傷害
 }
 
 impl Default for EnemyPunchAnimation {
@@ -236,7 +235,7 @@ impl Default for EnemyPunchAnimation {
             phase: PunchPhase::WindUp,
             target: None,
             attacker: None,
-            damage_dealt: false,
+            has_damage_dealt: false,
         }
     }
 }
@@ -284,7 +283,6 @@ pub enum HitReactionPhase {
 /// 受傷反應組件
 /// 當實體受到傷害時，根據傷害量觸發不同的反應動畫
 #[derive(Component, Debug)]
-#[allow(dead_code)]
 pub struct HitReaction {
     /// 當前反應階段
     pub phase: HitReactionPhase,
@@ -319,17 +317,21 @@ impl Default for HitReaction {
     }
 }
 
-#[allow(dead_code)]
 impl HitReaction {
     /// 傷害門檻常數
     pub const FLINCH_THRESHOLD: f32 = 10.0; // 10+ 傷害觸發畏縮
+    /// 觸發硬直的傷害閾值
     pub const STAGGER_THRESHOLD: f32 = 25.0; // 25+ 傷害觸發踉蹌
+    /// 觸發擊退的傷害閾值
     pub const KNOCKBACK_THRESHOLD: f32 = 40.0; // 40+ 傷害觸發擊退
 
     /// 反應持續時間常數
     pub const FLINCH_DURATION: f32 = 0.15;
+    /// 硬直持續時間（秒）
     pub const STAGGER_DURATION: f32 = 0.3;
+    /// 擊退持續時間（秒）
     pub const KNOCKBACK_DURATION: f32 = 0.5;
+    /// 恢復持續時間（秒）
     pub const RECOVERY_DURATION: f32 = 0.2;
 
     /// 免疫時間（防止連續擊退）
@@ -444,6 +446,7 @@ impl HitReaction {
     }
 
     /// 是否正在受傷反應中
+    #[allow(dead_code)] // TODO: 用於 AI 行為判斷
     pub fn is_reacting(&self) -> bool {
         self.phase != HitReactionPhase::None
     }

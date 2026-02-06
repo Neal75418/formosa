@@ -12,6 +12,9 @@ mod movement;
 mod perception;
 mod squad;
 
+#[cfg(test)]
+mod tests;
+
 pub use combat::*;
 pub use components::*;
 pub use config::*;
@@ -35,39 +38,34 @@ impl Plugin for AiPlugin {
             // 資源
             .init_resource::<AiConfig>()
             .init_resource::<EnemySpawnTimer>()
-            .init_resource::<AiUpdateTimer>()
+            // AiUpdateTimer 已改為系統本地計時器，避免資源競爭
             .init_resource::<DebugSettings>()
             .init_resource::<SquadManager>()
-            // 系統
+            // 系統 - 使用精確依賴而非全部串行化
             .add_systems(
                 Update,
                 (
-                    // Debug 切換（F3）
+                    // 獨立系統（可並行）
                     debug_toggle_system,
-                    // AI 感知（每 0.1 秒）
-                    ai_perception_system,
-                    // AI 決策（每 0.2 秒）
-                    ai_decision_system,
-                    // AI 掩體系統
-                    ai_cover_system,
-                    // 掩體釋放（死亡時清理）
-                    cover_release_system,
-                    // AI 小隊協調（包抄戰術）
-                    squad_coordination_system,
-                    // AI 移動
-                    ai_movement_system,
-                    // AI 攻擊（包含近戰）
-                    ai_attack_system,
-                    // 敵人揮拳動畫
-                    enemy_punch_animation_system,
-                    // 敵人生成
                     enemy_spawn_system,
-                    // 敵人死亡處理
                     enemy_death_system,
-                    // Debug 視覺化（Gizmo）
+                    enemy_punch_animation_system,
                     draw_ai_debug_gizmos,
+                    // AI 感知（每 0.1 秒）- 第一階段
+                    ai_perception_system,
+                    // AI 決策（每 0.2 秒）- 依賴感知
+                    ai_decision_system.after(ai_perception_system),
+                    // 依賴決策的系統 - 可並行執行
+                    (
+                        ai_cover_system,
+                        ai_movement_system,
+                        ai_attack_system,
+                        squad_coordination_system,
+                    )
+                        .after(ai_decision_system),
+                    // 掩體釋放 - 依賴決策
+                    cover_release_system.after(ai_decision_system),
                 )
-                    .chain()
                     .run_if(in_state(AppState::InGame)),
             );
     }

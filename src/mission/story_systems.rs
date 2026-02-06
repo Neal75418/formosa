@@ -2,7 +2,6 @@
 //!
 //! 處理任務觸發、目標追蹤、階段切換等核心邏輯
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -44,24 +43,32 @@ impl Plugin for StoryMissionPlugin {
                 Startup,
                 (setup_mission_trigger_visuals, setup_story_missions).chain(),
             )
-            // 更新系統
+            // 更新系統 - 使用精確依賴而非全部串行化
             .add_systems(
                 Update,
                 (
-                    update_total_play_time,         // 每幀更新遊戲時間
-                    spawn_mission_triggers,         // 生成可用任務的觸發點
-                    trigger_system,                 // 通用觸發系統
-                    mission_trigger_event_handler,  // 處理任務觸發事件
-                    dialogue_trigger_event_handler, // 處理對話觸發事件
+                    // 獨立系統（可並行）
+                    update_total_play_time,          // 純計時器更新
+                    spawn_mission_triggers,          // 生成觸發點
+                    objective_marker_system,         // UI 標記更新
+                    update_mission_trigger_visuals,  // UI 視覺更新
+                    // 觸發系統
+                    trigger_system,
+                    // 依賴觸發事件的處理器
+                    (
+                        mission_trigger_event_handler,
+                        dialogue_trigger_event_handler,
+                    )
+                        .after(trigger_system),
+                    // NPC 互動（獨立）
                     mission_npc_interaction_system,
+                    // 任務進度追蹤鏈
                     mission_objective_tracking_system,
-                    mission_phase_system,
-                    mission_fail_check_system,
+                    mission_phase_system.after(mission_objective_tracking_system),
+                    mission_fail_check_system.after(mission_phase_system),
+                    // 事件處理器
                     mission_event_handler,
-                    objective_marker_system,
-                    update_mission_trigger_visuals, // 更新觸發點視覺效果
                 )
-                    .chain()
                     .in_set(InteractionSet::Mission),
             );
     }
@@ -219,8 +226,9 @@ fn try_start_mission(
     }
 }
 
-// === NPC 互動輔助函數 ===
-
+// ============================================================================
+// NPC 互動輔助函數
+// ============================================================================
 /// 嘗試透過 NPC 開始任務
 fn try_start_npc_mission(
     mission_id: StoryMissionId,
@@ -353,8 +361,9 @@ fn mission_npc_interaction_system(
 // 目標追蹤系統
 // ============================================================================
 
-// === 目標追蹤輔助函數 ===
-
+// ============================================================================
+// 目標追蹤輔助函數
+// ============================================================================
 /// 檢查跟隨目標是否完成（目標到達終點）
 fn check_follow_target_complete(
     target_id: &str,
@@ -462,8 +471,9 @@ fn mission_objective_tracking_system(
 // 階段系統
 // ============================================================================
 
-// === 階段系統輔助函數 ===
-
+// ============================================================================
+// 階段系統輔助函數
+// ============================================================================
 /// 播放階段開始的對話和過場動畫
 fn play_phase_start_events(
     phase: &MissionPhase,
@@ -547,7 +557,7 @@ fn mission_phase_system(
             new_phase: next_phase_index as u32,
         });
         play_phase_start_events(next_phase, &mut dialogue_events, &mut cutscene_events);
-        info!("任務 {} 進入階段 {}", mission_id, next_phase_index);
+        info!("📋 任務 {} 進入階段 {}", mission_id, next_phase_index);
     } else {
         // 任務完成
         let rewards = mission.rewards.clone();
@@ -559,7 +569,7 @@ fn mission_phase_system(
                 mission_id: completed_id,
                 rewards,
             });
-            info!("任務完成: {}", completed_id);
+            info!("📋 任務完成: {}", completed_id);
         }
     }
 }
@@ -568,8 +578,9 @@ fn mission_phase_system(
 // 失敗檢查系統
 // ============================================================================
 
-// === 失敗檢查輔助函數 ===
-
+// ============================================================================
+// 失敗檢查輔助函數
+// ============================================================================
 /// 檢查是否滿足失敗條件
 fn check_fail_condition(
     condition: &FailCondition,
@@ -644,13 +655,13 @@ fn mission_event_handler(
                     if let Err(e) = manager.start_mission(mission, &wallet, &respect, &unlocks) {
                         warn!("無法開始任務 {}: {}", mission_id, e);
                     } else {
-                        info!("任務開始: {} - {}", mission_id, mission.title);
+                        info!("📋 任務開始: {} - {}", mission_id, mission.title);
                     }
                 }
             }
             StoryMissionEvent::MissionUnlocked(mission_id) => {
                 manager.unlock_mission(*mission_id);
-                info!("任務解鎖: {}", mission_id);
+                info!("📋 任務解鎖: {}", mission_id);
             }
             StoryMissionEvent::MoneyChanged { old, new } => {
                 info!("金錢變化: {} -> {}", old, new);

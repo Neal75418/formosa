@@ -14,8 +14,9 @@ use crate::player::Player;
 use crate::vehicle::{Vehicle, VehicleType};
 use crate::world::Building;
 
-// === 世界名稱標籤組件 ===
-
+// ============================================================================
+// 世界名稱標籤組件
+// ============================================================================
 /// 3D 世界名稱標籤組件
 #[derive(Component)]
 pub struct WorldNameTag {
@@ -23,8 +24,9 @@ pub struct WorldNameTag {
     pub offset: Vec3,
 }
 
-// === 地圖切換與更新系統 ===
-
+// ============================================================================
+// 地圖切換與更新系統
+// ============================================================================
 /// 切換大地圖顯示 (M 鍵)
 pub fn toggle_map(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -163,8 +165,9 @@ pub fn minimap_zoom_control(
     }
 }
 
-// === 世界名稱標籤系統 ===
-
+// ============================================================================
+// 世界名稱標籤系統
+// ============================================================================
 /// 為所有有名字的建築生成世界標籤 UI
 pub fn setup_world_name_tags(
     mut commands: Commands,
@@ -304,8 +307,9 @@ pub fn cleanup_orphaned_world_tags(
     }
 }
 
-// === 地圖生成通用邏輯 ===
-
+// ============================================================================
+// 地圖生成通用邏輯
+// ============================================================================
 /// 地標數據結構
 struct MapLandmark {
     name: &'static str,
@@ -622,30 +626,8 @@ fn draw_road_rect(
     name: &str,
     font: Handle<Font>,
 ) {
-    // 判斷方向：如果 (Width < Length) 則是垂直路？
-    // 不，這裡調用時已經區分了。我們在 spawn_map_layer 裡傳入的 width 已經是 "Thickness"。
-    // 垂直路：Rect Width = Thickness, Rect Height = Length
-    // 水平路：Rect Width = Length, Rect Height = Thickness
-    // 上面的 spawn_map_layer 用法：
-    // draw(X_ZIONG, 0, W*fac, v_len) -> width < length -> Vertical.
-    // draw(h_center, Z, h_len, W*fac) -> width > length -> Horizontal.
-    // 讓我們簡單點，直接判斷長寬比來決定形狀 (UI Width/Height)
-
-    // 如果是垂直路 (Thickness, Length) -> UI (T*scale, L*scale)
-    // 如果是水平路 (Length, Thickness) -> UI (L*scale, T*scale)
-    // 這裡 parent 調用時：
-    // Vert: x=pos, z=0, w=thick, l=len.
-    // Horz: x=0, z=pos, w=len, l=thick. (Wait, let's fix logic in spawn_map_layer)
-
-    // To simplify: I'll assume usage is always: (Center X, Center Z, Dimension X, Dimension Z)
-    // Vert: (X, 0, Thickness, Length) -> UI W=Thick, H=Len
-    // Horz: (0, Z, Length, Thickness) -> UI W=Len, H=Thick
-    // No, logic in spawn_map_layer was:
-    // Vert: draw(X, 0, W, len) -> W is width (thickness).
-    // Horz: draw(22.5, Z, h_len, W) -> h_len is width (length).
-    // so `width` parameter here is always X-dimension, `length` parameter is Z-dimension?
-
-    // Let's redefine `draw_road_rect` params to be `w_world`, `h_world`.
+    // width = 世界 X 軸尺寸，length = 世界 Z 軸尺寸
+    // 直接乘以縮放比例轉換為 UI 座標
     let ui_w = width * scale;
     let ui_h = length * scale;
     let ui_x = x * scale + off_x;

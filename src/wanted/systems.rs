@@ -93,8 +93,8 @@ pub fn process_crime_events(
 
         // 設置搜索區域（含超時）
         wanted.search_center = Some(event.position());
-        wanted.search_radius = 30.0;
-        wanted.search_timer = 45.0;  // 45 秒後若未找到玩家則清除搜索區域
+        wanted.search_radius = CRIME_SEARCH_RADIUS;
+        wanted.search_timer = CRIME_SEARCH_TIMEOUT;
 
         // 如果星級變化，發送事件
         if wanted.stars != old_stars {
@@ -189,7 +189,7 @@ fn process_cooldown(
 
         if wanted.stars != old_stars {
             level_changed.write(WantedLevelChanged::new(old_stars, wanted.stars));
-            info!("通緝等級消退: {} -> {} (熱度: {:.1})", old_stars, wanted.stars, wanted.heat);
+            info!("⭐ 通緝等級消退: {} → {} (熱度: {:.1})", old_stars, wanted.stars, wanted.heat);
         }
 
         if wanted.stars == 0 {
@@ -236,7 +236,7 @@ pub fn wanted_cooldown_system(
             if wanted.search_timer <= 0.0 {
                 wanted.search_center = None;
                 wanted.search_timer = 0.0;
-                info!("搜索區域超時，警察失去玩家蹤跡");
+                info!("⭐ 搜索區域超時，警察失去蹤跡");
             }
         }
     }
@@ -528,7 +528,7 @@ fn handle_searching_state(
         officer.state = PoliceState::Pursuing;
     }
 
-    if officer.search_timer > 30.0 && wanted.stars == 0 {
+    if officer.search_timer > POLICE_SEARCH_RETURN_THRESHOLD && wanted.stars == 0 {
         officer.state = PoliceState::Returning;
     }
 }
@@ -763,6 +763,12 @@ pub fn despawn_police_system(
 const RADIO_CALL_RANGE: f32 = 45.0;
 /// 無線電呼叫冷卻時間（秒）
 const RADIO_CALL_COOLDOWN: f32 = 5.0;
+/// 犯罪搜索半徑
+const CRIME_SEARCH_RADIUS: f32 = 30.0;
+/// 犯罪搜索逾時（秒）
+const CRIME_SEARCH_TIMEOUT: f32 = 45.0;
+/// 警察搜索後返回閾值（秒）— 超過此時間且通緝歸零則撤離
+const POLICE_SEARCH_RETURN_THRESHOLD: f32 = 30.0;
 
 /// 檢查警察是否可以發送無線電
 fn can_send_radio(officer: &PoliceOfficer, player_visible: bool) -> bool {

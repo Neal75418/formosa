@@ -1,5 +1,4 @@
 //! 任務資料
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 use rand::Rng;
@@ -8,7 +7,9 @@ use rand::Rng;
 // 任務系統常數
 // ============================================================================
 
-// === 外送任務閾值 ===
+// ============================================================================
+// 外送任務閾值
+// ============================================================================
 /// 超時閾值（剩餘時間比例）
 const OVERTIME_THRESHOLD: f32 = 0.0;
 /// 一星評級閾值
@@ -18,7 +19,9 @@ const TWO_STAR_TIME_THRESHOLD: f32 = 0.3;
 /// 三星評級閾值
 const THREE_STAR_TIME_THRESHOLD: f32 = 0.5;
 
-// === 外送獎勵乘數 ===
+// ============================================================================
+// 外送獎勵乘數
+// ============================================================================
 /// 一星獎勵乘數
 const ONE_STAR_REWARD_MULTIPLIER: f32 = 0.5;
 /// 二星獎勵乘數
@@ -30,7 +33,9 @@ const FOUR_STAR_REWARD_MULTIPLIER: f32 = 1.5;
 /// 五星獎勵乘數
 const FIVE_STAR_REWARD_MULTIPLIER: f32 = 2.0;
 
-// === 競速獎章乘數 ===
+// ============================================================================
+// 競速獎章乘數
+// ============================================================================
 /// 金牌獎勵乘數
 const GOLD_MEDAL_MULTIPLIER: f32 = 2.0;
 /// 銀牌獎勵乘數
@@ -38,7 +43,9 @@ const SILVER_MEDAL_MULTIPLIER: f32 = 1.5;
 /// 銅牌獎勵乘數
 const BRONZE_MEDAL_MULTIPLIER: f32 = 1.2;
 
-// === 計程車任務 ===
+// ============================================================================
+// 計程車任務
+// ============================================================================
 /// 最大滿意度
 const MAX_SATISFACTION: f32 = 1.5;
 /// 滿意度到小費的基礎轉換
@@ -66,7 +73,9 @@ const MIN_TIME_LIMIT: f32 = 30.0;
 /// 最大時限（秒）
 const MAX_TIME_LIMIT: f32 = 180.0;
 
-// === 連擊獎勵 ===
+// ============================================================================
+// 連擊獎勵
+// ============================================================================
 /// 每連擊獎勵比例
 const STREAK_BONUS_PER_DELIVERY: f32 = 0.05;
 /// 最大連擊數
@@ -208,6 +217,7 @@ pub struct RaceData {
 }
 
 impl RaceData {
+    /// 建立新實例
     pub fn new(checkpoints: Vec<Vec3>, gold: f32, silver: f32, bronze: f32) -> Self {
         Self {
             checkpoints,
@@ -264,6 +274,7 @@ pub enum RaceMedal {
 }
 
 impl RaceMedal {
+    /// 取得對應 emoji
     pub fn emoji(&self) -> &'static str {
         match self {
             RaceMedal::Gold => "🥇",
@@ -273,6 +284,7 @@ impl RaceMedal {
         }
     }
 
+    /// 計算獎勵倍率
     pub fn bonus_multiplier(&self) -> f32 {
         match self {
             RaceMedal::Gold => GOLD_MEDAL_MULTIPLIER,
@@ -307,6 +319,7 @@ pub struct TaxiData {
 }
 
 impl TaxiData {
+    /// 建立新實例
     pub fn new(passenger_name: String, destination_name: String) -> Self {
         Self {
             passenger_name,
@@ -354,6 +367,7 @@ pub enum TaxiRating {
 }
 
 impl TaxiRating {
+    /// 取得對應 emoji
     pub fn emoji(&self) -> &'static str {
         match self {
             TaxiRating::Excellent => "😍",
@@ -364,6 +378,7 @@ impl TaxiRating {
         }
     }
 
+    /// 計算小費倍率
     pub fn tip_multiplier(&self) -> f32 {
         match self {
             TaxiRating::Excellent => 2.0,

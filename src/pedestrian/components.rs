@@ -1,9 +1,9 @@
 //! 行人組件
 //!
 //! 定義行人 NPC 的組件、狀態和資源。
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
+use std::collections::VecDeque;
 
 // ============================================================================
 // 行人組件
@@ -358,6 +358,7 @@ pub struct SidewalkPath {
 }
 
 impl SidewalkPath {
+    /// 建立新實例
     pub fn new(name: &str, waypoints: Vec<Vec3>, ping_pong: bool) -> Self {
         Self {
             name: name.to_string(),
@@ -370,17 +371,17 @@ impl SidewalkPath {
 /// 槍擊事件追蹤（用於行人反應）
 #[derive(Resource, Default)]
 pub struct GunshotTracker {
-    /// 最近的槍擊位置和時間
-    pub recent_shots: Vec<(Vec3, f32)>,
+    /// 最近的槍擊位置和時間（使用 VecDeque 以 O(1) 移除舊記錄）
+    pub recent_shots: VecDeque<(Vec3, f32)>,
 }
 
 impl GunshotTracker {
     /// 記錄槍擊事件
     pub fn record_shot(&mut self, position: Vec3, time: f32) {
-        self.recent_shots.push((position, time));
-        // 只保留最近 10 次
+        self.recent_shots.push_back((position, time));
+        // 只保留最近 10 次 - O(1) 移除
         if self.recent_shots.len() > 10 {
-            self.recent_shots.remove(0);
+            self.recent_shots.pop_front();
         }
     }
 
@@ -428,6 +429,7 @@ pub struct PedestrianVisuals {
 }
 
 impl PedestrianVisuals {
+    /// 建立新實例
     pub fn new(
         meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,

@@ -1,6 +1,5 @@
 //! 通緝系統事件定義
 
-#![allow(dead_code)] // 預留功能：此檔案包含已定義但尚未整合的功能
 
 use bevy::prelude::*;
 
@@ -82,6 +81,7 @@ pub struct WantedLevelChanged {
 }
 
 impl WantedLevelChanged {
+    /// 建立新實例
     pub fn new(old: u8, new: u8) -> Self {
         Self {
             old_stars: old,
@@ -106,6 +106,7 @@ impl WitnessReport {
     /// 報警增加的熱度（每次報警增加 5 點）
     pub const HEAT_VALUE: f32 = 5.0;
 
+    /// 建立新實例
     pub fn new(position: Vec3, crime_description: &'static str) -> Self {
         Self {
             position,

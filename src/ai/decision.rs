@@ -1,3 +1,5 @@
+//! AI 行為決策樹（狀態轉換邏輯）
+
 use bevy::prelude::*;
 
 use super::{AiBehavior, AiCombat, AiConfig, AiMovement, AiPerception, AiState, PatrolPath};
@@ -7,12 +9,13 @@ use crate::combat::{Enemy, Health};
 // 決策系統
 // ============================================================================
 
-// === 決策系統輔助函數 ===
-
+// ============================================================================
+// 決策系統輔助函數
+// ============================================================================
 /// 處理逃跑狀態的開始
 /// 返回 true 表示開始逃跑，應跳過後續處理
 #[inline]
-fn check_start_flee(
+pub(crate) fn check_start_flee(
     config: &AiConfig,
     health_percent: f32,
     behavior: &mut AiBehavior,
@@ -38,7 +41,7 @@ fn check_start_flee(
 /// 處理逃跑狀態的持續
 /// 返回 true 表示仍在逃跑，應跳過狀態機處理
 #[inline]
-fn handle_fleeing_state(
+pub(crate) fn handle_fleeing_state(
     config: &AiConfig,
     behavior: &mut AiBehavior,
     movement: &mut AiMovement,
@@ -76,7 +79,7 @@ fn handle_fleeing_state(
 
 /// 設置追逐狀態
 #[inline]
-fn enter_chase_state(behavior: &mut AiBehavior, movement: &mut AiMovement, current_time: f32) {
+pub(crate) fn enter_chase_state(behavior: &mut AiBehavior, movement: &mut AiMovement, current_time: f32) {
     behavior.set_state(AiState::Chase, current_time);
     movement.is_running = true;
     movement.move_target = behavior.last_known_target_pos;
@@ -84,7 +87,7 @@ fn enter_chase_state(behavior: &mut AiBehavior, movement: &mut AiMovement, curre
 
 /// 處理 Idle 狀態的決策
 #[inline]
-fn handle_idle_state(
+pub(crate) fn handle_idle_state(
     config: &AiConfig,
     perception: &AiPerception,
     behavior: &mut AiBehavior,
@@ -94,7 +97,7 @@ fn handle_idle_state(
 ) {
     if perception.can_see_target {
         enter_chase_state(behavior, movement, current_time);
-    } else if perception.heard_noise {
+    } else if perception.has_heard_noise {
         behavior.set_state(AiState::Alert, current_time);
         movement.move_target = perception.noise_position;
     } else if has_patrol && behavior.state_timer > config.patrol_idle_threshold {
@@ -104,7 +107,7 @@ fn handle_idle_state(
 
 /// 處理 Patrol 狀態的決策
 #[inline]
-fn handle_patrol_state(
+pub(crate) fn handle_patrol_state(
     perception: &AiPerception,
     behavior: &mut AiBehavior,
     movement: &mut AiMovement,
@@ -112,7 +115,7 @@ fn handle_patrol_state(
 ) {
     if perception.can_see_target {
         enter_chase_state(behavior, movement, current_time);
-    } else if perception.heard_noise {
+    } else if perception.has_heard_noise {
         behavior.set_state(AiState::Alert, current_time);
         movement.move_target = perception.noise_position;
     }
@@ -120,7 +123,7 @@ fn handle_patrol_state(
 
 /// 處理 Alert 狀態的決策
 #[inline]
-fn handle_alert_state(
+pub(crate) fn handle_alert_state(
     config: &AiConfig,
     perception: &AiPerception,
     behavior: &mut AiBehavior,
@@ -141,7 +144,7 @@ fn handle_alert_state(
 
 /// 處理 Chase 狀態的決策
 #[inline]
-fn handle_chase_state(
+pub(crate) fn handle_chase_state(
     config: &AiConfig,
     perception: &AiPerception,
     combat: &AiCombat,
@@ -171,7 +174,7 @@ fn handle_chase_state(
 
 /// 處理 Attack 狀態的決策
 #[inline]
-fn handle_attack_state(
+pub(crate) fn handle_attack_state(
     perception: &AiPerception,
     combat: &AiCombat,
     behavior: &mut AiBehavior,
@@ -193,7 +196,7 @@ fn handle_attack_state(
 
 /// 處理 TakingCover 狀態的決策
 #[inline]
-fn handle_taking_cover_state(
+pub(crate) fn handle_taking_cover_state(
     config: &AiConfig,
     perception: &AiPerception,
     health_percent: f32,

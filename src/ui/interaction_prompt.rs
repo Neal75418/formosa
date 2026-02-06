@@ -11,7 +11,9 @@ use super::components::{
 use crate::mission::{Trigger as MissionTrigger, TriggerType};
 use crate::player::Player;
 
-// === 互動提示顏色常數 ===
+// ============================================================================
+// 互動提示顏色常數
+// ============================================================================
 /// 互動提示背景色
 const INTERACTION_PROMPT_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.75);
 /// 互動提示按鍵背景色

@@ -20,7 +20,6 @@ env:
   CARGO_INCREMENTAL: 0
   SCCACHE_DIR: /tmp/sccache
   SCCACHE_CACHE_SIZE: 2G
-  RUSTC_WRAPPER: sccache
 
 jobs:
   ci:
@@ -34,9 +33,12 @@ jobs:
 
       - name: Setup sccache
         run: |
+          SCCACHE_VER="v0.9.1"
           if ! command -v sccache &> /dev/null; then
-            echo "Installing sccache..."
-            cargo install sccache --locked
+            echo "Downloading sccache ${SCCACHE_VER}..."
+            curl -fsSL "https://github.com/mozilla/sccache/releases/download/${SCCACHE_VER}/sccache-${SCCACHE_VER}-x86_64-unknown-linux-musl.tar.gz" \
+              | tar xz --strip-components=1 -C /usr/local/bin/ "sccache-${SCCACHE_VER}-x86_64-unknown-linux-musl/sccache"
+            chmod +x /usr/local/bin/sccache
           fi
           sccache --version
 
@@ -57,10 +59,14 @@ jobs:
       # test 先跑（完整 codegen），clippy 再跑（重用 sccache 產物）
       - name: Test
         run: cargo test
+        env:
+          RUSTC_WRAPPER: sccache
 
       - name: Clippy
         run: cargo clippy -- -D warnings
+        env:
+          RUSTC_WRAPPER: sccache
 
       - name: sccache stats
         if: always()
-        run: sccache --show-stats
+        run: sccache --show-stats || true

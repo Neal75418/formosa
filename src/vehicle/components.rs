@@ -1491,3 +1491,314 @@ impl VehicleExplosion {
         (1.0 - progress).max(0.0)
     }
 }
+
+// ============================================================================
+// 單元測試
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- VehicleDamageState ---
+
+    #[test]
+    fn damage_state_from_health_percent_boundaries() {
+        assert_eq!(VehicleDamageState::from_health_percent(1.0), VehicleDamageState::Pristine);
+        assert_eq!(VehicleDamageState::from_health_percent(1.5), VehicleDamageState::Pristine);
+        assert_eq!(VehicleDamageState::from_health_percent(0.75), VehicleDamageState::Light);
+        assert_eq!(VehicleDamageState::from_health_percent(0.50), VehicleDamageState::Moderate);
+        assert_eq!(VehicleDamageState::from_health_percent(0.25), VehicleDamageState::Heavy);
+        assert_eq!(VehicleDamageState::from_health_percent(0.10), VehicleDamageState::Critical);
+        assert_eq!(VehicleDamageState::from_health_percent(0.0), VehicleDamageState::Destroyed);
+    }
+
+    // --- VehicleHealth ---
+
+    #[test]
+    fn health_new_sets_max_and_current() {
+        let h = VehicleHealth::new(500.0);
+        assert_eq!(h.current, 500.0);
+        assert_eq!(h.max, 500.0);
+        assert_eq!(h.percentage(), 1.0);
+        assert!(!h.is_destroyed());
+    }
+
+    #[test]
+    fn health_for_vehicle_type_correct_values() {
+        assert_eq!(VehicleHealth::for_vehicle_type(VehicleType::Scooter).max, 500.0);
+        assert_eq!(VehicleHealth::for_vehicle_type(VehicleType::Car).max, 1000.0);
+        assert_eq!(VehicleHealth::for_vehicle_type(VehicleType::Taxi).max, 1200.0);
+        assert_eq!(VehicleHealth::for_vehicle_type(VehicleType::Bus).max, 2000.0);
+    }
+
+    #[test]
+    fn health_take_damage_reduces_hp() {
+        let mut h = VehicleHealth::new(100.0);
+        let actual = h.take_damage(30.0, 1.0);
+        assert!((actual - 30.0).abs() < f32::EPSILON);
+        assert!((h.current - 70.0).abs() < f32::EPSILON);
+        assert!((h.percentage() - 0.7).abs() < 0.01);
+    }
+
+    #[test]
+    fn health_take_damage_clamps_to_zero() {
+        let mut h = VehicleHealth::new(50.0);
+        let actual = h.take_damage(200.0, 1.0);
+        assert!((actual - 50.0).abs() < f32::EPSILON);
+        assert_eq!(h.current, 0.0);
+        assert_eq!(h.damage_state, VehicleDamageState::Destroyed);
+    }
+
+    #[test]
+    fn health_take_damage_invulnerable_returns_zero() {
+        let mut h = VehicleHealth::new(100.0);
+        h.is_invulnerable = true;
+        let actual = h.take_damage(50.0, 1.0);
+        assert_eq!(actual, 0.0);
+        assert_eq!(h.current, 100.0);
+    }
+
+    #[test]
+    fn health_take_damage_critical_triggers_fire() {
+        let mut h = VehicleHealth::new(100.0);
+        h.take_damage(80.0, 1.0);
+        assert!(h.is_on_fire);
+        assert_eq!(h.damage_state, VehicleDamageState::Critical);
+    }
+
+    #[test]
+    fn health_repair_increases_hp() {
+        let mut h = VehicleHealth::new(100.0);
+        h.take_damage(60.0, 1.0);
+        h.repair(30.0);
+        assert!((h.current - 70.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn health_repair_clamps_to_max() {
+        let mut h = VehicleHealth::new(100.0);
+        h.take_damage(20.0, 1.0);
+        h.repair(500.0);
+        assert_eq!(h.current, 100.0);
+    }
+
+    #[test]
+    fn health_repair_extinguishes_fire_above_threshold() {
+        let mut h = VehicleHealth::new(100.0);
+        h.take_damage(85.0, 1.0);
+        assert!(h.is_on_fire);
+        h.repair(60.0);
+        assert!(!h.is_on_fire);
+        assert!(h.percentage() > 0.3);
+    }
+
+    #[test]
+    fn health_repair_does_nothing_when_destroyed() {
+        let mut h = VehicleHealth::new(100.0);
+        h.take_damage(100.0, 1.0);
+        assert!(h.is_destroyed());
+        h.repair(50.0);
+        assert_eq!(h.current, 0.0);
+    }
+
+    #[test]
+    fn health_full_repair_restores_everything() {
+        let mut h = VehicleHealth::new(100.0);
+        h.take_damage(80.0, 1.0);
+        h.full_repair();
+        assert_eq!(h.current, 100.0);
+        assert_eq!(h.damage_state, VehicleDamageState::Pristine);
+        assert!(!h.is_on_fire);
+    }
+
+    #[test]
+    fn health_apply_armor_upgrade_preserves_ratio() {
+        let mut h = VehicleHealth::new(100.0);
+        h.take_damage(50.0, 1.0);
+        assert!((h.percentage() - 0.5).abs() < 0.01);
+        h.apply_armor_upgrade(1.5);
+        assert!((h.max - 150.0).abs() < f32::EPSILON);
+        assert!((h.percentage() - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn health_tick_fire_countdown_explodes() {
+        let mut h = VehicleHealth::new(1000.0);
+        h.is_on_fire = true;
+        h.fire_timer = 1.0;
+        assert!(h.tick_fire(1.5));
+        assert_eq!(h.damage_state, VehicleDamageState::Destroyed);
+    }
+
+    #[test]
+    fn health_tick_fire_burn_damage() {
+        let mut h = VehicleHealth::new(100.0);
+        h.is_on_fire = true;
+        h.fire_timer = 10.0;
+        h.tick_fire(1.0);
+        assert!((h.current - 80.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn health_tick_fire_not_on_fire_returns_false() {
+        let mut h = VehicleHealth::new(100.0);
+        assert!(!h.tick_fire(1.0));
+        assert_eq!(h.current, 100.0);
+    }
+
+    // --- TireDamage ---
+
+    #[test]
+    fn tire_pop_and_count() {
+        let mut td = TireDamage::default();
+        assert_eq!(td.flat_count(), 0);
+        td.pop_tire(0);
+        assert_eq!(td.flat_count(), 1);
+        assert!(td.has_front_flat());
+        assert!(!td.has_rear_flat());
+    }
+
+    #[test]
+    fn tire_pop_rear_detected() {
+        let mut td = TireDamage::default();
+        td.pop_tire(2);
+        assert!(!td.has_front_flat());
+        assert!(td.has_rear_flat());
+    }
+
+    #[test]
+    fn tire_repair_single() {
+        let mut td = TireDamage::default();
+        td.pop_tire(1);
+        td.pop_tire(3);
+        assert_eq!(td.flat_count(), 2);
+        td.repair_tire(1);
+        assert_eq!(td.flat_count(), 1);
+    }
+
+    #[test]
+    fn tire_repair_all_resets() {
+        let mut td = TireDamage::default();
+        td.pop_tire(0);
+        td.pop_tire(1);
+        td.pop_tire(2);
+        td.repair_all();
+        assert_eq!(td.flat_count(), 0);
+        assert_eq!(td.handling_penalty, 0.0);
+        assert_eq!(td.speed_penalty, 0.0);
+    }
+
+    #[test]
+    fn tire_penalties_scale_with_count() {
+        let mut td = TireDamage::default();
+        td.pop_tire(0);
+        assert!((td.handling_penalty - 0.15).abs() < f32::EPSILON);
+        assert!((td.speed_penalty - 0.10).abs() < f32::EPSILON);
+        td.pop_tire(1);
+        assert!((td.handling_penalty - 0.30).abs() < f32::EPSILON);
+        assert!((td.speed_penalty - 0.20).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn tire_out_of_bounds_ignored() {
+        let mut td = TireDamage::default();
+        td.pop_tire(99);
+        assert_eq!(td.flat_count(), 0);
+    }
+
+    // --- TrafficLightState ---
+
+    #[test]
+    fn traffic_light_state_cycle() {
+        let g = TrafficLightState::Green;
+        let y = g.next();
+        let r = y.next();
+        let g2 = r.next();
+        assert_eq!(y, TrafficLightState::Yellow);
+        assert_eq!(r, TrafficLightState::Red);
+        assert_eq!(g2, TrafficLightState::Green);
+    }
+
+    #[test]
+    fn traffic_light_state_durations() {
+        assert_eq!(TrafficLightState::Green.duration(), 8.0);
+        assert_eq!(TrafficLightState::Yellow.duration(), 2.0);
+        assert_eq!(TrafficLightState::Red.duration(), 10.0);
+    }
+
+    // --- TrafficLight ---
+
+    #[test]
+    fn traffic_light_advance_cycles() {
+        let mut light = TrafficLight::new(Vec3::NEG_Z, true);
+        assert_eq!(light.state, TrafficLightState::Green);
+        light.advance();
+        assert_eq!(light.state, TrafficLightState::Yellow);
+        light.advance();
+        assert_eq!(light.state, TrafficLightState::Red);
+    }
+
+    #[test]
+    fn traffic_light_should_stop_red_facing() {
+        // control_direction=NEG_Z → 車輛需反向（+Z）才受控
+        let mut light = TrafficLight::new(Vec3::NEG_Z, true);
+        light.state = TrafficLightState::Red;
+        let light_pos = Vec3::new(0.0, 0.0, 10.0);
+        let vehicle_pos = Vec3::ZERO;
+        let vehicle_forward = Vec3::Z; // 朝向燈
+        assert!(light.should_vehicle_stop(vehicle_pos, vehicle_forward, light_pos));
+    }
+
+    #[test]
+    fn traffic_light_should_not_stop_green() {
+        let light = TrafficLight::new(Vec3::NEG_Z, true);
+        let light_pos = Vec3::new(0.0, 0.0, 10.0);
+        assert!(!light.should_vehicle_stop(Vec3::ZERO, Vec3::Z, light_pos));
+    }
+
+    // --- VehicleExplosion ---
+
+    #[test]
+    fn explosion_scale_expand_then_shrink() {
+        let mut e = VehicleExplosion::new(Vec3::ZERO, 5.0, 100.0);
+        assert!((e.scale() - 0.0).abs() < 0.01);
+        e.lifetime = 0.3;
+        assert!((e.scale() - 1.5).abs() < 0.01);
+        e.lifetime = 1.0;
+        assert!((e.scale() - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn explosion_alpha_fades() {
+        let mut e = VehicleExplosion::new(Vec3::ZERO, 5.0, 100.0);
+        assert!((e.alpha() - 1.0).abs() < f32::EPSILON);
+        e.lifetime = 0.5;
+        assert!((e.alpha() - 0.5).abs() < f32::EPSILON);
+        e.lifetime = 1.0;
+        assert!((e.alpha() - 0.0).abs() < f32::EPSILON);
+    }
+
+    // --- DriftSmoke ---
+
+    #[test]
+    fn drift_smoke_alpha_and_scale() {
+        let mut s = DriftSmoke::new(Vec3::Y, 2.0);
+        assert!((s.alpha() - 1.0).abs() < f32::EPSILON);
+        assert!((s.scale() - 0.3).abs() < 0.01);
+        s.lifetime = 1.0;
+        assert!((s.alpha() - 0.5).abs() < f32::EPSILON);
+        assert!((s.scale() - 0.3 * 2.0).abs() < 0.01);
+    }
+
+    // --- NitroFlame ---
+
+    #[test]
+    fn nitro_flame_scale_shrinks() {
+        let mut f = NitroFlame::new(Vec3::Z);
+        let s0 = f.scale();
+        f.lifetime = 0.15;
+        let s1 = f.scale();
+        assert!(s0 > s1);
+    }
+}

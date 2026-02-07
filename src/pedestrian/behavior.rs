@@ -310,3 +310,83 @@ impl ShelterSeeker {
         self.target_shelter.is_some() && !self.is_sheltered
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- BehaviorType ---
+
+    #[test]
+    fn behavior_speed_multipliers() {
+        assert_eq!(BehaviorType::Walking.speed_multiplier(), 1.0);
+        assert_eq!(BehaviorType::PhoneWatching.speed_multiplier(), 0.0);
+        assert_eq!(BehaviorType::SeekingShelter.speed_multiplier(), 2.0);
+        assert!(BehaviorType::WindowShopping.speed_multiplier() > 0.0);
+        assert!(BehaviorType::WindowShopping.speed_multiplier() < 1.0);
+    }
+
+    #[test]
+    fn behavior_duration_ranges_valid() {
+        let behaviors = [
+            BehaviorType::Walking,
+            BehaviorType::PhoneWatching,
+            BehaviorType::Chatting,
+            BehaviorType::Resting,
+            BehaviorType::TakingPhoto,
+            BehaviorType::WindowShopping,
+            BehaviorType::SeekingShelter,
+        ];
+        for b in &behaviors {
+            let (min, max) = b.duration_range();
+            assert!(min > 0.0, "{:?} min duration should be > 0", b);
+            assert!(max > min, "{:?} max should be > min", b);
+        }
+    }
+
+    // --- ShelterPoint ---
+
+    #[test]
+    fn shelter_has_space_and_occupy() {
+        let mut poi = PointsOfInterest::default();
+        poi.shelters.push(ShelterPoint::new(Vec3::ZERO, ShelterType::Awning, 2));
+        assert!(poi.shelters[0].has_space());
+        assert!(poi.occupy_shelter(Vec3::ZERO));
+        assert!(poi.occupy_shelter(Vec3::ZERO));
+        assert!(!poi.shelters[0].has_space()); // 已滿
+        poi.release_shelter(Vec3::ZERO);
+        assert!(poi.shelters[0].has_space());
+    }
+
+    // --- ShelterSeeker ---
+
+    #[test]
+    fn shelter_seeker_lifecycle() {
+        let mut ss = ShelterSeeker::default();
+        assert!(!ss.is_seeking());
+        ss.start_seeking(Vec3::new(10.0, 0.0, 10.0), BehaviorType::Walking);
+        assert!(ss.is_seeking());
+        assert!(!ss.is_sheltered);
+        ss.arrive_at_shelter(5.0);
+        assert!(!ss.is_seeking());
+        assert!(ss.is_sheltered);
+        ss.stop_sheltering();
+        assert!(!ss.is_sheltered);
+        assert!(ss.target_shelter.is_none());
+    }
+
+    // --- PointsOfInterest ---
+
+    #[test]
+    fn find_nearest_shelter_with_space() {
+        let mut poi = PointsOfInterest::default();
+        poi.shelters.push(ShelterPoint::new(Vec3::new(5.0, 0.0, 0.0), ShelterType::BusStop, 1));
+        poi.shelters.push(ShelterPoint::new(Vec3::new(10.0, 0.0, 0.0), ShelterType::Awning, 2));
+        // 佔滿第一個
+        poi.occupy_shelter(Vec3::new(5.0, 0.0, 0.0));
+        // 應該找到第二個
+        let nearest = poi.find_nearest_shelter(Vec3::ZERO, 20.0);
+        assert!(nearest.is_some());
+        assert!((nearest.unwrap().x - 10.0).abs() < f32::EPSILON);
+    }
+}

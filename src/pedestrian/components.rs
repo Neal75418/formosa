@@ -602,3 +602,85 @@ pub struct HitByVehicle {
     pub hit_time: f32,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- WitnessState ---
+
+    #[test]
+    fn witness_crime_sets_state() {
+        let mut ws = WitnessState::default();
+        ws.witness_crime(WitnessedCrime::Gunshot, Vec3::new(1.0, 0.0, 2.0));
+        assert!(ws.witnessed_crime);
+        assert_eq!(ws.crime_type, Some(WitnessedCrime::Gunshot));
+        assert_eq!(ws.call_progress, 0.0);
+    }
+
+    #[test]
+    fn witness_crime_ignored_on_cooldown() {
+        let mut ws = WitnessState::default();
+        ws.report_cooldown = 30.0;
+        ws.witness_crime(WitnessedCrime::Assault, Vec3::ZERO);
+        assert!(!ws.witnessed_crime);
+    }
+
+    #[test]
+    fn witness_tick_completes_call() {
+        let mut ws = WitnessState::default();
+        ws.witness_crime(WitnessedCrime::Murder, Vec3::ZERO);
+        assert!(!ws.tick(1.0));
+        assert!(!ws.tick(1.0));
+        assert!(ws.tick(1.0));
+        assert!(ws.has_reported);
+        assert!((ws.report_cooldown - 60.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn witness_reset_clears_state() {
+        let mut ws = WitnessState::default();
+        ws.witness_crime(WitnessedCrime::VehicleTheft, Vec3::ZERO);
+        ws.tick(1.0);
+        ws.reset();
+        assert!(!ws.witnessed_crime);
+        assert_eq!(ws.crime_type, None);
+        assert_eq!(ws.call_progress, 0.0);
+    }
+
+    // --- WitnessedCrime ---
+
+    #[test]
+    fn crime_severity_ordered() {
+        assert!(WitnessedCrime::Murder.severity() > WitnessedCrime::Assault.severity());
+        assert!(WitnessedCrime::VehicleHit.severity() > WitnessedCrime::Gunshot.severity());
+    }
+
+    // --- GunshotTracker ---
+
+    #[test]
+    fn gunshot_tracker_record_and_query() {
+        let mut gt = GunshotTracker::default();
+        gt.record_shot(Vec3::new(10.0, 0.0, 10.0), 1.0);
+        assert!(gt.has_nearby_shot(Vec3::new(11.0, 0.0, 10.0), 5.0, 2.0).is_some());
+        assert!(gt.has_nearby_shot(Vec3::new(100.0, 0.0, 100.0), 5.0, 2.0).is_none());
+    }
+
+    #[test]
+    fn gunshot_tracker_expires_old_shots() {
+        let mut gt = GunshotTracker::default();
+        gt.record_shot(Vec3::ZERO, 1.0);
+        gt.cleanup(10.0);
+        assert!(gt.recent_shots.is_empty());
+    }
+
+    #[test]
+    fn gunshot_tracker_time_window() {
+        let mut gt = GunshotTracker::default();
+        gt.record_shot(Vec3::ZERO, 1.0);
+        // 恰好 3 秒（差值 = 3.0，不嚴格大於 3.0）→ 仍可找到
+        assert!(gt.has_nearby_shot(Vec3::ZERO, 10.0, 4.0).is_some());
+        // 超過 3 秒 → 過期
+        assert!(gt.has_nearby_shot(Vec3::ZERO, 10.0, 4.01).is_none());
+    }
+}
+

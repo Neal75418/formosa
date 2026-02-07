@@ -233,6 +233,99 @@ fn update_moon_phase(moon: &mut Moon, dt: f32, time_scale: f32) {
     moon.phase = (moon.phase + phase_speed * dt * time_scale) % 1.0;
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- calculate_day_intensity ---
+
+    #[test]
+    fn day_intensity_midnight_is_zero() {
+        assert_eq!(calculate_day_intensity(0.0), 0.0);
+        assert_eq!(calculate_day_intensity(3.0), 0.0);
+        assert_eq!(calculate_day_intensity(5.9), 0.0);
+    }
+
+    #[test]
+    fn day_intensity_noon_is_max() {
+        assert_eq!(calculate_day_intensity(12.0), 1.0);
+        assert_eq!(calculate_day_intensity(10.0), 1.0);
+        assert_eq!(calculate_day_intensity(15.0), 1.0);
+    }
+
+    #[test]
+    fn day_intensity_sunrise_ramps_up() {
+        let dawn = calculate_day_intensity(7.0);
+        assert!(dawn > 0.0 && dawn < 1.0);
+        assert!((dawn - 0.5).abs() < f32::EPSILON);
+    }
+
+    // --- get_weather_light_factor ---
+
+    #[test]
+    fn weather_light_clear_is_full() {
+        let ws = WeatherState::default(); // Clear
+        assert_eq!(get_weather_light_factor(&ws), 1.0);
+    }
+
+    #[test]
+    fn weather_light_stormy_is_darkest() {
+        let ws = WeatherState {
+            weather_type: WeatherType::Stormy,
+            is_transitioning: false,
+            ..Default::default()
+        };
+        assert!((get_weather_light_factor(&ws) - 0.25).abs() < f32::EPSILON);
+    }
+
+    // --- adjust_hour_for_weather ---
+
+    #[test]
+    fn adjust_hour_clear_no_shift() {
+        let ws = WeatherState::default();
+        assert_eq!(adjust_hour_for_weather(12.0, &ws), 12.0);
+    }
+
+    #[test]
+    fn adjust_hour_stormy_shifts_4h_daytime() {
+        let ws = WeatherState {
+            weather_type: WeatherType::Stormy,
+            ..Default::default()
+        };
+        assert!((adjust_hour_for_weather(12.0, &ws) - 16.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn adjust_hour_nighttime_no_shift() {
+        let ws = WeatherState {
+            weather_type: WeatherType::Stormy,
+            ..Default::default()
+        };
+        assert_eq!(adjust_hour_for_weather(22.0, &ws), 22.0);
+    }
+
+    // --- calculate_sun_rotation ---
+
+    #[test]
+    fn sun_rotation_changes_between_noon_and_night() {
+        let noon = calculate_sun_rotation(12.0);
+        let night = calculate_sun_rotation(0.0);
+        // 正午和夜晚的旋轉應該不同
+        let diff = noon.dot(night).abs();
+        assert!(diff < 0.99, "noon and night rotations should differ, dot={diff}");
+    }
+
+    // --- calculate_moon_position ---
+
+    #[test]
+    fn moon_position_midnight_is_high() {
+        let (pos, elevation) = calculate_moon_position(0.0);
+        // 午夜月亮應在高處
+        assert!(pos.y > 100.0, "moon at midnight should be high, got {}", pos.y);
+        assert!(elevation > 0.0);
+    }
+}
+
 /// 更新路燈開關
 fn update_street_lights(street_lights: &mut Query<(&mut PointLight, &mut StreetLight)>, hour: f32) {
     let should_be_on = !(6.0..=18.0).contains(&hour);

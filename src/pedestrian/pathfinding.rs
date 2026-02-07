@@ -300,3 +300,149 @@ impl AStarPath {
         self.current_index >= self.waypoints.len().saturating_sub(1) && !self.waypoints.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn small_grid() -> PathfindingGrid {
+        PathfindingGrid {
+            origin: Vec3::new(0.0, 0.0, 0.0),
+            width: 10,
+            height: 10,
+            cell_size: 1.0,
+            walkable: vec![true; 100],
+        }
+    }
+
+    // --- 座標轉換 ---
+
+    #[test]
+    fn world_to_grid_and_back() {
+        let grid = small_grid();
+        let world_pos = Vec3::new(3.2, 0.0, 5.8);
+        let (gx, gz) = grid.world_to_grid(world_pos).unwrap();
+        assert_eq!((gx, gz), (3, 5));
+        let back = grid.grid_to_world(gx, gz);
+        assert!((back.x - 3.5).abs() < f32::EPSILON); // 格子中心
+        assert!((back.z - 5.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn world_to_grid_out_of_bounds() {
+        let grid = small_grid();
+        assert!(grid.world_to_grid(Vec3::new(-1.0, 0.0, 0.0)).is_none());
+        assert!(grid.world_to_grid(Vec3::new(10.0, 0.0, 0.0)).is_none());
+    }
+
+    // --- 可行走性 ---
+
+    #[test]
+    fn walkable_set_and_check() {
+        let mut grid = small_grid();
+        assert!(grid.is_walkable(5, 5));
+        grid.set_walkable(5, 5, false);
+        assert!(!grid.is_walkable(5, 5));
+    }
+
+    #[test]
+    fn walkable_out_of_bounds_returns_false() {
+        let grid = small_grid();
+        assert!(!grid.is_walkable(100, 100));
+    }
+
+    #[test]
+    fn diagonal_blocked_by_adjacent_wall() {
+        let mut grid = small_grid();
+        grid.set_walkable(1, 0, false); // 阻擋 (0,0)→(1,1) 的對角
+        assert!(!grid.is_diagonal_valid((0, 0), (1, 1)));
+    }
+
+    // --- A* 尋路 ---
+
+    #[test]
+    fn find_path_straight_line() {
+        let grid = small_grid();
+        let start = Vec3::new(0.5, 0.0, 0.5);
+        let goal = Vec3::new(5.5, 0.0, 0.5);
+        let path = grid.find_path(start, goal);
+        assert!(path.is_some());
+        let waypoints = path.unwrap();
+        assert!(waypoints.len() >= 2);
+        assert!((waypoints.last().unwrap().x - 5.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn find_path_around_obstacle() {
+        let mut grid = small_grid();
+        // 在 x=3 處放一面牆（z=0..8）
+        for z in 0..8 {
+            grid.set_walkable(3, z, false);
+        }
+        let start = Vec3::new(1.5, 0.0, 1.5);
+        let goal = Vec3::new(5.5, 0.0, 1.5);
+        let path = grid.find_path(start, goal);
+        assert!(path.is_some());
+        // 路徑應該繞過牆壁
+        let waypoints = path.unwrap();
+        assert!(waypoints.len() > 2);
+    }
+
+    #[test]
+    fn find_path_blocked_goal_returns_none() {
+        let mut grid = small_grid();
+        grid.set_walkable(5, 5, false);
+        let start = Vec3::new(0.5, 0.0, 0.5);
+        let goal = Vec3::new(5.5, 0.0, 5.5);
+        let path = grid.find_path(start, goal);
+        assert!(path.is_none());
+    }
+
+    #[test]
+    fn find_path_isolated_region_returns_none() {
+        let mut grid = small_grid();
+        // 完整牆壁隔開左右區域
+        for z in 0..10 {
+            grid.set_walkable(3, z, false);
+        }
+        let start = Vec3::new(1.5, 0.0, 5.5);
+        let goal = Vec3::new(5.5, 0.0, 5.5);
+        let path = grid.find_path(start, goal);
+        assert!(path.is_none());
+    }
+
+    #[test]
+    fn simplify_path_removes_collinear() {
+        let path = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(2.0, 0.0, 0.0),
+            Vec3::new(3.0, 0.0, 0.0),
+        ];
+        let simplified = simplify_path(path);
+        assert_eq!(simplified.len(), 2); // 只保留首尾
+    }
+
+    // --- AStarPath ---
+
+    #[test]
+    fn astar_path_advance_and_complete() {
+        let mut p = AStarPath::new(Vec3::new(10.0, 0.0, 10.0));
+        p.waypoints = vec![Vec3::ZERO, Vec3::X, Vec3::new(2.0, 0.0, 0.0)];
+        p.current_index = 0;
+        assert!(!p.is_complete());
+        assert_eq!(p.current_waypoint(), Some(Vec3::ZERO));
+        assert!(p.advance());
+        assert_eq!(p.current_waypoint(), Some(Vec3::X));
+        assert!(p.advance());
+        assert!(p.is_complete());
+        assert!(!p.advance()); // 已到末尾
+    }
+
+    #[test]
+    fn astar_path_empty_not_complete() {
+        let p = AStarPath::new(Vec3::ZERO);
+        assert!(!p.is_complete());
+        assert_eq!(p.current_waypoint(), None);
+    }
+}

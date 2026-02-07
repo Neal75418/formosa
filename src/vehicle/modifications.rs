@@ -394,6 +394,107 @@ pub fn purchase_nitro_system(
     }
 }
 
+// ============================================================================
+// 單元測試
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- ModLevel ---
+
+    #[test]
+    fn mod_level_multiplier_progression() {
+        assert_eq!(ModLevel::Stock.multiplier(), 1.0);
+        assert!((ModLevel::Level1.multiplier() - 1.10).abs() < f32::EPSILON);
+        assert!((ModLevel::Level2.multiplier() - 1.25).abs() < f32::EPSILON);
+        assert!((ModLevel::Level3.multiplier() - 1.50).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mod_level_price_progression() {
+        assert_eq!(ModLevel::Stock.price(), 0);
+        assert_eq!(ModLevel::Level1.price(), 5_000);
+        assert_eq!(ModLevel::Level2.price(), 15_000);
+        assert_eq!(ModLevel::Level3.price(), 40_000);
+    }
+
+    #[test]
+    fn mod_level_next_chain() {
+        assert_eq!(ModLevel::Stock.next(), Some(ModLevel::Level1));
+        assert_eq!(ModLevel::Level1.next(), Some(ModLevel::Level2));
+        assert_eq!(ModLevel::Level2.next(), Some(ModLevel::Level3));
+        assert_eq!(ModLevel::Level3.next(), None);
+    }
+
+    #[test]
+    fn mod_level_upgrade_price() {
+        assert_eq!(ModLevel::Stock.upgrade_price(), Some(5_000));
+        assert_eq!(ModLevel::Level3.upgrade_price(), None);
+    }
+
+    // --- VehicleModifications ---
+
+    #[test]
+    fn mods_upgrade_advances_level() {
+        let mut mods = VehicleModifications::default();
+        assert_eq!(mods.get_level(ModCategory::Engine), ModLevel::Stock);
+        assert!(mods.upgrade(ModCategory::Engine));
+        assert_eq!(mods.get_level(ModCategory::Engine), ModLevel::Level1);
+        assert!(mods.upgrade(ModCategory::Engine));
+        assert_eq!(mods.get_level(ModCategory::Engine), ModLevel::Level2);
+        assert!(mods.upgrade(ModCategory::Engine));
+        assert_eq!(mods.get_level(ModCategory::Engine), ModLevel::Level3);
+        assert!(!mods.upgrade(ModCategory::Engine)); // 已滿
+    }
+
+    #[test]
+    fn mods_get_multiplier_reflects_level() {
+        let mut mods = VehicleModifications::default();
+        assert_eq!(mods.get_multiplier(ModCategory::Tires), 1.0);
+        mods.upgrade(ModCategory::Tires);
+        assert!((mods.get_multiplier(ModCategory::Tires) - 1.10).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mods_total_value_sums_all() {
+        let mut mods = VehicleModifications::default();
+        assert_eq!(mods.total_value(), 0);
+        mods.upgrade(ModCategory::Engine); // +5000
+        mods.upgrade(ModCategory::Brakes); // +5000
+        assert_eq!(mods.total_value(), 10_000);
+        mods.has_nitro = true; // +25000
+        assert_eq!(mods.total_value(), 35_000);
+    }
+
+    // --- modified_* helpers ---
+
+    #[test]
+    fn modified_acceleration_applies_engine_multiplier() {
+        let mut mods = VehicleModifications::default();
+        mods.engine = ModLevel::Level2;
+        let result = modified_acceleration(10.0, &mods);
+        assert!((result - 12.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn modified_max_speed_applies_transmission() {
+        let mut mods = VehicleModifications::default();
+        mods.transmission = ModLevel::Level3;
+        let result = modified_max_speed(30.0, &mods);
+        assert!((result - 45.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn modified_health_applies_armor() {
+        let mut mods = VehicleModifications::default();
+        mods.armor = ModLevel::Level1;
+        let result = modified_health(1000.0, &mods);
+        assert!((result - 1100.0).abs() < f32::EPSILON);
+    }
+}
+
 /// 氮氣加速系統
 pub fn nitro_boost_system(
     time: Res<Time>,

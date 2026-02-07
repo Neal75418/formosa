@@ -902,3 +902,133 @@ pub struct MissionCompletionResult {
     /// 解鎖的任務
     pub unlocked_missions: Vec<StoryMissionId>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- MissionObjective ---
+
+    #[test]
+    fn objective_increment_and_completion() {
+        let mut obj =
+            MissionObjective::new(1, ObjectiveType::KillCount(3), "Kill 3 enemies").with_count(3);
+        assert!(!obj.check_completion());
+        assert!(obj.progress().abs() < f32::EPSILON);
+
+        obj.increment();
+        assert_eq!(obj.current_count, 1);
+        assert!(!obj.check_completion());
+
+        obj.increment();
+        obj.increment();
+        assert!(obj.check_completion());
+        assert!(obj.is_completed);
+        assert!((obj.progress() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn objective_increment_capped_at_target() {
+        let mut obj =
+            MissionObjective::new(1, ObjectiveType::KillCount(2), "Kill 2").with_count(2);
+        obj.increment();
+        obj.increment();
+        obj.increment(); // extra
+        assert_eq!(obj.current_count, 2);
+    }
+
+    #[test]
+    fn objective_progress_zero_target() {
+        let obj = MissionObjective {
+            id: 1,
+            objective_type: ObjectiveType::Custom("test".into()),
+            description: "test".into(),
+            target_count: 0,
+            current_count: 0,
+            is_optional: false,
+            is_completed: false,
+        };
+        assert!((obj.progress() - 1.0).abs() < f32::EPSILON);
+    }
+
+    // --- MissionPhase ---
+
+    #[test]
+    fn phase_complete_ignores_optional() {
+        let mut required =
+            MissionObjective::new(1, ObjectiveType::KillCount(1), "required").with_count(1);
+        required.increment();
+
+        let optional =
+            MissionObjective::new(2, ObjectiveType::CollectItem("bonus".into()), "optional")
+                .optional();
+
+        let phase = MissionPhase::new(1, StoryMissionType::Elimination, "test phase")
+            .with_objective(required)
+            .with_objective(optional);
+
+        assert!(phase.is_complete());
+    }
+
+    // --- MissionPerformance ---
+
+    #[test]
+    fn performance_accuracy() {
+        let mut perf = MissionPerformance::default();
+        assert!((perf.accuracy() - 1.0).abs() < f32::EPSILON);
+
+        perf.shots_fired = 10;
+        perf.shots_hit = 7;
+        assert!((perf.accuracy() - 0.7).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn performance_headshot_ratio() {
+        let perf = MissionPerformance {
+            enemies_killed: 10,
+            headshots: 4,
+            ..default()
+        };
+        assert!((perf.headshot_ratio() - 0.4).abs() < f32::EPSILON);
+
+        let no_kills = MissionPerformance::default();
+        assert!(no_kills.headshot_ratio().abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn performance_rating_perfect_run() {
+        let perf = MissionPerformance {
+            completion_time: 50.0,
+            shots_fired: 10,
+            shots_hit: 10,
+            enemies_killed: 5,
+            headshots: 5,
+            ..default()
+        };
+        let rating = perf.calculate_rating(60.0);
+        assert_eq!(rating, StoryMissionRating::FiveStars);
+    }
+
+    #[test]
+    fn performance_rating_poor_run() {
+        let perf = MissionPerformance {
+            completion_time: 180.0,
+            player_deaths: 3,
+            checkpoint_retries: 2,
+            ..default()
+        };
+        // score = 100 - 40(overtime) - 45(deaths) - 20(retries) + 10(accuracy) = 5
+        let rating = perf.calculate_rating(60.0);
+        assert_eq!(rating, StoryMissionRating::None);
+    }
+
+    // --- StoryMissionRating ---
+
+    #[test]
+    fn story_rating_stars_and_bonus() {
+        assert_eq!(StoryMissionRating::None.stars(), 0);
+        assert_eq!(StoryMissionRating::FiveStars.stars(), 5);
+        assert!((StoryMissionRating::FiveStars.bonus_multiplier() - 2.0).abs() < f32::EPSILON);
+        assert!((StoryMissionRating::None.bonus_multiplier() - 0.5).abs() < f32::EPSILON);
+    }
+}

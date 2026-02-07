@@ -890,3 +890,90 @@ fn calculate_taxi_fare(distance: f32) -> u32 {
     let per_unit = (distance / 200.0) as u32 * 5;
     base + per_unit
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- DeliveryRating ---
+
+    #[test]
+    fn delivery_rating_from_time_ratio() {
+        assert_eq!(DeliveryRating::from_time_ratio(-0.1), DeliveryRating::OneStar);
+        assert_eq!(DeliveryRating::from_time_ratio(0.05), DeliveryRating::TwoStars);
+        assert_eq!(DeliveryRating::from_time_ratio(0.2), DeliveryRating::ThreeStars);
+        assert_eq!(DeliveryRating::from_time_ratio(0.4), DeliveryRating::FourStars);
+        assert_eq!(DeliveryRating::from_time_ratio(0.6), DeliveryRating::FiveStars);
+    }
+
+    #[test]
+    fn delivery_rating_bonus_multiplier() {
+        assert!((DeliveryRating::OneStar.bonus_multiplier() - 0.5).abs() < f32::EPSILON);
+        assert!((DeliveryRating::FiveStars.bonus_multiplier() - 2.0).abs() < f32::EPSILON);
+        assert!((DeliveryRating::None.bonus_multiplier() - 1.0).abs() < f32::EPSILON);
+    }
+
+    // --- RaceData ---
+
+    #[test]
+    fn race_advance_checkpoint_and_finish() {
+        let mut race = RaceData::new(
+            vec![Vec3::ZERO, Vec3::X, Vec3::new(2.0, 0.0, 0.0)],
+            30.0, 40.0, 50.0,
+        );
+        assert!(!race.is_finished());
+        assert_eq!(race.current_checkpoint, 0);
+
+        assert!(race.advance_checkpoint()); // 0 -> 1
+        assert!(race.advance_checkpoint()); // 1 -> 2
+        assert!(!race.advance_checkpoint()); // at last, can't advance
+        assert_eq!(race.current_checkpoint, 2);
+    }
+
+    #[test]
+    fn race_medal_for_time() {
+        let race = RaceData::new(vec![Vec3::ZERO], 30.0, 40.0, 50.0);
+        assert_eq!(race.medal_for_time(25.0), RaceMedal::Gold);
+        assert_eq!(race.medal_for_time(30.0), RaceMedal::Gold); // exactly gold
+        assert_eq!(race.medal_for_time(35.0), RaceMedal::Silver);
+        assert_eq!(race.medal_for_time(45.0), RaceMedal::Bronze);
+        assert_eq!(race.medal_for_time(60.0), RaceMedal::None);
+    }
+
+    // --- TaxiData ---
+
+    #[test]
+    fn taxi_update_satisfaction_clamped() {
+        let mut taxi = TaxiData::new("Test".into(), "Dest".into());
+        assert!((taxi.satisfaction - 1.0).abs() < f32::EPSILON);
+
+        taxi.update_satisfaction(0.3);
+        assert!((taxi.satisfaction - 1.3).abs() < f32::EPSILON);
+
+        taxi.update_satisfaction(1.0); // clamp to MAX_SATISFACTION (1.5)
+        assert!((taxi.satisfaction - 1.5).abs() < f32::EPSILON);
+
+        taxi.update_satisfaction(-10.0); // clamp to 0.0
+        assert!(taxi.satisfaction.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn taxi_rating_thresholds() {
+        let mut taxi = TaxiData::new("Test".into(), "Dest".into());
+
+        taxi.satisfaction = 1.4;
+        assert_eq!(taxi.rating(), TaxiRating::Excellent);
+
+        taxi.satisfaction = 1.0;
+        assert_eq!(taxi.rating(), TaxiRating::Good);
+
+        taxi.satisfaction = 0.7;
+        assert_eq!(taxi.rating(), TaxiRating::Average);
+
+        taxi.satisfaction = 0.5;
+        assert_eq!(taxi.rating(), TaxiRating::Poor);
+
+        taxi.satisfaction = 0.2;
+        assert_eq!(taxi.rating(), TaxiRating::Terrible);
+    }
+}

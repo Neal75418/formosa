@@ -18,6 +18,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  CARGO_BUILD_JOBS: 2
 
 jobs:
   ci:
@@ -32,19 +33,20 @@ jobs:
       - name: Override opt-level for CI
         run: |
           mkdir -p .cargo
-          cat > .cargo/config.toml << 'EOF'
+          cat > .cargo/config.toml << 'TOML'
           [profile.dev]
-          opt-level = 0
+          opt-level = 1
 
           [profile.dev.package."*"]
-          opt-level = 0
-          EOF
+          opt-level = 1
+          TOML
+          cat .cargo/config.toml
 
       - name: Cache
         uses: Swatinem/rust-cache@v2
 
       - name: Test
-        run: cargo test
+        run: cargo test 2>&1
 
       - name: Clippy
         run: cargo clippy -- -D warnings

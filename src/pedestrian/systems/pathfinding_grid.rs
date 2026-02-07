@@ -6,81 +6,78 @@ use bevy_rapier3d::prelude::*;
 use crate::pedestrian::behavior::{DailyBehavior, PointsOfInterest};
 use crate::pedestrian::components::{PedState, Pedestrian, PedestrianConfig, PedestrianState};
 use crate::pedestrian::pathfinding::{AStarPath, PathfindingGrid};
-
-// ============================================================================
-// A* 尋路系統
-// ============================================================================
+use crate::world::{
+    X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA,
+    Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
+    W_ALLEY, W_MAIN, W_PEDESTRIAN, W_SECONDARY, W_ZHONGHUA,
+};
 
 // ============================================================================
 // 尋路網格輔助函數
 // ============================================================================
-/// 將世界座標轉換為網格座標
-fn world_to_grid_coords(x: i32, z: i32) -> (usize, usize) {
-    (((x + 70) / 2) as usize, ((z + 70) / 2) as usize)
-}
 
-/// 將矩形區域標記為不可通行
-fn mark_area_unwalkable(grid: &mut PathfindingGrid, x1: i32, z1: i32, x2: i32, z2: i32) {
-    for x in x1..x2 {
-        for z in z1..z2 {
-            let (gx, gz) = world_to_grid_coords(x, z);
-            if gx < grid.width && gz < grid.height {
-                grid.set_walkable(gx, gz, false);
-            }
+/// 將矩形世界座標區域標記為可通行
+fn mark_rect_walkable(grid: &mut PathfindingGrid, x_min: f32, x_max: f32, z_min: f32, z_max: f32) {
+    let gx_start = ((x_min - grid.origin.x) / grid.cell_size).floor().max(0.0) as usize;
+    let gx_end = ((x_max - grid.origin.x) / grid.cell_size).ceil().min(grid.width as f32) as usize;
+    let gz_start = ((z_min - grid.origin.z) / grid.cell_size).floor().max(0.0) as usize;
+    let gz_end = ((z_max - grid.origin.z) / grid.cell_size).ceil().min(grid.height as f32) as usize;
+
+    for gx in gx_start..gx_end {
+        for gz in gz_start..gz_end {
+            grid.set_walkable(gx, gz, true);
         }
     }
 }
 
-/// 將橫向道路標記為可通行
-fn mark_horizontal_road(grid: &mut PathfindingGrid, grid_x_start: usize, grid_x_end: usize) {
-    for x in grid_x_start..grid_x_end {
-        for z in 0..grid.height {
-            grid.set_walkable(x, z, true);
-        }
-    }
+/// 標記南北向道路為可通行（固定 X 中心，沿 Z 軸延伸整個網格）
+fn mark_ns_road(grid: &mut PathfindingGrid, center_x: f32, road_width: f32) {
+    let x_min = center_x - road_width / 2.0;
+    let x_max = center_x + road_width / 2.0;
+    let z_min = grid.origin.z;
+    let z_max = grid.origin.z + grid.height as f32 * grid.cell_size;
+    mark_rect_walkable(grid, x_min, x_max, z_min, z_max);
 }
 
-/// 將縱向道路標記為可通行
-fn mark_vertical_road(grid: &mut PathfindingGrid, grid_z_start: usize, grid_z_end: usize) {
-    for x in 0..grid.width {
-        for z in grid_z_start..grid_z_end {
-            grid.set_walkable(x, z, true);
-        }
-    }
+/// 標記東西向道路為可通行（固定 Z 中心，沿 X 軸延伸整個網格）
+fn mark_ew_road(grid: &mut PathfindingGrid, center_z: f32, road_width: f32) {
+    let z_min = center_z - road_width / 2.0;
+    let z_max = center_z + road_width / 2.0;
+    let x_min = grid.origin.x;
+    let x_max = grid.origin.x + grid.width as f32 * grid.cell_size;
+    mark_rect_walkable(grid, x_min, x_max, z_min, z_max);
 }
 
-/// 初始化 A* 尋路網格
+/// 初始化 A* 尋路網格 — 使用 world::constants 道路常數動態生成
 pub fn setup_pathfinding_grid(mut commands: Commands) {
-    let mut grid = PathfindingGrid::default();
+    // 網格覆蓋完整西門町地圖區域：
+    // X: -110 to +102 (康定路西側 → 中華路東側)
+    // Z:  -90 to +60  (漢口街北側 → 成都路南側)
+    let cell_size = 2.0_f32;
+    let origin = Vec3::new(-110.0, 0.0, -90.0);
+    let width = 106; // 212m / 2m
+    let height = 75; // 150m / 2m
 
-    // 建築物區域座標 (世界座標)
-    let buildings: &[(i32, i32, i32, i32)] = &[
-        // 漢中街兩側建築（中央徒步區）
-        (-15, -60, 15, 55),
-        // 西側建築
-        (-70, -70, -20, -50),
-        (-70, -45, -20, -25),
-        (-70, -20, -20, 0),
-        (-70, 5, -20, 25),
-        (-70, 30, -20, 60),
-        // 東側建築
-        (20, -70, 50, -50),
-        (20, -45, 50, -25),
-        (20, -20, 50, 0),
-        (20, 5, 50, 25),
-        (20, 30, 50, 60),
-    ];
+    let mut grid = PathfindingGrid {
+        origin,
+        width,
+        height,
+        cell_size,
+        walkable: vec![false; width * height], // 預設全部不可通行
+    };
 
-    // 將建築區域設為不可通行
-    for &(x1, z1, x2, z2) in buildings {
-        mark_area_unwalkable(&mut grid, x1, z1, x2, z2);
-    }
+    // --- 南北向道路（固定 X，沿 Z 軸延伸）---
+    mark_ns_road(&mut grid, X_ZHONGHUA, W_ZHONGHUA);  // 中華路
+    mark_ns_road(&mut grid, X_HAN, W_PEDESTRIAN);     // 漢中街（徒步區）
+    mark_ns_road(&mut grid, X_XINING, W_SECONDARY);   // 西寧南路
+    mark_ns_road(&mut grid, X_KANGDING, W_MAIN);      // 康定路
 
-    // 漢中街徒步區 (X: -15 ~ 15) → 網格 27..43
-    mark_horizontal_road(&mut grid, 27, 43);
-
-    // 峨嵋街 (Z: -15 ~ 15) → 網格 27..43
-    mark_vertical_road(&mut grid, 27, 43);
+    // --- 東西向道路（固定 Z，沿 X 軸延伸）---
+    mark_ew_road(&mut grid, Z_HANKOU, W_SECONDARY);   // 漢口街
+    mark_ew_road(&mut grid, Z_WUCHANG, W_PEDESTRIAN); // 武昌街
+    mark_ew_road(&mut grid, Z_KUNMING, W_ALLEY);      // 昆明街
+    mark_ew_road(&mut grid, Z_EMEI, W_PEDESTRIAN);    // 峨嵋街
+    mark_ew_road(&mut grid, Z_CHENGDU, W_MAIN);       // 成都路
 
     commands.insert_resource(grid);
     commands.insert_resource(PointsOfInterest::setup_ximending());

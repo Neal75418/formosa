@@ -325,6 +325,16 @@ fn spawn_police_officer(
         PoliceState::Patrolling
     };
 
+    // 生成矩形巡邏路徑（圍繞生成位置）
+    let patrol_offset = 15.0;
+    let y = position.y;
+    let patrol_route = vec![
+        Vec3::new(position.x + patrol_offset, y, position.z),
+        Vec3::new(position.x + patrol_offset, y, position.z + patrol_offset),
+        Vec3::new(position.x, y, position.z + patrol_offset),
+        Vec3::new(position.x, y, position.z),
+    ];
+
     // 創建警察實體
     let police_entity = commands
         .spawn((
@@ -338,6 +348,7 @@ fn spawn_police_officer(
                 state: initial_state,
                 officer_type,
                 target_player: wanted_stars > 0,
+                patrol_route,
                 ..default()
             },
             Health {

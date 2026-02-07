@@ -264,14 +264,17 @@ pub fn police_arrest_system(
 
     // 尋找可以執行逮捕的警察
     for (police_entity, police_transform, officer) in &police_query {
-        // 只有交戰狀態的警察會逮捕
-        if officer.state != PoliceState::Engaging && officer.state != PoliceState::Pursuing {
+        // 警覺、追逐、交戰、搜索狀態的警察皆可逮捕
+        if !matches!(
+            officer.state,
+            PoliceState::Engaging | PoliceState::Pursuing | PoliceState::Alerted | PoliceState::Searching
+        ) {
             continue;
         }
 
-        let distance = (police_transform.translation - player_pos).length();
+        let distance_sq = (police_transform.translation - player_pos).length_squared();
 
-        if distance <= ARREST_DISTANCE {
+        if distance_sq <= ARREST_DISTANCE * ARREST_DISTANCE {
             // 開始逮捕
             surrender_state.being_arrested = true;
             surrender_state.arresting_officer = Some(police_entity);

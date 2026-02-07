@@ -819,7 +819,13 @@ fn check_obstacle(
         });
     }
 
-    // 側向射線（避免路邊擦撞）
+    // 側向射線（避免路邊擦撞）— 只偵測車輛和行人，不碰建築/牆壁
+    let side_groups = QueryFilter::new()
+        .groups(CollisionGroups::new(
+            COLLISION_GROUP_VEHICLE,
+            COLLISION_GROUP_VEHICLE | COLLISION_GROUP_CHARACTER,
+        ))
+        .exclude_collider(vehicle_entity);
     let side_offset = 0.8;
     for side in [-1.0, 1.0] {
         let side_origin = ray_origin + vehicle_transform.right().as_vec3() * side * side_offset;
@@ -832,7 +838,7 @@ fn check_obstacle(
             ray_dir,
             config.obstacle_side_max_distance,
             solid,
-            groups,
+            side_groups,
         ) {
             let distance = rapier_real_to_f32(toi);
             if distance <= config.obstacle_side_brake_distance {
@@ -858,8 +864,6 @@ fn update_npc_state_from_obstacle(
     dt: f32,
     config: &crate::vehicle::config::NpcDrivingConfig,
 ) {
-    npc.stuck_timer += dt;
-
     if let Some(hit) = check_obstacle(
         transform,
         vehicle_entity,
@@ -867,6 +871,7 @@ fn update_npc_state_from_obstacle(
         rapier_context,
         config,
     ) {
+        npc.stuck_timer += dt; // 只在有障礙物時累加
         let (new_state, reset_timer) =
             determine_npc_reaction(hit, vehicle.current_speed, npc.stuck_timer, config);
         npc.state = new_state;
@@ -886,6 +891,7 @@ fn update_npc_state_from_obstacle(
         }
     } else {
         npc.state = NpcState::Cruising;
+        npc.stuck_timer = 0.0; // 無障礙物時歸零
     }
 }
 
@@ -1027,10 +1033,14 @@ fn should_stop_for_traffic_light(
 
             if dist_sq < 400.0 {
                 // 20m 內
-                let light_forward = light_transform.forward().as_vec3();
-                // 燈是面向車輛的 (dot < -0.5) 且 車是面向燈的 (dot > 0.5)
-                if light_forward.dot(vehicle_forward) < -0.8 {
-                    return true;
+                let to_light_dir = to_light.normalize();
+                // 燈必須在車輛前方（dot > 0.3 ≈ ±72°）
+                if to_light_dir.dot(vehicle_forward) > 0.3 {
+                    let light_forward = light_transform.forward().as_vec3();
+                    // 燈面向車輛（dot < -0.5）
+                    if light_forward.dot(vehicle_forward) < -0.5 {
+                        return true;
+                    }
                 }
             }
         }
@@ -1112,7 +1122,7 @@ fn handle_waiting_at_light_state(
     vehicle: &mut Vehicle,
     transform: &Transform,
     traffic_light_query: &Query<(&Transform, &TrafficLight), Without<NpcVehicle>>,
-    _dt: f32,
+    dt: f32,
 ) {
     // 減速停車
     vehicle.current_speed *= 0.85;
@@ -1120,11 +1130,16 @@ fn handle_waiting_at_light_state(
         vehicle.current_speed = 0.0;
     }
 
-    // 檢查燈是否變綠了，如果變綠則恢復巡航
+    npc.stuck_timer += dt;
+
+    // 檢查燈是否變綠了或等太久（30 秒 failsafe），恢復巡航
     let vehicle_pos = transform.translation;
     let vehicle_forward = transform.forward().as_vec3();
-    if !should_stop_for_traffic_light(vehicle_pos, vehicle_forward, traffic_light_query) {
+    if !should_stop_for_traffic_light(vehicle_pos, vehicle_forward, traffic_light_query)
+        || npc.stuck_timer > 30.0
+    {
         npc.state = NpcState::Cruising;
+        npc.stuck_timer = 0.0;
     }
 }
 
@@ -1202,6 +1217,10 @@ pub fn npc_vehicle_motion_system(
         // Move
         let forward = transform.forward().as_vec3();
         transform.translation += forward * vehicle.current_speed * dt;
+
+        // 邊界夾持：防止 NPC 車輛駛出地圖（略小於邊界牆位置）
+        transform.translation.x = transform.translation.x.clamp(-119.0, 109.0);
+        transform.translation.z = transform.translation.z.clamp(-94.0, 64.0);
     }
 }
 

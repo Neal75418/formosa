@@ -164,8 +164,8 @@ pub fn police_car_ai_system(
     config: Res<PoliceCarConfig>,
     time: Res<Time>,
 ) {
-    // 玩家不在車上或沒有通緝，警車停止追逐
-    if !game_state.player_in_vehicle || wanted.stars < 2 {
+    // 沒有通緝，警車停止追逐
+    if wanted.stars < 2 {
         return;
     }
 
@@ -194,6 +194,13 @@ pub fn police_car_ai_system(
         // 更新冷卻計時器
         if police_car.pit_cooldown > 0.0 {
             police_car.pit_cooldown -= dt;
+        }
+
+        // 玩家不在車上時，強制切為 Responding（低速靠近，不做 PIT/攔截）
+        if !game_state.player_in_vehicle
+            && !matches!(police_car.state, PoliceCarState::Disabled | PoliceCarState::Responding)
+        {
+            police_car.state = PoliceCarState::Responding;
         }
 
         // 根據狀態執行行為

@@ -167,6 +167,24 @@ fn setup_ground(
         RigidBody::Fixed,
         Collider::cuboid(200.0, 0.1, 200.0),
     ));
+
+    // === 2. 隱形邊界牆（防止玩家和載具離開地圖）===
+    let walls: &[(Vec3, Vec3)] = &[
+        // (位置, 半尺寸) — 東西南北各一面
+        (Vec3::new(110.0, 10.0, -15.0), Vec3::new(0.5, 20.0, 100.0)),   // 東（中華路外）
+        (Vec3::new(-120.0, 10.0, -15.0), Vec3::new(0.5, 20.0, 100.0)),  // 西（康定路外）
+        (Vec3::new(-10.0, 10.0, 65.0), Vec3::new(130.0, 20.0, 0.5)),    // 南（成都路外）
+        (Vec3::new(-10.0, 10.0, -95.0), Vec3::new(130.0, 20.0, 0.5)),   // 北（漢口街外）
+    ];
+
+    for &(pos, half_ext) in walls {
+        commands.spawn((
+            Transform::from_translation(pos),
+            RigidBody::Fixed,
+            Collider::cuboid(half_ext.x, half_ext.y, half_ext.z),
+            CollisionGroups::new(COLLISION_GROUP_STATIC, Group::ALL),
+        ));
+    }
 }
 
 /// 道路材質與道路網格生成

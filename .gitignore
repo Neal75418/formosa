@@ -1,6 +1,5 @@
 # Rust 編譯產物
 /target/
-Cargo.lock
 
 # IDE
 .idea/
@@ -15,3 +14,11 @@ Cargo.lock
 *.swp
 *~
 
+# 敏感檔案
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json

@@ -25,7 +25,7 @@ jobs:
   ci:
     name: Clippy & Test
     runs-on: [self-hosted, linux]
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout

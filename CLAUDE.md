@@ -6,25 +6,25 @@ Claude Code 在此專案中的工作指引。
 
 撰寫程式碼前，參閱 `.agent/skills/` 中的專門指南：
 
-| 技能 | 路徑 |
-|------|------|
-| Rust 專家 | `.agent/skills/rust-expert/SKILL.md` |
-| Bevy 架構師 | `.agent/skills/bevy-architect/SKILL.md` |
-| 遊戲數學與物理 | `.agent/skills/game-math-physicist/SKILL.md` |
-| 資源管理員 | `.agent/skills/asset-manager/SKILL.md` |
+| 技能       | 路徑                                           |
+|----------|----------------------------------------------|
+| Rust 專家  | `.agent/skills/rust-expert/SKILL.md`         |
+| Bevy 架構師 | `.agent/skills/bevy-architect/SKILL.md`      |
+| 遊戲數學與物理  | `.agent/skills/game-math-physicist/SKILL.md` |
+| 資源管理員    | `.agent/skills/asset-manager/SKILL.md`       |
 
 ## 專案概述
 
 **島嶼狂飆 (Island Rampage)** — 以台灣西門町為舞台的 GTA 風格 3D 開放世界動作遊戲。
 
-| 技術 | 版本 | 用途 |
-|------|------|------|
-| Rust | 2021 Edition | 程式語言 |
-| Bevy | 0.17 | ECS 遊戲引擎 |
-| bevy_rapier3d | 0.32 | 3D 物理引擎 |
-| serde/serde_json | 1.0 | 存檔系統 |
+| 技術               | 版本           | 用途       |
+|------------------|--------------|----------|
+| Rust             | 2021 Edition | 程式語言     |
+| Bevy             | 0.17         | ECS 遊戲引擎 |
+| bevy_rapier3d    | 0.32         | 3D 物理引擎  |
+| serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：121 個 .rs 檔案、~61,700 行、235 個單元測試、0 clippy warnings
+**規模**：140 個 .rs 檔案、~62,800 行、329 個單元測試、0 clippy warnings
 
 ## 常用指令
 
@@ -32,7 +32,7 @@ Claude Code 在此專案中的工作指引。
 cargo run                    # 開發模式（動態連結）
 cargo run --release          # 發布模式（最佳效能）
 cargo check                  # 編譯檢查
-cargo test                   # 執行 235 個單元測試
+cargo test                   # 執行 329 個單元測試
 cargo test economy::tests    # 特定模組測試
 cargo clippy                 # 靜態分析
 cargo fmt                    # 格式化
@@ -40,38 +40,155 @@ cargo fmt                    # 格式化
 
 ## 架構
 
-### 模組結構（15 個頂層模組）
+### 分層架構
 
+```mermaid
+graph TD
+    subgraph L5["<b>Presentation</b>"]
+        ui["ui — HUD · 小地圖 · 武器輪盤 · GPS<br><small>18 個檔案</small>"]
+        audio["audio — BGM · 引擎聲 · 3D 音效"]
+        camera["camera — 跟隨 · 震動 · 後座力"]
+    end
+
+    subgraph L4["<b>Game Systems</b>"]
+        wanted["wanted — 5 星通緝 · 警車 AI · 直升機 · 路障<br><small>11 個檔案</small>"]
+        mission["mission — 劇情 · 對話 · 過場動畫<br><small>15 個檔案</small>"]
+        economy["economy — 商店 · ATM · 金錢"]
+        env["environment — 可破壞物件 · 碎片池"]
+    end
+
+    subgraph L3["<b>Entities</b>"]
+        player["player — 移動 · 跳躍 · 閃避 · 攀爬"]
+        vehicle["vehicle — 物理 · 偷車 · 改裝 · 效果<br><small>10 個檔案</small>"]
+        combat["combat — 射擊 · 爆炸 · 掩體 · 布娃娃<br><small>13 個檔案</small>"]
+        ai_mod["ai — 感知 · 決策 · 小隊 · 掩護<br><small>11 個檔案</small>"]
+        ped["pedestrian — 尋路 · 恐慌 · 目擊者<br><small>13 個檔案</small>"]
+    end
+
+    subgraph L2["<b>World</b>"]
+        world["world — 西門町 · 建築 · 天氣 · 隨機事件<br><small>10 個檔案</small>"]
+    end
+
+    subgraph L1["<b>Core</b>"]
+        core["core — AppState · 空間哈希 · 物件池 · 數學<br><small>8 個檔案</small>"]
+    end
+
+    subgraph L0["<b>Persistence</b>"]
+        save["save — 非同步 IO · JSON 序列化"]
+    end
+
+    ui & audio & camera --> player & vehicle & combat
+    wanted --> player & vehicle & combat & ai_mod
+    mission --> player & vehicle & combat & economy
+    env --> combat
+    player & vehicle & combat & ai_mod & ped --> core
+    world --> core
+    save --> player & vehicle & combat & economy & mission
+
+    style core fill:#1a1a2e,stroke:#e94560,color:#fff
+    style player fill:#16213e,stroke:#0f3460,color:#fff
+    style vehicle fill:#16213e,stroke:#0f3460,color:#fff
+    style combat fill:#16213e,stroke:#0f3460,color:#fff
+    style ai_mod fill:#16213e,stroke:#0f3460,color:#fff
+    style ped fill:#16213e,stroke:#0f3460,color:#fff
+    style world fill:#0f3460,stroke:#533483,color:#fff
+    style wanted fill:#533483,stroke:#e94560,color:#fff
+    style mission fill:#533483,stroke:#e94560,color:#fff
+    style economy fill:#533483,stroke:#e94560,color:#fff
+    style env fill:#533483,stroke:#e94560,color:#fff
+    style ui fill:#e94560,stroke:#fff,color:#fff
+    style audio fill:#e94560,stroke:#fff,color:#fff
+    style camera fill:#e94560,stroke:#fff,color:#fff
+    style save fill:#1a1a2e,stroke:#533483,color:#fff
 ```
-src/
-├── core/               # 空間哈希、數學工具、物件池、狀態機
-│   ├── camera.rs         # CameraSettings, RecoilState, CameraShake
-│   ├── pool.rs           # EntityPool 泛用物件池
-│   ├── spatial_hash.rs   # O(1) 鄰近查詢
-│   └── weather.rs        # WeatherType, WeatherState
-├── player/             # 移動、跳躍、閃避、攀爬、上下車
-├── vehicle/            # 物理、NPC AI、偷車、改裝、視覺效果
-│   ├── effects.rs        # 漂移煙霧、火焰、輪胎痕跡
-│   ├── spawning.rs       # 車輛生成
-│   ├── traffic_lights.rs # 交通號誌
-│   └── vehicle_damage.rs # 損壞系統
-├── combat/             # 射擊、掩體、爆炸物、傷害、布娃娃
-├── wanted/             # 5 星通緝、警察 AI、直升機、路障
-│   └── police_vehicle/   # 警車 AI + 生成
-├── pedestrian/         # 行人 AI、恐慌波、目擊者
-│   └── systems/          # 7 個子模組（lifecycle, animation, reactions, pathfinding_grid, daily_behavior, witnesses, panic_propagation）
-├── environment/        # 可破壞物件、碎片物件池
-├── economy/            # 金錢、商店系統
-├── mission/            # 劇情任務、對話、過場動畫（15 個檔案）
-├── world/              # 地圖生成、天氣、隨機事件
-│   ├── buildings/        # 商業、娛樂、服務、通用建築
-│   └── time_weather/     # 3 個子模組（lighting, city_visuals, weather_effects）
-├── ui/                 # HUD、小地圖、武器輪盤、GPS（18 個檔案）
-├── camera/             # 第三人稱跟隨、震動
-├── audio/              # 背景音樂、引擎聲、3D 空間音效
-├── save/               # 非同步 IO、JSON 序列化
-└── ai/                 # 敵人 AI：感知、決策、戰鬥、掩護、小隊
+
+### 系統執行順序
+
+```mermaid
+flowchart LR
+    subgraph GameSet["<b>GameSet（依序）</b>"]
+        direction LR
+        GS1["Player"] --> GS2["Vehicle"] --> GS3["World"] --> GS4["Ui"]
+    end
+
+    subgraph InteractionSet["<b>InteractionSet（優先序）</b>"]
+        direction LR
+        IS1["Vehicle"] --> IS2["Mission"] --> IS3["Economy"] --> IS4["Interior"]
+    end
+
+    subgraph Pipeline["<b>主迴圈管線</b>"]
+        direction TB
+        PreUpdate["PreUpdate<br><small>update_interaction_state</small>"]
+        Update["Update<br><small>GameSet + InteractionSet</small>"]
+        Camera_S["Camera<br><small>input → auto_follow → follow → shake</small>"]
+
+        PreUpdate --> Update --> Camera_S
+    end
+
+    style GS1 fill:#16213e,stroke:#0f3460,color:#fff
+    style GS2 fill:#16213e,stroke:#0f3460,color:#fff
+    style GS3 fill:#0f3460,stroke:#533483,color:#fff
+    style GS4 fill:#e94560,stroke:#fff,color:#fff
+    style IS1 fill:#16213e,stroke:#0f3460,color:#fff
+    style IS2 fill:#533483,stroke:#e94560,color:#fff
+    style IS3 fill:#533483,stroke:#e94560,color:#fff
+    style IS4 fill:#0f3460,stroke:#533483,color:#fff
+    style PreUpdate fill:#1a1a2e,stroke:#e94560,color:#fff
+    style Update fill:#1a1a2e,stroke:#e94560,color:#fff
+    style Camera_S fill:#1a1a2e,stroke:#e94560,color:#fff
 ```
+
+暫停控制：`.run_if(|ui: Res<UiState>| !ui.paused)`
+
+### 16 個 Bevy Plugins
+
+```mermaid
+graph LR
+    subgraph Entities
+        PlayerPlugin
+        VehiclePlugin
+        CombatPlugin
+        AiPlugin
+        PedestrianPlugin
+    end
+
+    subgraph Systems
+        WantedPlugin
+        EconomyPlugin
+        EnvironmentPlugin
+    end
+
+    subgraph Mission_P["Mission（4 個子插件）"]
+        DialogueSystemPlugin
+        DialogueUIPlugin
+        CutsceneSystemPlugin
+        StoryMissionPlugin
+    end
+
+    subgraph Infra["基礎設施"]
+        WorldPlugin
+        UiPlugin
+        SavePlugin
+    end
+
+    style PlayerPlugin fill:#16213e,stroke:#0f3460,color:#fff
+    style VehiclePlugin fill:#16213e,stroke:#0f3460,color:#fff
+    style CombatPlugin fill:#16213e,stroke:#0f3460,color:#fff
+    style AiPlugin fill:#16213e,stroke:#0f3460,color:#fff
+    style PedestrianPlugin fill:#16213e,stroke:#0f3460,color:#fff
+    style WantedPlugin fill:#533483,stroke:#e94560,color:#fff
+    style EconomyPlugin fill:#533483,stroke:#e94560,color:#fff
+    style EnvironmentPlugin fill:#533483,stroke:#e94560,color:#fff
+    style DialogueSystemPlugin fill:#533483,stroke:#e94560,color:#fff
+    style DialogueUIPlugin fill:#533483,stroke:#e94560,color:#fff
+    style CutsceneSystemPlugin fill:#533483,stroke:#e94560,color:#fff
+    style StoryMissionPlugin fill:#533483,stroke:#e94560,color:#fff
+    style WorldPlugin fill:#0f3460,stroke:#533483,color:#fff
+    style UiPlugin fill:#e94560,stroke:#fff,color:#fff
+    style SavePlugin fill:#1a1a2e,stroke:#533483,color:#fff
+```
+
+> `audio` 和 `camera` 的系統直接註冊在 `main.rs`，未使用 Plugin 形式。
 
 ### 關鍵模式
 
@@ -91,11 +208,11 @@ fn my_system(mut events: MessageReader<DamageEvent>) {
 
 位於 `core/spatial_hash.rs`，三個預定義網格：
 
-| 資源 | 網格大小 | 用途 |
-|------|----------|------|
-| `VehicleSpatialHash` | 15.0m | 行人碰撞檢測 |
-| `PedestrianSpatialHash` | 10.0m | 恐慌波傳播 |
-| `PoliceSpatialHash` | 20.0m | 玩家偵測 |
+| 資源                      | 網格大小  | 用途     |
+|-------------------------|-------|--------|
+| `VehicleSpatialHash`    | 15.0m | 行人碰撞檢測 |
+| `PedestrianSpatialHash` | 10.0m | 恐慌波傳播  |
+| `PoliceSpatialHash`     | 20.0m | 玩家偵測   |
 
 ```rust
 fn my_system(mut grid: ResMut<VehicleSpatialHash>) {
@@ -150,80 +267,59 @@ pub struct DamageSystemResources<'w> {
 pub fn damage_system(res: DamageSystemResources, query: Query<...>) { ... }
 ```
 
-### 系統執行順序
-
-```
-1. 核心/UI（暫停時仍執行）
-   └─ toggle_pause, update_ui
-
-2. 玩家（明確排序）
-   └─ player_input → dodge → movement → jump
-
-3. 載具（暫停時跳過）
-   └─ vehicle_input → movement → npc_ai
-
-4. 攝影機（在移動之後）
-   └─ camera_input → camera_follow
-
-5. 戰鬥（暫停時跳過，顯式 .after() 依賴）
-   └─ shooting → damage → death → ragdoll → effects
-
-6. 天氣/世界
-   └─ weather_input（不暫停）→ particles（暫停）
-```
-
-暫停控制：`.run_if(|ui: Res<UiState>| !ui.paused)`
-
 ### 測試覆蓋
 
-| 模組 | 測試數 | 覆蓋範圍 |
-|------|--------|----------|
-| combat | 88 | 武器、傷害、護甲、布娃娃、出血 |
-| economy | 47 | 錢包、商店、ATM |
-| ai | 26 | 狀態轉換、感知、逃跑 |
-| wanted | 22 | 通緝等級、警察狀態、搜索區 |
-| pedestrian/panic | 18 | 恐慌波傳播、尖叫冷卻 |
-| save | 17 | 序列化、存檔路徑 |
-| core/spatial_hash | 12 | 插入、查詢、邊界 |
-| player/climb | 5 | 攀爬類型、緩動函數 |
-| **合計** | **235** | |
+| 模組                 | 測試數     | 覆蓋範圍              |
+|--------------------|---------|-------------------|
+| combat             | 88      | 武器、傷害、護甲、布娃娃、出血   |
+| economy            | 47      | 錢包、商店、ATM         |
+| pedestrian         | 43      | 恐慌波、尋路、目擊者、行為、動畫  |
+| vehicle            | 41      | 血量、輪胎、交通燈、改裝、爆炸   |
+| ai                 | 26      | 狀態轉換、感知、逃跑        |
+| wanted             | 22      | 通緝等級、警察狀態、搜索區     |
+| save               | 17      | 序列化、存檔路徑          |
+| mission            | 15      | 任務目標、評分、競速、計程車    |
+| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶 |
+| core/spatial_hash  | 12      | 插入、查詢、邊界          |
+| player/climb       | 5       | 攀爬類型、緩動函數         |
+| **合計**             | **329** |                   |
 
 ## 關鍵檔案速查
 
-| 系統 | 檔案 |
-|------|------|
-| 空間哈希 | `src/core/spatial_hash.rs` |
-| 戰鬥插件 | `src/combat/mod.rs` |
-| 傷害計算 | `src/combat/damage.rs` |
-| 爆炸物 | `src/combat/explosives.rs` |
-| 掩體 | `src/combat/cover.rs` |
-| 警用直升機 | `src/wanted/police_helicopter.rs` |
-| 偷車 | `src/vehicle/theft.rs` |
-| 車輛改裝 | `src/vehicle/modifications.rs` |
-| 車輛效果 | `src/vehicle/effects.rs` |
-| 行人生命週期 | `src/pedestrian/systems/lifecycle.rs` |
-| 恐慌系統 | `src/pedestrian/panic.rs` |
-| 目擊者系統 | `src/pedestrian/systems/witnesses.rs` |
-| 世界生成 | `src/world/setup.rs` |
-| 天氣效果 | `src/world/time_weather/weather_effects.rs` |
-| 可破壞物件 | `src/environment/systems.rs` |
+| 系統     | 檔案                                          |
+|--------|---------------------------------------------|
+| 空間哈希   | `src/core/spatial_hash.rs`                  |
+| 戰鬥插件   | `src/combat/mod.rs`                         |
+| 傷害計算   | `src/combat/damage.rs`                      |
+| 爆炸物    | `src/combat/explosives.rs`                  |
+| 掩體     | `src/combat/cover.rs`                       |
+| 警用直升機  | `src/wanted/police_helicopter.rs`           |
+| 偷車     | `src/vehicle/theft.rs`                      |
+| 車輛改裝   | `src/vehicle/modifications.rs`              |
+| 車輛效果   | `src/vehicle/effects.rs`                    |
+| 行人生命週期 | `src/pedestrian/systems/lifecycle.rs`       |
+| 恐慌系統   | `src/pedestrian/panic.rs`                   |
+| 目擊者系統  | `src/pedestrian/systems/witnesses.rs`       |
+| 世界生成   | `src/world/setup.rs`                        |
+| 天氣效果   | `src/world/time_weather/weather_effects.rs` |
+| 可破壞物件  | `src/environment/systems.rs`                |
 
 ## 操作方式
 
-| 按鍵 | 步行 | 駕駛 |
-|------|------|------|
-| WASD | 移動 | 轉向/加速 |
-| Space | 跳躍 | 煞車 |
-| Shift | 衝刺 | 氮氣 |
-| Q/E | 斜向前進 | - |
-| F | 互動（上下車/任務/商店/門） | 下車 |
-| X | 偷車 | - |
-| R | 換彈 | - |
-| G | 投擲爆炸物 | - |
-| 1-4 | 切換武器 | - |
-| Tab | 武器輪盤 | - |
-| M | 地圖 | 地圖 |
-| Esc | 暫停 | 暫停 |
+| 按鍵    | 步行              | 駕駛    |
+|-------|-----------------|-------|
+| WASD  | 移動              | 轉向/加速 |
+| Space | 跳躍              | 煞車    |
+| Shift | 衝刺              | 氮氣    |
+| Q/E   | 斜向前進            | -     |
+| F     | 互動（上下車/任務/商店/門） | 下車    |
+| X     | 偷車              | -     |
+| R     | 換彈              | -     |
+| G     | 投擲爆炸物           | -     |
+| 1-4   | 切換武器            | -     |
+| Tab   | 武器輪盤            | -     |
+| M     | 地圖              | 地圖    |
+| Esc   | 暫停              | 暫停    |
 
 ## 驗證
 

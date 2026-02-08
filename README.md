@@ -48,36 +48,36 @@
 ```mermaid
 graph TD
     subgraph "<b>Presentation</b>"
-        UI[🖥️ UI<br><small>HUD · 小地圖 · 武器輪盤 · GPS</small>]
-        Audio[🔊 Audio<br><small>BGM · 引擎聲 · 3D 音效</small>]
-        Camera[🎥 Camera<br><small>跟隨 · 震動 · 後座力</small>]
+        UI["🖥️ UI<br><small>HUD · 小地圖 · 武器輪盤 · GPS</small>"]
+        Audio["🔊 Audio<br><small>BGM · 引擎聲 · 3D 音效</small>"]
+        Camera["🎥 Camera<br><small>跟隨 · 震動 · 後座力</small>"]
     end
 
     subgraph "<b>Game Systems</b>"
-        Wanted[🚔 Wanted<br><small>5 星通緝 · 警車 AI · 直升機</small>]
-        Mission[📋 Mission<br><small>劇情 · 對話 · 過場動畫</small>]
-        Economy[💰 Economy<br><small>商店 · ATM</small>]
-        Env[💥 Environment<br><small>可破壞物件 · 碎片</small>]
+        Wanted["🚔 Wanted<br><small>5 星通緝 · 警車 AI · 直升機</small>"]
+        Mission["📋 Mission<br><small>劇情 · 對話 · 過場動畫</small>"]
+        Economy["💰 Economy<br><small>商店 · ATM</small>"]
+        Env["💥 Environment<br><small>可破壞物件 · 碎片</small>"]
     end
 
     subgraph "<b>Entities</b>"
-        Player[🏃 Player<br><small>移動 · 跳躍 · 閃避 · 攀爬</small>]
-        Vehicle[🚗 Vehicle<br><small>物理 · 偷車 · 改裝</small>]
-        Combat[⚔️ Combat<br><small>射擊 · 爆炸 · 掩體</small>]
-        AI[🤖 AI<br><small>感知 · 決策 · 小隊</small>]
-        Ped[🚶 Pedestrian<br><small>尋路 · 恐慌 · 目擊者</small>]
+        Player["🏃 Player<br><small>移動 · 跳躍 · 閃避 · 攀爬</small>"]
+        Vehicle["🚗 Vehicle<br><small>物理 · 偷車 · 改裝</small>"]
+        Combat["⚔️ Combat<br><small>射擊 · 爆炸 · 掩體</small>"]
+        AI["🤖 AI<br><small>感知 · 決策 · 小隊</small>"]
+        Ped["🚶 Pedestrian<br><small>尋路 · 恐慌 · 目擊者</small>"]
     end
 
     subgraph "<b>World</b>"
-        World[🌏 World<br><small>西門町 · 建築 · 天氣 · 隨機事件</small>]
+        World["🌏 World<br><small>西門町 · 建築 · 天氣 · 隨機事件</small>"]
     end
 
     subgraph "<b>Core</b>"
-        Core[⚙️ Core<br><small>狀態機 · 空間哈希 · 物件池 · 數學</small>]
+        Core["⚙️ Core<br><small>狀態機 · 空間哈希 · 物件池 · 數學</small>"]
     end
 
     subgraph "<b>Persistence</b>"
-        Save[💾 Save<br><small>非同步 IO · JSON</small>]
+        Save["💾 Save<br><small>非同步 IO · JSON</small>"]
     end
 
     UI & Audio & Camera --> Player & Vehicle & Combat

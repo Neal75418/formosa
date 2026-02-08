@@ -13,7 +13,7 @@ use super::constants::{
     DELIVERY_APP_INNER_BORDER, DELIVERY_APP_SUBTITLE, DELIVERY_APP_TITLE, KEY_ICON_BG,
     KEY_ICON_BORDER, KEY_TEXT_COLOR, ORDER_CARD_BG, ORDER_CARD_BORDER, ORDER_CARD_GLOW,
     PANEL_BORDER_GRAY, RATING_STAR_COLOR, RESTAURANT_NAME_COLOR, REWARD_TEXT_COLOR, STREAK_COLOR,
-    TEXT_GRAY_90, TEXT_MUTED, TEXT_SECONDARY,
+    TEXT_GRAY_90, TEXT_MUTED, TEXT_SECONDARY, icon_box_node,
 };
 use crate::mission::MissionManager;
 use crate::ui::UiState;
@@ -307,14 +307,7 @@ fn spawn_hint_row(content: &mut ChildSpawnerCommands, font: &Handle<Font>) {
 fn spawn_delivery_app_icon(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
     parent
         .spawn((
-            Node {
-                width: Val::Px(28.0),
-                height: Val::Px(28.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
+            icon_box_node(),
             BackgroundColor(Color::srgba(0.9, 0.4, 0.1, 0.3)),
             BorderColor::all(DELIVERY_APP_BORDER),
             BorderRadius::all(Val::Px(4.0)),

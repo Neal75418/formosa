@@ -1,7 +1,8 @@
 //! 通緝系統函數實作
 
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
+use bevy_rapier3d::prelude::{Real as RapierReal, *};
+use crate::core::rapier_real_to_f32;
 
 use crate::player::Player;
 use crate::ai::AiMovement;
@@ -160,11 +161,11 @@ fn check_police_vision(
         if let Some((_, toi)) = rapier.cast_ray(
             ray_origin,
             to_player.normalize(),
-            distance,
+            distance as RapierReal,
             true,
             QueryFilter::default(),
         ) {
-            if toi >= distance - 1.0 {
+            if rapier_real_to_f32(toi) >= distance - 1.0 {
                 return true;
             }
         }
@@ -634,8 +635,8 @@ fn check_line_of_sight(
 ) -> bool {
     let filter = QueryFilter::default().exclude_rigid_body(exclude_entity);
 
-    match rapier.cast_ray(ray_origin, ray_direction, distance, true, filter) {
-        Some((hit_entity, toi)) => hit_entity == player_entity || toi >= distance - 1.0,
+    match rapier.cast_ray(ray_origin, ray_direction, distance as RapierReal, true, filter) {
+        Some((hit_entity, toi)) => hit_entity == player_entity || rapier_real_to_f32(toi) >= distance - 1.0,
         None => true,
     }
 }

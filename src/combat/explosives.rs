@@ -4,7 +4,7 @@
 
 
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
+use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 use crate::core::CameraSettings;
 use crate::player::Player;
@@ -923,7 +923,7 @@ pub fn handle_explosion_event_system(
                 let ray_origin = position + Vec3::Y * 0.5;
                 let ray_target = target_pos + Vec3::Y * 0.5;
                 let ray_dir = (ray_target - ray_origin).normalize();
-                let max_toi = distance;
+                let max_toi = distance as RapierReal;
 
                 // 使用 solid=true 檢測第一個障礙物
                 let filter = QueryFilter::default().exclude_collider(target); // 排除目標本身

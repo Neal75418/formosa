@@ -88,7 +88,7 @@ pub fn spawn_npc_vehicle(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    shared_mats: &super::VehicleMaterials,
+    shared_mats: &VehicleMaterials,
     position: Vec3,
     rotation: Quat,
     vehicle_type: VehicleType,
@@ -318,7 +318,7 @@ pub fn spawn_initial_traffic(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    shared_mats: Res<super::VehicleMaterials>,
+    shared_mats: Res<VehicleMaterials>,
 ) {
     // NPC 車輛路線 - 只走柏油路，避開徒步區
     // 可用道路：中華路 (X=75, 寬50m), 西寧南路 (X=-50), 成都路 (Z=50)
@@ -481,7 +481,7 @@ pub fn spawn_scooter(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    shared_mats: &super::VehicleMaterials,
+    shared_mats: &VehicleMaterials,
     position: Vec3,
     rotation: Quat,
     color: Color,

@@ -1,7 +1,7 @@
 //! UI 組件
 
 use bevy::prelude::*;
-use crate::core::calculate_fade_alpha;
+use crate::core::lifetime_fade_alpha;
 
 /// 控制提示文字
 #[derive(Component)]
@@ -599,12 +599,7 @@ impl FloatingDamageNumber {
 
     /// 計算當前透明度 (0.0 ~ 1.0)
     pub fn alpha(&self) -> f32 {
-        let progress = if self.max_lifetime > 0.0 {
-            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        calculate_fade_alpha(progress, 0.3)
+        lifetime_fade_alpha(self.lifetime, self.max_lifetime, 0.3)
     }
 
     /// 計算當前縮放

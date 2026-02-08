@@ -13,7 +13,7 @@ use crate::core::{
 };
 use bevy::prelude::*;
 
-use bevy_rapier3d::prelude::*;
+use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 // ============================================================================
 // 車輛系統
@@ -811,7 +811,7 @@ fn check_obstacle(
         .exclude_collider(vehicle_entity);
 
     if let Some((_entity, toi)) =
-        rapier.cast_ray(ray_origin, vehicle_forward, max_toi, solid, groups)
+        rapier.cast_ray(ray_origin, vehicle_forward, max_toi as RapierReal, solid, groups)
     {
         return Some(ObstacleHit {
             distance: rapier_real_to_f32(toi),
@@ -836,7 +836,7 @@ fn check_obstacle(
         if let Some((_entity, toi)) = rapier.cast_ray(
             side_origin,
             ray_dir,
-            config.obstacle_side_max_distance,
+            config.obstacle_side_max_distance as RapierReal,
             solid,
             side_groups,
         ) {

@@ -133,6 +133,30 @@ pub fn calculate_fade_alpha(progress: f32, fade_start: f32) -> f32 {
     }
 }
 
+/// 從 lifetime/max_lifetime 計算淡出透明度
+///
+/// 組合 progress 計算與 `calculate_fade_alpha`，避免重複的 progress 計算程式碼。
+#[inline]
+pub fn lifetime_fade_alpha(lifetime: f32, max_lifetime: f32, fade_start: f32) -> f32 {
+    let progress = if max_lifetime > 0.0 {
+        (lifetime / max_lifetime).clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    calculate_fade_alpha(progress, fade_start)
+}
+
+/// 從 lifetime/max_lifetime 計算線性淡出透明度（1.0 → 0.0）
+#[inline]
+pub fn lifetime_linear_alpha(lifetime: f32, max_lifetime: f32) -> f32 {
+    let progress = if max_lifetime > 0.0 {
+        (lifetime / max_lifetime).clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    (1.0 - progress).max(0.0)
+}
+
 // ============================================================================
 // 緩動函數 (Easing Functions)
 // ============================================================================

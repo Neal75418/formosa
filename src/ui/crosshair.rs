@@ -185,14 +185,7 @@ fn spawn_weapon_slot(
 ) {
     parent
         .spawn((
-            Node {
-                width: Val::Px(28.0),
-                height: Val::Px(28.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
+            icon_box_node(),
             BackgroundColor(if is_active {
                 SLOT_ACTIVE
             } else {

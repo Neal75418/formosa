@@ -299,3 +299,19 @@ pub const TEXT_WHITE: Color = Color::srgb(0.95, 0.95, 0.95);
 pub const TITLE_GOLD: Color = Color::srgb(1.0, 0.85, 0.0);
 /// 誠品綠
 pub const ESLITE_GREEN: Color = Color::srgb(0.2, 0.35, 0.25);
+
+// ============================================================================
+// 共用 Node 建構函數
+// ============================================================================
+
+/// 28x28 置中圖示方塊 Node（武器槽位、App 圖示等共用）
+pub fn icon_box_node() -> Node {
+    Node {
+        width: Val::Px(28.0),
+        height: Val::Px(28.0),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        border: UiRect::all(Val::Px(1.0)),
+        ..default()
+    }
+}

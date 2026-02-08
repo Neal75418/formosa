@@ -4,7 +4,8 @@
 
 
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
+use bevy_rapier3d::prelude::{Real as RapierReal, *};
+use crate::core::rapier_real_to_f32;
 use crate::combat::{
     DamageEvent, DamageSource, Health,
     CombatVisuals, TracerStyle, spawn_bullet_tracer, spawn_muzzle_flash,
@@ -682,15 +683,15 @@ pub fn helicopter_combat_system(
 
         // 計算子彈終點
         let tracer_end = rapier
-            .cast_ray(muzzle_pos, direction, HELICOPTER_ATTACK_RANGE, true, QueryFilter::default())
-            .map(|(_, toi)| muzzle_pos + direction * toi)
+            .cast_ray(muzzle_pos, direction, HELICOPTER_ATTACK_RANGE as RapierReal, true, QueryFilter::default())
+            .map(|(_, toi)| muzzle_pos + direction * rapier_real_to_f32(toi))
             .unwrap_or_else(|| muzzle_pos + direction * HELICOPTER_ATTACK_RANGE);
 
         spawn_bullet_tracer(&mut commands, &visuals, muzzle_pos, tracer_end, TracerStyle::SMG);
 
         // 傷害判定
         if let Some((hit_entity, _)) = rapier.cast_ray(
-            muzzle_pos, direction, distance, true, QueryFilter::default()
+            muzzle_pos, direction, distance as RapierReal, true, QueryFilter::default()
         ) {
             if hit_entity == player_entity {
                 damage_events.write(DamageEvent {

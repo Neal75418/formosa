@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 use crate::audio::{play_weapon_fire_sound, AudioManager, WeaponSounds};
-use crate::core::{CameraSettings, GameState};
+use crate::core::{rapier_real_to_f32, CameraSettings, GameState};
 use crate::player::Player;
 use crate::vehicle::Vehicle;
 
@@ -228,7 +228,7 @@ pub fn vehicle_shooting_fire_system(
         true,
         filter,
     ) {
-        let hit_pos = muzzle_pos + aim_dir * hit_dist;
+        let hit_pos = muzzle_pos + aim_dir * rapier_real_to_f32(hit_dist);
 
         // 檢查是否命中可受傷目標
         if damageable_query.get(hit_entity).is_ok() {

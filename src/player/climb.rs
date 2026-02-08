@@ -7,8 +7,8 @@
 
 
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
-use crate::core::{ease_out_cubic, ease_in_out_quad};
+use bevy_rapier3d::prelude::{Real as RapierReal, *};
+use crate::core::{ease_out_cubic, ease_in_out_quad, rapier_real_to_f32};
 
 // ============================================================================
 // 常數定義
@@ -285,13 +285,13 @@ pub fn detect_climbable_obstacle(
 
     // Step 1: 前方射線檢測障礙物（從胸口高度發射）
     let chest_origin = player_pos + Vec3::Y * CHEST_HEIGHT;
-    let forward_hit = rapier.cast_ray(chest_origin, forward, DETECTION_DISTANCE, true, filter);
+    let forward_hit = rapier.cast_ray(chest_origin, forward, DETECTION_DISTANCE as RapierReal, true, filter);
 
     let Some((_, forward_toi)) = forward_hit else {
         return ClimbDetectionResult::default();
     };
 
-    let obstacle_front = chest_origin + forward * forward_toi;
+    let obstacle_front = chest_origin + forward * rapier_real_to_f32(forward_toi);
 
     // Step 2: 向上掃描找到邊緣高度
     let scan_origin = obstacle_front + forward * 0.05; // 稍微往前一點
@@ -305,7 +305,7 @@ pub fn detect_climbable_obstacle(
 
         // 如果這個高度沒有碰撞，說明找到了邊緣
         if rapier
-            .cast_ray(check_origin, forward, 0.3, true, filter)
+            .cast_ray(check_origin, forward, 0.3 as RapierReal, true, filter)
             .is_none()
         {
             edge_height = CHEST_HEIGHT + h;
@@ -319,21 +319,21 @@ pub fn detect_climbable_obstacle(
     }
 
     // Step 3: 確認頂部表面存在（向下射線）
-    let above_edge = player_pos + forward * (forward_toi + 0.3) + Vec3::Y * (edge_height + 0.3);
-    let down_hit = rapier.cast_ray(above_edge, -Vec3::Y, 0.6, true, filter);
+    let above_edge = player_pos + forward * (rapier_real_to_f32(forward_toi) + 0.3) + Vec3::Y * (edge_height + 0.3);
+    let down_hit = rapier.cast_ray(above_edge, -Vec3::Y, 0.6 as RapierReal, true, filter);
 
     let Some((_, down_toi)) = down_hit else {
         return ClimbDetectionResult::default();
     };
 
-    let edge_position = above_edge - Vec3::Y * down_toi;
+    let edge_position = above_edge - Vec3::Y * rapier_real_to_f32(down_toi);
 
     // Step 4: 檢測著地點（翻越後的落腳處）
     let landing_check_origin = edge_position + forward * LANDING_CHECK_DEPTH + Vec3::Y * 1.5;
-    let landing_hit = rapier.cast_ray(landing_check_origin, -Vec3::Y, 3.0, true, filter);
+    let landing_hit = rapier.cast_ray(landing_check_origin, -Vec3::Y, 3.0 as RapierReal, true, filter);
 
     let landing_position = match landing_hit {
-        Some((_, toi)) => landing_check_origin - Vec3::Y * toi + Vec3::Y * 0.1,
+        Some((_, toi)) => landing_check_origin - Vec3::Y * rapier_real_to_f32(toi) + Vec3::Y * 0.1,
         None => edge_position + forward * LANDING_CHECK_DEPTH, // 沒有地面就站在邊緣上
     };
 

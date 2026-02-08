@@ -1231,41 +1231,29 @@ fn spawn_vehicle(
                         ..default()
                     });
 
-                    let light_z = -chassis_size.z / 2.0 - 0.05;
                     let light_x = chassis_size.x / 2.0 - 0.4;
-
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.4, 0.2, 0.1))),
-                        MeshMaterial3d(headlight_mat.clone()),
-                        Transform::from_xyz(-light_x, 0.1, light_z),
-                        GlobalTransform::default(),
-                    ));
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.4, 0.2, 0.1))),
-                        MeshMaterial3d(headlight_mat),
-                        Transform::from_xyz(light_x, 0.1, light_z),
-                        GlobalTransform::default(),
-                    ));
+                    let light_mesh = meshes.add(Cuboid::new(0.4, 0.2, 0.1));
 
                     let taillight_mat = materials.add(StandardMaterial {
                         base_color: Color::srgb(1.0, 0.0, 0.0),
                         emissive: LinearRgba::new(15.0, 0.0, 0.0, 1.0),
                         ..default()
                     });
-                    let tail_z = chassis_size.z / 2.0 + 0.05;
 
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.4, 0.2, 0.1))),
-                        MeshMaterial3d(taillight_mat.clone()),
-                        Transform::from_xyz(-light_x, 0.1, tail_z),
-                        GlobalTransform::default(),
-                    ));
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.4, 0.2, 0.1))),
-                        MeshMaterial3d(taillight_mat),
-                        Transform::from_xyz(light_x, 0.1, tail_z),
-                        GlobalTransform::default(),
-                    ));
+                    let lights: [(Handle<StandardMaterial>, f32); 2] = [
+                        (headlight_mat, -chassis_size.z / 2.0 - 0.05),
+                        (taillight_mat, chassis_size.z / 2.0 + 0.05),
+                    ];
+                    for (mat, z) in lights {
+                        for x in [-light_x, light_x] {
+                            parent.spawn((
+                                Mesh3d(light_mesh.clone()),
+                                MeshMaterial3d(mat.clone()),
+                                Transform::from_xyz(x, 0.1, z),
+                                GlobalTransform::default(),
+                            ));
+                        }
+                    }
                 });
         });
 }

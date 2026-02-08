@@ -1,7 +1,7 @@
 //! AI 感知系統（視覺、聽覺、天氣影響）
 
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
+use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 use super::{AiBehavior, AiConfig, AiPerception};
 use crate::combat::Enemy;
@@ -96,10 +96,10 @@ pub fn ai_perception_system(
 
         // 執行射線檢測
         let has_line_of_sight = if let Some((_hit_entity, toi)) =
-            rapier.cast_ray(ray_origin, ray_dir, max_distance, true, filter)
+            rapier.cast_ray(ray_origin, ray_dir, max_distance as RapierReal, true, filter)
         {
             // 如果射線打到的距離小於玩家距離，表示有遮擋
-            toi >= max_distance * config.line_of_sight_tolerance
+            toi >= (max_distance * config.line_of_sight_tolerance) as RapierReal
         } else {
             // 沒有打到任何東西，視線通暢
             true

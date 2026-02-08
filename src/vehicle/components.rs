@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::pbr::StandardMaterial;
 use serde::{Serialize, Deserialize};
 use std::sync::atomic::{AtomicU64, Ordering};
-use crate::core::calculate_fade_alpha;
+use crate::core::{lifetime_fade_alpha, lifetime_linear_alpha};
 
 // ============================================================================
 // 車輛穩定 ID（用於存檔識別）
@@ -604,12 +604,7 @@ impl TireTrack {
 
     /// 計算當前透明度
     pub fn alpha(&self) -> f32 {
-        let progress = if self.max_lifetime > 0.0 {
-            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        calculate_fade_alpha(progress, 0.7)
+        lifetime_fade_alpha(self.lifetime, self.max_lifetime, 0.7)
     }
 }
 
@@ -639,12 +634,7 @@ impl DriftSmoke {
 
     /// 計算當前透明度（煙霧會擴散變淡）
     pub fn alpha(&self) -> f32 {
-        let progress = if self.max_lifetime > 0.0 {
-            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        (1.0 - progress).max(0.0)
+        lifetime_linear_alpha(self.lifetime, self.max_lifetime)
     }
 
     /// 計算當前縮放（煙霧會擴散變大）
@@ -1162,12 +1152,7 @@ impl VehicleDamageSmoke {
 
     /// 計算透明度
     pub fn alpha(&self) -> f32 {
-        let progress = if self.max_lifetime > 0.0 {
-            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        (1.0 - progress).max(0.0)
+        lifetime_linear_alpha(self.lifetime, self.max_lifetime)
     }
 }
 
@@ -1483,12 +1468,7 @@ impl VehicleExplosion {
 
     /// 計算透明度
     pub fn alpha(&self) -> f32 {
-        let progress = if self.max_lifetime > 0.0 {
-            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        (1.0 - progress).max(0.0)
+        lifetime_linear_alpha(self.lifetime, self.max_lifetime)
     }
 }
 

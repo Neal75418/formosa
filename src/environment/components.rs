@@ -1,7 +1,7 @@
 //! 環境互動組件
 
 use bevy::prelude::*;
-use crate::core::{EntityPool, calculate_fade_alpha};
+use crate::core::{EntityPool, lifetime_fade_alpha};
 
 // ============================================================================
 // 可破壞物件
@@ -182,12 +182,7 @@ impl Debris {
 
     /// 計算當前透明度
     pub fn alpha(&self) -> f32 {
-        let progress = if self.max_lifetime > 0.0 {
-            (self.lifetime / self.max_lifetime).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        calculate_fade_alpha(progress, 0.7)
+        lifetime_fade_alpha(self.lifetime, self.max_lifetime, 0.7)
     }
 }
 

@@ -241,6 +241,18 @@ impl ShopItem {
     }
 }
 
+// ============================================================================
+// 商品 ID 常數
+// ============================================================================
+pub const ITEM_WEAPON_PISTOL: &str = "weapon_pistol";
+pub const ITEM_WEAPON_SMG: &str = "weapon_smg";
+pub const ITEM_WEAPON_SHOTGUN: &str = "weapon_shotgun";
+pub const ITEM_WEAPON_RIFLE: &str = "weapon_rifle";
+pub const ITEM_AMMO_PISTOL: &str = "ammo_pistol";
+pub const ITEM_AMMO_SMG: &str = "ammo_smg";
+pub const ITEM_AMMO_SHOTGUN: &str = "ammo_shotgun";
+pub const ITEM_AMMO_RIFLE: &str = "ammo_rifle";
+
 /// 商店庫存資源
 #[derive(Resource, Default)]
 pub struct ShopInventory {
@@ -281,28 +293,28 @@ impl ShopInventory {
 
     fn init_weapon_shop(&mut self) {
         self.weapon_items = vec![
-            ShopItem::new("ammo_pistol", "手槍彈匣", ItemCategory::Ammo, 50)
+            ShopItem::new(ITEM_AMMO_PISTOL, "手槍彈匣", ItemCategory::Ammo, 50)
                 .with_description("手槍彈藥 x30")
                 .with_effect(30.0),
-            ShopItem::new("ammo_smg", "衝鋒槍彈匣", ItemCategory::Ammo, 100)
+            ShopItem::new(ITEM_AMMO_SMG, "衝鋒槍彈匣", ItemCategory::Ammo, 100)
                 .with_description("衝鋒槍彈藥 x60")
                 .with_effect(60.0),
-            ShopItem::new("ammo_shotgun", "霰彈", ItemCategory::Ammo, 80)
+            ShopItem::new(ITEM_AMMO_SHOTGUN, "霰彈", ItemCategory::Ammo, 80)
                 .with_description("霰彈 x12")
                 .with_effect(12.0),
-            ShopItem::new("ammo_rifle", "步槍彈匣", ItemCategory::Ammo, 150)
+            ShopItem::new(ITEM_AMMO_RIFLE, "步槍彈匣", ItemCategory::Ammo, 150)
                 .with_description("步槍彈藥 x30")
                 .with_effect(30.0),
-            ShopItem::new("weapon_pistol", "9mm 手槍", ItemCategory::Weapon, 1500)
+            ShopItem::new(ITEM_WEAPON_PISTOL, "9mm 手槍", ItemCategory::Weapon, 1500)
                 .with_description("基礎手槍")
                 .with_stock(1),
-            ShopItem::new("weapon_smg", "衝鋒槍", ItemCategory::Weapon, 5000)
+            ShopItem::new(ITEM_WEAPON_SMG, "衝鋒槍", ItemCategory::Weapon, 5000)
                 .with_description("高射速")
                 .with_stock(1),
-            ShopItem::new("weapon_shotgun", "霰彈槍", ItemCategory::Weapon, 8000)
+            ShopItem::new(ITEM_WEAPON_SHOTGUN, "霰彈槍", ItemCategory::Weapon, 8000)
                 .with_description("近距離高傷害")
                 .with_stock(1),
-            ShopItem::new("weapon_rifle", "突擊步槍", ItemCategory::Weapon, 15000)
+            ShopItem::new(ITEM_WEAPON_RIFLE, "突擊步槍", ItemCategory::Weapon, 15000)
                 .with_description("中遠距離")
                 .with_stock(1),
             ShopItem::new("armor_heavy", "重型防彈衣", ItemCategory::Armor, 2000)

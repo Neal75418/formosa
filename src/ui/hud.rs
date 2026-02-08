@@ -13,6 +13,7 @@ use super::components::{
 use crate::combat::{Armor, Health};
 use crate::core::{GameState, WorldTime};
 use crate::mission::MissionManager;
+use crate::economy::PlayerWallet;
 use crate::player::Player;
 use crate::vehicle::{Vehicle, VehicleType};
 
@@ -258,7 +259,8 @@ fn update_armor_section(
 /// 更新 HUD（血量條、護甲條、金錢）- GTA 風格
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_hud(
-    player_query: Query<(&Health, Option<&Armor>, &Player)>,
+    wallet: Res<PlayerWallet>,
+    player_query: Query<(&Health, Option<&Armor>), With<Player>>,
     mut health_fill_query: Query<
         &mut Node,
         (
@@ -331,7 +333,7 @@ pub fn update_hud(
         ),
     >,
 ) {
-    let Ok((health, armor_opt, player)) = player_query.single() else {
+    let Ok((health, armor_opt)) = player_query.single() else {
         return;
     };
 
@@ -367,7 +369,7 @@ pub fn update_hud(
 
     // 更新金錢顯示
     if let Ok(mut text) = money_query.single_mut() {
-        **text = format!("$ {}", player.money);
+        **text = format!("$ {}", wallet.cash);
     }
 }
 

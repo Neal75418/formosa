@@ -489,12 +489,10 @@ fn apply_player_data(
     respect: &mut RespectManager,
     save_data: &SaveData,
 ) {
-    if let Ok((mut transform, mut player, health, armor)) = player_query.single_mut() {
+    if let Ok((mut transform, _, health, armor)) = player_query.single_mut() {
         let pos = save_data.player.position;
         transform.translation = Vec3::new(pos[0], pos[1], pos[2]);
         transform.rotation = Quat::from_rotation_y(save_data.player.rotation_y);
-
-        player.money = save_data.player.cash as u32;
 
         if let Some(mut h) = health {
             h.current = save_data.player.health;

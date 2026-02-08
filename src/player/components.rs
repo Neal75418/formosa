@@ -2,6 +2,7 @@
 
 
 use bevy::prelude::*;
+use crate::core::{ease_out_cubic, ease_in_cubic};
 
 /// 玩家標記與移動參數
 /// 注意：生命值使用獨立的 Health 組件，不在此結構中
@@ -14,7 +15,6 @@ pub struct Player {
     pub jump_force: f32,
     pub vertical_velocity: f32,
     pub is_grounded: bool,
-    pub money: u32,
     // === 加速度系統 ===
     /// 當前實際移動速度（平滑過渡）
     pub current_speed: f32,
@@ -36,7 +36,6 @@ impl Default for Player {
             jump_force: 12.0,
             vertical_velocity: 0.0,
             is_grounded: true,
-            money: 5000,
             // 加速度系統
             current_speed: 0.0,           // 初始靜止
             acceleration_time: 0.3,       // 0.3 秒從靜止到全速
@@ -379,16 +378,6 @@ impl VehicleTransitionState {
         self.target_vehicle = None;
         self.door_angle = 0.0;
     }
-}
-
-/// 緩出曲線（用於門打開）
-fn ease_out_cubic(t: f32) -> f32 {
-    1.0 - (1.0 - t).powi(3)
-}
-
-/// 緩入曲線（用於門關閉）
-fn ease_in_cubic(t: f32) -> f32 {
-    t.powi(3)
 }
 
 /// 車門組件標記

@@ -16,24 +16,14 @@ use super::components::*;
 // 金錢同步系統
 // ============================================================================
 
-/// 同步金錢顯示（PlayerWallet -> PlayerStats -> Player）
+/// 同步金錢顯示（PlayerWallet -> PlayerStats）
 /// 確保所有金錢來源保持一致
 pub fn sync_money_display(
     wallet: Res<PlayerWallet>,
     mut player_stats: ResMut<PlayerStats>,
-    mut player_query: Query<&mut Player>,
 ) {
-    // 只在錢包變動時同步
     if wallet.is_changed() {
-        let cash = wallet.cash as u32;
-
-        // 同步到 PlayerStats（HUD 用）
-        player_stats.money = cash;
-
-        // 同步到 Player 組件
-        for mut player in player_query.iter_mut() {
-            player.money = cash;
-        }
+        player_stats.money = wallet.cash as u32;
     }
 }
 
@@ -185,10 +175,10 @@ fn try_purchase_item(
         ItemCategory::Weapon => {
             // 根據 item.id 確定武器類型
             let weapon = match item.id.as_str() {
-                "weapon_pistol" => Weapon::new(WeaponStats::pistol()),
-                "weapon_smg" => Weapon::new(WeaponStats::smg()),
-                "weapon_shotgun" => Weapon::new(WeaponStats::shotgun()),
-                "weapon_rifle" => Weapon::new(WeaponStats::rifle()),
+                ITEM_WEAPON_PISTOL => Weapon::new(WeaponStats::pistol()),
+                ITEM_WEAPON_SMG => Weapon::new(WeaponStats::smg()),
+                ITEM_WEAPON_SHOTGUN => Weapon::new(WeaponStats::shotgun()),
+                ITEM_WEAPON_RIFLE => Weapon::new(WeaponStats::rifle()),
                 _ => {
                     warn!("未知武器 ID: {}", item.id);
                     return;
@@ -203,10 +193,10 @@ fn try_purchase_item(
         ItemCategory::Ammo => {
             // 根據 item.id 確定彈藥類型並補充
             let weapon_type = match item.id.as_str() {
-                "ammo_pistol" => WeaponType::Pistol,
-                "ammo_smg" => WeaponType::SMG,
-                "ammo_shotgun" => WeaponType::Shotgun,
-                "ammo_rifle" => WeaponType::Rifle,
+                ITEM_AMMO_PISTOL => WeaponType::Pistol,
+                ITEM_AMMO_SMG => WeaponType::SMG,
+                ITEM_AMMO_SHOTGUN => WeaponType::Shotgun,
+                ITEM_AMMO_RIFLE => WeaponType::Rifle,
                 _ => {
                     warn!("未知彈藥 ID: {}", item.id);
                     return;

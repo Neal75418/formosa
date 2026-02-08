@@ -406,675 +406,67 @@ fn setup_buildings(
 ) {
     // === 3. 地標建築 (根據真實西門町位置) ===
 
-    // 定義 helper closure 來計算貼合位置
-    // x_align: -1 (路左/西), 1 (路右/東)
-    // z_align: -1 (路北), 1 (路南)
+    // 交叉路口建築（road1 = X 軸道路, road2 = Z 軸道路）
+    let corner_buildings = [
+        // 西寧南路沿線
+        BuildingSpec { road1: RoadSide { center: X_XINING, width: W_SECONDARY, align: -1.0 }, road2: RoadSide { center: Z_EMEI, width: W_PEDESTRIAN, align: -1.0 }, width: 20.0, height: 28.0, depth: 15.0, name: "萬年大樓" },
+        BuildingSpec { road1: RoadSide { center: X_XINING, width: W_SECONDARY, align: -1.0 }, road2: RoadSide { center: Z_WUCHANG, width: W_PEDESTRIAN, align: -1.0 }, width: 22.0, height: 24.0, depth: 22.0, name: "獅子林" },
+        BuildingSpec { road1: RoadSide { center: X_XINING, width: W_SECONDARY, align: -1.0 }, road2: RoadSide { center: Z_KUNMING, width: W_ALLEY, align: -1.0 }, width: 23.0, height: 4.0, depth: 18.0, name: "電影公園" },
+        BuildingSpec { road1: RoadSide { center: X_XINING, width: W_SECONDARY, align: 1.0 }, road2: RoadSide { center: Z_WUCHANG, width: W_PEDESTRIAN, align: 1.0 }, width: 28.0, height: 35.0, depth: 22.0, name: "Don Don Donki" },
+        // 漢中街沿線
+        BuildingSpec { road1: RoadSide { center: X_HAN, width: W_PEDESTRIAN, align: -1.0 }, road2: RoadSide { center: Z_EMEI, width: W_PEDESTRIAN, align: -1.0 }, width: 18.0, height: 20.0, depth: 16.0, name: "誠品西門" },
+        BuildingSpec { road1: RoadSide { center: X_HAN, width: W_PEDESTRIAN, align: -1.0 }, road2: RoadSide { center: Z_WUCHANG, width: W_PEDESTRIAN, align: 1.0 }, width: 14.0, height: 18.0, depth: 14.0, name: "誠品武昌" },
+        BuildingSpec { road1: RoadSide { center: X_HAN, width: W_PEDESTRIAN, align: 1.0 }, road2: RoadSide { center: Z_EMEI, width: W_PEDESTRIAN, align: -1.0 }, width: 12.0, height: 15.0, depth: 12.0, name: "Uniqlo" },
+        BuildingSpec { road1: RoadSide { center: X_HAN, width: W_PEDESTRIAN, align: 1.0 }, road2: RoadSide { center: Z_CHENGDU, width: W_MAIN, align: -1.0 }, width: 14.0, height: 18.0, depth: 14.0, name: "H&M" },
+        // 中華路沿線
+        BuildingSpec { road1: RoadSide { center: X_ZHONGHUA, width: W_ZHONGHUA, align: -1.0 }, road2: RoadSide { center: Z_CHENGDU, width: W_MAIN, align: -1.0 }, width: 12.0, height: 8.0, depth: 12.0, name: "捷運6號出口" },
+        BuildingSpec { road1: RoadSide { center: X_ZHONGHUA, width: W_ZHONGHUA, align: -1.0 }, road2: RoadSide { center: Z_CHENGDU, width: W_MAIN, align: 1.0 }, width: 22.0, height: 14.0, depth: 22.0, name: "西門紅樓" },
+        BuildingSpec { road1: RoadSide { center: X_ZHONGHUA, width: W_ZHONGHUA, align: 1.0 }, road2: RoadSide { center: Z_CHENGDU, width: W_MAIN, align: -1.0 }, width: 16.0, height: 22.0, depth: 16.0, name: "錢櫃KTV" },
+        BuildingSpec { road1: RoadSide { center: X_ZHONGHUA, width: W_ZHONGHUA, align: -1.0 }, road2: RoadSide { center: Z_WUCHANG, width: W_PEDESTRIAN, align: 1.0 }, width: 10.0, height: 8.0, depth: 10.0, name: "鴨肉扁" },
+        BuildingSpec { road1: RoadSide { center: X_ZHONGHUA, width: W_ZHONGHUA, align: -1.0 }, road2: RoadSide { center: Z_EMEI, width: W_PEDESTRIAN, align: -1.0 }, width: 18.0, height: 28.0, depth: 16.0, name: "新光三越" },
+        BuildingSpec { road1: RoadSide { center: X_ZHONGHUA, width: W_ZHONGHUA, align: 1.0 }, road2: RoadSide { center: Z_HANKOU, width: W_SECONDARY, align: 1.0 }, width: 20.0, height: 25.0, depth: 18.0, name: "遠東百貨" },
+        BuildingSpec { road1: RoadSide { center: X_ZHONGHUA, width: W_ZHONGHUA, align: 1.0 }, road2: RoadSide { center: Z_WUCHANG, width: W_PEDESTRIAN, align: -1.0 }, width: 14.0, height: 20.0, depth: 12.0, name: "商業大樓A" },
+        // 康定路沿線
+        BuildingSpec { road1: RoadSide { center: X_KANGDING, width: W_MAIN, align: 1.0 }, road2: RoadSide { center: Z_HANKOU, width: W_SECONDARY, align: 1.0 }, width: 28.0, height: 12.0, depth: 23.0, name: "西門國小" },
+        BuildingSpec { road1: RoadSide { center: X_KANGDING, width: W_MAIN, align: 1.0 }, road2: RoadSide { center: Z_EMEI, width: W_PEDESTRIAN, align: -1.0 }, width: 12.0, height: 10.0, depth: 12.0, name: "7-ELEVEN" },
+        // 漢口街建築群
+        BuildingSpec { road1: RoadSide { center: X_XINING, width: W_SECONDARY, align: 1.0 }, road2: RoadSide { center: Z_HANKOU, width: W_SECONDARY, align: 1.0 }, width: 10.0, height: 8.0, depth: 10.0, name: "全家便利" },
+        BuildingSpec { road1: RoadSide { center: X_HAN, width: W_PEDESTRIAN, align: -1.0 }, road2: RoadSide { center: Z_HANKOU, width: W_SECONDARY, align: 1.0 }, width: 14.0, height: 12.0, depth: 12.0, name: "麥當勞" },
+        BuildingSpec { road1: RoadSide { center: X_HAN, width: W_PEDESTRIAN, align: 1.0 }, road2: RoadSide { center: Z_HANKOU, width: W_SECONDARY, align: 1.0 }, width: 10.0, height: 10.0, depth: 10.0, name: "摩斯漢堡" },
+        // 康定路南段
+        BuildingSpec { road1: RoadSide { center: X_KANGDING, width: W_MAIN, align: 1.0 }, road2: RoadSide { center: Z_CHENGDU, width: W_MAIN, align: 1.0 }, width: 12.0, height: 10.0, depth: 12.0, name: "大創" },
+        BuildingSpec { road1: RoadSide { center: X_KANGDING, width: W_MAIN, align: 1.0 }, road2: RoadSide { center: Z_CHENGDU, width: W_MAIN, align: -1.0 }, width: 14.0, height: 12.0, depth: 14.0, name: "彈珠台" },
+    ];
+    for spec in &corner_buildings {
+        spawn_building_at_corner(commands, meshes, materials, building_tracker, spec);
+    }
 
-    // ========== 西寧南路沿線建築 ==========
+    // 道路沿線建築（位於兩條橫路之間的路側）
+    spawn_building_at_linear(commands, meshes, materials, building_tracker, Z_CHENGDU, W_MAIN, -1.0, X_XINING, X_HAN, 8.0, 6.0, "阿宗麵線");
+    spawn_building_at_linear(commands, meshes, materials, building_tracker, X_HAN, W_PEDESTRIAN, -1.0, Z_EMEI, Z_CHENGDU, 6.0, 6.0, "KFC");
+    spawn_building_at_linear(commands, meshes, materials, building_tracker, Z_EMEI, W_PEDESTRIAN, 1.0, X_XINING, X_HAN, 5.0, 5.0, "小吃街");
 
-    // 萬年大樓 (西寧/峨嵋 NW 角) - 西門町最著名的購物中心之一
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_XINING,
-        W_SECONDARY,
-        -1.0,
-        Z_EMEI,
-        W_PEDESTRIAN,
-        -1.0,
-        20.0,
-        28.0,
-        15.0,
-        "萬年大樓",
-        Color::srgb(0.45, 0.45, 0.5),
-    );
+    // 直接定位建築（電影街、補充店面等）
+    let direct_buildings: &[(Vec3, f32, f32, f32, &str)] = &[
+        (Vec3::new(X_ZHONGHUA - W_ZHONGHUA / 2.0 - 10.0, 15.0, 25.0), 16.0, 30.0, 14.0, "統一元氣館"),
+        (Vec3::new(41.0, 16.0, -68.0), 22.0, 32.0, 18.0, "國賓影城"),
+        (Vec3::new(36.0, 14.0, -34.0), 18.0, 28.0, 16.0, "樂聲影城"),
+        (Vec3::new(59.0, 15.0, -62.0), 20.0, 30.0, 20.0, "日新威秀"),
+        (Vec3::new(40.0, 10.0, -64.0), 18.0, 20.0, 15.0, "湯姆熊"),
+        (Vec3::new(-20.0, 6.0, 33.0), 10.0, 12.0, 10.0, "肯德基"),
+        (Vec3::new(14.0, 4.0, 33.0), 6.0, 8.0, 6.0, "50嵐"),
+        (Vec3::new(26.0, 5.0, 33.0), 8.0, 10.0, 8.0, "夾娃娃機"),
+        (Vec3::new(28.0, 7.0, -10.0), 10.0, 14.0, 10.0, "潮牌店"),
+        (Vec3::new(40.0, 6.0, -10.0), 8.0, 12.0, 8.0, "古著店"),
+        (Vec3::new(52.0, 7.5, 14.0), 12.0, 15.0, 12.0, "球鞋專賣"),
+        (Vec3::new(20.0, 6.0, -17.0), 8.0, 12.0, 8.0, "刺青店"),
+        (Vec3::new(30.0, 5.0, -17.0), 6.0, 10.0, 6.0, "潮流刺青"),
+    ];
+    for &(pos, width, height, depth, name) in direct_buildings {
+        try_spawn_rich_building(commands, meshes, materials, building_tracker, pos, width, height, depth, name);
+    }
 
-    // 獅子林大樓 (西寧/武昌 NW 角)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_XINING,
-        W_SECONDARY,
-        -1.0,
-        Z_WUCHANG,
-        W_PEDESTRIAN,
-        -1.0,
-        22.0,
-        24.0,
-        22.0,
-        "獅子林",
-        Color::srgb(0.5, 0.4, 0.3),
-    );
-
-    // 電影公園 (西寧/武昌與昆明之間，西側) - 縮小尺寸確保不侵入道路
-    // 原本 25x20 剛好貼邊，改為 23x18 留 1m 間距
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_XINING,
-        W_SECONDARY,
-        -1.0,
-        Z_KUNMING,
-        W_ALLEY,
-        -1.0,
-        23.0,
-        4.0,
-        18.0,
-        "電影公園",
-        Color::srgb(0.25, 0.4, 0.25),
-    );
-
-    // 唐吉訶德 Don Quijote (西寧東側/武昌南側) - 黃色顯眼大樓
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_XINING,
-        W_SECONDARY,
-        1.0,
-        Z_WUCHANG,
-        W_PEDESTRIAN,
-        1.0,
-        28.0,
-        35.0,
-        22.0,
-        "Don Don Donki",
-        Color::srgb(1.0, 0.85, 0.0),
-    );
-
-    // ========== 漢中街沿線建築 ==========
-
-    // 誠品西門店 (峨嵋北側, 漢中西側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_HAN,
-        W_PEDESTRIAN,
-        -1.0,
-        Z_EMEI,
-        W_PEDESTRIAN,
-        -1.0,
-        18.0,
-        20.0,
-        16.0,
-        "誠品西門",
-        Color::srgb(0.2, 0.35, 0.25),
-    );
-
-    // 誠品武昌店 (武昌南側, 漢中西側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_HAN,
-        W_PEDESTRIAN,
-        -1.0,
-        Z_WUCHANG,
-        W_PEDESTRIAN,
-        1.0,
-        14.0,
-        18.0,
-        14.0,
-        "誠品武昌",
-        Color::srgb(0.2, 0.35, 0.25),
-    );
-
-    // Uniqlo (漢中東側，峨嵋北側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_HAN,
-        W_PEDESTRIAN,
-        1.0,
-        Z_EMEI,
-        W_PEDESTRIAN,
-        -1.0,
-        12.0,
-        15.0,
-        12.0,
-        "Uniqlo",
-        Color::srgb(0.85, 0.15, 0.15),
-    );
-
-    // H&M (漢中東側，成都北側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_HAN,
-        W_PEDESTRIAN,
-        1.0,
-        Z_CHENGDU,
-        W_MAIN,
-        -1.0,
-        14.0,
-        18.0,
-        14.0,
-        "H&M",
-        Color::srgb(0.85, 0.85, 0.85),
-    );
-
-    // ========== 中華路沿線建築 ==========
-
-    // 捷運西門站6號出口 (中華/成都 NW 角)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_ZHONGHUA,
-        W_ZHONGHUA,
-        -1.0,
-        Z_CHENGDU,
-        W_MAIN,
-        -1.0,
-        12.0,
-        8.0,
-        12.0,
-        "捷運6號出口",
-        Color::srgb(0.2, 0.35, 0.65),
-    );
-
-    // 西門紅樓 (中華路西側，成都路南側) - 歷史地標
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_ZHONGHUA,
-        W_ZHONGHUA,
-        -1.0,
-        Z_CHENGDU,
-        W_MAIN,
-        1.0,
-        22.0,
-        14.0,
-        22.0,
-        "西門紅樓",
-        Color::srgb(0.7, 0.22, 0.18),
-    );
-
-    // 錢櫃 KTV (中華路東側，成都路北側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_ZHONGHUA,
-        W_ZHONGHUA,
-        1.0,
-        Z_CHENGDU,
-        W_MAIN,
-        -1.0,
-        16.0,
-        22.0,
-        16.0,
-        "錢櫃KTV",
-        Color::srgb(0.75, 0.45, 0.55),
-    );
-
-    // 鴨肉扁 (中華路西側，武昌街南側) - 著名小吃
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_ZHONGHUA,
-        W_ZHONGHUA,
-        -1.0,
-        Z_WUCHANG,
-        W_PEDESTRIAN,
-        1.0,
-        10.0,
-        8.0,
-        10.0,
-        "鴨肉扁",
-        Color::srgb(0.85, 0.65, 0.35),
-    );
-
-    // 新光三越 (中華路西側，峨嵋北側) - 大型百貨
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_ZHONGHUA,
-        W_ZHONGHUA,
-        -1.0,
-        Z_EMEI,
-        W_PEDESTRIAN,
-        -1.0,
-        18.0,
-        28.0,
-        16.0,
-        "新光三越",
-        Color::srgb(0.85, 0.85, 0.9),
-    );
-
-    // 統一元氣館 (中華路西側，峨嵋與成都之間) - 辦公大樓
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(X_ZHONGHUA - W_ZHONGHUA / 2.0 - 10.0, 15.0, 25.0),
-        16.0,
-        30.0,
-        14.0,
-        "統一元氣館",
-    );
-
-    // 遠東百貨 (中華路東側，漢口街南側) - 大型商場
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_ZHONGHUA,
-        W_ZHONGHUA,
-        1.0,
-        Z_HANKOU,
-        W_SECONDARY,
-        1.0,
-        20.0,
-        25.0,
-        18.0,
-        "遠東百貨",
-        Color::srgb(0.3, 0.4, 0.6),
-    );
-
-    // 台北車站方向商業大樓 (中華路東側，武昌北側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_ZHONGHUA,
-        W_ZHONGHUA,
-        1.0,
-        Z_WUCHANG,
-        W_PEDESTRIAN,
-        -1.0,
-        14.0,
-        20.0,
-        12.0,
-        "商業大樓A",
-        Color::srgb(0.6, 0.6, 0.65),
-    );
-
-    // ========== 成都路沿線建築 ==========
-
-    // 阿宗麵線 (成都路北側，西寧與漢中之間)
-    spawn_building_at_linear(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Z_CHENGDU,
-        W_MAIN,
-        -1.0, // 成都路北側
-        X_XINING,
-        X_HAN, // 西寧到漢中之間
-        8.0,
-        6.0,
-        "阿宗麵線",
-        Color::srgb(0.9, 0.5, 0.2),
-    );
-
-    // ========== 康定路沿線建築 ==========
-
-    // 西門國小 (康定路東側，漢口街南側) - 縮小尺寸確保不侵入道路
-    // 原本 30x25 剛好貼邊，改為 28x23 留 1m 間距
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_KANGDING,
-        W_MAIN,
-        1.0,
-        Z_HANKOU,
-        W_SECONDARY,
-        1.0,
-        28.0,
-        12.0,
-        23.0,
-        "西門國小",
-        Color::srgb(0.7, 0.65, 0.55),
-    );
-
-    // 便利商店區 (康定路東側，峨嵋北側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_KANGDING,
-        W_MAIN,
-        1.0,
-        Z_EMEI,
-        W_PEDESTRIAN,
-        -1.0,
-        12.0,
-        10.0,
-        12.0,
-        "7-ELEVEN",
-        Color::srgb(0.2, 0.5, 0.35),
-    );
-
-    // === 4. 裝飾：便利商店與小店 (沿街填充) ===
-    // 漢中街西側 - KFC
-    spawn_building_at_linear(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_HAN,
-        W_PEDESTRIAN,
-        -1.0,
-        Z_EMEI,
-        Z_CHENGDU,
-        6.0,
-        6.0,
-        "KFC",
-        Color::srgb(0.8, 0.1, 0.1),
-    );
-
-    // 峨嵋街南側 - 小吃攤
-    spawn_building_at_linear(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Z_EMEI,
-        W_PEDESTRIAN,
-        1.0,
-        X_XINING,
-        X_HAN,
-        5.0,
-        5.0,
-        "小吃街",
-        Color::srgb(0.85, 0.65, 0.4),
-    );
-
-    // ========== 電影街區域 (武昌街二段東段) - Phase 1 ==========
-
-    // 國賓影城 (武昌北側，漢中東側偏東) - 往北移 2m 避免海報進入道路
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(41.0, 16.0, -68.0),
-        22.0,
-        32.0,
-        18.0,
-        "國賓影城",
-    );
-
-    // 樂聲影城 (武昌南側)
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(36.0, 14.0, -34.0),
-        18.0,
-        28.0,
-        16.0,
-        "樂聲影城",
-    );
-
-    // 日新威秀 (更東邊) - 確保不侵入漢口街 (南邊界 Z=-74)
-    // 建築深度 20，所以 Z 中心需 >= -74 + 10 + 2 = -62
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(59.0, 15.0, -62.0),
-        20.0,
-        30.0,
-        20.0,
-        "日新威秀",
-    );
-
-    // ========== 漢口街建築群 - Phase 2 ==========
-
-    // 全家便利商店 (漢口街南側，西寧東側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_XINING,
-        W_SECONDARY,
-        1.0,
-        Z_HANKOU,
-        W_SECONDARY,
-        1.0,
-        10.0,
-        8.0,
-        10.0,
-        "全家便利",
-        Color::srgb(0.2, 0.5, 0.4),
-    );
-
-    // 麥當勞 (漢口街南側，漢中西側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_HAN,
-        W_PEDESTRIAN,
-        -1.0,
-        Z_HANKOU,
-        W_SECONDARY,
-        1.0,
-        14.0,
-        12.0,
-        12.0,
-        "麥當勞",
-        Color::srgb(0.95, 0.75, 0.1),
-    );
-
-    // 摩斯漢堡 (漢口街南側，漢中東側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_HAN,
-        W_PEDESTRIAN,
-        1.0,
-        Z_HANKOU,
-        W_SECONDARY,
-        1.0,
-        10.0,
-        10.0,
-        10.0,
-        "摩斯漢堡",
-        Color::srgb(0.8, 0.2, 0.2),
-    );
-
-    // 湯姆熊遊戲中心 (漢口街南側偏東) - 確保不侵入漢口街 (南邊界 Z=-74)
-    // 建築深度 15，所以 Z 中心需 >= -74 + 7.5 + 2 = -64.5，取 -64
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(40.0, 10.0, -64.0),
-        18.0,
-        20.0,
-        15.0,
-        "湯姆熊",
-    );
-
-    // ========== 成都路與峨嵋街補充 - Phase 3 ==========
-    // 成都路 Z=50, 寬度16, 北側邊界 Z=42
-    // 峨嵋街 Z=0, 寬度15, 北側邊界 Z=-7.5, 南側邊界 Z=7.5
-
-    // 肯德基 (成都路北側，西寧東側偏東) - 移到 Z=33 避開道路
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(-20.0, 6.0, 33.0),
-        10.0,
-        12.0,
-        10.0,
-        "肯德基",
-    );
-
-    // 50嵐飲料 (成都路北側，漢中東側偏東) - 移到 Z=33
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(14.0, 4.0, 33.0),
-        6.0,
-        8.0,
-        6.0,
-        "50嵐",
-    );
-
-    // 夾娃娃機店 (成都路北側) - 移到 Z=33
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(26.0, 5.0, 33.0),
-        8.0,
-        10.0,
-        8.0,
-        "夾娃娃機",
-    );
-
-    // 潮牌店 (峨嵋街北側，漢中東側偏東) - Z=-8 OK (建築南邊 -8+5=-3 不在道路內)
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(28.0, 7.0, -10.0),
-        10.0,
-        14.0,
-        10.0,
-        "潮牌店",
-    );
-
-    // 古著店 (峨嵋街北側) - 移到 Z=-10
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(40.0, 6.0, -10.0),
-        8.0,
-        12.0,
-        8.0,
-        "古著店",
-    );
-
-    // 球鞋專賣店 (峨嵋街南側偏東) - 移到 Z=14 避開道路
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(52.0, 7.5, 14.0),
-        12.0,
-        15.0,
-        12.0,
-        "球鞋專賣",
-    );
-
-    // ========== 刺青街特色區 - Phase 4 ==========
-
-    // 刺青店 (昆明街南側)
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(20.0, 6.0, -17.0),
-        8.0,
-        12.0,
-        8.0,
-        "刺青店",
-    );
-
-    // 潮流刺青 (昆明街南側)
-    try_spawn_rich_building(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        Vec3::new(30.0, 5.0, -17.0),
-        6.0,
-        10.0,
-        6.0,
-        "潮流刺青",
-    );
-
-    // 康定路南段補充
-    // 大創 (康定路東側，成都路南側) - 移到這裡避免與峨嵋停車場重疊
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_KANGDING,
-        W_MAIN,
-        1.0,
-        Z_CHENGDU,
-        W_MAIN,
-        1.0,
-        12.0,
-        10.0,
-        12.0,
-        "大創",
-        Color::srgb(0.9, 0.4, 0.5),
-    );
-
-    // 彈珠台 (康定路東側，成都北側)
-    spawn_building_at_corner(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        X_KANGDING,
-        W_MAIN,
-        1.0,
-        Z_CHENGDU,
-        W_MAIN,
-        -1.0,
-        14.0,
-        12.0,
-        14.0,
-        "彈珠台",
-        Color::srgb(0.8, 0.7, 0.2),
-    );
-
-    info!("🏢 已新增 21 棟建築填補空白區域");
+    info!("🏢 已新增 {} 棟建築", corner_buildings.len() + 3 + direct_buildings.len());
 }
 
 /// 玩家、停車場、載具生成
@@ -1097,7 +489,6 @@ fn setup_player_and_vehicles(
         Player {
             speed: 8.0,
             rotation_speed: 3.0,
-            money: 5000,
             ..default()
         },
     );
@@ -1604,34 +995,37 @@ fn setup_special_elements(
 // ============================================================================
 // 輔助函數
 // ============================================================================
+
+/// 道路側面參數（用於交叉路口建築定位）
+struct RoadSide {
+    center: f32,
+    width: f32,
+    /// -1.0 = 低座標側（西/北）, 1.0 = 高座標側（東/南）
+    align: f32,
+}
+
+/// 交叉路口建築規格
+struct BuildingSpec {
+    road1: RoadSide,
+    road2: RoadSide,
+    width: f32,
+    height: f32,
+    depth: f32,
+    name: &'static str,
+}
+
 fn spawn_building_at_corner(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     tracker: &mut BuildingTracker,
-    road1_center: f32,
-    road1_width: f32,
-    align1: f32, // align: -1 (Low coord), 1 (High coord)
-    road2_center: f32,
-    road2_width: f32,
-    align2: f32,
-    width: f32,
-    height: f32,
-    depth: f32,
-    name: &str,
-    _color: Color, // 保留參數但標記為未使用（spawn_rich_building 會根據名稱決定顏色）
+    spec: &BuildingSpec,
 ) {
-    // 計算貼合座標（含緩衝距離，避免建築貼邊道路）
-    // 如果 align1 = -1 (路左/西)，建築中心 x = 路中心 - 路寬/2 - 建築寬/2 - 緩衝
-    // 如果 align1 = 1 (路右/東)，建築中心 x = 路中心 + 路寬/2 + 建築寬/2 + 緩衝
-    let x = road1_center + align1 * (road1_width / 2.0 + width / 2.0 + BUILDING_ROAD_BUFFER);
-    let z = road2_center + align2 * (road2_width / 2.0 + depth / 2.0 + BUILDING_ROAD_BUFFER);
-
-    let pos = Vec3::new(x, height / 2.0, z);
-
-    // 檢查重疊，若重疊則跳過生成
-    if tracker.try_record(pos, width, height, depth, name) {
-        spawn_rich_building(commands, meshes, materials, pos, width, height, depth, name);
+    let x = spec.road1.center + spec.road1.align * (spec.road1.width / 2.0 + spec.width / 2.0 + BUILDING_ROAD_BUFFER);
+    let z = spec.road2.center + spec.road2.align * (spec.road2.width / 2.0 + spec.depth / 2.0 + BUILDING_ROAD_BUFFER);
+    let pos = Vec3::new(x, spec.height / 2.0, z);
+    if tracker.try_record(pos, spec.width, spec.height, spec.depth, spec.name) {
+        spawn_rich_building(commands, meshes, materials, pos, spec.width, spec.height, spec.depth, spec.name);
     }
 }
 
@@ -1648,7 +1042,6 @@ fn spawn_building_at_linear(
     width: f32,
     depth: f32,
     name: &str,
-    _color: Color, // 保留參數但標記為未使用
 ) {
     // 放在兩條橫路的中間
     let center_cross = (start_cross + end_cross) / 2.0;

@@ -7,7 +7,8 @@ use super::{
     MissionType, MissionData, RaceMedal, TaxiRating,
 };
 use crate::player::Player;
-use crate::core::{InteractionState, PlayerStats};
+use crate::core::InteractionState;
+use crate::economy::PlayerWallet;
 use crate::ui::NotificationQueue;
 use crate::vehicle::Vehicle;
 
@@ -358,7 +359,7 @@ fn reset_mission_markers(
 fn handle_mission_completion(
     rating: DeliveryRating,
     mission_manager: &mut MissionManager,
-    player_stats: &mut PlayerStats,
+    wallet: &mut PlayerWallet,
     notifications: &mut NotificationQueue,
     commands: &mut Commands,
     marker_query: &Query<(Entity, &MissionMarker)>,
@@ -369,7 +370,7 @@ fn handle_mission_completion(
 
     // 計算獎勵
     let final_reward = mission_manager.complete_delivery(rating);
-    player_stats.money += final_reward;
+    wallet.add_cash(final_reward as i32);
 
     // 顯示結果
     let streak_msg = if mission_manager.delivery_streak > 1 {
@@ -409,7 +410,7 @@ fn handle_race_completion(
     medal: RaceMedal,
     finish_time: f32,
     mission_manager: &mut MissionManager,
-    player_stats: &mut PlayerStats,
+    wallet: &mut PlayerWallet,
     notifications: &mut NotificationQueue,
     commands: &mut Commands,
     marker_query: &Query<(Entity, &MissionMarker)>,
@@ -422,7 +423,7 @@ fn handle_race_completion(
         .unwrap_or(0);
     let final_reward = (base_reward as f32 * medal.bonus_multiplier()) as u32;
 
-    player_stats.money += final_reward;
+    wallet.add_cash(final_reward as i32);
     mission_manager.completed_count += 1;
     mission_manager.total_earnings += final_reward;
 
@@ -449,7 +450,7 @@ fn handle_race_completion(
 fn handle_taxi_completion(
     rating: TaxiRating,
     mission_manager: &mut MissionManager,
-    player_stats: &mut PlayerStats,
+    wallet: &mut PlayerWallet,
     notifications: &mut NotificationQueue,
     commands: &mut Commands,
     marker_query: &Query<(Entity, &MissionMarker)>,
@@ -463,7 +464,7 @@ fn handle_taxi_completion(
     let tip = (base_reward as f32 * rating.tip_multiplier() * 0.3) as u32;
     let final_reward = base_reward + tip;
 
-    player_stats.money += final_reward;
+    wallet.add_cash(final_reward as i32);
     mission_manager.completed_count += 1;
     mission_manager.total_earnings += final_reward;
 
@@ -574,7 +575,7 @@ fn accept_mission(
 pub fn mission_system(
     mut interaction: ResMut<InteractionState>,
     mut mission_manager: ResMut<MissionManager>,
-    mut player_stats: ResMut<PlayerStats>,
+    mut wallet: ResMut<PlayerWallet>,
     mut notifications: ResMut<NotificationQueue>,
     player_query: Query<&Transform, With<Player>>,
     vehicle_query: Query<&Transform, With<Vehicle>>,
@@ -612,7 +613,7 @@ pub fn mission_system(
                 handle_mission_completion(
                     rating,
                     &mut mission_manager,
-                    &mut player_stats,
+                    &mut wallet,
                     &mut notifications,
                     &mut commands,
                     &marker_query,
@@ -626,7 +627,7 @@ pub fn mission_system(
                     medal,
                     finish_time,
                     &mut mission_manager,
-                    &mut player_stats,
+                    &mut wallet,
                     &mut notifications,
                     &mut commands,
                     &marker_query,
@@ -637,7 +638,7 @@ pub fn mission_system(
                 handle_taxi_completion(
                     rating,
                     &mut mission_manager,
-                    &mut player_stats,
+                    &mut wallet,
                     &mut notifications,
                     &mut commands,
                     &marker_query,

@@ -58,42 +58,41 @@ pub enum ExplosiveType {
     StickyBomb, // 黏性炸彈
 }
 
+struct ExplosiveStats {
+    name: &'static str,
+    throw_force: f32,
+    explosion_radius: f32,
+    damage: f32,
+}
+
 impl ExplosiveType {
-    /// 取得爆炸物名稱
-    pub fn name(&self) -> &'static str {
+    fn stats(&self) -> ExplosiveStats {
         match self {
-            ExplosiveType::Grenade => "手榴彈",
-            ExplosiveType::Molotov => "燃燒瓶",
-            ExplosiveType::StickyBomb => "黏性炸彈",
+            ExplosiveType::Grenade => ExplosiveStats {
+                name: "手榴彈",
+                throw_force: GRENADE_THROW_FORCE,
+                explosion_radius: GRENADE_EXPLOSION_RADIUS,
+                damage: GRENADE_DAMAGE,
+            },
+            ExplosiveType::Molotov => ExplosiveStats {
+                name: "燃燒瓶",
+                throw_force: MOLOTOV_THROW_FORCE,
+                explosion_radius: MOLOTOV_FIRE_RADIUS,
+                damage: MOLOTOV_DPS,
+            },
+            ExplosiveType::StickyBomb => ExplosiveStats {
+                name: "黏性炸彈",
+                throw_force: STICKY_THROW_FORCE,
+                explosion_radius: STICKY_EXPLOSION_RADIUS,
+                damage: STICKY_DAMAGE,
+            },
         }
     }
 
-    /// 取得投擲力道
-    pub fn throw_force(&self) -> f32 {
-        match self {
-            ExplosiveType::Grenade => GRENADE_THROW_FORCE,
-            ExplosiveType::Molotov => MOLOTOV_THROW_FORCE,
-            ExplosiveType::StickyBomb => STICKY_THROW_FORCE,
-        }
-    }
-
-    /// 取得爆炸半徑
-    pub fn explosion_radius(&self) -> f32 {
-        match self {
-            ExplosiveType::Grenade => GRENADE_EXPLOSION_RADIUS,
-            ExplosiveType::Molotov => MOLOTOV_FIRE_RADIUS,
-            ExplosiveType::StickyBomb => STICKY_EXPLOSION_RADIUS,
-        }
-    }
-
-    /// 取得基礎傷害
-    pub fn damage(&self) -> f32 {
-        match self {
-            ExplosiveType::Grenade => GRENADE_DAMAGE,
-            ExplosiveType::Molotov => MOLOTOV_DPS,
-            ExplosiveType::StickyBomb => STICKY_DAMAGE,
-        }
-    }
+    pub fn name(&self) -> &'static str { self.stats().name }
+    pub fn throw_force(&self) -> f32 { self.stats().throw_force }
+    pub fn explosion_radius(&self) -> f32 { self.stats().explosion_radius }
+    pub fn damage(&self) -> f32 { self.stats().damage }
 }
 
 // ============================================================================

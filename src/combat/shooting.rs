@@ -469,40 +469,25 @@ fn fire_ranged_weapon(
         weapon.stats.spread
     };
 
+    let ctx = FireContext {
+        visuals,
+        attacker,
+        origin: muzzle_pos,
+        direction,
+        weapon,
+        rapier,
+    };
+
     // 霰彈槍使用環形散佈模式
     if weapon.stats.weapon_type == WeaponType::Shotgun {
         let pattern = generate_shotgun_pattern(weapon.stats.pellet_count, spread);
         for offset in pattern {
-            fire_bullet_with_offset(
-                commands,
-                visuals,
-                attacker,
-                muzzle_pos,
-                direction,
-                weapon,
-                offset,
-                rapier,
-                damage_events,
-                damageable_query,
-                transform_query,
-            );
+            fire_bullet_with_offset(commands, &ctx, offset, damage_events, damageable_query, transform_query);
         }
     } else {
         // 其他武器使用隨機散佈
         for _ in 0..weapon.stats.pellet_count {
-            fire_bullet(
-                commands,
-                visuals,
-                attacker,
-                muzzle_pos,
-                direction,
-                weapon,
-                spread,
-                rapier,
-                damage_events,
-                damageable_query,
-                transform_query,
-            );
+            fire_bullet(commands, &ctx, spread, damage_events, damageable_query, transform_query);
         }
     }
 
@@ -777,35 +762,33 @@ fn fire_knife_attack(
     }
 }
 
-/// 發射子彈（使用預設隨機散佈）
-#[allow(clippy::too_many_arguments)]
-fn fire_bullet(
-    commands: &mut Commands,
-    visuals: &CombatVisuals,
+/// 射擊上下文（將共用參數打包，減少參數傳遞）
+struct FireContext<'a> {
+    visuals: &'a CombatVisuals,
     attacker: Entity,
     origin: Vec3,
     direction: Vec3,
-    weapon: &Weapon,
+    weapon: &'a Weapon,
+    rapier: &'a RapierContext<'a>,
+}
+
+/// 發射子彈（使用預設隨機散佈）
+fn fire_bullet(
+    commands: &mut Commands,
+    ctx: &FireContext,
     spread_degrees: f32,
-    rapier: &RapierContext,
     damage_events: &mut MessageWriter<DamageEvent>,
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
-    // 計算隨機散射偏移（完整散佈範圍 -spread 到 +spread）
     let spread_rad = spread_degrees.to_radians();
     let spread_x = (rand::random::<f32>() - 0.5) * 2.0 * spread_rad;
     let spread_y = (rand::random::<f32>() - 0.5) * 2.0 * spread_rad;
 
     fire_bullet_with_offset(
         commands,
-        visuals,
-        attacker,
-        origin,
-        direction,
-        weapon,
+        ctx,
         Vec2::new(spread_x, spread_y),
-        rapier,
         damage_events,
         damageable_query,
         transform_query,
@@ -813,50 +796,44 @@ fn fire_bullet(
 }
 
 /// 發射子彈（使用指定散佈偏移）
-#[allow(clippy::too_many_arguments)]
 fn fire_bullet_with_offset(
     commands: &mut Commands,
-    visuals: &CombatVisuals,
-    attacker: Entity,
-    origin: Vec3,
-    direction: Vec3,
-    weapon: &Weapon,
+    ctx: &FireContext,
     spread_offset: Vec2,
-    rapier: &RapierContext,
     damage_events: &mut MessageWriter<DamageEvent>,
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
-    let right = direction.cross(Vec3::Y).normalize_or_zero();
-    let up = right.cross(direction).normalize_or_zero();
+    let right = ctx.direction.cross(Vec3::Y).normalize_or_zero();
+    let up = right.cross(ctx.direction).normalize_or_zero();
 
-    let spread_dir = (direction + right * spread_offset.x + up * spread_offset.y).normalize();
+    let spread_dir = (ctx.direction + right * spread_offset.x + up * spread_offset.y).normalize();
 
-    let filter = QueryFilter::default().exclude_collider(attacker);
+    let filter = QueryFilter::default().exclude_collider(ctx.attacker);
 
     // 取得武器彈道風格
-    let tracer_style = weapon.stats.weapon_type.tracer_style();
+    let tracer_style = ctx.weapon.stats.weapon_type.tracer_style();
 
     // 使用 Raycast 檢測命中
-    if let Some((hit_entity, toi)) = rapier.cast_ray(
-        origin,
+    if let Some((hit_entity, toi)) = ctx.rapier.cast_ray(
+        ctx.origin,
         spread_dir,
-        weapon.stats.range as bevy_rapier3d::prelude::Real,
+        ctx.weapon.stats.range as bevy_rapier3d::prelude::Real,
         true,
         filter,
     ) {
-        let hit_pos = origin + spread_dir * rapier_real_to_f32(toi);
+        let hit_pos = ctx.origin + spread_dir * rapier_real_to_f32(toi);
         let distance = rapier_real_to_f32(toi);
 
         // 生成子彈拖尾（使用武器專屬風格）
-        spawn_bullet_tracer(commands, visuals, origin, hit_pos, tracer_style);
+        spawn_bullet_tracer(commands, ctx.visuals, ctx.origin, hit_pos, tracer_style);
 
         // 計算距離傷害衰減（對所有目標都適用）
-        let falloff_multiplier = weapon.stats.calculate_damage_falloff(distance);
+        let falloff_multiplier = ctx.weapon.stats.calculate_damage_falloff(distance);
 
         // 計算最終傷害和爆頭（僅對可受傷實體進行爆頭檢測）
         let (final_damage, is_headshot) = if damageable_query.get(hit_entity).is_ok() {
-            let mut damage = weapon.stats.damage * falloff_multiplier;
+            let mut damage = ctx.weapon.stats.damage * falloff_multiplier;
 
             // 檢查爆頭
             let headshot = if let Ok(target_transform) = transform_query.get(hit_entity) {
@@ -873,23 +850,23 @@ fn fire_bullet_with_offset(
             (damage, headshot)
         } else {
             // 對可破壞物件等其他目標，使用基礎傷害（無爆頭）
-            (weapon.stats.damage * falloff_multiplier, false)
+            (ctx.weapon.stats.damage * falloff_multiplier, false)
         };
 
         // 對所有命中目標發送傷害事件（讓接收系統自行過濾）
         damage_events.write(
             DamageEvent::new(hit_entity, final_damage, DamageSource::Bullet)
-                .with_attacker(attacker)
+                .with_attacker(ctx.attacker)
                 .with_position(hit_pos)
                 .with_headshot(is_headshot),
         );
 
         // 生成命中效果（火花）
-        spawn_impact_effect(commands, visuals, hit_pos);
+        spawn_impact_effect(commands, ctx.visuals, hit_pos);
     } else {
         // 未命中，子彈飛到最大距離
-        let end_pos = origin + spread_dir * weapon.stats.range;
-        spawn_bullet_tracer(commands, visuals, origin, end_pos, tracer_style);
+        let end_pos = ctx.origin + spread_dir * ctx.weapon.stats.range;
+        spawn_bullet_tracer(commands, ctx.visuals, ctx.origin, end_pos, tracer_style);
     }
 }
 

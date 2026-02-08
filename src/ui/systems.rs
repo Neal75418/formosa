@@ -640,46 +640,14 @@ fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                             });
 
                         // === 方位標示（帶圓角背景）===
-                        // 北（紅色更醒目）
-                        spawn_compass_marker(
-                            parent,
-                            "N",
-                            font,
-                            13.0,
-                            COMPASS_NORTH,
-                            20.0,
-                            (Val::Px(6.0), Val::Auto, Val::Px(140.0), Val::Auto),
-                        );
-                        // 南
-                        spawn_compass_marker(
-                            parent,
-                            "S",
-                            font,
-                            13.0,
-                            Color::WHITE,
-                            20.0,
-                            (Val::Auto, Val::Px(6.0), Val::Px(140.0), Val::Auto),
-                        );
-                        // 東
-                        spawn_compass_marker(
-                            parent,
-                            "E",
-                            font,
-                            13.0,
-                            Color::WHITE,
-                            20.0,
-                            (Val::Px(140.0), Val::Auto, Val::Auto, Val::Px(6.0)),
-                        );
-                        // 西
-                        spawn_compass_marker(
-                            parent,
-                            "W",
-                            font,
-                            13.0,
-                            Color::WHITE,
-                            20.0,
-                            (Val::Px(140.0), Val::Auto, Val::Px(6.0), Val::Auto),
-                        );
+                        for (label, color, position) in [
+                            ("N", COMPASS_NORTH, (Val::Px(6.0), Val::Auto, Val::Px(140.0), Val::Auto)),
+                            ("S", Color::WHITE, (Val::Auto, Val::Px(6.0), Val::Px(140.0), Val::Auto)),
+                            ("E", Color::WHITE, (Val::Px(140.0), Val::Auto, Val::Auto, Val::Px(6.0))),
+                            ("W", Color::WHITE, (Val::Px(140.0), Val::Auto, Val::Px(6.0), Val::Auto)),
+                        ] {
+                            spawn_compass_marker(parent, label, font, 13.0, color, 20.0, position);
+                        }
 
                         // === 掃描線效果（模擬雷達感）===
                         for i in 0..6 {
@@ -1459,46 +1427,14 @@ fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                             });
 
                             // === 方位標示（帶圓角背景）===
-                            // 北（紅色更醒目）
-                            spawn_compass_marker(
-                                map,
-                                "N",
-                                font,
-                                22.0,
-                                COMPASS_NORTH,
-                                36.0,
-                                (Val::Px(15.0), Val::Auto, Val::Px(582.0), Val::Auto),
-                            );
-                            // 南
-                            spawn_compass_marker(
-                                map,
-                                "S",
-                                font,
-                                22.0,
-                                Color::WHITE,
-                                36.0,
-                                (Val::Auto, Val::Px(15.0), Val::Px(582.0), Val::Auto),
-                            );
-                            // 東
-                            spawn_compass_marker(
-                                map,
-                                "E",
-                                font,
-                                22.0,
-                                Color::WHITE,
-                                36.0,
-                                (Val::Px(382.0), Val::Auto, Val::Auto, Val::Px(15.0)),
-                            );
-                            // 西
-                            spawn_compass_marker(
-                                map,
-                                "W",
-                                font,
-                                22.0,
-                                Color::WHITE,
-                                36.0,
-                                (Val::Px(382.0), Val::Auto, Val::Px(15.0), Val::Auto),
-                            );
+                            for (label, color, position) in [
+                                ("N", COMPASS_NORTH, (Val::Px(15.0), Val::Auto, Val::Px(582.0), Val::Auto)),
+                                ("S", Color::WHITE, (Val::Auto, Val::Px(15.0), Val::Px(582.0), Val::Auto)),
+                                ("E", Color::WHITE, (Val::Px(382.0), Val::Auto, Val::Auto, Val::Px(15.0))),
+                                ("W", Color::WHITE, (Val::Px(382.0), Val::Auto, Val::Px(15.0), Val::Auto)),
+                            ] {
+                                spawn_compass_marker(map, label, font, 22.0, color, 36.0, position);
+                            }
                         });
                 });
             });

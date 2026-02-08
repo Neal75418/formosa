@@ -301,12 +301,7 @@ pub fn enter_exit_vehicle(
     rapier_context: ReadRapierContext,
     config: Res<PlayerConfig>,
 ) {
-    // 如果正在動畫中，不處理輸入
-    if transition.is_animating() {
-        return;
-    }
-
-    if !interaction.can_interact() {
+    if transition.is_animating() || !interaction.can_interact() {
         return;
     }
 
@@ -314,101 +309,113 @@ pub fn enter_exit_vehicle(
         return;
     };
 
-    // 如果玩家在車上 -> 開始下車動畫
     if game_state.player_in_vehicle {
-        let Ok(rapier_ctx) = rapier_context.single() else {
-            return;
-        };
-        let Some(vehicle_entity) = game_state.current_vehicle else {
-            return;
-        };
-        let Ok((_, vehicle_transform, _)) = vehicle_query.get(vehicle_entity) else {
-            return;
-        };
-
-        // 計算下車位置
-        let right = vehicle_transform.right();
-        let left = -right;
-        let origin = vehicle_transform.translation
-            + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
-        let filter = QueryFilter::new().exclude_rigid_body(vehicle_entity);
-
-        // 決定下車方向
-        let (exit_dir, from_right) = if rapier_ctx
-            .cast_ray(origin, *right, 2.0 as RapierReal, true, filter)
-            .is_none()
-        {
-            (*right, true)
-        } else if rapier_ctx
-            .cast_ray(origin, *left, 2.0 as RapierReal, true, filter)
-            .is_none()
-        {
-            (*left, false)
-        } else {
-            (*right, true) // 預設右側
-        };
-
-        let exit_pos = vehicle_transform.translation + exit_dir * 2.5;
-        let seat_pos = vehicle_transform.translation;
-
-        // 開始下車動畫
-        transition.start_exit(seat_pos, vehicle_entity, exit_pos, from_right);
-        interaction.consume();
+        try_exit_vehicle(&game_state, &mut transition, &mut interaction, &vehicle_query, &rapier_context, &config);
+    } else {
+        try_enter_vehicle(&mut transition, &mut interaction, player_transform, &vehicle_query, &rapier_context, &config);
     }
-    // 如果玩家在車外 -> 開始上車動畫
-    else {
-        let Ok(rapier_ctx) = rapier_context.single() else {
-            return;
-        };
-        let player_pos = player_transform.translation;
-        let ray_origin = player_pos + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
+}
 
-        // 尋找最近且可到達的車輛
-        let nearest_vehicle = vehicle_query
-            .iter()
-            .filter_map(|(entity, transform, vehicle)| {
-                let distance = can_enter_vehicle(
-                    entity,
-                    vehicle,
-                    transform.translation,
-                    player_pos,
-                    ray_origin,
-                    &rapier_ctx,
-                    &config,
-                )?;
-                Some((entity, transform.translation, distance))
-            })
-            .min_by(|(_, _, a), (_, _, b)| a.total_cmp(b));
+fn try_exit_vehicle(
+    game_state: &GameState,
+    transition: &mut VehicleTransitionState,
+    interaction: &mut InteractionState,
+    vehicle_query: &Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
+    rapier_context: &ReadRapierContext,
+    config: &PlayerConfig,
+) {
+    let Ok(rapier_ctx) = rapier_context.single() else {
+        return;
+    };
+    let Some(vehicle_entity) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok((_, vehicle_transform, _)) = vehicle_query.get(vehicle_entity) else {
+        return;
+    };
 
-        let Some((vehicle_entity, vehicle_pos, _)) = nearest_vehicle else {
-            return;
-        };
-        let Ok((_, vehicle_transform, _)) = vehicle_query.get(vehicle_entity) else {
-            return;
-        };
+    let right = vehicle_transform.right();
+    let left = -right;
+    let origin = vehicle_transform.translation
+        + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
+    let filter = QueryFilter::new().exclude_rigid_body(vehicle_entity);
 
-        // 計算上車側（玩家面向車輛的哪一側）
-        let to_vehicle_delta = vehicle_pos - player_pos;
-        let to_vehicle = if to_vehicle_delta.length_squared() > 1e-6 {
-            to_vehicle_delta.normalize()
-        } else {
-            player_transform.forward().as_vec3()
-        };
-        let vehicle_right = vehicle_transform.right();
-        let from_right = to_vehicle.dot(*vehicle_right) > 0.0;
+    let (exit_dir, from_right) = if rapier_ctx
+        .cast_ray(origin, *right, 2.0 as RapierReal, true, filter)
+        .is_none()
+    {
+        (*right, true)
+    } else if rapier_ctx
+        .cast_ray(origin, *left, 2.0 as RapierReal, true, filter)
+        .is_none()
+    {
+        (*left, false)
+    } else {
+        (*right, true)
+    };
 
-        // 門的位置（車輛側邊）
-        let door_offset = if from_right {
-            *vehicle_right
-        } else {
-            -*vehicle_right
-        } * 1.2;
-        let door_pos = vehicle_pos + door_offset;
+    let exit_pos = vehicle_transform.translation + exit_dir * 2.5;
+    let seat_pos = vehicle_transform.translation;
 
-        // 開始上車動畫
-        transition.start_enter(player_pos, vehicle_entity, door_pos, from_right);
-        interaction.consume();
-    }
+    transition.start_exit(seat_pos, vehicle_entity, exit_pos, from_right);
+    interaction.consume();
+}
+
+fn try_enter_vehicle(
+    transition: &mut VehicleTransitionState,
+    interaction: &mut InteractionState,
+    player_transform: &Transform,
+    vehicle_query: &Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
+    rapier_context: &ReadRapierContext,
+    config: &PlayerConfig,
+) {
+    let Ok(rapier_ctx) = rapier_context.single() else {
+        return;
+    };
+    let player_pos = player_transform.translation;
+    let ray_origin = player_pos + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
+
+    let nearest_vehicle = vehicle_query
+        .iter()
+        .filter_map(|(entity, transform, vehicle)| {
+            let distance = can_enter_vehicle(
+                entity,
+                vehicle,
+                transform.translation,
+                player_pos,
+                ray_origin,
+                &rapier_ctx,
+                config,
+            )?;
+            Some((entity, transform.translation, distance))
+        })
+        .min_by(|(_, _, a), (_, _, b)| a.total_cmp(b));
+
+    let Some((vehicle_entity, vehicle_pos, _)) = nearest_vehicle else {
+        return;
+    };
+    let Ok((_, vehicle_transform, _)) = vehicle_query.get(vehicle_entity) else {
+        return;
+    };
+
+    let to_vehicle_delta = vehicle_pos - player_pos;
+    let to_vehicle = if to_vehicle_delta.length_squared() > 1e-6 {
+        to_vehicle_delta.normalize()
+    } else {
+        player_transform.forward().as_vec3()
+    };
+    let vehicle_right = vehicle_transform.right();
+    let from_right = to_vehicle.dot(*vehicle_right) > 0.0;
+
+    let door_offset = if from_right {
+        *vehicle_right
+    } else {
+        -*vehicle_right
+    } * 1.2;
+    let door_pos = vehicle_pos + door_offset;
+
+    transition.start_enter(player_pos, vehicle_entity, door_pos, from_right);
+    interaction.consume();
 }
 
 // /// 上車距離常數 (Moved to Config)

@@ -663,7 +663,7 @@ impl SaveData {
 
     /// 取得存檔目錄路徑
     pub fn get_save_directory() -> Option<std::path::PathBuf> {
-        dirs::data_dir().map(|p| p.join("island_rampage").join("saves"))
+        dirs::data_dir().map(|p| p.join("IslandRampage").join("saves"))
     }
 
     /// 確保存檔目錄存在

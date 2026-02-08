@@ -21,8 +21,7 @@ fn test_ai_behavior_default() {
 
 #[test]
 fn test_ai_behavior_set_state() {
-    let mut behavior = AiBehavior::default();
-    behavior.state_timer = 5.0;
+    let mut behavior = AiBehavior { state_timer: 5.0, ..AiBehavior::default() };
 
     behavior.set_state(AiState::Chase, 10.0);
     assert_eq!(behavior.state, AiState::Chase);
@@ -32,8 +31,7 @@ fn test_ai_behavior_set_state() {
 
 #[test]
 fn test_ai_behavior_set_state_same_state_no_reset() {
-    let mut behavior = AiBehavior::default();
-    behavior.state_timer = 5.0;
+    let mut behavior = AiBehavior { state_timer: 5.0, ..AiBehavior::default() };
 
     behavior.set_state(AiState::Idle, 10.0); // 同狀態
     assert_eq!(behavior.state_timer, 5.0); // 不重置
@@ -75,8 +73,7 @@ fn test_ai_behavior_see_target() {
 
 #[test]
 fn test_ai_behavior_lose_target() {
-    let mut behavior = AiBehavior::default();
-    behavior.last_seen_time = 1.0;
+    let mut behavior = AiBehavior { last_seen_time: 1.0, ..AiBehavior::default() };
 
     assert!(!behavior.lose_target(3.0, 5.0)); // 2s < 5s timeout
     assert!(behavior.lose_target(7.0, 5.0)); // 6s > 5s timeout
@@ -127,8 +124,7 @@ fn test_handle_idle_to_alert_on_noise() {
 fn test_handle_idle_to_patrol_after_threshold() {
     let config = AiConfig::default();
     let perception = AiPerception::default();
-    let mut behavior = AiBehavior::default();
-    behavior.state_timer = config.patrol_idle_threshold + 1.0; // 超過閾值
+    let mut behavior = AiBehavior { state_timer: config.patrol_idle_threshold + 1.0, ..AiBehavior::default() }; // 超過閾值
     let mut movement = AiMovement::default();
 
     handle_idle_state(&config, &perception, &mut behavior, &mut movement, true, 1.0);
@@ -140,8 +136,7 @@ fn test_handle_idle_to_patrol_after_threshold() {
 fn test_handle_idle_stays_idle_without_patrol() {
     let config = AiConfig::default();
     let perception = AiPerception::default();
-    let mut behavior = AiBehavior::default();
-    behavior.state_timer = config.patrol_idle_threshold + 1.0;
+    let mut behavior = AiBehavior { state_timer: config.patrol_idle_threshold + 1.0, ..AiBehavior::default() };
     let mut movement = AiMovement::default();
 
     handle_idle_state(&config, &perception, &mut behavior, &mut movement, false, 1.0);
@@ -238,9 +233,7 @@ fn test_check_start_flee_ignores_above_threshold() {
 #[test]
 fn test_handle_fleeing_state_stops_when_far() {
     let config = AiConfig::default();
-    let mut behavior = AiBehavior::default();
-    behavior.is_fleeing = true;
-    behavior.last_known_target_pos = Some(Vec3::ZERO);
+    let mut behavior = AiBehavior { is_fleeing: true, last_known_target_pos: Some(Vec3::ZERO), ..AiBehavior::default() };
     let mut movement = AiMovement::default();
 
     // 遠離威脅超過 alert_distance (40m)
@@ -255,9 +248,7 @@ fn test_handle_fleeing_state_stops_when_far() {
 #[test]
 fn test_handle_fleeing_state_continues_when_close() {
     let config = AiConfig::default();
-    let mut behavior = AiBehavior::default();
-    behavior.is_fleeing = true;
-    behavior.last_known_target_pos = Some(Vec3::ZERO);
+    let mut behavior = AiBehavior { is_fleeing: true, last_known_target_pos: Some(Vec3::ZERO), ..AiBehavior::default() };
     let mut movement = AiMovement::default();
 
     // 離威脅還很近 (10m < 40m)

@@ -394,6 +394,40 @@ pub fn purchase_nitro_system(
     }
 }
 
+/// 氮氣加速系統
+pub fn nitro_boost_system(
+    time: Res<Time>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut query: Query<(&mut VehicleModifications, &mut NitroBoost)>,
+    game_state: Res<crate::core::GameState>,
+) {
+    // 只有在駕駛車輛時才處理
+    if !game_state.player_in_vehicle {
+        return;
+    }
+
+    let dt = time.delta_secs();
+
+    for (mut mods, mut nitro) in query.iter_mut() {
+        if !mods.has_nitro {
+            continue;
+        }
+
+        // Shift 鍵（左或右）啟動氮氣
+        let wants_boost = keyboard.pressed(KeyCode::ShiftLeft)
+            || keyboard.pressed(KeyCode::ShiftRight);
+
+        if wants_boost && mods.nitro_charge > 0.0 {
+            nitro.is_active = true;
+            mods.nitro_charge = (mods.nitro_charge - NITRO_DRAIN_RATE * dt).max(0.0);
+        } else {
+            nitro.is_active = false;
+            // 不使用時緩慢回充
+            mods.nitro_charge = (mods.nitro_charge + NITRO_RECHARGE_RATE * dt).min(1.0);
+        }
+    }
+}
+
 // ============================================================================
 // 單元測試
 // ============================================================================
@@ -472,59 +506,22 @@ mod tests {
 
     #[test]
     fn modified_acceleration_applies_engine_multiplier() {
-        let mut mods = VehicleModifications::default();
-        mods.engine = ModLevel::Level2;
+        let mods = VehicleModifications { engine: ModLevel::Level2, ..VehicleModifications::default() };
         let result = modified_acceleration(10.0, &mods);
         assert!((result - 12.5).abs() < f32::EPSILON);
     }
 
     #[test]
     fn modified_max_speed_applies_transmission() {
-        let mut mods = VehicleModifications::default();
-        mods.transmission = ModLevel::Level3;
+        let mods = VehicleModifications { transmission: ModLevel::Level3, ..VehicleModifications::default() };
         let result = modified_max_speed(30.0, &mods);
         assert!((result - 45.0).abs() < f32::EPSILON);
     }
 
     #[test]
     fn modified_health_applies_armor() {
-        let mut mods = VehicleModifications::default();
-        mods.armor = ModLevel::Level1;
+        let mods = VehicleModifications { armor: ModLevel::Level1, ..VehicleModifications::default() };
         let result = modified_health(1000.0, &mods);
         assert!((result - 1100.0).abs() < f32::EPSILON);
-    }
-}
-
-/// 氮氣加速系統
-pub fn nitro_boost_system(
-    time: Res<Time>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut VehicleModifications, &mut NitroBoost)>,
-    game_state: Res<crate::core::GameState>,
-) {
-    // 只有在駕駛車輛時才處理
-    if !game_state.player_in_vehicle {
-        return;
-    }
-
-    let dt = time.delta_secs();
-
-    for (mut mods, mut nitro) in query.iter_mut() {
-        if !mods.has_nitro {
-            continue;
-        }
-
-        // Shift 鍵（左或右）啟動氮氣
-        let wants_boost = keyboard.pressed(KeyCode::ShiftLeft)
-            || keyboard.pressed(KeyCode::ShiftRight);
-
-        if wants_boost && mods.nitro_charge > 0.0 {
-            nitro.is_active = true;
-            mods.nitro_charge = (mods.nitro_charge - NITRO_DRAIN_RATE * dt).max(0.0);
-        } else {
-            nitro.is_active = false;
-            // 不使用時緩慢回充
-            mods.nitro_charge = (mods.nitro_charge + NITRO_RECHARGE_RATE * dt).min(1.0);
-        }
     }
 }

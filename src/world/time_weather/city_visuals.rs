@@ -133,38 +133,6 @@ fn set_window_emissive(material: &mut StandardMaterial, window: &BuildingWindow,
     };
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn night_boost_higher_at_night() {
-        let day = get_night_boost(12.0);
-        let night = get_night_boost(22.0);
-        assert!(night > day);
-        assert!((day - 0.8).abs() < f32::EPSILON);
-        assert!((night - 1.5).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn calculate_wave_bounded() {
-        for t in [0.0, 1.0, 2.5, 10.0] {
-            let v = calculate_wave(t, 3.0, 0.5);
-            assert!((0.0..=1.0).contains(&v), "wave({t}) = {v} out of [0,1]");
-        }
-    }
-
-    #[test]
-    fn base_lit_chance_daytime_low() {
-        let day = calculate_base_lit_chance(12.0);
-        let evening = calculate_base_lit_chance(19.0);
-        let deep_night = calculate_base_lit_chance(1.0);
-        assert!((day - 0.1).abs() < f32::EPSILON);
-        assert!((evening - 0.6).abs() < f32::EPSILON);
-        assert!((deep_night - 0.2).abs() < f32::EPSILON);
-    }
-}
-
 /// 更新建築窗戶燈光（根據時間變化）
 /// 日間窗戶暗淡，夜間隨機點亮
 /// 效能優化：每 5 秒更新一次（而非每幀）
@@ -270,4 +238,36 @@ pub fn spawn_neon_sign(
                 GlobalTransform::default(),
             ));
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn night_boost_higher_at_night() {
+        let day = get_night_boost(12.0);
+        let night = get_night_boost(22.0);
+        assert!(night > day);
+        assert!((day - 0.8).abs() < f32::EPSILON);
+        assert!((night - 1.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn calculate_wave_bounded() {
+        for t in [0.0, 1.0, 2.5, 10.0] {
+            let v = calculate_wave(t, 3.0, 0.5);
+            assert!((0.0..=1.0).contains(&v), "wave({t}) = {v} out of [0,1]");
+        }
+    }
+
+    #[test]
+    fn base_lit_chance_daytime_low() {
+        let day = calculate_base_lit_chance(12.0);
+        let evening = calculate_base_lit_chance(19.0);
+        let deep_night = calculate_base_lit_chance(1.0);
+        assert!((day - 0.1).abs() < f32::EPSILON);
+        assert!((evening - 0.6).abs() < f32::EPSILON);
+        assert!((deep_night - 0.2).abs() < f32::EPSILON);
+    }
 }

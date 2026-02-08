@@ -69,7 +69,7 @@ pub fn handle_save_input(
     mut save_events: MessageWriter<SaveGameEvent>,
     mut load_events: MessageWriter<LoadGameEvent>,
 ) {
-    // F5 = 快速存檔
+    // F5 = 快速存檔, F9 = 快速讀檔（互斥，同一幀最多觸發一個）
     if keyboard.just_pressed(KeyCode::F5)
         && !save_manager.is_busy {
             save_events.write(SaveGameEvent {
@@ -78,9 +78,7 @@ pub fn handle_save_input(
             });
             info!("💾 快速存檔中...");
         }
-
-    // F9 = 快速讀檔
-    if keyboard.just_pressed(KeyCode::F9)
+    else if keyboard.just_pressed(KeyCode::F9)
         && !save_manager.is_busy {
             load_events.write(LoadGameEvent {
                 load_type: LoadType::QuickLoad,
@@ -113,8 +111,8 @@ pub fn handle_save_events(
     // 車輛改裝查詢（包含穩定 ID）
     vehicle_mod_query: Query<(Entity, &VehicleId, &VehicleModifications)>,
 ) {
-    // 檢查是否已有任務在執行
-    if task_tracker.save_task.is_some() {
+    // 檢查是否已有存檔或讀檔任務在執行（互斥）
+    if task_tracker.save_task.is_some() || task_tracker.load_task.is_some() {
         return;
     }
 
@@ -186,7 +184,9 @@ pub fn poll_save_task(
                 Err(e) => error!("存檔失敗: {:?}", e),
             }
             task_tracker.save_task = None;
-            save_manager.is_busy = false;
+            if task_tracker.load_task.is_none() && task_tracker.pending_load_data.is_none() {
+                save_manager.is_busy = false;
+            }
         }
     }
 }
@@ -263,11 +263,18 @@ fn collect_save_data(
     save_data.world.weather_intensity = weather_state.intensity;
 
     // 任務資料
+    // v1 格式（向後相容）
     save_data.missions.completed_missions = story_manager
         .get_completed_missions()
         .iter()
         .map(|id| format!("{:?}", id))
         .collect();
+    // v2 格式（完整 round-trip）
+    save_data.missions.mission_states = story_manager.mission_states.clone();
+    save_data.missions.current_chapter = story_manager.current_chapter;
+    save_data.missions.best_ratings = story_manager.mission_ratings.clone();
+    save_data.play_time_secs = story_manager.total_play_time as f64;
+
     save_data.missions.unlocked_items = unlocks.unlocked_items.iter().cloned().collect();
     save_data.missions.unlocked_areas = unlocks
         .unlocked_areas
@@ -318,8 +325,8 @@ pub fn handle_load_events(
     mut save_manager: ResMut<SaveManager>,
     mut task_tracker: ResMut<SaveTaskTracker>,
 ) {
-    // 檢查是否已有任務在執行
-    if task_tracker.load_task.is_some() {
+    // 檢查是否已有存檔或讀檔任務在執行（互斥）
+    if task_tracker.save_task.is_some() || task_tracker.load_task.is_some() {
         return;
     }
 
@@ -360,7 +367,9 @@ pub fn poll_load_task(
                 }
                 Err(e) => {
                     error!("讀檔失敗: {:?}", e);
-                    save_manager.is_busy = false;
+                    if task_tracker.save_task.is_none() {
+                        save_manager.is_busy = false;
+                    }
                 }
             }
             task_tracker.load_task = None;
@@ -409,7 +418,9 @@ pub fn apply_pending_load_data(
             &mut relationship,
             &mut vehicle_mod_query,
         );
-        save_manager.is_busy = false;
+        if task_tracker.save_task.is_none() {
+            save_manager.is_busy = false;
+        }
         info!("💾 存檔資料已套用");
     }
 }
@@ -505,6 +516,8 @@ fn apply_player_data(
 
     wallet.cash = save_data.player.cash;
     wallet.bank = save_data.player.bank;
+    wallet.total_earned = save_data.stats.total_money_earned;
+    wallet.total_spent = save_data.stats.total_money_spent;
     respect.respect = save_data.player.respect;
 }
 
@@ -560,7 +573,38 @@ fn apply_mission_data(
     relationship: &mut RelationshipManager,
     save_data: &SaveData,
 ) {
-    story_manager.completed_count = save_data.missions.completed_missions.len() as u32;
+    // 還原 mission_states（v2 優先，v1 向後相容）
+    if !save_data.missions.mission_states.is_empty() {
+        story_manager.mission_states = save_data.missions.mission_states.clone();
+    } else {
+        // v1 向後相容：從 completed_missions 字串重建
+        story_manager.mission_states.clear();
+        for id_str in &save_data.missions.completed_missions {
+            if let Ok(id) = id_str.parse::<u32>() {
+                story_manager
+                    .mission_states
+                    .insert(id, crate::mission::StoryMissionStatus::Completed);
+            }
+        }
+    }
+
+    // 從實際狀態計算 completed_count（取代直接用 len()）
+    story_manager.completed_count = story_manager
+        .mission_states
+        .values()
+        .filter(|s| **s == crate::mission::StoryMissionStatus::Completed)
+        .count() as u32;
+
+    // 還原 chapter、ratings、play_time
+    if save_data.missions.current_chapter > 0 {
+        story_manager.current_chapter = save_data.missions.current_chapter;
+    }
+    if !save_data.missions.best_ratings.is_empty() {
+        story_manager.mission_ratings = save_data.missions.best_ratings.clone();
+    }
+    story_manager.total_play_time = save_data.play_time_secs as f32;
+
+    // 還原 unlocks
     unlocks.unlocked_items = save_data.missions.unlocked_items.iter().cloned().collect();
     unlocks.unlocked_areas = save_data
         .missions
@@ -569,6 +613,7 @@ fn apply_mission_data(
         .filter_map(|s| s.parse().ok())
         .collect();
 
+    // 還原 NPC 關係
     relationship.relationships.clear();
     for (npc_str, value) in &save_data.missions.npc_relationships {
         if let Ok(npc_id) = npc_str.parse::<u32>() {
@@ -576,10 +621,13 @@ fn apply_mission_data(
         }
     }
 
+    // 還原劇情旗標
     story_manager.story_flags = save_data.missions.flags.iter().cloned().collect();
     info!(
-        "還原任務進度: {} 個已完成任務",
-        story_manager.completed_count
+        "還原任務進度: {} 個已完成、{} 個追蹤中、章節 {}",
+        story_manager.completed_count,
+        story_manager.mission_states.len(),
+        story_manager.current_chapter,
     );
 }
 

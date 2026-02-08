@@ -619,8 +619,7 @@ mod tests {
 
     #[test]
     fn witness_crime_ignored_on_cooldown() {
-        let mut ws = WitnessState::default();
-        ws.report_cooldown = 30.0;
+        let mut ws = WitnessState { report_cooldown: 30.0, ..WitnessState::default() };
         ws.witness_crime(WitnessedCrime::Assault, Vec3::ZERO);
         assert!(!ws.witnessed_crime);
     }

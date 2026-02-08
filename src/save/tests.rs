@@ -23,8 +23,7 @@ fn test_save_manager_default() {
 
 #[test]
 fn test_save_manager_get_save_path() {
-    let mut manager = SaveManager::default();
-    manager.save_directory = PathBuf::from("/test/saves");
+    let manager = SaveManager { save_directory: PathBuf::from("/test/saves"), ..SaveManager::default() };
 
     let path = manager.get_save_path(0);
     assert_eq!(path, PathBuf::from("/test/saves/save_00.json"));
@@ -38,8 +37,7 @@ fn test_save_manager_get_save_path() {
 
 #[test]
 fn test_save_manager_get_auto_save_path() {
-    let mut manager = SaveManager::default();
-    manager.save_directory = PathBuf::from("/test/saves");
+    let manager = SaveManager { save_directory: PathBuf::from("/test/saves"), ..SaveManager::default() };
 
     let path = manager.get_auto_save_path();
     assert_eq!(path, PathBuf::from("/test/saves/autosave.json"));
@@ -47,8 +45,7 @@ fn test_save_manager_get_auto_save_path() {
 
 #[test]
 fn test_save_manager_get_quick_save_path() {
-    let mut manager = SaveManager::default();
-    manager.save_directory = PathBuf::from("/test/saves");
+    let manager = SaveManager { save_directory: PathBuf::from("/test/saves"), ..SaveManager::default() };
 
     let path = manager.get_quick_save_path();
     assert_eq!(path, PathBuf::from("/test/saves/quicksave.json"));
@@ -219,6 +216,7 @@ fn test_mission_save_data_with_progress() {
         flags: vec![],
         unlocked_items: vec![],
         unlocked_areas: vec![],
+        ..Default::default()
     };
 
     let json = serde_json::to_string(&mission_data).expect("Serialization failed");

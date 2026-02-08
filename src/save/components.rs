@@ -4,10 +4,12 @@
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::combat::WeaponType;
 use crate::core::WeatherType;
+use crate::mission::{StoryMissionRating, StoryMissionStatus};
 
 // ============================================================================
 // 存檔資料結構
@@ -47,7 +49,7 @@ impl Default for SaveData {
 }
 
 /// 當前存檔版本
-pub const SAVE_VERSION: u32 = 1;
+pub const SAVE_VERSION: u32 = 2;
 
 /// 玩家存檔資料
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -157,7 +159,7 @@ pub struct MissionSaveData {
     pub active_mission: Option<String>,
     /// 任務進度（任務 ID -> 檢查點索引）
     pub mission_progress: Vec<(String, usize)>,
-    /// 任務評分（任務 ID -> 星級）
+    /// 任務評分（任務 ID -> 星級）— v1 格式，保留向後相容
     pub mission_ratings: Vec<(String, u8)>,
     /// 已解鎖的任務 ID
     pub unlocked_missions: Vec<String>,
@@ -169,6 +171,15 @@ pub struct MissionSaveData {
     pub npc_relationships: Vec<(String, i32)>,
     /// 劇情旗標（Flag Name -> Value）
     pub flags: Vec<(String, bool)>,
+    /// 任務狀態對照表（v2+，完整 round-trip）
+    #[serde(default)]
+    pub mission_states: HashMap<u32, StoryMissionStatus>,
+    /// 當前章節（v2+）
+    #[serde(default)]
+    pub current_chapter: u32,
+    /// 各任務最佳評分（v2+）
+    #[serde(default)]
+    pub best_ratings: HashMap<u32, StoryMissionRating>,
 }
 
 /// 遊戲統計資料

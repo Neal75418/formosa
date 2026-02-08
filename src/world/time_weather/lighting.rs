@@ -233,6 +233,18 @@ fn update_moon_phase(moon: &mut Moon, dt: f32, time_scale: f32) {
     moon.phase = (moon.phase + phase_speed * dt * time_scale) % 1.0;
 }
 
+/// 更新路燈開關
+fn update_street_lights(street_lights: &mut Query<(&mut PointLight, &mut StreetLight)>, hour: f32) {
+    let should_be_on = !(6.0..=18.0).contains(&hour);
+
+    for (mut light, mut street_light) in street_lights.iter_mut() {
+        if street_light.is_on != should_be_on {
+            street_light.is_on = should_be_on;
+            light.intensity = if should_be_on { 80000.0 } else { 0.0 };
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -323,17 +335,5 @@ mod tests {
         // 午夜月亮應在高處
         assert!(pos.y > 100.0, "moon at midnight should be high, got {}", pos.y);
         assert!(elevation > 0.0);
-    }
-}
-
-/// 更新路燈開關
-fn update_street_lights(street_lights: &mut Query<(&mut PointLight, &mut StreetLight)>, hour: f32) {
-    let should_be_on = !(6.0..=18.0).contains(&hour);
-
-    for (mut light, mut street_light) in street_lights.iter_mut() {
-        if street_light.is_on != should_be_on {
-            street_light.is_on = should_be_on;
-            light.intensity = if should_be_on { 80000.0 } else { 0.0 };
-        }
     }
 }

@@ -628,9 +628,7 @@ mod tests {
 
     #[test]
     fn test_total_duration() {
-        let mut state = ClimbState::default();
-
-        state.climb_type = ClimbType::Vault;
+        let mut state = ClimbState { climb_type: ClimbType::Vault, ..ClimbState::default() };
         let vault_duration = state.total_duration();
         assert!(vault_duration < 1.0);
         assert!(vault_duration > 0.0);

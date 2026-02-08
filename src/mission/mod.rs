@@ -36,6 +36,7 @@ pub use dialogue_systems::*;
 pub use dialogue_ui::*;
 pub use economy::*;
 pub use relationship::*;
+pub use story_data::*;
 pub use story_manager::*;
 pub use story_systems::*;
 pub use trigger::*;

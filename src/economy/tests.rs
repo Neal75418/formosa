@@ -591,3 +591,80 @@ fn test_interactable_default() {
     assert_eq!(interactable.range, 3.0);
     assert_eq!(interactable.interaction_type, InteractionType::Generic);
 }
+
+// ============================================================================
+// 溢位保護測試
+// ============================================================================
+
+#[test]
+fn test_wallet_add_cash_saturating_overflow() {
+    let mut wallet = wallet_with_cash(i32::MAX - 100);
+    let result = wallet.add_cash(200);
+    assert_eq!(result, i32::MAX); // 飽和加法，不溢位
+    assert_eq!(wallet.cash, i32::MAX);
+}
+
+#[test]
+fn test_wallet_total_saturating_overflow() {
+    let wallet = PlayerWallet {
+        cash: i32::MAX / 2 + 1,
+        bank: i32::MAX / 2 + 1,
+        total_earned: 0,
+        total_spent: 0,
+    };
+    assert_eq!(wallet.total(), i32::MAX); // 飽和加法
+}
+
+#[test]
+fn test_wallet_total_earned_saturating_overflow() {
+    let mut wallet = PlayerWallet {
+        cash: 0,
+        bank: 0,
+        total_earned: i32::MAX - 50,
+        total_spent: 0,
+    };
+    wallet.add_cash(100);
+    assert_eq!(wallet.total_earned, i32::MAX); // total_earned 飽和
+    assert_eq!(wallet.cash, 100); // cash 正常增加
+}
+
+#[test]
+fn test_wallet_deposit_bank_saturating_overflow() {
+    let mut wallet = PlayerWallet {
+        cash: 100,
+        bank: i32::MAX - 50,
+        total_earned: 0,
+        total_spent: 0,
+    };
+    let result = wallet.deposit(100);
+    assert!(result);
+    assert_eq!(wallet.bank, i32::MAX); // 銀行餘額飽和
+    assert_eq!(wallet.cash, 0); // 現金扣除成功
+}
+
+#[test]
+fn test_wallet_withdraw_cash_saturating_overflow() {
+    let mut wallet = PlayerWallet {
+        cash: i32::MAX - 50,
+        bank: 100,
+        total_earned: 0,
+        total_spent: 0,
+    };
+    let result = wallet.withdraw(100);
+    assert!(result);
+    assert_eq!(wallet.cash, i32::MAX); // 現金飽和
+    assert_eq!(wallet.bank, 0); // 銀行扣除成功
+}
+
+#[test]
+fn test_wallet_total_spent_saturating_overflow() {
+    let mut wallet = PlayerWallet {
+        cash: 100,
+        bank: 0,
+        total_earned: 0,
+        total_spent: i32::MAX - 50,
+    };
+    let result = wallet.spend_cash(100);
+    assert!(result);
+    assert_eq!(wallet.total_spent, i32::MAX); // total_spent 飽和
+}

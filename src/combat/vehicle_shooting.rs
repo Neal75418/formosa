@@ -29,6 +29,19 @@ const PASSENGER_LEFT_ANGLE_LIMIT: f32 = 45.0;
 /// 乘客右側射擊角度限制（度）
 const PASSENGER_RIGHT_ANGLE_LIMIT: f32 = 90.0;
 
+/// 車上槍口閃光縮放比例（比步行版小，配合車窗空間）
+const VEHICLE_MUZZLE_SCALE: f32 = 0.3;
+/// 車上擊中效果縮放比例
+const VEHICLE_IMPACT_SCALE: f32 = 0.2;
+/// 車上擊中效果持續時間（秒）— 比步行版 0.15s 短，避免高速時的視覺干擾
+const VEHICLE_IMPACT_LIFETIME: f32 = 0.1;
+/// 車窗射擊高度偏移（相對於車輛位置）
+const VEHICLE_MUZZLE_HEIGHT: f32 = 1.2;
+/// 槍口前方偏移距離
+const VEHICLE_MUZZLE_FORWARD_OFFSET: f32 = 0.5;
+/// 垂直射擊角度限制因子（限制在車上的俯仰射擊角度）
+const VEHICLE_VERTICAL_AIM_FACTOR: f32 = 0.3;
+
 // ============================================================================
 // 組件
 // ============================================================================
@@ -183,12 +196,12 @@ pub fn vehicle_shooting_fire_system(
     }
 
     // 計算射擊方向（從車窗向外）
-    let muzzle_offset = Vec3::new(0.0, 1.2, 0.0); // 車窗高度
+    let muzzle_offset = Vec3::new(0.0, VEHICLE_MUZZLE_HEIGHT, 0.0);
     let muzzle_pos = vehicle_transform.translation + muzzle_offset;
 
     let aim_dir = Vec3::new(
         camera_settings.yaw.cos(),
-        -camera_settings.pitch.sin() * 0.3, // 限制垂直角度
+        -camera_settings.pitch.sin() * VEHICLE_VERTICAL_AIM_FACTOR,
         camera_settings.yaw.sin(),
     )
     .normalize();
@@ -235,7 +248,7 @@ pub fn vehicle_shooting_fire_system(
     }
 
     // 生成槍口火焰
-    let muzzle_world = muzzle_pos + aim_dir * 0.5;
+    let muzzle_world = muzzle_pos + aim_dir * VEHICLE_MUZZLE_FORWARD_OFFSET;
     spawn_muzzle_flash(&mut commands, &visuals, muzzle_world, aim_dir);
 
     // 播放音效
@@ -268,6 +281,14 @@ fn find_compatible_weapon_index(inventory: &WeaponInventory) -> Option<usize> {
         .position(|w| is_vehicle_compatible_weapon(w.stats.weapon_type))
 }
 
+// ============================================================================
+// 車輛版特效函數
+// 與 shooting.rs 的步行版不同之處：
+// - 槍口閃光：需要 direction 朝向 + 較小的 scale（車窗空間限制）
+// - 擊中效果：需要 normal 朝向 + 更短的存在時間 + 較小的 scale
+// - 曳光彈：使用不同的旋轉方式和縮放軸（Z 軸為長度 vs Y 軸為長度）
+// ============================================================================
+
 /// 生成槍口火焰
 fn spawn_muzzle_flash(
     commands: &mut Commands,
@@ -280,7 +301,7 @@ fn spawn_muzzle_flash(
         MeshMaterial3d(visuals.muzzle_material.clone()),
         Transform::from_translation(position)
             .looking_to(direction, Vec3::Y)
-            .with_scale(Vec3::splat(0.3)),
+            .with_scale(Vec3::splat(VEHICLE_MUZZLE_SCALE)),
         MuzzleFlash { lifetime: 0.05 },
     ));
 }
@@ -297,10 +318,10 @@ fn spawn_impact_effect(
         MeshMaterial3d(visuals.impact_material.clone()),
         Transform::from_translation(position)
             .looking_to(normal, Vec3::Y)
-            .with_scale(Vec3::splat(0.2)),
+            .with_scale(Vec3::splat(VEHICLE_IMPACT_SCALE)),
         ImpactEffect {
-            lifetime: 0.1,
-            max_lifetime: 0.1,
+            lifetime: VEHICLE_IMPACT_LIFETIME,
+            max_lifetime: VEHICLE_IMPACT_LIFETIME,
         },
     ));
 }

@@ -36,14 +36,14 @@ impl Default for PlayerWallet {
 impl PlayerWallet {
     /// 獲取總資產
     pub fn total(&self) -> i32 {
-        self.cash + self.bank
+        self.cash.saturating_add(self.bank)
     }
 
     /// 增加現金
     pub fn add_cash(&mut self, amount: i32) -> i32 {
-        self.cash += amount;
+        self.cash = self.cash.saturating_add(amount);
         if amount > 0 {
-            self.total_earned += amount;
+            self.total_earned = self.total_earned.saturating_add(amount);
         }
         self.cash
     }
@@ -51,8 +51,8 @@ impl PlayerWallet {
     /// 花費現金（如果足夠且金額為正）
     pub fn spend_cash(&mut self, amount: i32) -> bool {
         if amount >= 0 && self.cash >= amount {
-            self.cash -= amount;
-            self.total_spent += amount;
+            self.cash = self.cash.saturating_sub(amount);
+            self.total_spent = self.total_spent.saturating_add(amount);
             true
         } else {
             false
@@ -64,8 +64,8 @@ impl PlayerWallet {
     pub fn spend_up_to(&mut self, amount: i32) -> i32 {
         let actual = amount.min(self.cash).max(0);
         if actual > 0 {
-            self.cash -= actual;
-            self.total_spent += actual;
+            self.cash = self.cash.saturating_sub(actual);
+            self.total_spent = self.total_spent.saturating_add(actual);
         }
         actual
     }
@@ -73,8 +73,8 @@ impl PlayerWallet {
     /// 存款到銀行
     pub fn deposit(&mut self, amount: i32) -> bool {
         if self.cash >= amount && amount > 0 {
-            self.cash -= amount;
-            self.bank += amount;
+            self.cash = self.cash.saturating_sub(amount);
+            self.bank = self.bank.saturating_add(amount);
             true
         } else {
             false
@@ -84,8 +84,8 @@ impl PlayerWallet {
     /// 從銀行提款
     pub fn withdraw(&mut self, amount: i32) -> bool {
         if self.bank >= amount && amount > 0 {
-            self.bank -= amount;
-            self.cash += amount;
+            self.bank = self.bank.saturating_sub(amount);
+            self.cash = self.cash.saturating_add(amount);
             true
         } else {
             false

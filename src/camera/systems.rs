@@ -12,6 +12,14 @@ use crate::combat::{CombatState, WeaponInventory, WeaponType};
 /// 攝影機自動跟隨速度（越大越快跟上玩家）
 const CAMERA_FOLLOW_SPEED: f32 = 3.0;
 
+/// 俯仰角最小值（約 -17°，微微仰望）
+const PITCH_MIN: f32 = -0.3;
+/// 俯仰角最大值 — 正常輸入範圍（約 69°）
+const PITCH_MAX_INPUT: f32 = 1.2;
+/// 俯仰角最大值 — 含後座力影響（約 86°）
+/// 比 PITCH_MAX_INPUT 寬，允許後座力暫時超過正常輸入上限
+const PITCH_MAX_WITH_RECOIL: f32 = 1.5;
+
 /// 遊戲攝影機標記
 #[derive(Component)]
 pub struct GameCamera;
@@ -99,7 +107,7 @@ pub fn camera_input(
     }
 
     // 限制俯仰角範圍
-    camera_settings.pitch = camera_settings.pitch.clamp(-0.3, 1.2);
+    camera_settings.pitch = camera_settings.pitch.clamp(PITCH_MIN, PITCH_MAX_INPUT);
 
     // 滾輪縮放
     for event in scroll.read() {
@@ -151,7 +159,7 @@ pub fn camera_follow(
     };
 
     // 限制後座力影響後的 pitch 範圍
-    let pitch = pitch.clamp(-0.3, 1.5);
+    let pitch = pitch.clamp(PITCH_MIN, PITCH_MAX_WITH_RECOIL);
 
     // 計算攝影機偏移（後方 + 上方）
     let offset = Vec3::new(
@@ -272,13 +280,8 @@ pub fn camera_auto_follow(
     // 計算角度差（考慮角度繞圈）
     let mut angle_diff = target_yaw - camera_settings.yaw;
 
-    // 正規化到 -PI ~ PI 範圍
-    while angle_diff > std::f32::consts::PI {
-        angle_diff -= std::f32::consts::TAU;
-    }
-    while angle_diff < -std::f32::consts::PI {
-        angle_diff += std::f32::consts::TAU;
-    }
+    // 正規化到 -PI ~ PI 範圍（O(1)，避免極端值的多次迭代）
+    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
 
     // 平滑插值
     let dt = time.delta_secs();

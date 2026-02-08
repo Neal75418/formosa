@@ -94,9 +94,6 @@ fn calculate_world_direction(input: Vec3, yaw: f32) -> Vec3 {
     (forward * (-input.z) + right * input.x).normalize_or_zero()
 }
 
-// /// 角色旋轉速度 (Moved to Config)
-// const ROTATION_SPEED: f32 = 25.0;
-
 /// 更新角色旋轉
 /// - 向前走時：面向移動方向
 /// - 後退/平移時：保持面向攝影機方向（像瞄準一樣）
@@ -184,7 +181,8 @@ pub fn player_movement(
     };
 
     // 指數衰減插值（比線性更自然）
-    // 使用 .max(f32::EPSILON) 防止除零（配置錯誤時的保護）
+    // 使用 .max(f32::EPSILON) 防止除零（Player.acceleration_time/deceleration_time
+    // 沒有配置級驗證，此防禦性檢查是唯一的保護）
     let accel_rate = if target_speed > player.current_speed {
         1.0 / player.acceleration_time.max(f32::EPSILON)
     } else {

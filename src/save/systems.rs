@@ -11,11 +11,11 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
-use crate::core::{PlayerStats, WeatherState, WorldTime};
+use crate::core::{GameState, PlayerStats, WeatherState, WorldTime};
 use crate::economy::PlayerWallet;
 use crate::mission::{RelationshipManager, RespectManager, StoryMissionManager, UnlockManager};
 use crate::player::Player;
-use crate::vehicle::{ModLevel, NitroBoost, VehicleId, VehicleModifications};
+use crate::vehicle::{ModLevel, NitroBoost, Vehicle, VehicleId, VehicleModifications};
 
 use super::components::*;
 
@@ -108,6 +108,7 @@ pub fn handle_save_events(
     unlocks: Res<UnlockManager>,
     relationship: Res<RelationshipManager>,
     player_stats: Res<PlayerStats>,
+    game_state: Res<GameState>,
     // 車輛改裝查詢（包含穩定 ID）
     vehicle_mod_query: Query<(Entity, &VehicleId, &VehicleModifications)>,
 ) {
@@ -131,6 +132,7 @@ pub fn handle_save_events(
             &unlocks,
             &relationship,
             &player_stats,
+            &game_state,
             &vehicle_mod_query,
         );
 
@@ -211,6 +213,7 @@ fn collect_save_data(
     unlocks: &UnlockManager,
     relationship: &RelationshipManager,
     _player_stats: &PlayerStats,
+    game_state: &GameState,
     vehicle_mod_query: &Query<(Entity, &VehicleId, &VehicleModifications)>,
 ) -> SaveData {
     let mut save_data = SaveData {
@@ -235,6 +238,17 @@ fn collect_save_data(
             save_data.player.armor = a.current;
         }
     }
+
+    // 車內狀態
+    save_data.player.current_vehicle_id = game_state.current_vehicle.and_then(|entity| {
+        vehicle_mod_query
+            .iter()
+            .find(|(e, _, _)| *e == entity)
+            .map(|(_, vid, _)| vid.as_u64())
+    });
+    // 確保 in_vehicle 和 current_vehicle_id 一致
+    save_data.player.in_vehicle =
+        game_state.player_in_vehicle && save_data.player.current_vehicle_id.is_some();
 
     // 錢包資料
     save_data.player.cash = wallet.cash;
@@ -402,6 +416,8 @@ pub fn apply_pending_load_data(
         &mut VehicleModifications,
         Option<&NitroBoost>,
     )>,
+    mut game_state: ResMut<GameState>,
+    mut vehicle_query: Query<&mut Vehicle>,
 ) {
     if let Some(save_data) = task_tracker.pending_load_data.take() {
         apply_save_data(
@@ -417,6 +433,8 @@ pub fn apply_pending_load_data(
             &mut unlocks,
             &mut relationship,
             &mut vehicle_mod_query,
+            &mut game_state,
+            &mut vehicle_query,
         );
         if task_tracker.save_task.is_none() {
             save_manager.is_busy = false;
@@ -481,12 +499,15 @@ pub fn apply_save_data(
         &mut VehicleModifications,
         Option<&NitroBoost>,
     )>,
+    game_state: &mut GameState,
+    vehicle_query: &mut Query<&mut Vehicle>,
 ) {
     apply_player_data(player_query, wallet, respect, save_data);
     apply_weapon_data(weapon_query, save_data);
     apply_world_data(world_time, weather_state, save_data);
     apply_mission_data(story_manager, unlocks, relationship, save_data);
     apply_vehicle_modifications(commands, vehicle_mod_query, save_data);
+    apply_vehicle_state(game_state, vehicle_mod_query, vehicle_query, save_data);
 }
 
 fn apply_player_data(
@@ -600,7 +621,18 @@ fn apply_mission_data(
         story_manager.current_chapter = save_data.missions.current_chapter;
     }
     if !save_data.missions.best_ratings.is_empty() {
+        // v2 格式優先
         story_manager.mission_ratings = save_data.missions.best_ratings.clone();
+    } else if !save_data.missions.mission_ratings.is_empty() {
+        // v1 fallback：從 Vec<(String, u8)> 轉換為 HashMap<u32, StoryMissionRating>
+        story_manager.mission_ratings.clear();
+        for (id_str, stars) in &save_data.missions.mission_ratings {
+            if let Ok(id) = id_str.parse::<u32>() {
+                story_manager
+                    .mission_ratings
+                    .insert(id, crate::mission::StoryMissionRating::from_stars(*stars));
+            }
+        }
     }
     story_manager.total_play_time = save_data.play_time_secs as f32;
 
@@ -671,6 +703,52 @@ fn apply_vehicle_modifications(
                 mods.has_nitro
             );
         }
+    }
+}
+
+/// 還原玩家車內狀態
+fn apply_vehicle_state(
+    game_state: &mut GameState,
+    vehicle_mod_query: &mut Query<(
+        Entity,
+        &VehicleId,
+        &mut VehicleModifications,
+        Option<&NitroBoost>,
+    )>,
+    vehicle_query: &mut Query<&mut Vehicle>,
+    save_data: &SaveData,
+) {
+    if save_data.player.in_vehicle {
+        if let Some(target_id) = save_data.player.current_vehicle_id {
+            let found = vehicle_mod_query
+                .iter()
+                .find(|(_, vid, _, _)| vid.as_u64() == target_id)
+                .map(|(entity, _, _, _)| entity);
+
+            if let Some(entity) = found {
+                game_state.player_in_vehicle = true;
+                game_state.current_vehicle = Some(entity);
+
+                // 同步設定車輛為已佔用
+                if let Ok(mut vehicle) = vehicle_query.get_mut(entity) {
+                    vehicle.is_occupied = true;
+                } else {
+                    warn!("無法設定車輛 {:?} 為已佔用狀態", entity);
+                }
+
+                info!("還原車內狀態: 車輛 ID={}", target_id);
+            } else {
+                warn!(
+                    "存檔中的車輛 ID {} 不存在，玩家將以步行狀態還原",
+                    target_id
+                );
+                game_state.player_in_vehicle = false;
+                game_state.current_vehicle = None;
+            }
+        }
+    } else {
+        game_state.player_in_vehicle = false;
+        game_state.current_vehicle = None;
     }
 }
 

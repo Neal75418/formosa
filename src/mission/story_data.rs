@@ -698,6 +698,22 @@ pub enum StoryMissionRating {
 }
 
 impl StoryMissionRating {
+    /// 從星數建立評分（用於 v1 存檔 fallback 轉換）
+    pub fn from_stars(stars: u8) -> Self {
+        match stars {
+            0 => Self::None,
+            1 => Self::OneStar,
+            2 => Self::TwoStars,
+            3 => Self::ThreeStars,
+            4 => Self::FourStars,
+            5 => Self::FiveStars,
+            _ => {
+                warn!("無效的任務評分星數: {}，預設為 None", stars);
+                Self::None
+            }
+        }
+    }
+
     /// 取得星星數
     pub fn stars(&self) -> u32 {
         match self {

@@ -143,8 +143,28 @@ pub fn astar_movement_system(
     let dt = time.delta_secs();
 
     for (state, behavior, mut transform, mut path, mut controller) in ped_query.iter_mut() {
-        // 逃跑時不使用 A* 路徑
+        // 逃跑時不使用 A* 路徑，改用逃離方向
+        // （恐慌逃跑由 panic_flee_direction_system 處理，此處處理非恐慌逃跑如目擊犯罪）
         if state.state == PedState::Fleeing {
+            if let Some(threat_pos) = state.last_threat_pos {
+                let current_pos = transform.translation;
+                let away_dir = (current_pos - threat_pos).normalize_or_zero();
+                let flee_target = current_pos + away_dir * 20.0;
+                // 將逃跑目標限制在市區範圍內
+                let clamped = Vec3::new(
+                    flee_target.x.clamp(-95.0, 75.0),
+                    flee_target.y,
+                    flee_target.z.clamp(-75.0, 45.0),
+                );
+                let direction = (clamped - current_pos).normalize_or_zero();
+                let flat_dir = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
+                if flat_dir.length_squared() > 0.001 {
+                    let target_rot = Quat::from_rotation_y((-flat_dir.x).atan2(-flat_dir.z));
+                    transform.rotation = transform.rotation.slerp(target_rot, dt * 5.0);
+                    let velocity = flat_dir * config.flee_speed;
+                    controller.translation = Some(velocity * dt + Vec3::new(0.0, -9.8 * dt, 0.0));
+                }
+            }
             continue;
         }
 

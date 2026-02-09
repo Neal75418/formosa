@@ -156,6 +156,8 @@ pub struct PoliceOfficer {
     pub radio_alerted: bool,
     /// 無線電通知的玩家位置
     pub radio_alert_position: Option<Vec3>,
+    /// 此警察是否能直接看到玩家
+    pub can_see_player: bool,
 }
 
 impl Default for PoliceOfficer {
@@ -171,6 +173,7 @@ impl Default for PoliceOfficer {
             radio_cooldown: 0.0,
             radio_alerted: false,
             radio_alert_position: None,
+            can_see_player: false,
         }
     }
 }

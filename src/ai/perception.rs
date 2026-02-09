@@ -5,7 +5,10 @@ use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 use super::{AiBehavior, AiConfig, AiPerception};
 use crate::combat::Enemy;
-use crate::core::{WeatherState, WeatherType, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
+use crate::core::{
+    WeatherState, WeatherType, COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC,
+    COLLISION_GROUP_VEHICLE,
+};
 use crate::player::Player;
 
 /// 感知系統本地計時器（避免資源競爭）
@@ -86,20 +89,21 @@ pub fn ai_perception_system(
         let ray_dir = (ray_target - ray_origin).normalize_or_zero();
         let max_distance = ray_origin.distance(ray_target);
 
-        // 設定碰撞過濾：排除自己，只檢測靜態物體和車輛
+        // 設定碰撞過濾：排除自己，檢測靜態物體、車輛和角色
         let filter = QueryFilter::default()
             .exclude_rigid_body(enemy_entity)
             .groups(CollisionGroups::new(
                 Group::ALL,
-                COLLISION_GROUP_STATIC | COLLISION_GROUP_VEHICLE,
+                COLLISION_GROUP_STATIC | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_CHARACTER,
             ));
 
         // 執行射線檢測
-        let has_line_of_sight = if let Some((_hit_entity, toi)) =
+        let has_line_of_sight = if let Some((hit_entity, toi)) =
             rapier.cast_ray(ray_origin, ray_dir, max_distance as RapierReal, true, filter)
         {
-            // 如果射線打到的距離小於玩家距離，表示有遮擋
-            toi >= (max_distance * config.line_of_sight_tolerance) as RapierReal
+            // 射線命中玩家自身不算遮擋
+            hit_entity == player_entity
+                || toi >= (max_distance * config.line_of_sight_tolerance) as RapierReal
         } else {
             // 沒有打到任何東西，視線通暢
             true

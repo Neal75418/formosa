@@ -8,7 +8,8 @@ use crate::ai::{AiMovement, PatrolPath};
 use crate::combat::{BodyPart, Damageable, Health, HitReaction};
 use crate::core::math::look_rotation_y_flat;
 use crate::core::COLLISION_GROUP_CHARACTER;
-use crate::pedestrian::behavior::ShelterSeeker;
+use crate::pedestrian::behavior::{DailyBehavior, ShelterSeeker};
+use crate::pedestrian::pathfinding::AStarPath;
 use crate::pedestrian::components::{
     GunshotTracker, PedState, Pedestrian, PedestrianArm, PedestrianConfig, PedestrianLeg,
     PedestrianPaths, PedestrianState, PedestrianType, PedestrianVisuals, SidewalkPath,
@@ -410,6 +411,9 @@ fn get_movement_target(
 }
 
 /// 行人移動系統
+///
+/// 只處理沒有 `AStarPath` 的行人（有 `AStarPath` 的由 `astar_movement_system` 處理）。
+/// 當行人有 `DailyBehavior` 時，尊重其 `speed_multiplier()`（看手機、休息等行為速度為 0）。
 pub fn pedestrian_movement_system(
     time: Res<Time>,
     config: Res<PedestrianConfig>,
@@ -420,12 +424,21 @@ pub fn pedestrian_movement_system(
         &mut PatrolPath,
         &mut AiMovement,
         &mut KinematicCharacterController,
-    )>,
+        Option<&DailyBehavior>,
+    ), Without<AStarPath>>,
 ) {
     let dt = time.delta_secs();
 
-    for (_ped, state, mut transform, mut patrol, movement, mut controller) in ped_query.iter_mut() {
-        let speed = get_pedestrian_speed(state.state, &config);
+    for (_ped, state, mut transform, mut patrol, movement, mut controller, daily_behavior) in ped_query.iter_mut() {
+        let mut speed = get_pedestrian_speed(state.state, &config);
+
+        // 非逃跑狀態下，尊重 DailyBehavior 的速度倍率
+        if state.state != PedState::Fleeing {
+            if let Some(behavior) = daily_behavior {
+                speed *= behavior.behavior.speed_multiplier();
+            }
+        }
+
         if speed <= 0.0 {
             continue;
         }

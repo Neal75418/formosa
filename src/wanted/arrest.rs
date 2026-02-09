@@ -7,9 +7,10 @@
 //! - 監獄/警局釋放點
 
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 use crate::player::Player;
-use crate::core::GameState;
+use crate::core::{rapier_real_to_f32, GameState};
 use crate::combat::{Health, WeaponInventory};
 use crate::economy::PlayerWallet;
 
@@ -222,6 +223,7 @@ pub fn police_arrest_system(
     mut player_query: Query<(Entity, &Transform, &mut PlayerSurrenderState), With<Player>>,
     police_query: Query<(Entity, &Transform, &PoliceOfficer), Without<Player>>,
     mut arrest_events: MessageWriter<ArrestEvent>,
+    rapier_context: ReadRapierContext,
     time: Res<Time>,
 ) {
     let Ok((player_entity, player_transform, mut surrender_state)) = player_query.single_mut() else {
@@ -272,9 +274,32 @@ pub fn police_arrest_system(
             continue;
         }
 
-        let distance_sq = (police_transform.translation - player_pos).length_squared();
+        let to_player = player_pos - police_transform.translation;
+        let distance_sq = to_player.length_squared();
 
         if distance_sq <= ARREST_DISTANCE * ARREST_DISTANCE {
+            // 視線檢查：確認警察能看到玩家
+            let Ok(rapier) = rapier_context.single() else {
+                continue;
+            };
+            let ray_origin = police_transform.translation + Vec3::Y * 1.5;
+            let ray_dir = to_player.normalize();
+            let distance = distance_sq.sqrt();
+            let has_los = if let Some((_, toi)) = rapier.cast_ray(
+                ray_origin,
+                ray_dir,
+                distance as RapierReal,
+                true,
+                QueryFilter::default().exclude_rigid_body(police_entity),
+            ) {
+                rapier_real_to_f32(toi) >= distance - 0.5
+            } else {
+                true
+            };
+            if !has_los {
+                continue;
+            }
+
             // 開始逮捕
             surrender_state.being_arrested = true;
             surrender_state.arresting_officer = Some(police_entity);

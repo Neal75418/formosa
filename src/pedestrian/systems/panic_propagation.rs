@@ -1,6 +1,7 @@
 //! GTA5 風格群體恐慌傳播系統
 
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::KinematicCharacterController;
 use rand::Rng;
 
 use crate::core::PedestrianSpatialHash;
@@ -249,6 +250,7 @@ pub fn panic_flee_direction_system(
             &PedestrianState,
             &PanicState,
             &mut WalkingAnimation,
+            &mut KinematicCharacterController,
         ),
         With<Pedestrian>,
     >,
@@ -261,7 +263,7 @@ pub fn panic_flee_direction_system(
     // 初始化持久化 RNG（只在第一次調用時創建）
     let rng = rng.get_or_insert_with(|| rand::rngs::StdRng::from_rng(&mut rand::rng()));
 
-    for (mut transform, ped_state, panic_state, mut anim) in ped_query.iter_mut() {
+    for (mut transform, ped_state, panic_state, mut anim, mut controller) in ped_query.iter_mut() {
         // 只處理因恐慌而逃跑的行人
         if ped_state.state != PedState::Fleeing || !panic_state.is_panicked() {
             continue;
@@ -277,9 +279,9 @@ pub fn panic_flee_direction_system(
             // 計算移動速度（恐慌程度越高越快）
             let speed = config.flee_speed * PANIC_FLEE_SPEED_MULTIPLIER * panic_state.panic_level;
 
-            // 移動
+            // 透過角色控制器移動（加入重力保持地面接觸）
             let movement = jittered_dir * speed * dt;
-            transform.translation += movement;
+            controller.translation = Some(movement + Vec3::new(0.0, -9.8 * dt, 0.0));
 
             // 更新朝向（使用標準 Bevy 坐標系統慣例）
             if jittered_dir.length_squared() > 0.01 {

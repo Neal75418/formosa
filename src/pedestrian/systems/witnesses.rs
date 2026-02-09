@@ -117,7 +117,7 @@ pub fn witness_crime_detection_system(
         let crime_pos = crime.position();
         let witnessed_crime = crime_event_to_witnessed_crime(crime);
         let witness_range_sq = witnessed_crime.witness_range().powi(2);
-        let flee_chance = FLEE_INSTEAD_OF_CALL_CHANCE * (1.0 - witnessed_crime.severity());
+        let flee_chance = FLEE_INSTEAD_OF_CALL_CHANCE * witnessed_crime.severity();
 
         for (ped_transform, mut state, mut witness) in ped_query.iter_mut() {
             // 跳過已經在逃跑或報警的行人

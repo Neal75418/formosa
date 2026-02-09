@@ -91,7 +91,7 @@ pub fn spawn_police_car_system(
     );
 
     // 生成警車
-    spawn_police_car(&mut commands, spawn_pos, player_entity, &visuals);
+    spawn_police_car(&mut commands, spawn_pos, player_entity, player_pos, &visuals);
 
     info!(
         "生成警車 at ({:.1}, {:.1}) - 當前: {}/{}",
@@ -105,11 +105,12 @@ fn spawn_police_car(
     commands: &mut Commands,
     position: Vec3,
     target: Entity,
+    player_pos: Vec3,
     visuals: &PoliceCarVisuals,
 ) {
-    // 計算朝向目標的初始旋轉
-    let to_target = Vec3::new(0.0, 0.0, 1.0); // 預設朝前
-    let rotation = Quat::from_rotation_y(to_target.x.atan2(to_target.z));
+    // 計算朝向玩家的初始旋轉
+    let to_player = (player_pos - position).normalize_or_zero();
+    let rotation = Quat::from_rotation_y((-to_player.x).atan2(-to_player.z));
 
     // 分批添加組件以避免 tuple 過大
     let car_entity = commands

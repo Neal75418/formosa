@@ -11,7 +11,6 @@ use bevy_rapier3d::prelude::*;
 
 use crate::player::Player;
 use crate::core::GameState;
-use crate::vehicle::Vehicle;
 use crate::combat::{DamageEvent, DamageSource, Health, HitReaction};
 use crate::ai::AiMovement;
 
@@ -498,11 +497,11 @@ pub fn roadblock_collision_system(
     mut collision_events: MessageReader<CollisionEvent>,
     mut roadblock_query: Query<&mut Roadblock>,
     barrier_query: Query<&RoadblockBarrier>,
-    player_vehicle_query: Query<Entity, (With<Player>, With<Vehicle>)>,
+    game_state: Res<GameState>,
     mut damage_events: MessageWriter<DamageEvent>,
     _time: Res<Time>,
 ) {
-    let Ok(player_vehicle) = player_vehicle_query.single() else {
+    let Some(player_vehicle) = game_state.current_vehicle else {
         return;
     };
 

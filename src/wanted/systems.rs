@@ -143,34 +143,50 @@ pub fn process_witness_reports(
 /// 視野檢測距離
 const VISION_RANGE: f32 = 40.0;
 
-/// 檢查警察是否能看到玩家
-fn check_police_vision(
+/// 更新每個警察的視線狀態，並回傳是否有任何警察能看到玩家
+fn update_police_vision(
     player_pos: Vec3,
     police_hash: &PoliceSpatialHash,
-    police_query: &Query<(&Transform, &PoliceOfficer)>,
+    police_query: &mut Query<(&Transform, &mut PoliceOfficer)>,
     rapier: &RapierContext,
+    config: &PoliceConfig,
 ) -> bool {
+    // 重置所有警察的視線
+    for (_, mut officer) in police_query.iter_mut() {
+        officer.can_see_player = false;
+    }
+
+    let mut any_visible = false;
+    let half_fov = config.vision_fov / 2.0;
+
     for (police_entity, police_pos, _) in police_hash.query_radius(player_pos, VISION_RANGE) {
-        let Ok((police_transform, officer)) = police_query.get(police_entity) else { continue; };
+        let Ok((police_transform, mut officer)) = police_query.get_mut(police_entity) else { continue; };
         if officer.state == PoliceState::Patrolling { continue; }
 
         let to_player = player_pos - police_transform.translation;
         let distance = to_player.length();
-        let ray_origin = police_pos + Vec3::Y * 1.5;
 
+        // FOV 檢查
+        let police_forward = police_transform.forward().as_vec3();
+        let angle = police_forward.dot(to_player.normalize()).clamp(-1.0, 1.0).acos();
+        if angle > half_fov { continue; }
+
+        // Raycast 視線檢查
+        let ray_origin = police_pos + Vec3::Y * 1.5;
         if let Some((_, toi)) = rapier.cast_ray(
             ray_origin,
             to_player.normalize(),
             distance as RapierReal,
             true,
-            QueryFilter::default(),
+            QueryFilter::default().exclude_rigid_body(police_entity),
         ) {
             if rapier_real_to_f32(toi) >= distance - 1.0 {
-                return true;
+                officer.can_see_player = true;
+                any_visible = true;
             }
         }
     }
-    false
+    any_visible
 }
 
 /// 處理通緝消退邏輯
@@ -207,8 +223,9 @@ pub fn wanted_cooldown_system(
     time: Res<Time>,
     player_query: Query<&Transform, With<Player>>,
     police_hash: Res<PoliceSpatialHash>,
-    police_query: Query<(&Transform, &PoliceOfficer)>,
+    mut police_query: Query<(&Transform, &mut PoliceOfficer)>,
     rapier_context: ReadRapierContext,
+    config: Res<PoliceConfig>,
 ) {
     if wanted.stars == 0 { return; }
 
@@ -217,7 +234,7 @@ pub fn wanted_cooldown_system(
 
     let player_visible = rapier_context
         .single()
-        .map(|rapier| check_police_vision(player_pos, &police_hash, &police_query, &rapier))
+        .map(|rapier| update_police_vision(player_pos, &police_hash, &mut police_query, &rapier, &config))
         .unwrap_or(false);
 
     wanted.player_visible = player_visible;
@@ -486,7 +503,7 @@ fn handle_alerted_state(
         }
     }
 
-    if distance < config.vision_range && wanted.player_visible {
+    if distance < config.vision_range && officer.can_see_player {
         officer.state = PoliceState::Pursuing;
         officer.radio_alerted = false;
         officer.radio_alert_position = None;
@@ -536,7 +553,7 @@ fn handle_searching_state(
         }
     }
 
-    if wanted.player_visible {
+    if officer.can_see_player {
         officer.state = PoliceState::Pursuing;
     }
 
@@ -596,6 +613,7 @@ pub fn police_ai_system(
         let to_player = player_pos - police_pos;
         let distance = to_player.length();
         let direction = if distance > 0.1 { to_player.normalize() } else { Vec3::ZERO };
+        let can_see = officer.can_see_player;
 
         match officer.state {
             PoliceState::Patrolling => {
@@ -605,7 +623,7 @@ pub fn police_ai_system(
                 handle_alerted_state(&mut officer, &mut transform, &mut controller, police_pos, distance, movement, &wanted, &config, dt);
             }
             PoliceState::Pursuing => {
-                handle_pursuing_state(&mut officer, &mut transform, &mut controller, direction, distance, movement, wanted.player_visible, config.attack_range, dt);
+                handle_pursuing_state(&mut officer, &mut transform, &mut controller, direction, distance, movement, can_see, config.attack_range, dt);
             }
             PoliceState::Searching => {
                 handle_searching_state(&mut officer, &mut controller, police_pos, movement, &wanted, dt);
@@ -783,10 +801,10 @@ const CRIME_SEARCH_TIMEOUT: f32 = 45.0;
 const POLICE_SEARCH_RETURN_THRESHOLD: f32 = 30.0;
 
 /// 檢查警察是否可以發送無線電
-fn can_send_radio(officer: &PoliceOfficer, player_visible: bool) -> bool {
+fn can_send_radio(officer: &PoliceOfficer) -> bool {
     (officer.state == PoliceState::Pursuing || officer.state == PoliceState::Engaging)
         && officer.radio_cooldown <= 0.0
-        && player_visible
+        && officer.can_see_player
 }
 
 /// 檢查警察是否可以接收無線電
@@ -797,7 +815,6 @@ fn can_receive_radio(state: PoliceState) -> bool {
 /// 收集無線電發送者
 fn collect_radio_senders(
     police_query: &mut Query<(Entity, &Transform, &mut PoliceOfficer)>,
-    player_visible: bool,
     dt: f32,
 ) -> Vec<(Entity, Vec3)> {
     let mut senders = Vec::new();
@@ -807,7 +824,7 @@ fn collect_radio_senders(
             officer.radio_cooldown -= dt;
         }
 
-        if can_send_radio(&officer, player_visible) {
+        if can_send_radio(&officer) {
             senders.push((entity, transform.translation));
             officer.radio_cooldown = RADIO_CALL_COOLDOWN;
             debug!("🔊 警察在 ({:.1}, {:.1}) 發送無線電呼叫", transform.translation.x, transform.translation.z);
@@ -867,7 +884,7 @@ pub fn police_radio_call_system(
     let Ok(player_transform) = player_query.single() else { return; };
     let player_pos = player_transform.translation;
 
-    let senders = collect_radio_senders(&mut police_query, wanted.player_visible, time.delta_secs());
+    let senders = collect_radio_senders(&mut police_query, time.delta_secs());
     if senders.is_empty() { return; }
 
     let receivers = collect_receivers(&senders, &police_hash);

@@ -261,11 +261,15 @@ const COLLISION_REFERENCE_SPEED: f32 = 15.0;
 pub fn police_car_collision_system(
     mut collision_events: MessageReader<CollisionEvent>,
     mut police_car_query: Query<(&Transform, &mut PoliceCar, &mut VehicleHealth, &Vehicle)>,
-    player_vehicle_query: Query<(Entity, &Vehicle), With<Player>>,
+    game_state: Res<GameState>,
+    vehicle_query: Query<&Vehicle, Without<PoliceCar>>,
     mut damage_events: MessageWriter<DamageEvent>,
     time: Res<Time>,
 ) {
-    let Ok((player_vehicle, player_vehicle_data)) = player_vehicle_query.single() else {
+    let Some(player_vehicle) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok(player_vehicle_data) = vehicle_query.get(player_vehicle) else {
         return;
     };
 

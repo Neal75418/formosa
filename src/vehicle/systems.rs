@@ -982,7 +982,7 @@ fn handle_cruising_state(
     config: &crate::vehicle::config::NpcDrivingConfig,
 ) {
     navigate_to_waypoint(npc, transform, input, config);
-    input.throttle_input = 0.7; // 巡航油門
+    input.throttle_input = input.throttle_input.min(0.7); // 巡航限速，保留轉彎減速
     input.brake_input = 0.0;
 }
 
@@ -1067,7 +1067,7 @@ pub fn npc_vehicle_ai(
         return;
     };
 
-    for (entity, mut transform, mut vehicle, mut input, mut npc) in npc_query.iter_mut() {
+    for (entity, mut transform, vehicle, mut input, mut npc) in npc_query.iter_mut() {
         // 定期檢查前方障礙物和紅綠燈
         npc.check_timer.tick(time.delta());
         if npc.check_timer.just_finished() {
@@ -1107,7 +1107,7 @@ pub fn npc_vehicle_ai(
             }
             NpcState::WaitingAtLight => handle_waiting_at_light_state(
                 &mut npc,
-                &mut vehicle,
+                &mut input,
                 &transform,
                 &traffic_light_query,
                 dt,
@@ -1119,16 +1119,14 @@ pub fn npc_vehicle_ai(
 /// 處理等紅燈狀態
 fn handle_waiting_at_light_state(
     npc: &mut NpcVehicle,
-    vehicle: &mut Vehicle,
+    input: &mut VehicleInput,
     transform: &Transform,
     traffic_light_query: &Query<(&Transform, &TrafficLight), Without<NpcVehicle>>,
     dt: f32,
 ) {
-    // 減速停車
-    vehicle.current_speed *= 0.85;
-    if vehicle.current_speed < 0.5 {
-        vehicle.current_speed = 0.0;
-    }
+    // 重置輸入：鬆油門 + 踩煞車（由 npc_vehicle_motion_system 的煞車物理處理減速）
+    input.throttle_input = 0.0;
+    input.brake_input = 1.0;
 
     npc.stuck_timer += dt;
 

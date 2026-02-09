@@ -745,6 +745,11 @@ fn apply_vehicle_state(
                 game_state.player_in_vehicle = false;
                 game_state.current_vehicle = None;
             }
+        } else {
+            // 防禦性處理：in_vehicle=true 但無車輛 ID
+            warn!("存檔狀態不一致：in_vehicle=true 但 current_vehicle_id=None，回退為步行");
+            game_state.player_in_vehicle = false;
+            game_state.current_vehicle = None;
         }
     } else {
         game_state.player_in_vehicle = false;

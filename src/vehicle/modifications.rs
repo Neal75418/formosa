@@ -394,37 +394,42 @@ pub fn purchase_nitro_system(
     }
 }
 
-/// 氮氣加速系統
+/// 氮氣加速系統（僅作用於玩家當前車輛）
 pub fn nitro_boost_system(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut query: Query<(&mut VehicleModifications, &mut NitroBoost)>,
     game_state: Res<crate::core::GameState>,
 ) {
-    // 只有在駕駛車輛時才處理
     if !game_state.player_in_vehicle {
+        return;
+    }
+
+    let Some(current_vehicle) = game_state.current_vehicle else {
+        return;
+    };
+
+    let Ok((mut mods, mut nitro)) = query.get_mut(current_vehicle) else {
+        return;
+    };
+
+    if !mods.has_nitro {
         return;
     }
 
     let dt = time.delta_secs();
 
-    for (mut mods, mut nitro) in query.iter_mut() {
-        if !mods.has_nitro {
-            continue;
-        }
+    // Shift 鍵（左或右）啟動氮氣
+    let wants_boost = keyboard.pressed(KeyCode::ShiftLeft)
+        || keyboard.pressed(KeyCode::ShiftRight);
 
-        // Shift 鍵（左或右）啟動氮氣
-        let wants_boost = keyboard.pressed(KeyCode::ShiftLeft)
-            || keyboard.pressed(KeyCode::ShiftRight);
-
-        if wants_boost && mods.nitro_charge > 0.0 {
-            nitro.is_active = true;
-            mods.nitro_charge = (mods.nitro_charge - NITRO_DRAIN_RATE * dt).max(0.0);
-        } else {
-            nitro.is_active = false;
-            // 不使用時緩慢回充
-            mods.nitro_charge = (mods.nitro_charge + NITRO_RECHARGE_RATE * dt).min(1.0);
-        }
+    if wants_boost && mods.nitro_charge > 0.0 {
+        nitro.is_active = true;
+        mods.nitro_charge = (mods.nitro_charge - NITRO_DRAIN_RATE * dt).max(0.0);
+    } else {
+        nitro.is_active = false;
+        // 不使用時緩慢回充
+        mods.nitro_charge = (mods.nitro_charge + NITRO_RECHARGE_RATE * dt).min(1.0);
     }
 }
 

@@ -164,8 +164,12 @@ pub fn police_car_ai_system(
     config: Res<PoliceCarConfig>,
     time: Res<Time>,
 ) {
-    // 沒有通緝，警車停止追逐
+    // 沒有通緝，警車停止追逐：清零外力後返回
     if wanted.stars < 2 {
+        for (_, _, _, _, mut force, _) in &mut police_car_query {
+            force.force = Vec3::ZERO;
+            force.torque = Vec3::ZERO;
+        }
         return;
     }
 

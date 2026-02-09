@@ -33,8 +33,16 @@ use bevy::window::PresentMode;
 // MonitorSelection 已移除：BorderlessFullscreen 在 macOS 26 有 bug
 use bevy_rapier3d::prelude::*;
 
+// 開發工具（僅 Debug 模式）
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+use bevy_inspector_egui::bevy_egui::EguiPlugin;
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
+
 fn main() {
-    App::new()
+    let mut app = App::new();
+
+    app
         // === 插件 ===
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -46,7 +54,23 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default());
+
+    // === 🎨 開發工具（僅 Debug 模式，Release 自動移除）===
+    #[cfg(all(debug_assertions, feature = "dev_tools"))]
+    {
+        use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+
+        app.add_plugins(RapierDebugRenderPlugin::default()); // Rapier 碰撞箱可視化
+        app.add_plugins(EguiPlugin::default()); // Egui 插件（Inspector 的依賴）
+        app.add_plugins(WorldInspectorPlugin::new()); // 即時編輯器
+        // Picking 已包含在 DefaultPlugins 中，不需額外加入
+
+        app.add_plugins(FrameTimeDiagnosticsPlugin::default()); // FPS 診斷（Bevy 內建）
+        app.add_plugins(LogDiagnosticsPlugin::default()); // 在 console 顯示 FPS
+    }
+
+    app
         // === 戰鬥插件 ===
         .add_plugins(combat::CombatPlugin)
         // === AI 插件 ===

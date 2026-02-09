@@ -10,11 +10,22 @@ keywords = ["game", "taiwan", "open-world", "bevy"]
 [dependencies]
 bevy = { version = "0.17", features = ["dynamic_linking", "jpeg"] }  # Bevy 0.17 穩定版
 bevy_rapier3d = "0.32"  # 對應 Bevy 0.17
+
+# === 開發工具（Debug 模式自動移除）===
+bevy-inspector-egui = { version = "0.35", optional = true }  # 即時編輯器
+
 rand = "0.9"  # 隨機數生成
 serde = { version = "1.0", features = ["derive"] }  # 序列化（存檔系統）
 serde_json = "1.0"  # JSON 格式存檔
 dirs = "6.0"  # 跨平台目錄路徑
 futures-lite = "2.5"  # 非同步任務輪詢
+
+# === Features ===
+[features]
+default = []  # Release 乾淨建置；開發時用 cargo run --features dev_tools
+dev_tools = [
+    "bevy-inspector-egui",
+]
 
 # 開發時的編譯優化（讓遊戲跑得動，但編譯較快）
 [profile.dev]

@@ -12,6 +12,9 @@ mod setup;
 mod street_furniture;
 mod time_weather;
 
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+mod entity_naming;
+
 // 公開 API re-exports (允許外部使用 crate::world::* 存取)
 #[allow(unused_imports)]
 pub use buildings::*;
@@ -29,8 +32,27 @@ pub use setup::*;
 pub use street_furniture::*;
 pub use time_weather::*;
 
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+pub use entity_naming::*;
+
 use bevy::prelude::*;
 use crate::core::{AppState, GameSet, InteractionSet};
+
+/// 實體命名計時器（每秒執行一次，僅 Debug 模式）
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+#[derive(Resource)]
+pub struct EntityNamingTimer {
+    timer: Timer,
+}
+
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+impl Default for EntityNamingTimer {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+        }
+    }
+}
 
 /// 世界系統插件
 pub struct WorldPlugin;
@@ -102,5 +124,23 @@ impl Plugin for WorldPlugin {
             )
                 .in_set(GameSet::World)
                 .run_if(in_state(AppState::InGame)));
+
+        // === 實體命名系統（僅 Debug 模式，每秒執行一次即可）===
+        #[cfg(all(debug_assertions, feature = "dev_tools"))]
+        {
+            app
+                .init_resource::<EntityNamingTimer>()
+                .add_systems(Update, (
+                    update_entity_naming_timer,
+                    (
+                        name_player_entities,
+                        name_vehicle_entities,
+                        name_police_entities,
+                        name_pedestrian_entities,
+                        name_police_car_entities,
+                        name_building_entities,
+                    ).run_if(|timer: Res<EntityNamingTimer>| timer.timer.just_finished()),
+                ).chain().run_if(in_state(AppState::InGame)));
+        }
     }
 }

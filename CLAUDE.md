@@ -24,19 +24,67 @@ Claude Code 在此專案中的工作指引。
 | bevy_rapier3d    | 0.32         | 3D 物理引擎  |
 | serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：140 個 .rs 檔案、~62,800 行、329 個單元測試、0 clippy warnings
+**規模**：140 個 .rs 檔案、~62,800 行、335 個單元測試、0 clippy warnings
 
 ## 常用指令
 
 ```bash
-cargo run                    # 開發模式（動態連結）
-cargo run --release          # 發布模式（最佳效能）
+cargo dev                    # 開發模式（含 dev_tools，見 .cargo/config.toml）
+cargo run                    # 開發模式（不含 dev_tools）
+cargo run --release          # 發布模式（最佳效能，不含 dev_tools）
 cargo check                  # 編譯檢查
-cargo test                   # 執行 329 個單元測試
+cargo test                   # 執行 335 個單元測試
 cargo test economy::tests    # 特定模組測試
 cargo clippy                 # 靜態分析
 cargo fmt                    # 格式化
 ```
+
+## 開發工具
+
+### Debug 模式專用工具
+
+條件編譯：`#[cfg(all(debug_assertions, feature = "dev_tools"))]`
+
+| 工具 | 按鍵 | 位置 | 說明 |
+|------|------|------|------|
+| World Inspector | F7 | 全螢幕 | 即時編輯實體/組件 |
+| FPS Counter | - | 左上角 | 綠(>60)/黃(30-60)/紅(<30) |
+| Debug Viz | F3 | - | 警察視野/路徑/恐慌範圍 |
+| Rapier Debug | - | 場景中 | 綠色碰撞箱線框 |
+| Entity Names | - | Inspector | 每秒自動命名（英文） |
+
+**Gizmos 可視化**：
+- 警察 FOV 錐 - 綠色扇形（半徑：`PoliceConfig.vision_range`）
+- 視線狀態 - 紅（看見）/灰（未看見）
+- A* 路徑 - 藍色折線 + 黃色球（waypoints）
+- 恐慌範圍 - 黃色圓圈（半徑 10m）
+
+### 開發工具模式
+
+```rust
+// Timer-based system（非關鍵 debug 功能）
+#[derive(Resource)]
+pub struct MyDebugTimer { timer: Timer }
+
+app.init_resource::<MyDebugTimer>()
+   .add_systems(Update, (
+       update_timer,
+       debug_system.run_if(|t: Res<MyDebugTimer>| t.timer.just_finished()),
+   ).chain());
+
+// Toggle-based system（F3 類按鍵切換）
+#[derive(Resource, Default)]
+pub struct DebugState { pub enabled: bool }
+
+app.init_resource::<DebugState>()
+   .add_systems(Update, debug_viz.run_if(|s: Res<DebugState>| s.enabled));
+```
+
+### UI 位置慣例
+
+- **左上角**：Debug 資訊（FPS、座標等）
+- **右上角**：小地圖（避免放置其他 UI）
+- **中下**：通緝等級、武器、血量
 
 ## 架構
 
@@ -321,8 +369,36 @@ pub fn damage_system(res: DamageSystemResources, query: Query<...>) { ... }
 | M     | 地圖              | 地圖    |
 | Esc   | 暫停              | 暫停    |
 
+### 開發專用
+
+| 按鍵 | 功能 |
+|------|------|
+| F3 | 切換 Debug 可視化（Gizmos） |
+| F7 | 開啟 World Inspector |
+
 ## 驗證
 
 ```bash
 cargo check && cargo test && cargo clippy
 ```
+
+## 常見問題
+
+### Bevy 0.17 特殊性
+
+- `on_timer()` 不存在 - 使用自訂 `Timer` resource + `run_if(|t: Res<T>| t.timer.just_finished())`
+- FPS 顯示 - `DiagnosticsStore` + `FrameTimeDiagnosticsPlugin::FPS`
+- Query 單一結果 - `query.single()` 取代 `get_single()`（Bevy 0.16 → 0.17）
+
+### 開發工具整合
+
+- **FlyCam 衝突**：與自訂 camera_follow 系統衝突，已移除
+- **Inspector 中文亂碼**：預設字體不支援中文，實體命名使用英文
+- **Gizmos 性能**：預設每幀繪製，大量物件時用 `run_if` 條件執行或 F3 切換
+- **條件編譯**：所有 dev tools 模組需加 `#[cfg(all(debug_assertions, feature = "dev_tools"))]`
+
+### 測試
+
+- 335 個單元測試覆蓋核心系統
+- 修改後必跑：`cargo test`（~0.01s）
+- 建置時間：37-84 秒（動態連結）

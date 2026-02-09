@@ -15,6 +15,9 @@ mod roadblock;
 mod arrest;
 mod police_helicopter;
 
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+mod debug_viz; // Gizmos 除錯可視化（僅 Debug 模式）
+
 #[cfg(test)]
 mod tests;
 
@@ -26,8 +29,18 @@ pub use roadblock::*;
 pub use arrest::*;
 pub use police_helicopter::*;
 
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+pub use debug_viz::*;
+
 use bevy::prelude::*;
 use crate::core::{AppState, PoliceSpatialHash};
+
+/// Debug 可視化開關（F3 切換）
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+#[derive(Resource, Default)]
+pub struct DebugVisualizationState {
+    pub enabled: bool,
+}
 
 /// 警察通緝系統插件
 pub struct WantedPlugin;
@@ -38,7 +51,15 @@ impl Plugin for WantedPlugin {
             // 資源
             .init_resource::<WantedLevel>()
             .init_resource::<PoliceConfig>()
-            .insert_resource(PoliceSpatialHash::new())  // 警察空間哈希（視野檢測優化）
+            .insert_resource(PoliceSpatialHash::new());  // 警察空間哈希（視野檢測優化）
+
+        // Debug 可視化資源（僅 Debug 模式）
+        #[cfg(all(debug_assertions, feature = "dev_tools"))]
+        {
+            app.init_resource::<DebugVisualizationState>();
+        }
+
+        app
             // 事件（Bevy 0.17: add_message）
             .add_message::<CrimeEvent>()
             .add_message::<WantedLevelChanged>()
@@ -109,5 +130,20 @@ impl Plugin for WantedPlugin {
                 surrender_ui_system,
                 update_surrender_progress_bar,
             ));
+
+        // === 🎨 除錯可視化（僅 Debug 模式）===
+        #[cfg(all(debug_assertions, feature = "dev_tools"))]
+        {
+            app
+                // F3 切換開關
+                .add_systems(Update, toggle_debug_visualization)
+                // 除錯繪製系統（僅在啟用時執行）
+                .add_systems(Update, (
+                    debug_police_vision,
+                    debug_astar_paths,
+                    debug_panic_propagation,
+                ).run_if(in_state(AppState::InGame))
+                 .run_if(|state: Res<DebugVisualizationState>| state.enabled));
+        }
     }
 }

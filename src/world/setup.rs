@@ -78,6 +78,7 @@ fn setup_camera_and_lighting(
     // === 0. 攝影機與光照 ===
     // 遊戲主攝影機 (由 camera_follow 系統接管位置，這裡只需生成)
     commands.spawn((
+        Name::new("Main Camera"),
         Camera3d::default(),
         Transform::from_xyz(0.0, 50.0, 50.0).looking_at(Vec3::ZERO, Vec3::Y),
         // Bloom 效果：針對霓虹燈和發光材質優化
@@ -109,6 +110,7 @@ fn setup_camera_and_lighting(
     // 主光源 (太陽) - 含級聯陰影配置
     // 初始角度會由 sun_moon_rotation_system 根據 WorldTime 自動更新
     commands.spawn((
+        Name::new("Sun"),
         Sun, // 標記組件，用於識別太陽實體
         DirectionalLight {
             illuminance: 15000.0,
@@ -136,6 +138,7 @@ fn setup_camera_and_lighting(
     });
 
     commands.spawn((
+        Name::new("Moon"),
         Moon {
             phase: 0.5, // 初始滿月
             emissive_intensity: 1.0,

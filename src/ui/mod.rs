@@ -20,6 +20,9 @@ mod systems;
 mod weapon_wheel;
 mod weather_hud;
 
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+mod fps_counter;
+
 pub use components::*;
 pub use crosshair::*;
 pub use damage_indicator::*;
@@ -36,6 +39,9 @@ pub use story_mission_hud::*;
 pub use systems::*;
 pub use weapon_wheel::*;
 pub use weather_hud::*;
+
+#[cfg(all(debug_assertions, feature = "dev_tools"))]
+pub use fps_counter::*;
 
 use bevy::ecs::schedule::SystemCondition;
 use bevy::prelude::*;
@@ -133,5 +139,12 @@ impl Plugin for UiPlugin {
             .add_systems(Update, update_story_mission_hud.in_set(GameSet::Ui).run_if(ui_active))
             // UI Scale 動態更新（視窗大小改變時）
             .add_systems(Update, update_ui_scale);
+
+        // === FPS 計數器（僅 Debug 模式）===
+        #[cfg(all(debug_assertions, feature = "dev_tools"))]
+        {
+            app.add_systems(Startup, setup_fps_counter)
+                .add_systems(Update, update_fps_counter);
+        }
     }
 }

@@ -1,0 +1,5 @@
+# 開發用別名，省去每次打 --features dev_tools
+[alias]
+dev = "run --features dev_tools"
+dev-check = "check --features dev_tools"
+dev-build = "build --features dev_tools"

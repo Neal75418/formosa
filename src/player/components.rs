@@ -1,4 +1,5 @@
 //! 玩家組件
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -28,6 +29,11 @@ pub struct Player {
 
 impl Default for Player {
     fn default() -> Self {
+        let acceleration_time = 0.3;  // 0.3 秒從靜止到全速
+        let deceleration_time = 0.4;  // 0.4 秒從全速到靜止
+        debug_assert!(acceleration_time > 0.0, "acceleration_time 必須 > 0，否則除零");
+        debug_assert!(deceleration_time > 0.0, "deceleration_time 必須 > 0，否則除零");
+
         Self {
             speed: 10.0,           // 基礎走路速度
             rotation_speed: 3.0,
@@ -38,8 +44,8 @@ impl Default for Player {
             is_grounded: true,
             // 加速度系統
             current_speed: 0.0,           // 初始靜止
-            acceleration_time: 0.3,       // 0.3 秒從靜止到全速
-            deceleration_time: 0.4,       // 0.4 秒從全速到靜止
+            acceleration_time,
+            deceleration_time,
             last_movement_direction: Vec3::Z, // 初始面向 +Z
         }
     }

@@ -60,6 +60,8 @@ pub struct WorldPlugin;
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app
+            // Resource
+            .init_resource::<MapBounds>()
             // Message
             .add_message::<RandomEventTriggered>()
             .add_message::<RandomEventCompleted>()

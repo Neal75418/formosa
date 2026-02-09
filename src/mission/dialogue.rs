@@ -1,6 +1,7 @@
 //! 對話系統資料結構
 //!
 //! 定義對話樹、對話節點、選項分支等資料結構
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};

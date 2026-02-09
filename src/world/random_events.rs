@@ -6,6 +6,7 @@
 //! - 打架
 //! - 乞丐求助
 //! - 警察追捕逃犯
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 

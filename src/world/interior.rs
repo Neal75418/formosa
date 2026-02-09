@@ -1,6 +1,7 @@
 //! 室內建築系統
 //!
 //! 處理玩家進入/離開室內空間的邏輯
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

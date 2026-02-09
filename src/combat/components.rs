@@ -2,6 +2,7 @@
 //!
 //! 定義剩餘的戰鬥組件（玩家動畫、敵人基礎、全域狀態）。
 //! 武器、生命值、視覺效果已拆分至 weapon.rs, health.rs, visuals.rs。
+#![allow(dead_code)]
 
 use super::weapon::WeaponStats;
 use bevy::prelude::*;
@@ -46,7 +47,6 @@ pub struct ShootingInput {
 /// 敵人標記
 #[derive(Component)]
 pub struct Enemy {
-    #[allow(dead_code)] // TODO: 用於 AI 行為差異化
     pub enemy_type: EnemyType,
 }
 
@@ -446,7 +446,6 @@ impl HitReaction {
     }
 
     /// 是否正在受傷反應中
-    #[allow(dead_code)] // TODO: 用於 AI 行為判斷
     pub fn is_reacting(&self) -> bool {
         self.phase != HitReactionPhase::None
     }

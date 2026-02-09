@@ -1,4 +1,5 @@
 //! 行人日常行為系統（逛街、看手機、拍照、躲雨）
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use rand::Rng;

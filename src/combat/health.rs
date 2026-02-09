@@ -1,4 +1,5 @@
 //! 生命值與護甲系統
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 
@@ -43,7 +44,6 @@ impl Health {
     }
 
     /// 設定自動回復
-    #[allow(dead_code)] // TODO: 用於可再生生命的敵人/Boss
     pub fn with_regen(mut self, regen_per_sec: f32, delay: f32) -> Self {
         self.regeneration = regen_per_sec;
         self.regen_delay = delay;
@@ -102,7 +102,6 @@ impl Default for Armor {
 
 impl Armor {
     /// 建立新實例
-    #[allow(dead_code)] // TODO: 用於護甲撿取/商店購買
     pub fn new(amount: f32) -> Self {
         Self {
             current: amount,
@@ -112,7 +111,6 @@ impl Armor {
     }
 
     /// 計算百分比
-    #[allow(dead_code)] // TODO: 用於護甲 UI 顯示
     pub fn percentage(&self) -> f32 {
         (self.current / self.max).clamp(0.0, 1.0)
     }
@@ -134,16 +132,13 @@ impl Armor {
     }
 
     /// 是否破碎
-    #[allow(dead_code)] // TODO: 用於護甲破碎特效
     pub fn is_broken(&self) -> bool {
         self.current <= 0.0
     }
 
-    #[allow(dead_code)] // TODO: 用於護甲火花特效
     const SIGNIFICANT_HIT_THRESHOLD: f32 = 15.0;
 
     /// 是否受到重大打擊
-    #[allow(dead_code)] // TODO: 用於護甲火花特效
     pub fn took_significant_hit(&self, damage: f32) -> bool {
         damage >= Self::SIGNIFICANT_HIT_THRESHOLD && self.current > 0.0
     }
@@ -168,10 +163,8 @@ pub enum DamageSource {
     Explosion,               // 爆炸
     Melee,                   // 近戰
     Vehicle,                 // 車輛撞擊
-    #[allow(dead_code)] // TODO: 用於墜落傷害系統
     Fall,                    // 墜落
     Fire,                    // 火焰
-    #[allow(dead_code)] // TODO: 用於環境危害系統
     Environment,             // 環境傷害
 }
 
@@ -245,7 +238,6 @@ pub struct DeathEvent {
 /// 護甲破碎事件
 #[derive(Message, Clone, Debug)]
 pub struct ArmorBreakEvent {
-    #[allow(dead_code)] // TODO: 用於護甲破碎特效定位
     pub entity: Entity,
     /// 破碎位置
     pub position: Vec3,

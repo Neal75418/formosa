@@ -1,6 +1,7 @@
 //! 爆炸物系統
 //!
 //! 手榴彈、燃燒瓶、黏性炸彈等投擲武器
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

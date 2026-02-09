@@ -1,4 +1,5 @@
 //! 環境互動組件
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use crate::core::{EntityPool, lifetime_fade_alpha};

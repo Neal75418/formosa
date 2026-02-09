@@ -3,6 +3,7 @@
 //! 處理存檔、讀檔、自動存檔邏輯
 //!
 //! 使用非同步 IO 避免阻塞主執行緒
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};

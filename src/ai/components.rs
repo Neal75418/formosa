@@ -1,6 +1,7 @@
 //! AI 組件
 //!
 //! 定義 AI 狀態機、感知、巡邏等組件。
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use crate::core::{clamp_dot, safe_normalize};

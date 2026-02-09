@@ -1,6 +1,7 @@
 //! 經濟系統
 //!
 //! 處理金錢同步、商店互動、ATM 操作
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

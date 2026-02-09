@@ -1,6 +1,7 @@
 //! 存檔系統組件
 //!
 //! 包含存檔資料結構和事件定義
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};

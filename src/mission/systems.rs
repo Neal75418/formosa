@@ -1,4 +1,5 @@
 //! 任務系統
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

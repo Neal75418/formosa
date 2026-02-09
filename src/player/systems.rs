@@ -181,12 +181,11 @@ pub fn player_movement(
     };
 
     // 指數衰減插值（比線性更自然）
-    // 使用 .max(f32::EPSILON) 防止除零（Player.acceleration_time/deceleration_time
-    // 沒有配置級驗證，此防禦性檢查是唯一的保護）
+    // acceleration_time/deceleration_time 已在 Player::default() 中驗證 > 0
     let accel_rate = if target_speed > player.current_speed {
-        1.0 / player.acceleration_time.max(f32::EPSILON)
+        1.0 / player.acceleration_time
     } else {
-        1.0 / player.deceleration_time.max(f32::EPSILON)
+        1.0 / player.deceleration_time
     };
     // 公式：current = lerp(current, target, 1 - exp(-rate * dt))
     let blend = 1.0 - (-accel_rate * dt).exp();

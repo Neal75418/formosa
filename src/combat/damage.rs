@@ -1,6 +1,7 @@
 //! 傷害系統
 //!
 //! 處理傷害計算、死亡邏輯等。
+#![allow(dead_code)]
 
 
 use bevy::ecs::system::SystemParam;

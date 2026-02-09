@@ -93,7 +93,7 @@ pub fn spawn_npc_vehicle(
     rotation: Quat,
     vehicle_type: VehicleType,
     color: Color,
-    waypoints: Vec<Vec3>,
+    waypoints: std::sync::Arc<Vec<Vec3>>,
     start_index: usize,
 ) {
     // 根據類型定義尺寸變數和組件
@@ -346,45 +346,47 @@ pub fn spawn_initial_traffic(
     let x_kangding_east = X_KANGDING + lane_offset_main;
     let x_kangding_west = X_KANGDING - lane_offset_main;
 
+    use std::sync::Arc;
+
     // 路線 A：外圈 (逆時針) - 走主要幹道外側
-    let route_outer = vec![
+    let route_outer = Arc::new(vec![
         Vec3::new(x_xining_west, 0.0, z_chengdu_north), // 西南角
         Vec3::new(x_zhonghua_east, 0.0, z_chengdu_north), // 東南角
         Vec3::new(x_zhonghua_east, 0.0, z_hankou_south), // 東北角
         Vec3::new(x_xining_west, 0.0, z_hankou_south),  // 西北角
-    ];
+    ]);
 
     // 路線 B：內圈 (順時針) - 使用相反車道避免重疊
-    let route_inner = vec![
+    let route_inner = Arc::new(vec![
         Vec3::new(x_zhonghua_west, 0.0, z_chengdu_south), // 東南角
         Vec3::new(x_xining_east, 0.0, z_chengdu_south),   // 西南角
         Vec3::new(x_xining_east, 0.0, z_hankou_north),    // 西北角
         Vec3::new(x_zhonghua_west, 0.0, z_hankou_north),  // 東北角
-    ];
+    ]);
 
     // 路線 C：中華路直線 (南北向) - 使用中間車道避免與外圈衝突
-    let route_zhonghua = vec![
+    let route_zhonghua = Arc::new(vec![
         Vec3::new(x_zhonghua_mid_east, 0.0, z_chengdu_south), // 南端
         Vec3::new(x_zhonghua_mid_east, 0.0, z_hankou_north),  // 北端
         Vec3::new(x_zhonghua_mid_west, 0.0, z_hankou_north),  // U 型轉彎
         Vec3::new(x_zhonghua_mid_west, 0.0, z_chengdu_south), // 南端
-    ];
+    ]);
 
     // 路線 D：成都路西段 (東西向) - 避開外圈主線
-    let route_chengdu = vec![
+    let route_chengdu = Arc::new(vec![
         Vec3::new(X_KANGDING, 0.0, z_chengdu_north), // 西端
         Vec3::new(X_XINING, 0.0, z_chengdu_north),   // 東端
         Vec3::new(X_XINING, 0.0, z_chengdu_south),   // U 型轉彎
         Vec3::new(X_KANGDING, 0.0, z_chengdu_south), // 西端
-    ];
+    ]);
 
     // 路線 E：康定路直線 (南北向) - 新增西邊界車流
-    let route_kangding = vec![
+    let route_kangding = Arc::new(vec![
         Vec3::new(x_kangding_east, 0.0, z_chengdu_south), // 南端
         Vec3::new(x_kangding_east, 0.0, z_hankou_north),  // 北端
         Vec3::new(x_kangding_west, 0.0, z_hankou_north),  // U 型轉彎
         Vec3::new(x_kangding_west, 0.0, z_chengdu_south), // 南端
-    ];
+    ]);
 
     // 車輛顏色池
     let car_colors = [
@@ -406,7 +408,7 @@ pub fn spawn_initial_traffic(
             VehicleType::Taxi,
             Color::srgb(1.0, 0.8, 0.0),
             0,
-            route_outer.clone(),
+            Arc::clone(&route_outer),
         ),
         // === 路線 B：內圈（順時針）- 公車 ===
         (
@@ -414,7 +416,7 @@ pub fn spawn_initial_traffic(
             VehicleType::Bus,
             Color::srgb(0.2, 0.4, 0.8),
             0,
-            route_inner.clone(),
+            Arc::clone(&route_inner),
         ),
         // === 路線 C：中華路（U 型迴轉）===
         (
@@ -422,7 +424,7 @@ pub fn spawn_initial_traffic(
             VehicleType::Car,
             car_colors[2],
             0,
-            route_zhonghua.clone(),
+            Arc::clone(&route_zhonghua),
         ),
         // === 路線 D：成都路西段（U 型迴轉）===
         (
@@ -430,7 +432,7 @@ pub fn spawn_initial_traffic(
             VehicleType::Car,
             car_colors[3],
             0,
-            route_chengdu.clone(),
+            Arc::clone(&route_chengdu),
         ),
         // === 路線 E：康定路（U 型迴轉）===
         (
@@ -438,7 +440,7 @@ pub fn spawn_initial_traffic(
             VehicleType::Car,
             car_colors[5],
             0,
-            route_kangding.clone(),
+            Arc::clone(&route_kangding),
         ),
     ];
 
@@ -464,7 +466,7 @@ pub fn spawn_initial_traffic(
             initial_rotation,
             *v_type,
             *color,
-            path.clone(),
+            Arc::clone(path),
             next_idx,
         );
     }

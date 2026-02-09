@@ -1,4 +1,5 @@
 //! 攝影機相關資源
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 

@@ -1,4 +1,5 @@
 //! 武器系統（類型、屬性、彈藥、冷卻）
+#![allow(dead_code)]
 
 /// 彈道視覺風格
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -94,7 +95,6 @@ impl WeaponType {
 
 /// 近戰動畫類型
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[allow(dead_code)] // TODO: 用於近戰動畫系統
 pub enum MeleeAnimationType {
     #[default]
     Punch, // 拳頭
@@ -103,7 +103,6 @@ pub enum MeleeAnimationType {
     Stab,  // 刀刺
 }
 
-#[allow(dead_code)] // TODO: 用於近戰動畫系統
 impl MeleeAnimationType {
     /// 從武器類型推斷動畫類型
     pub fn from_weapon(weapon_type: WeaponType) -> Self {
@@ -128,7 +127,6 @@ pub struct WeaponStats {
     pub reload_time: f32,   // 換彈時間（秒）
     pub spread: f32,        // 散射角度（度）
     pub pellet_count: u32,  // 彈丸數量（霰彈槍用）
-    #[allow(dead_code)] // TODO: 用於拋射物系統
     pub bullet_speed: f32,  // 子彈速度
     pub is_automatic: bool, // 是否全自動
     // === 距離傷害衰減 ===
@@ -486,7 +484,6 @@ impl WeaponInventory {
     }
 
     /// 切換到下一把武器
-    #[allow(dead_code)] // TODO: 用於武器輪盤快捷切換
     pub fn next_weapon(&mut self) {
         if !self.weapons.is_empty() {
             self.current_index = (self.current_index + 1) % self.weapons.len();
@@ -494,7 +491,6 @@ impl WeaponInventory {
     }
 
     /// 切換到上一把武器
-    #[allow(dead_code)] // TODO: 用於武器輪盤快捷切換
     pub fn prev_weapon(&mut self) {
         if !self.weapons.is_empty() {
             self.current_index = if self.current_index == 0 {
@@ -533,7 +529,6 @@ impl WeaponInventory {
     }
 
     /// 檢查是否有指定類型武器
-    #[allow(dead_code)] // TODO: 用於武器撿取邏輯
     pub fn has_weapon(&self, weapon_type: WeaponType) -> bool {
         self.weapons
             .iter()

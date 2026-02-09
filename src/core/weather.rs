@@ -1,4 +1,5 @@
 //! 天氣系統資源
+#![allow(dead_code)]
 
 /// 天氣類型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]

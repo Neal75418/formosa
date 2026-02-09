@@ -1,4 +1,5 @@
 //! 音效系統
+#![allow(dead_code)]
 
 // Bevy 系統需要 Res<T> 按值傳遞
 #![allow(clippy::needless_pass_by_value)]

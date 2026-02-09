@@ -1,4 +1,5 @@
 //! GTA5 風格行人報警系統
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use rand::Rng;

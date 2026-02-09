@@ -1,4 +1,5 @@
 //! 任務經濟獎勵系統
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

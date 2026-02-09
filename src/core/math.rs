@@ -1,4 +1,5 @@
 //! 數學工具（避免 NaN 與數值誤差）
+#![allow(dead_code)]
 
 use bevy::prelude::Vec3;
 

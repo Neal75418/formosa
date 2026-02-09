@@ -1,4 +1,5 @@
 //! 通緝系統組件定義
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 

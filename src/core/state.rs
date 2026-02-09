@@ -1,4 +1,5 @@
 //! 遊戲執行狀態與系統分組
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

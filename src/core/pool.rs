@@ -1,4 +1,5 @@
 //! 通用實體池（物件池模式）
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 

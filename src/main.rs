@@ -5,9 +5,7 @@
 // Bevy ECS 系統常見的 lint 豁免
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
-// 遊戲開發中，346 個 dead_code 項目分佈在所有模組（AI、任務、UI、音效等）
-// 這些是已定義但尚未整合到遊戲流程中的系統。逐一標註不實際，待各系統整合後逐步移除
-#![allow(dead_code)]
+// dead_code 警告已改為逐模組標記，見各模組內的 #[allow(dead_code)]
 
 // ============================================================================
 // 模組

@@ -1,4 +1,5 @@
 //! 解鎖內容管理（物品、區域）
+#![allow(dead_code)]
 
 
 use std::collections::HashSet;

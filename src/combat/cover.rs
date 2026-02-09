@@ -1,6 +1,7 @@
 //! 玩家掩體系統
 //!
 //! 允許玩家進入掩體、探出射擊、掩體間移動
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

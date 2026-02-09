@@ -5,6 +5,7 @@
 //! - 警察逮捕流程
 //! - 敵人投降（低血量或被包圍）
 //! - 監獄/警局釋放點
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};

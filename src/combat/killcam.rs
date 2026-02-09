@@ -1,6 +1,7 @@
 //! Kill Cam 系統 (GTA 5 風格死亡慢鏡頭)
 //!
 //! 在特定擊殺（爆頭、最後敵人、連殺）時觸發慢動作效果。
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

@@ -1,4 +1,5 @@
 //! 環境互動系統
+#![allow(dead_code)]
 
 
 use bevy::prelude::*;

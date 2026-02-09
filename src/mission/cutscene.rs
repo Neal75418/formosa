@@ -1,6 +1,7 @@
 //! 過場動畫系統資料結構
 //!
 //! 定義過場動畫、攝影機路徑、演出指令等資料結構
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};

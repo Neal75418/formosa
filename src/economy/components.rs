@@ -1,6 +1,7 @@
 //! 經濟系統組件
 //!
 //! 包含錢包、商店、ATM、商品等定義
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};

@@ -14,9 +14,24 @@ pub struct VehicleConfig {
 }
 
 
+/// 天氣效果參數組（牽引力或操控力共用結構）
+#[derive(Debug, Clone)]
+pub struct WeatherFactorParams {
+    pub clear: f32,
+    pub cloudy: f32,
+    pub rainy_base: f32,
+    pub rainy_range: f32,
+    pub foggy: f32,
+    pub stormy_base: f32,
+    pub stormy_range: f32,
+    pub sandstorm_base: f32,
+    pub sandstorm_range: f32,
+}
+
 /// 天氣影響配置
 #[derive(Debug, Clone, Reflect)]
 pub struct VehicleWeatherConfig {
+    // === 牽引力 ===
     /// 晴天牽引力乘數
     pub clear_traction: f32,
     /// 陰天牽引力乘數
@@ -27,33 +42,90 @@ pub struct VehicleWeatherConfig {
     pub rainy_traction_range: f32,
     /// 霧天牽引力乘數
     pub foggy_traction: f32,
+    /// 暴風雨牽引力恢復範圍
+    pub stormy_traction_range: f32,
+    /// 沙塵暴牽引力恢復範圍
+    pub sandstorm_traction_range: f32,
+
+    // === 操控力 ===
+    /// 晴天操控乘數
+    pub clear_handling: f32,
+    /// 陰天操控乘數
+    pub cloudy_handling: f32,
     /// 雨天基礎操控乘數
     pub rainy_handling_base: f32,
     /// 雨天操控恢復範圍
     pub rainy_handling_range: f32,
     /// 霧天操控乘數
     pub foggy_handling: f32,
+    /// 暴風雨操控恢復範圍
+    pub stormy_handling_range: f32,
+    /// 沙塵暴操控恢復範圍
+    pub sandstorm_handling_range: f32,
+
+    // === 基礎值（暴風雨/沙塵暴共用） ===
     /// 暴風雨基礎牽引力
     pub stormy_traction_base: f32,
-    /// 暴風雨操控乘數
+    /// 暴風雨基礎操控乘數
     pub stormy_handling_base: f32,
     /// 沙塵暴基礎牽引力
     pub sandstorm_traction_base: f32,
-    /// 沙塵暴操控乘數
+    /// 沙塵暴基礎操控乘數
     pub sandstorm_handling_base: f32,
+}
+
+impl VehicleWeatherConfig {
+    /// 取得牽引力參數組
+    pub fn traction_params(&self) -> WeatherFactorParams {
+        WeatherFactorParams {
+            clear: self.clear_traction,
+            cloudy: self.cloudy_traction,
+            rainy_base: self.rainy_traction_base,
+            rainy_range: self.rainy_traction_range,
+            foggy: self.foggy_traction,
+            stormy_base: self.stormy_traction_base,
+            stormy_range: self.stormy_traction_range,
+            sandstorm_base: self.sandstorm_traction_base,
+            sandstorm_range: self.sandstorm_traction_range,
+        }
+    }
+
+    /// 取得操控力參數組
+    pub fn handling_params(&self) -> WeatherFactorParams {
+        WeatherFactorParams {
+            clear: self.clear_handling,
+            cloudy: self.cloudy_handling,
+            rainy_base: self.rainy_handling_base,
+            rainy_range: self.rainy_handling_range,
+            foggy: self.foggy_handling,
+            stormy_base: self.stormy_handling_base,
+            stormy_range: self.stormy_handling_range,
+            sandstorm_base: self.sandstorm_handling_base,
+            sandstorm_range: self.sandstorm_handling_range,
+        }
+    }
 }
 
 impl Default for VehicleWeatherConfig {
     fn default() -> Self {
         Self {
+            // 牽引力
             clear_traction: 1.0,
             cloudy_traction: 1.0,
             rainy_traction_base: 0.7,
             rainy_traction_range: 0.3,
             foggy_traction: 0.9,
+            stormy_traction_range: 0.15,
+            sandstorm_traction_range: 0.1,
+            // 操控力
+            clear_handling: 1.0,
+            cloudy_handling: 1.0,
             rainy_handling_base: 0.85,
             rainy_handling_range: 0.15,
             foggy_handling: 0.95,
+            stormy_handling_range: 0.2,
+            sandstorm_handling_range: 0.1,
+            // 暴風雨/沙塵暴基礎值
             stormy_traction_base: 0.55,
             stormy_handling_base: 0.5,
             sandstorm_traction_base: 0.75,
@@ -129,6 +201,24 @@ pub struct VehiclePhysicsConfig {
     pub drift_decay_rate: f32,
     /// 側滑角度歸零閾值
     pub drift_angle_zero_threshold: f32,
+
+    // === 轉向/摩擦（從 systems.rs 提取的 magic numbers）===
+    /// 轉向平滑乘數
+    pub steering_smoothing: f32,
+    /// 靜止時轉向輸入衰減
+    pub steering_stationary_decay: f32,
+    /// 摩擦阻力係數
+    pub friction_drag_coefficient: f32,
+    /// 基礎減速率
+    pub friction_base_decel: f32,
+    /// 扭力曲線低速區閾值（speed_ratio）
+    pub torque_low_speed_ratio: f32,
+    /// 扭力曲線中速區閾值（speed_ratio）
+    pub torque_mid_speed_ratio: f32,
+    /// 車身側傾角度限制
+    pub roll_angle_limit: f32,
+    /// 車身俯仰角度限制
+    pub pitch_angle_limit: f32,
 }
 
 impl Default for VehiclePhysicsConfig {
@@ -166,6 +256,16 @@ impl Default for VehiclePhysicsConfig {
             drift_speed_loss_rate: 0.5,
             drift_decay_rate: 4.0,
             drift_angle_zero_threshold: 0.05,
+
+            // 轉向/摩擦
+            steering_smoothing: 5.0,
+            steering_stationary_decay: 0.9,
+            friction_drag_coefficient: 0.5,
+            friction_base_decel: 0.025,
+            torque_low_speed_ratio: 0.3,
+            torque_mid_speed_ratio: 0.7,
+            roll_angle_limit: 0.2,
+            pitch_angle_limit: 0.15,
         }
     }
 }
@@ -206,6 +306,26 @@ pub struct NpcDrivingConfig {
     pub waypoint_arrival_distance_sq: f32,
     /// NPC 巡航速度比例
     pub cruising_speed_ratio: f32,
+
+    // === 卡住/倒車偵測（從 systems.rs 提取的 magic numbers）===
+    /// 卡住判定速度閾值
+    pub stuck_speed_threshold: f32,
+    /// 卡住計時器超時（秒）
+    pub stuck_timeout: f32,
+    /// 倒車超時（秒）
+    pub reverse_timeout: f32,
+    /// 紅綠燈偵測距離平方
+    pub traffic_light_detect_dist_sq: f32,
+    /// 紅綠燈正前方 dot 閾值
+    pub traffic_light_forward_dot: f32,
+    /// 紅綠燈面向車輛 dot 閾值
+    pub traffic_light_facing_dot: f32,
+    /// 紅綠燈等待超時（秒）
+    pub traffic_light_wait_timeout: f32,
+    /// 轉向 P 控制增益
+    pub steering_p_gain: f32,
+    /// 障礙物射線前方偏移
+    pub ray_forward_offset: f32,
 }
 
 impl Default for NpcDrivingConfig {
@@ -220,6 +340,17 @@ impl Default for NpcDrivingConfig {
             waypoint_arrival_distance: 5.0,
             waypoint_arrival_distance_sq: 25.0,
             cruising_speed_ratio: 0.6,
+
+            // 卡住/倒車偵測
+            stuck_speed_threshold: 1.0,
+            stuck_timeout: 2.0,
+            reverse_timeout: 3.0,
+            traffic_light_detect_dist_sq: 400.0,
+            traffic_light_forward_dot: 0.3,
+            traffic_light_facing_dot: -0.5,
+            traffic_light_wait_timeout: 30.0,
+            steering_p_gain: 2.0,
+            ray_forward_offset: 2.0,
         }
     }
 }

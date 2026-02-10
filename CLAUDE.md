@@ -339,6 +339,7 @@ pub fn damage_system(res: DamageSystemResources, query: Query<...>) { ... }
 | 空間哈希   | `src/core/spatial_hash.rs`                  |
 | 戰鬥插件   | `src/combat/mod.rs`                         |
 | 傷害計算   | `src/combat/damage/` (calculation, death, effects, reactions) |
+| 射擊系統   | `src/combat/shooting/` (input, firing, effects) |
 | 爆炸物    | `src/combat/explosives.rs`                  |
 | 掩體     | `src/combat/cover.rs`                       |
 | 警用直升機  | `src/wanted/police_helicopter.rs`           |

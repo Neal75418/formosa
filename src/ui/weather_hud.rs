@@ -363,7 +363,7 @@ pub fn update_weather_hud(
         WeatherType::Rainy => WeatherIconType::Rain,
         WeatherType::Foggy => WeatherIconType::Fog,
         WeatherType::Stormy => WeatherIconType::Rain, // 暴風雨用雨天圖示
-        WeatherType::Sandstorm => WeatherIconType::Fog, // 沙塵暴用霧天圖示（TODO: 專用圖示）
+        WeatherType::Sandstorm => WeatherIconType::Fog, // 沙塵暴暫用霧天圖示（待美術提供專用圖示）
     };
 
     // 更新圖示可見性

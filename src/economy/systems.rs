@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
 use crate::core::{InteractionState, PlayerStats, WorldTime};
 use crate::player::Player;
-use crate::ui::MoneyDisplay;
+use crate::ui::{MoneyDisplay, NotificationQueue};
 
 use super::components::*;
 
@@ -79,6 +79,7 @@ pub fn handle_shop_interaction(
     mut player_query: Query<(&Transform, &mut Health, &mut Armor, &mut WeaponInventory), With<Player>>,
     shop_query: Query<(Entity, &Transform, &Shop, &Interactable)>,
     mut interaction: ResMut<InteractionState>,
+    mut notifications: ResMut<NotificationQueue>,
 ) {
     let Ok((player_transform, mut health, mut armor, mut weapon_inventory)) = player_query.single_mut() else {
         return;
@@ -115,7 +116,9 @@ pub fn handle_shop_interaction(
 
         // 檢查營業時間
         if !shop.is_open_at(world_time.hour) {
-            // TODO: 顯示「店鋪已打烊」提示
+            if interaction.can_interact() {
+                notifications.info("店鋪已打烊，請稍後再來");
+            }
             continue;
         }
 

@@ -1,7 +1,6 @@
 //! 遊戲內通知系統（GTA 風格）
 //!
 //! 取代 println! 輸出，在畫面右上角顯示遊戲訊息
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -144,6 +143,7 @@ impl Notification {
     }
 
     /// 設定自訂持續時間
+    #[allow(dead_code)]
     pub fn with_duration(mut self, duration: f32) -> Self {
         self.duration = duration;
         self

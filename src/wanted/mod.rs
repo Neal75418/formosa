@@ -7,6 +7,7 @@
 //! - 通緝等級消退
 //! - 警車追逐（2 星以上）
 
+pub(crate) mod config;
 mod components;
 mod events;
 mod systems;

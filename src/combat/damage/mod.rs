@@ -7,7 +7,6 @@
 //! - `death` — 死亡、重生、布娃娃、生命回復
 //! - `reactions` — 受傷反應（擊退、視覺傾斜）
 //! - `effects` — 血液粒子、浮動傷害數字、護甲特效
-#![allow(dead_code)]
 
 mod calculation;
 mod death;

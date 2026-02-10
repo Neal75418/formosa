@@ -1,5 +1,4 @@
 //! NPC 車輛 AI 駕駛系統
-#![allow(dead_code)]
 
 use super::systems::{apply_vehicle_motion_physics, get_weather_factor, VehicleDynamicsModifiers};
 use super::*;
@@ -15,6 +14,7 @@ use bevy_rapier3d::prelude::{Real as RapierReal, *};
 // ============================================================================
 
 /// 取得車輛高度
+#[allow(dead_code)]
 fn get_vehicle_height(vehicle_type: &VehicleType) -> f32 {
     match vehicle_type {
         VehicleType::Scooter => 1.5,

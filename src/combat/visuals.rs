@@ -1,5 +1,4 @@
 //! 戰鬥視覺效果（子彈拖尾、布娃娃）
-#![allow(dead_code)]
 
 use super::weapon::TracerStyle;
 use super::weapon::WeaponType;
@@ -19,7 +18,9 @@ pub struct WeaponModel {
 /// 子彈拖尾效果標記
 #[derive(Component)]
 pub struct BulletTracer {
+    #[allow(dead_code)]
     pub start_pos: Vec3,
+    #[allow(dead_code)]
     pub end_pos: Vec3,
     pub lifetime: f32,
 }
@@ -100,8 +101,11 @@ pub struct Ragdoll {
     pub lifetime: f32,
     /// 最大持續時間（秒）
     pub max_lifetime: f32,
+    #[allow(dead_code)]
     pub physics_applied: bool,
+    #[allow(dead_code)]
     pub impulse_direction: Vec3,
+    #[allow(dead_code)]
     pub impulse_strength: f32,
 }
 

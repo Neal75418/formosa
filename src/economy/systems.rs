@@ -1,7 +1,6 @@
 //! 經濟系統
 //!
 //! 處理金錢同步、商店互動、ATM 操作
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -550,6 +549,7 @@ pub fn update_cash_pickups(
 // ============================================================================
 
 /// 生成金錢掉落物
+#[allow(dead_code)]
 pub fn spawn_cash_pickup(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,

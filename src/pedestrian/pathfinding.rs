@@ -1,7 +1,6 @@
 //! A* 尋路系統
 //!
 //! 提供基於網格的 A* 尋路功能，用於行人導航。
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 use std::collections::{BinaryHeap, HashMap};
@@ -271,6 +270,7 @@ pub struct AStarPath {
 
 impl AStarPath {
     /// 建立新實例
+    #[allow(dead_code)]
     pub fn new(goal: Vec3) -> Self {
         Self {
             waypoints: Vec::new(),
@@ -297,6 +297,7 @@ impl AStarPath {
     }
 
     /// 是否已到達終點
+    #[allow(dead_code)]
     pub fn is_complete(&self) -> bool {
         self.current_index >= self.waypoints.len().saturating_sub(1) && !self.waypoints.is_empty()
     }

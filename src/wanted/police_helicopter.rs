@@ -1,7 +1,6 @@
 //! 警用直升機系統
 //!
 //! 5 星通緝時出動，追蹤玩家並使用機槍射擊。
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -159,8 +158,10 @@ impl HelicopterRotor {
 #[derive(Component)]
 pub struct HelicopterSpotlight {
     /// 追蹤目標
+    #[allow(dead_code)]
     pub target: Option<Entity>,
     /// 光線強度
+    #[allow(dead_code)]
     pub intensity: f32,
 }
 
@@ -198,6 +199,7 @@ pub struct HelicopterVisuals {
     /// 旋翼材質
     pub rotor_material: Handle<StandardMaterial>,
     /// 探照燈材質
+    #[allow(dead_code)]
     pub spotlight_material: Handle<StandardMaterial>,
     /// 機身 mesh
     pub body_mesh: Handle<Mesh>,

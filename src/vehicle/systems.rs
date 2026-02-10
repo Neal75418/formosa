@@ -1,5 +1,4 @@
 //! 載具系統
-#![allow(dead_code)]
 
 
 use super::{

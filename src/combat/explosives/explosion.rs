@@ -7,7 +7,7 @@ use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 use super::effects::{spawn_fire_particles, spawn_smoke_particles};
 use super::*;
-use super::super::health::*;
+use crate::combat::health::*;
 
 /// 處理爆炸事件
 pub fn handle_explosion_event_system(

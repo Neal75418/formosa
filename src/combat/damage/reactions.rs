@@ -6,8 +6,8 @@ use bevy::math::EulerRot;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use super::super::components::{Enemy, HitReaction, HitReactionPhase};
-use super::super::visuals::Ragdoll;
+use crate::combat::components::{Enemy, HitReaction, HitReactionPhase};
+use crate::combat::visuals::Ragdoll;
 use crate::pedestrian::Pedestrian;
 
 /// 受傷反應更新系統

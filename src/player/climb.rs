@@ -4,7 +4,6 @@
 //! - Vault（翻越）：低矮障礙物（0.3-1.0m），快速跨越
 //! - Climb（攀爬）：中等高度牆面（1.0-1.8m），抓住邊緣往上爬
 //! - HighClimb（高位攀爬）：較高牆面（1.8-2.5m），需要更長時間
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -183,6 +182,7 @@ impl ClimbState {
     }
 
     /// 取得總動畫時間
+    #[allow(dead_code)]
     pub fn total_duration(&self) -> f32 {
         match self.climb_type {
             ClimbType::None => 0.0,

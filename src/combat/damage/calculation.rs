@@ -6,8 +6,8 @@ use bevy::prelude::*;
 
 use super::effects::spawn_floating_damage_number;
 use super::DamageSystemResources;
-use super::super::components::*;
-use super::super::health::*;
+use crate::combat::components::*;
+use crate::combat::health::*;
 use crate::ai::{CoverPoint, CoverSeeker};
 use crate::audio::{play_hit_sound, AudioManager, WeaponSounds};
 use crate::player::Player;

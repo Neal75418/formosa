@@ -1,5 +1,4 @@
 //! 攝影機相關資源
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 
@@ -17,6 +16,7 @@ pub struct CameraSettings {
     // 瞄準模式參數
     pub aim_shoulder_offset: f32,  // 過肩偏移（正值=右肩）
     pub aim_distance: f32,         // 瞄準時攝影機距離
+    #[allow(dead_code)]
     pub aim_pitch: f32,            // 瞄準時俯仰角
 }
 

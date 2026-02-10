@@ -363,7 +363,7 @@ fn setup_player_status_hud(commands: &mut Commands, font: &Handle<Font>) {
                             // 血量條容器
                             glow.spawn((
                                 Node {
-                                    width: Val::Px(180.0),
+                                    width: Val::Px(STATUS_BAR_WIDTH),
                                     height: Val::Px(18.0),
                                     ..default()
                                 },
@@ -436,7 +436,7 @@ fn setup_player_status_hud(commands: &mut Commands, font: &Handle<Font>) {
                         // 護甲條容器
                         row.spawn((
                             Node {
-                                width: Val::Px(180.0),
+                                width: Val::Px(STATUS_BAR_WIDTH),
                                 height: Val::Px(18.0),
                                 ..default()
                             },
@@ -476,8 +476,8 @@ fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                 position_type: PositionType::Absolute,
                 top: Val::Px(10.0),
                 right: Val::Px(10.0),
-                width: Val::Px(316.0), // 300 + 8*2 邊框
-                height: Val::Px(316.0),
+                width: Val::Px(MINIMAP_OUTER_SIZE), // 300 + 8*2 邊框
+                height: Val::Px(MINIMAP_OUTER_SIZE),
                 padding: UiRect::all(Val::Px(4.0)),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
@@ -490,8 +490,8 @@ fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
             // 主邊框層
             glow.spawn((
                 Node {
-                    width: Val::Px(308.0),
-                    height: Val::Px(308.0),
+                    width: Val::Px(MINIMAP_FRAME_SIZE),
+                    height: Val::Px(MINIMAP_FRAME_SIZE),
                     padding: UiRect::all(Val::Px(3.0)),
                     border: UiRect::all(Val::Px(2.0)),
                     justify_content: JustifyContent::Center,
@@ -507,8 +507,8 @@ fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                 frame
                     .spawn((
                         Node {
-                            width: Val::Px(300.0),
-                            height: Val::Px(300.0),
+                            width: Val::Px(MINIMAP_CONTENT_SIZE),
+                            height: Val::Px(MINIMAP_CONTENT_SIZE),
                             overflow: Overflow::clip(),
                             ..default()
                         },
@@ -1222,8 +1222,8 @@ fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                     frame
                         .spawn((
                             Node {
-                                width: Val::Px(1200.0),
-                                height: Val::Px(800.0),
+                                width: Val::Px(FULLMAP_WIDTH),
+                                height: Val::Px(FULLMAP_HEIGHT),
                                 overflow: Overflow::clip(),
                                 ..default()
                             },

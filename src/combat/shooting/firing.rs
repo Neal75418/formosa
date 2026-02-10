@@ -6,13 +6,13 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 use super::effects::{spawn_bullet_tracer, spawn_impact_effect, spawn_muzzle_flash};
-use super::super::components::*;
-use super::super::health::{
+use crate::combat::components::*;
+use crate::combat::health::{
     check_headshot, BleedEffect, DamageEvent, DamageSource, Damageable, BLEED_CHANCE,
     HEADSHOT_MULTIPLIER,
 };
-use super::super::visuals::*;
-use super::super::weapon::*;
+use crate::combat::visuals::*;
+use crate::combat::weapon::*;
 use crate::audio::{play_weapon_fire_sound, AudioManager, WeaponSounds};
 use crate::core::{rapier_real_to_f32, CameraSettings, CameraShake, RecoilState};
 use crate::player::Player;

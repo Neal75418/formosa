@@ -10,6 +10,7 @@ use crate::combat::{Health, DamageEvent, DamageSource, HitReaction, CombatVisual
 use crate::core::PoliceSpatialHash;
 
 use super::components::*;
+use super::config::*;
 use super::events::*;
 
 /// 設置警察視覺資源
@@ -140,8 +141,6 @@ pub fn process_witness_reports(
 // 通緝消退輔助函數
 // ============================================================================
 
-/// 視野檢測距離
-const VISION_RANGE: f32 = 40.0;
 
 /// 更新每個警察的視線狀態，並回傳是否有任何警察能看到玩家
 fn update_police_vision(
@@ -172,7 +171,7 @@ fn update_police_vision(
         if angle > half_fov { continue; }
 
         // Raycast 視線檢查
-        let ray_origin = police_pos + Vec3::Y * 1.5;
+        let ray_origin = police_pos + Vec3::Y * RAYCAST_ORIGIN_HEIGHT;
         if let Some((_, toi)) = rapier.cast_ray(
             ray_origin,
             to_player.normalize(),
@@ -180,7 +179,7 @@ fn update_police_vision(
             true,
             QueryFilter::default().exclude_rigid_body(police_entity),
         ) {
-            if rapier_real_to_f32(toi) >= distance - 1.0 {
+            if rapier_real_to_f32(toi) >= distance - RAYCAST_HIT_TOLERANCE {
                 officer.can_see_player = true;
                 any_visible = true;
             }
@@ -331,7 +330,7 @@ fn spawn_police_officer(
     wanted_stars: u8,
 ) {
     // 決定警察類型
-    let officer_type = if wanted_stars >= 3 {
+    let officer_type = if wanted_stars >= SWAT_STAR_THRESHOLD {
         PoliceType::Swat
     } else {
         PoliceType::Patrol
@@ -344,7 +343,7 @@ fn spawn_police_officer(
     };
 
     // 生成矩形巡邏路徑（圍繞生成位置）
-    let patrol_offset = 15.0;
+    let patrol_offset = PATROL_OFFSET_RADIUS;
     let y = position.y;
     let patrol_route = vec![
         Vec3::new(position.x + patrol_offset, y, position.z),
@@ -357,7 +356,7 @@ fn spawn_police_officer(
     let police_entity = commands
         .spawn((
             Name::new("PoliceOfficer"),
-            Transform::from_translation(position + Vec3::Y * 0.9),
+            Transform::from_translation(position + Vec3::Y * OFFICER_SPAWN_HEIGHT),
             GlobalTransform::default(),
             Visibility::default(),
             InheritedVisibility::default(),
@@ -370,21 +369,21 @@ fn spawn_police_officer(
                 ..default()
             },
             Health {
-                current: 100.0,
-                max: 100.0,
+                current: POLICE_OFFICER_HEALTH,
+                max: POLICE_OFFICER_HEALTH,
                 ..default()
             },
             HitReaction::default(),  // 受傷反應
             AiMovement {
-                walk_speed: 3.0,
-                run_speed: if officer_type == PoliceType::Swat { 7.0 } else { 5.5 },
+                walk_speed: OFFICER_WALK_SPEED,
+                run_speed: if officer_type == PoliceType::Swat { SWAT_RUN_SPEED } else { OFFICER_RUN_SPEED },
                 ..default()
             },
             // 物理組件
             RigidBody::KinematicPositionBased,
-            Collider::capsule_y(0.4, 0.25),
+            Collider::capsule_y(OFFICER_CAPSULE_HALF_HEIGHT, OFFICER_CAPSULE_RADIUS),
             KinematicCharacterController {
-                offset: CharacterLength::Absolute(0.1),
+                offset: CharacterLength::Absolute(OFFICER_CONTROLLER_OFFSET),
                 ..default()
             },
         ))
@@ -427,10 +426,6 @@ fn calc_facing_rotation(direction: Vec3) -> Quat {
 }
 
 /// 處理巡邏狀態
-/// 巡邏移動速度
-const PATROL_SPEED: f32 = 2.5;
-/// 到達巡邏點的距離閾值
-const PATROL_WAYPOINT_THRESHOLD: f32 = 1.5;
 
 fn handle_patrolling_state(
     officer: &mut PoliceOfficer,
@@ -667,15 +662,15 @@ fn calc_hit_chance(distance: f32, config: &PoliceConfig) -> f32 {
 
 /// 計算彈道終點位置
 fn calc_tracer_end(player_pos: Vec3, is_hit: bool) -> Vec3 {
-    let target_height = player_pos + Vec3::Y * 1.0;
+    let target_height = player_pos + Vec3::Y * TARGET_HEIGHT_OFFSET;
 
     if is_hit {
         target_height
     } else {
         let miss_offset = Vec3::new(
-            rand::random::<f32>() * 2.0 - 1.0,
-            rand::random::<f32>() * 1.5 - 0.5,
-            rand::random::<f32>() * 2.0 - 1.0,
+            rand::random::<f32>() * MISS_OFFSET_RANGE - 1.0,
+            rand::random::<f32>() * MISS_OFFSET_Y_RANGE - 0.5,
+            rand::random::<f32>() * MISS_OFFSET_RANGE - 1.0,
         );
         target_height + miss_offset
     }
@@ -723,7 +718,7 @@ pub fn police_combat_system(
         }
 
         // 射線檢測：確保警察和玩家之間沒有障礙物
-        let ray_origin = police_pos + Vec3::Y * 1.5;
+        let ray_origin = police_pos + Vec3::Y * MUZZLE_FLASH_HEIGHT;
         let ray_direction = to_player.normalize();
 
         if !check_line_of_sight(&rapier, ray_origin, ray_direction, distance, police_entity, player_entity) {
@@ -733,7 +728,7 @@ pub fn police_combat_system(
         // 計算命中率和彈道
         let hit_chance = calc_hit_chance(distance, &config);
         let is_hit = rand::random::<f32>() < hit_chance;
-        let muzzle_pos = police_pos + Vec3::Y * 1.2 + ray_direction * 0.5;
+        let muzzle_pos = police_pos + Vec3::Y * 1.2 + ray_direction * MUZZLE_FORWARD_OFFSET;
         let tracer_end = calc_tracer_end(player_pos, is_hit);
 
         // 生成視覺效果
@@ -789,16 +784,7 @@ pub fn despawn_police_system(
 // 無線電呼叫系統
 // ============================================================================
 
-/// 無線電呼叫範圍（公尺）- 降低以避免玩家被立即包圍
-const RADIO_CALL_RANGE: f32 = 45.0;
-/// 無線電呼叫冷卻時間（秒）
-const RADIO_CALL_COOLDOWN: f32 = 5.0;
-/// 犯罪搜索半徑
-const CRIME_SEARCH_RADIUS: f32 = 30.0;
-/// 犯罪搜索逾時（秒）
-const CRIME_SEARCH_TIMEOUT: f32 = 45.0;
-/// 警察搜索後返回閾值（秒）— 超過此時間且通緝歸零則撤離
-const POLICE_SEARCH_RETURN_THRESHOLD: f32 = 30.0;
+
 
 /// 檢查警察是否可以發送無線電
 fn can_send_radio(officer: &PoliceOfficer) -> bool {

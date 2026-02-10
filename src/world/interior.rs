@@ -1,7 +1,6 @@
 //! 室內建築系統
 //!
 //! 處理玩家進入/離開室內空間的邏輯
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -255,6 +254,7 @@ pub fn door_animation_system(
 // ============================================================================
 
 /// 生成便利商店
+#[allow(dead_code)]
 pub fn spawn_convenience_store(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,

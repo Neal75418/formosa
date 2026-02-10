@@ -4,9 +4,9 @@
 
 use bevy::prelude::*;
 
-use super::super::components::*;
-use super::super::weapon::*;
-use super::super::RespawnState;
+use crate::combat::components::*;
+use crate::combat::weapon::*;
+use crate::combat::RespawnState;
 use crate::audio::{
     play_reload_sound, play_weapon_switch_sound, AudioManager, WeaponSounds,
 };

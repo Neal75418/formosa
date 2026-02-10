@@ -1,5 +1,4 @@
 //! 遊戲執行狀態與系統分組
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -8,10 +7,12 @@ use bevy::prelude::*;
 #[derive(States, Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub enum AppState {
     /// 載入資源中（顯示載入畫面，未來可用於 asset 非同步載入）
+    #[allow(dead_code)]
     Loading,
     #[default]
     InGame,
     Paused,
+    #[allow(dead_code)]
     Menu,
 }
 

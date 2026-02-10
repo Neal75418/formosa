@@ -4,7 +4,6 @@
 //! - 警車生成與管理
 //! - 警車 AI 駕駛（追逐、攔截、PIT 機動）
 //! - 警車損壞與爆炸
-#![allow(dead_code)]
 
 
 mod spawn;
@@ -72,14 +71,18 @@ pub struct PoliceCar {
     /// 警車 AI 狀態
     pub state: PoliceCarState,
     /// 駕駛警察實體（可選）
+    #[allow(dead_code)]
     pub driver: Option<Entity>,
     /// 目標玩家實體
+    #[allow(dead_code)]
     pub target: Option<Entity>,
     /// 追逐計時器
+    #[allow(dead_code)]
     pub chase_timer: f32,
     /// PIT 機動冷卻
     pub pit_cooldown: f32,
     /// 警笛是否啟動
+    #[allow(dead_code)]
     pub siren_active: bool,
     /// 最後碰撞時間
     pub last_collision_time: f32,

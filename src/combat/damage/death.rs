@@ -8,11 +8,11 @@ use rand::Rng;
 
 use super::effects::spawn_blood_particles;
 use super::{DeathSystemQueries, DeathSystemResources, RespawnState, RESPAWN_POSITION};
-use super::super::components::*;
-use super::super::health::*;
-use super::super::killcam::{KillCamState, KillCamTrigger};
-use super::super::ragdoll::convert_to_skeletal_ragdoll;
-use super::super::visuals::*;
+use crate::combat::components::*;
+use crate::combat::health::*;
+use crate::combat::killcam::{KillCamState, KillCamTrigger};
+use crate::combat::ragdoll::convert_to_skeletal_ragdoll;
+use crate::combat::visuals::*;
 use crate::ai::{AiBehavior, AiCombat, AiMovement, AiPerception};
 use crate::economy::CashPickup;
 use crate::pedestrian::Pedestrian;
@@ -147,6 +147,7 @@ fn handle_police_death_crime(
 
 /// 處理行人死亡犯罪事件
 #[inline]
+#[allow(dead_code)]
 fn handle_pedestrian_death_crime(
     entity: Entity,
     killer: Option<Entity>,
@@ -497,6 +498,7 @@ pub fn player_respawn_system(
 }
 
 /// 生命回復系統（可選，給有回復能力的實體使用）
+#[allow(dead_code)]
 fn health_regeneration_system(time: Res<Time>, mut query: Query<&mut Health>) {
     let current_time = time.elapsed_secs();
     let dt = time.delta_secs();

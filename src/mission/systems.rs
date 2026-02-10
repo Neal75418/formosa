@@ -1,5 +1,4 @@
 //! 任務系統
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -268,6 +267,7 @@ fn spawn_checkpoint_marker(
 /// 檢查點標記組件
 #[derive(Component)]
 pub struct CheckpointMarker {
+    #[allow(dead_code)]
     pub index: usize,
 }
 

@@ -6,10 +6,10 @@ use bevy::ecs::hierarchy::ChildOf;
 use bevy::math::EulerRot;
 use bevy::prelude::*;
 
-use super::super::components::*;
-use super::super::health::{BleedEffect, DamageEvent, DamageSource};
-use super::super::visuals::*;
-use super::super::weapon::*;
+use crate::combat::components::*;
+use crate::combat::health::{BleedEffect, DamageEvent, DamageSource};
+use crate::combat::visuals::*;
+use crate::combat::weapon::*;
 use crate::core::{ease_in_out_quad, ease_out_cubic, ease_out_quad, GameState};
 use crate::player::Player;
 
@@ -215,7 +215,7 @@ pub fn punch_animation_trigger_system(
     mut commands: Commands,
     input: Res<ShootingInput>,
     game_state: Res<GameState>,
-    respawn_state: Res<super::super::RespawnState>,
+    respawn_state: Res<crate::combat::RespawnState>,
     player_query: Query<(&WeaponInventory, &Children), With<Player>>,
     arm_query: Query<(Entity, &PlayerArm), Without<PunchAnimation>>,
 ) {

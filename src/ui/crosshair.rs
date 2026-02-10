@@ -695,7 +695,7 @@ pub fn update_hit_marker(
             HIT_MARKER_COLOR
         };
         // 根據剩餘時間計算透明度（淡出效果）
-        let alpha = (combat_state.hit_marker_timer / 0.2).min(1.0);
+        let alpha = (combat_state.hit_marker_timer / HIT_MARKER_DURATION).min(1.0);
         let faded_color = Color::srgba(
             color.to_srgba().red,
             color.to_srgba().green,

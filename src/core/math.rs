@@ -1,5 +1,4 @@
 //! 數學工具（避免 NaN 與數值誤差）
-#![allow(dead_code)]
 
 use bevy::prelude::Vec3;
 
@@ -30,6 +29,7 @@ pub fn safe_normalize(value: Vec3) -> Vec3 {
 
 /// 判斷兩點是否在指定距離內（使用距離平方避免 sqrt）
 #[inline]
+#[allow(dead_code)]
 pub fn is_within_range(a: Vec3, b: Vec3, range: f32) -> bool {
     a.distance_squared(b) <= range * range
 }

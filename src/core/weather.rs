@@ -1,5 +1,4 @@
 //! 天氣系統資源
-#![allow(dead_code)]
 
 /// 天氣類型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -44,11 +43,13 @@ impl WeatherType {
     }
 
     /// 是否為惡劣天氣（影響駕駛和視線）
+    #[allow(dead_code)]
     pub fn is_severe(&self) -> bool {
         matches!(self, WeatherType::Stormy | WeatherType::Sandstorm)
     }
 
     /// 取得穩定的存檔鍵值（不受 enum 重命名影響）
+    #[allow(dead_code)]
     pub fn save_key(&self) -> &'static str {
         match self {
             WeatherType::Clear => "Clear",
@@ -116,6 +117,7 @@ impl WeatherState {
     }
 
     /// 取得當前有效強度（考慮過渡）
+    #[allow(dead_code)]
     pub fn effective_intensity(&self) -> f32 {
         if self.is_transitioning {
             // 過渡期間使用 smooth step

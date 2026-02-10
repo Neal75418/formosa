@@ -1,5 +1,4 @@
 //! 任務經濟獎勵系統
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -14,6 +13,7 @@ pub struct RespectManager {
 
 impl RespectManager {
     /// 創建新的聲望管理器
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self { respect: 0 }
     }
@@ -24,6 +24,7 @@ impl RespectManager {
     }
 
     /// 取得聲望
+    #[allow(dead_code)]
     pub fn get_respect(&self) -> i32 {
         self.respect
     }

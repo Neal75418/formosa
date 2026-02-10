@@ -1,5 +1,4 @@
 //! GTA5 風格行人報警系統
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 use rand::Rng;
@@ -12,6 +11,7 @@ use crate::player::Player;
 use crate::wanted::{CrimeEvent, WitnessReport};
 
 /// 目擊者 UI 顯示距離平方 (30.0²)
+#[allow(dead_code)]
 const WITNESS_UI_DISTANCE_SQ: f32 = 900.0;
 
 // ============================================================================
@@ -325,6 +325,7 @@ pub fn witness_icon_follow_system(
 
 /// 報警進度條系統
 /// 在 UI 上顯示附近報警中行人的進度
+#[allow(dead_code)]
 pub fn witness_progress_ui_system(
     player_query: Query<&Transform, With<Player>>,
     ped_query: Query<(&Transform, &WitnessState), (With<Pedestrian>, Changed<WitnessState>)>,

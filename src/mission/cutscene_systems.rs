@@ -1,7 +1,6 @@
 //! 過場動畫系統邏輯
 //!
 //! 處理過場動畫播放、攝影機控制、淡入淡出等
-#![allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -534,6 +533,7 @@ fn cutscene_skip_system(
 // ============================================================================
 
 /// 開始過場動畫
+#[allow(dead_code)]
 pub fn start_cutscene(
     cutscene_id: CutsceneId,
     events: &mut MessageWriter<CutsceneEvent>,
@@ -547,6 +547,7 @@ pub fn is_cutscene_active(cutscene_state: &CutsceneState) -> bool {
 }
 
 /// 取得當前過場動畫進度（0.0 - 1.0）
+#[allow(dead_code)]
 pub fn get_cutscene_progress(cutscene_state: &CutsceneState, database: &CutsceneDatabase) -> f32 {
     let Some(active) = &cutscene_state.active_cutscene else {
         return 0.0;

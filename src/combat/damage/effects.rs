@@ -6,8 +6,8 @@ use bevy::math::EulerRot;
 use bevy::prelude::*;
 use rand::Rng;
 
-use super::super::health::ArmorBreakEvent;
-use super::super::visuals::*;
+use crate::combat::health::ArmorBreakEvent;
+use crate::combat::visuals::*;
 use crate::ui::{ChineseFont, FloatingDamageNumber, FloatingDamageTracker};
 
 // ============================================================================

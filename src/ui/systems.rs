@@ -278,6 +278,638 @@ fn spawn_keyboard_hint(
         });
 }
 
+/// 生成小地圖玩家標記（圓形+箭頭指針）
+fn spawn_minimap_player_marker(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Px(20.0),
+                height: Val::Px(34.0),
+                left: Val::Px(140.0),
+                top: Val::Px(133.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                overflow: Overflow::visible(),
+                ..default()
+            },
+            Transform::default(),
+            GlobalTransform::default(),
+            MinimapPlayerMarker,
+        ))
+        .with_children(|marker| {
+            // 淡白色外圈（脈衝動畫用）
+            marker.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(18.0),
+                    height: Val::Px(18.0),
+                    left: Val::Px(1.0),
+                    top: Val::Px(15.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.25)),
+                BorderRadius::all(Val::Px(9.0)),
+                MinimapPlayerGlow,
+            ));
+            // 黑色描邊圓
+            marker.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(14.0),
+                    height: Val::Px(14.0),
+                    left: Val::Px(3.0),
+                    top: Val::Px(17.0),
+                    ..default()
+                },
+                BackgroundColor(OVERLAY_BLACK_90),
+                BorderRadius::all(Val::Px(7.0)),
+            ));
+            // 白色主圓
+            marker.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(10.0),
+                    height: Val::Px(10.0),
+                    left: Val::Px(5.0),
+                    top: Val::Px(19.0),
+                    ..default()
+                },
+                BackgroundColor(Color::WHITE),
+                BorderRadius::all(Val::Px(5.0)),
+            ));
+            // 方向指示三角（黑色描邊）
+            marker.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(10.0),
+                    height: Val::Px(16.0),
+                    left: Val::Px(5.0),
+                    top: Val::Px(2.0),
+                    ..default()
+                },
+                BackgroundColor(OVERLAY_BLACK_90),
+                BorderRadius::top(Val::Px(5.0)),
+            ));
+            // 方向指示三角（白色內部）
+            marker.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(6.0),
+                    height: Val::Px(14.0),
+                    left: Val::Px(7.0),
+                    top: Val::Px(4.0),
+                    ..default()
+                },
+                BackgroundColor(Color::WHITE),
+                BorderRadius::top(Val::Px(3.0)),
+            ));
+        });
+}
+
+/// 生成大地圖玩家標記（大尺寸圓形+箭頭指針）
+fn spawn_fullmap_player_marker(map: &mut ChildSpawnerCommands) {
+    map.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Px(30.0),
+            height: Val::Px(52.0),
+            left: Val::Px(585.0),
+            top: Val::Px(374.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            overflow: Overflow::visible(),
+            ..default()
+        },
+        Transform::default(),
+        GlobalTransform::default(),
+        FullMapPlayerMarker,
+    ))
+    .with_children(|marker| {
+        // 淡白色外圈（脈衝動畫用）
+        marker.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Px(28.0),
+                height: Val::Px(28.0),
+                left: Val::Px(1.0),
+                top: Val::Px(23.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.25)),
+            BorderRadius::all(Val::Px(14.0)),
+        ));
+        // 黑色描邊圓
+        marker.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Px(22.0),
+                height: Val::Px(22.0),
+                left: Val::Px(4.0),
+                top: Val::Px(26.0),
+                ..default()
+            },
+            BackgroundColor(OVERLAY_BLACK_90),
+            BorderRadius::all(Val::Px(11.0)),
+        ));
+        // 白色主圓
+        marker.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Px(16.0),
+                height: Val::Px(16.0),
+                left: Val::Px(7.0),
+                top: Val::Px(29.0),
+                ..default()
+            },
+            BackgroundColor(Color::WHITE),
+            BorderRadius::all(Val::Px(8.0)),
+        ));
+        // 方向指示三角（黑色描邊）
+        marker.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Px(14.0),
+                height: Val::Px(24.0),
+                left: Val::Px(8.0),
+                top: Val::Px(2.0),
+                ..default()
+            },
+            BackgroundColor(OVERLAY_BLACK_90),
+            BorderRadius::top(Val::Px(7.0)),
+        ));
+        // 方向指示三角（白色內部）
+        marker.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Px(10.0),
+                height: Val::Px(22.0),
+                left: Val::Px(10.0),
+                top: Val::Px(4.0),
+                ..default()
+            },
+            BackgroundColor(Color::WHITE),
+            BorderRadius::top(Val::Px(5.0)),
+        ));
+    });
+}
+
+/// 生成大地圖網格線
+fn spawn_fullmap_grid_lines(map: &mut ChildSpawnerCommands) {
+    for i in 0..9 {
+        map.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(100.0 * i as f32),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Px(1.0),
+                ..default()
+            },
+            BackgroundColor(MAP_AREA_GREEN),
+        ));
+    }
+    for i in 0..13 {
+        map.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(100.0 * i as f32),
+                width: Val::Px(1.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            BackgroundColor(MAP_AREA_GREEN),
+        ));
+    }
+}
+
+/// 生成血量區塊（圖示 + 血量條 + 數值標籤）
+fn spawn_health_section(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
+    parent
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(10.0),
+            ..default()
+        },))
+        .with_children(|row| {
+            // 血量圖示（紅色圓角方塊 + 內圈模擬愛心）
+            row.spawn((
+                Node {
+                    width: Val::Px(18.0),
+                    height: Val::Px(18.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(HEALTH_ICON),
+                BorderRadius::all(Val::Px(4.0)),
+            ))
+            .with_children(|icon| {
+                icon.spawn((
+                    Node {
+                        width: Val::Px(8.0),
+                        height: Val::Px(8.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
+                    BorderRadius::all(Val::Px(4.0)),
+                ));
+            });
+
+            // 血量條外發光層（低血量時脈衝）
+            row.spawn((
+                Node {
+                    width: Val::Px(186.0),
+                    height: Val::Px(24.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::NONE),
+                BorderRadius::all(Val::Px(6.0)),
+                HealthBarGlow,
+            ))
+            .with_children(|glow| {
+                glow.spawn((
+                    Node {
+                        width: Val::Px(STATUS_BAR_WIDTH),
+                        height: Val::Px(18.0),
+                        ..default()
+                    },
+                    BackgroundColor(HEALTH_BAR_BG),
+                    BorderRadius::all(Val::Px(4.0)),
+                    HealthBarBg,
+                ))
+                .with_children(|bar_bg| {
+                    spawn_status_bar_fill(
+                        bar_bg,
+                        HEALTH_BAR_FILL_COLOR,
+                        HEALTH_BAR_HIGHLIGHT_COLOR,
+                        HealthBarFill,
+                        Val::Percent(100.0),
+                    );
+                });
+            });
+
+            // 血量數值標籤（帶陰影）
+            spawn_status_bar_label(
+                row,
+                "100/100",
+                font,
+                14.0,
+                HealthLabelShadow,
+                HealthLabel,
+            );
+        });
+}
+
+/// 生成護甲區塊（圖示 + 護甲條 + 數值標籤，預設隱藏）
+fn spawn_armor_section_ui(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
+    parent
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
+                ..default()
+            },
+            Visibility::Hidden,
+            ArmorSection,
+        ))
+        .with_children(|row| {
+            // 護甲圖示（藍色圓角方塊 + 盾牌樣式）
+            row.spawn((
+                Node {
+                    width: Val::Px(18.0),
+                    height: Val::Px(18.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(ARMOR_ICON),
+                BorderColor::all(Color::srgba(0.6, 0.85, 1.0, 0.8)),
+                BorderRadius::all(Val::Px(4.0)),
+            ))
+            .with_children(|icon| {
+                icon.spawn((
+                    Node {
+                        width: Val::Px(6.0),
+                        height: Val::Px(8.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.1, 0.3, 0.5, 0.6)),
+                    BorderRadius::all(Val::Px(2.0)),
+                ));
+            });
+
+            // 護甲條容器
+            row.spawn((
+                Node {
+                    width: Val::Px(STATUS_BAR_WIDTH),
+                    height: Val::Px(18.0),
+                    ..default()
+                },
+                BackgroundColor(ARMOR_BAR_BG),
+                BorderRadius::all(Val::Px(4.0)),
+            ))
+            .with_children(|bar_bg| {
+                spawn_status_bar_fill(
+                    bar_bg,
+                    ARMOR_BAR_FILL_COLOR,
+                    ARMOR_BAR_HIGHLIGHT_COLOR,
+                    ArmorBarFill,
+                    Val::Percent(50.0),
+                );
+            });
+
+            // 護甲數值標籤（帶陰影）
+            spawn_status_bar_label(
+                row,
+                "50/100",
+                font,
+                14.0,
+                ArmorLabelShadow,
+                ArmorLabel,
+            );
+        });
+}
+
+/// 生成控制提示按鍵（按鍵框 + 動作說明）
+fn spawn_control_key(
+    keys: &mut ChildSpawnerCommands,
+    key: &str,
+    action: &str,
+    font: Handle<Font>,
+) {
+    keys.spawn((
+        Node {
+            padding: UiRect::new(
+                Val::Px(6.0),
+                Val::Px(6.0),
+                Val::Px(3.0),
+                Val::Px(3.0),
+            ),
+            border: UiRect::all(Val::Px(1.0)),
+            min_width: Val::Px(24.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        BackgroundColor(KEY_ICON_BG),
+        BorderColor::all(KEY_ICON_BORDER),
+        BorderRadius::all(Val::Px(3.0)),
+    ))
+    .with_children(|key_bg| {
+        key_bg.spawn((
+            Text::new(key),
+            TextFont {
+                font_size: 11.0,
+                font: font.clone(),
+                ..default()
+            },
+            TextColor(KEY_TEXT_COLOR),
+        ));
+    });
+    keys.spawn((
+        Text::new(action),
+        TextFont {
+            font_size: 11.0,
+            font,
+            ..default()
+        },
+        TextColor(ACTION_TEXT_COLOR),
+        Node {
+            margin: UiRect::right(Val::Px(6.0)),
+            ..default()
+        },
+    ));
+}
+
+/// 生成大地圖標題區
+fn spawn_fullmap_title(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
+    parent
+        .spawn((Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(25.0),
+            left: Val::Px(0.0),
+            width: Val::Percent(100.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },))
+        .with_children(|title_row| {
+            title_row
+                .spawn((
+                    Node {
+                        padding: UiRect::new(
+                            Val::Px(30.0),
+                            Val::Px(30.0),
+                            Val::Px(10.0),
+                            Val::Px(10.0),
+                        ),
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(FULLMAP_TITLE_BG),
+                    BorderColor::all(FULLMAP_BORDER),
+                    BorderRadius::all(Val::Px(8.0)),
+                ))
+                .with_children(|bg| {
+                    bg.spawn((
+                        Text::new("西門町地圖"),
+                        TextFont {
+                            font_size: 28.0,
+                            font: font.clone(),
+                            ..default()
+                        },
+                        TextColor(Color::srgba(0.9, 0.95, 0.9, 1.0)),
+                    ));
+                });
+        });
+}
+
+/// 生成大地圖圖例與操作提示
+fn spawn_fullmap_legend_and_hints(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
+    // 圖例
+    parent
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(25.0),
+                padding: UiRect::new(Val::Px(20.0), Val::Px(20.0), Val::Px(8.0), Val::Px(8.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.08, 0.1, 0.08, 0.85)),
+            BorderColor::all(Color::srgba(0.3, 0.35, 0.3, 0.5)),
+            BorderRadius::all(Val::Px(6.0)),
+        ))
+        .with_children(|legend| {
+            spawn_legend_item(legend, Color::srgb(0.5, 0.5, 0.55), "道路", font.clone());
+            spawn_legend_item(legend, Color::srgb(0.8, 0.25, 0.2), "地標", font.clone());
+            spawn_legend_item(legend, PLAYER_MARKER_CORE, "你", font.clone());
+        });
+
+    // 操作提示
+    parent
+        .spawn((
+            Node {
+                padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(6.0), Val::Px(6.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.05, 0.05, 0.05, 0.6)),
+            BorderRadius::all(Val::Px(4.0)),
+        ))
+        .with_children(|bg| {
+            bg.spawn((
+                Text::new("[M] 關閉地圖"),
+                TextFont {
+                    font_size: 14.0,
+                    font: font.clone(),
+                    ..default()
+                },
+                TextColor(TEXT_GRAY_90),
+            ));
+        });
+}
+
+/// 生成暫停選單標題區（圖示 + 文字）
+fn spawn_pause_title_section(menu: &mut ChildSpawnerCommands, font: &Handle<Font>) {
+    menu.spawn((Node {
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Center,
+        row_gap: Val::Px(5.0),
+        margin: UiRect::bottom(Val::Px(10.0)),
+        ..default()
+    },))
+    .with_children(|title_area| {
+        // 暫停圖示（用方塊模擬）
+        title_area
+            .spawn((Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(8.0),
+                margin: UiRect::bottom(Val::Px(8.0)),
+                ..default()
+            },))
+            .with_children(|icon_row| {
+                spawn_pause_title_bar(icon_row);
+                spawn_pause_title_bar(icon_row);
+            });
+
+        // 標題文字
+        title_area.spawn((
+            Text::new("遊戲暫停"),
+            TextFont {
+                font_size: 32.0,
+                font: font.clone(),
+                ..default()
+            },
+            TextColor(PAUSE_TITLE_COLOR),
+        ));
+    });
+}
+
+/// 生成選單分隔線
+fn spawn_menu_separator(
+    menu: &mut ChildSpawnerCommands,
+    margin_top: f32,
+    margin_bottom: f32,
+    color: Color,
+) {
+    menu.spawn((
+        Node {
+            width: Val::Px(220.0),
+            height: Val::Px(1.0),
+            margin: UiRect::new(
+                Val::Px(0.0),
+                Val::Px(0.0),
+                Val::Px(margin_top),
+                Val::Px(margin_bottom),
+            ),
+            ..default()
+        },
+        BackgroundColor(color),
+    ));
+}
+
+/// 生成小地圖裝飾（角落高光 + 標題徽章）
+fn spawn_minimap_decorations(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
+    // 左上角高光
+    parent.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(0.0),
+            left: Val::Px(0.0),
+            width: Val::Px(60.0),
+            height: Val::Px(60.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.2, 0.3, 0.2, 0.15)),
+        BorderRadius::top_left(Val::Px(6.0)),
+    ));
+    // 右上角高光
+    parent.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(0.0),
+            right: Val::Px(0.0),
+            width: Val::Px(60.0),
+            height: Val::Px(60.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.2, 0.3, 0.2, 0.1)),
+        BorderRadius::top_right(Val::Px(6.0)),
+    ));
+
+    // 標題（帶背景）
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(4.0),
+                left: Val::Px(4.0),
+                padding: UiRect::new(
+                    Val::Px(6.0),
+                    Val::Px(6.0),
+                    Val::Px(2.0),
+                    Val::Px(2.0),
+                ),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+            BorderRadius::all(Val::Px(4.0)),
+        ))
+        .with_children(|title_bg| {
+            title_bg.spawn((
+                Text::new("西門町"),
+                TextFont {
+                    font_size: 10.0,
+                    font: font.clone(),
+                    ..default()
+                },
+                TextColor(Color::srgba(0.8, 0.95, 0.8, 0.9)),
+            ));
+        });
+}
+
+/// 生成小地圖掃描線效果（模擬雷達感）
+fn spawn_minimap_scan_effects(parent: &mut ChildSpawnerCommands) {
+    for i in 0..6 {
+        parent.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(50.0 * i as f32),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Px(1.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.3, 0.5, 0.3, 0.08)),
+        ));
+    }
+}
+
 // ============================================================================
 // 分區設置函數
 // ============================================================================
@@ -312,157 +944,8 @@ fn setup_player_status_hud(commands: &mut Commands, font: &Handle<Font>) {
                 PlayerStatusContainer,
             ))
             .with_children(|parent| {
-                // === 血量區塊 ===
-                parent
-                    .spawn((Node {
-                        flex_direction: FlexDirection::Row,
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Px(10.0),
-                        ..default()
-                    },))
-                    .with_children(|row| {
-                        // 血量圖示（紅色圓角方塊 + 內圈模擬愛心）
-                        row.spawn((
-                            Node {
-                                width: Val::Px(18.0),
-                                height: Val::Px(18.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(HEALTH_ICON),
-                            BorderRadius::all(Val::Px(4.0)),
-                        ))
-                        .with_children(|icon| {
-                            // 內圈高光
-                            icon.spawn((
-                                Node {
-                                    width: Val::Px(8.0),
-                                    height: Val::Px(8.0),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
-                                BorderRadius::all(Val::Px(4.0)),
-                            ));
-                        });
-
-                        // 血量條外發光層（低血量時脈衝）
-                        row.spawn((
-                            Node {
-                                width: Val::Px(186.0),
-                                height: Val::Px(24.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(Color::NONE),
-                            BorderRadius::all(Val::Px(6.0)),
-                            HealthBarGlow,
-                        ))
-                        .with_children(|glow| {
-                            // 血量條容器
-                            glow.spawn((
-                                Node {
-                                    width: Val::Px(STATUS_BAR_WIDTH),
-                                    height: Val::Px(18.0),
-                                    ..default()
-                                },
-                                BackgroundColor(HEALTH_BAR_BG),
-                                BorderRadius::all(Val::Px(4.0)),
-                                HealthBarBg,
-                            ))
-                            .with_children(|bar_bg| {
-                                spawn_status_bar_fill(
-                                    bar_bg,
-                                    HEALTH_BAR_FILL_COLOR,
-                                    HEALTH_BAR_HIGHLIGHT_COLOR,
-                                    HealthBarFill,
-                                    Val::Percent(100.0),
-                                );
-                            });
-                        }); // 結束 glow
-
-                        // 血量數值標籤（帶陰影）
-                        spawn_status_bar_label(
-                            row,
-                            "100/100",
-                            font,
-                            14.0,
-                            HealthLabelShadow,
-                            HealthLabel,
-                        );
-                    });
-
-                // === 護甲區塊（有護甲時才顯示）===
-                parent
-                    .spawn((
-                        Node {
-                            flex_direction: FlexDirection::Row,
-                            align_items: AlignItems::Center,
-                            column_gap: Val::Px(10.0),
-                            ..default()
-                        },
-                        Visibility::Hidden, // 預設隱藏
-                        ArmorSection,
-                    ))
-                    .with_children(|row| {
-                        // 護甲圖示（藍色圓角方塊 + 盾牌樣式）
-                        row.spawn((
-                            Node {
-                                width: Val::Px(18.0),
-                                height: Val::Px(18.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                border: UiRect::all(Val::Px(2.0)),
-                                ..default()
-                            },
-                            BackgroundColor(ARMOR_ICON),
-                            BorderColor::all(Color::srgba(0.6, 0.85, 1.0, 0.8)),
-                            BorderRadius::all(Val::Px(4.0)),
-                        ))
-                        .with_children(|icon| {
-                            // 內部深色區塊（模擬盾牌）
-                            icon.spawn((
-                                Node {
-                                    width: Val::Px(6.0),
-                                    height: Val::Px(8.0),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(0.1, 0.3, 0.5, 0.6)),
-                                BorderRadius::all(Val::Px(2.0)),
-                            ));
-                        });
-
-                        // 護甲條容器
-                        row.spawn((
-                            Node {
-                                width: Val::Px(STATUS_BAR_WIDTH),
-                                height: Val::Px(18.0),
-                                ..default()
-                            },
-                            BackgroundColor(ARMOR_BAR_BG),
-                            BorderRadius::all(Val::Px(4.0)),
-                        ))
-                        .with_children(|bar_bg| {
-                            spawn_status_bar_fill(
-                                bar_bg,
-                                ARMOR_BAR_FILL_COLOR,
-                                ARMOR_BAR_HIGHLIGHT_COLOR,
-                                ArmorBarFill,
-                                Val::Percent(50.0),
-                            );
-                        });
-
-                        // 護甲數值標籤（帶陰影）
-                        spawn_status_bar_label(
-                            row,
-                            "50/100",
-                            font,
-                            14.0,
-                            ArmorLabelShadow,
-                            ArmorLabel,
-                        );
-                    });
+                spawn_health_section(parent, font);
+                spawn_armor_section_ui(parent, font);
             }); // 結束 PlayerStatusContainer
         }); // 結束外發光層
 }
@@ -517,63 +1000,8 @@ fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                         MinimapContainer,
                     ))
                     .with_children(|parent| {
-                        // 內層漸層效果（四角較亮模擬）
-                        // 左上角高光
-                        parent.spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                top: Val::Px(0.0),
-                                left: Val::Px(0.0),
-                                width: Val::Px(60.0),
-                                height: Val::Px(60.0),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgba(0.2, 0.3, 0.2, 0.15)),
-                            BorderRadius::top_left(Val::Px(6.0)),
-                        ));
-                        // 右上角高光
-                        parent.spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                top: Val::Px(0.0),
-                                right: Val::Px(0.0),
-                                width: Val::Px(60.0),
-                                height: Val::Px(60.0),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgba(0.2, 0.3, 0.2, 0.1)),
-                            BorderRadius::top_right(Val::Px(6.0)),
-                        ));
-
-                        // 小地圖標題（帶背景）
-                        parent
-                            .spawn((
-                                Node {
-                                    position_type: PositionType::Absolute,
-                                    top: Val::Px(4.0),
-                                    left: Val::Px(4.0),
-                                    padding: UiRect::new(
-                                        Val::Px(6.0),
-                                        Val::Px(6.0),
-                                        Val::Px(2.0),
-                                        Val::Px(2.0),
-                                    ),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
-                                BorderRadius::all(Val::Px(4.0)),
-                            ))
-                            .with_children(|title_bg| {
-                                title_bg.spawn((
-                                    Text::new("西門町"),
-                                    TextFont {
-                                        font_size: 10.0,
-                                        font: font.clone(),
-                                        ..default()
-                                    },
-                                    TextColor(Color::srgba(0.8, 0.95, 0.8, 0.9)),
-                                ));
-                            });
+                        // 裝飾（角落高光 + 標題）
+                        spawn_minimap_decorations(parent, font);
 
                         // === 地圖內容層 ===
                         let mm_scale = 0.9;
@@ -605,93 +1033,8 @@ fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                             MinimapScanLine,
                         ));
 
-                        // === 玩家標記（簡潔圓形+箭頭指針）===
-                        // 注意：容器需要包含整個箭頭，旋轉才能正確工作
-                        parent
-                            .spawn((
-                                Node {
-                                    position_type: PositionType::Absolute,
-                                    width: Val::Px(20.0),
-                                    height: Val::Px(34.0), // 增加高度以包含箭頭
-                                    left: Val::Px(140.0),
-                                    top: Val::Px(133.0), // 調整位置，讓圓心在地圖中央
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    overflow: Overflow::visible(), // 允許子元素溢出
-                                    ..default()
-                                },
-                                Transform::default(),
-                                GlobalTransform::default(),
-                                MinimapPlayerMarker,
-                            ))
-                            .with_children(|marker| {
-                                // 淡白色外圈（脈衝動畫用）- 定位在容器下半部
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(18.0),
-                                        height: Val::Px(18.0),
-                                        left: Val::Px(1.0),
-                                        top: Val::Px(15.0), // 在容器下半部
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.25)),
-                                    BorderRadius::all(Val::Px(9.0)),
-                                    MinimapPlayerGlow,
-                                ));
-                                // 黑色描邊圓
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(14.0),
-                                        height: Val::Px(14.0),
-                                        left: Val::Px(3.0),
-                                        top: Val::Px(17.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(OVERLAY_BLACK_90),
-                                    BorderRadius::all(Val::Px(7.0)),
-                                ));
-                                // 白色主圓
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(10.0),
-                                        height: Val::Px(10.0),
-                                        left: Val::Px(5.0),
-                                        top: Val::Px(19.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::WHITE),
-                                    BorderRadius::all(Val::Px(5.0)),
-                                ));
-                                // 方向指示三角（黑色描邊）
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(10.0),
-                                        height: Val::Px(16.0),
-                                        left: Val::Px(5.0),
-                                        top: Val::Px(2.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(OVERLAY_BLACK_90),
-                                    BorderRadius::top(Val::Px(5.0)),
-                                ));
-                                // 方向指示三角（白色內部）
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(6.0),
-                                        height: Val::Px(14.0),
-                                        left: Val::Px(7.0),
-                                        top: Val::Px(4.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::WHITE),
-                                    BorderRadius::top(Val::Px(3.0)),
-                                ));
-                            });
+                        // 玩家標記（圓形+箭頭指針）
+                        spawn_minimap_player_marker(parent);
 
                         // === 方位標示（帶圓角背景）===
                         for (label, color, position) in [
@@ -703,20 +1046,8 @@ fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                             spawn_compass_marker(parent, label, font, 13.0, color, 20.0, position);
                         }
 
-                        // === 掃描線效果（模擬雷達感）===
-                        for i in 0..6 {
-                            parent.spawn((
-                                Node {
-                                    position_type: PositionType::Absolute,
-                                    top: Val::Px(50.0 * i as f32),
-                                    left: Val::Px(0.0),
-                                    width: Val::Percent(100.0),
-                                    height: Val::Px(1.0),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(0.3, 0.5, 0.3, 0.08)),
-                            ));
-                        }
+                        // 掃描線效果
+                        spawn_minimap_scan_effects(parent);
                     });
             });
         });
@@ -874,60 +1205,10 @@ fn setup_control_hints(commands: &mut Commands, font: &Handle<Font>) {
                     ControlKeyArea,
                 ))
                 .with_children(|keys| {
-                    // 按鍵圖示 helper
-                    let spawn_key = |keys: &mut ChildSpawnerCommands,
-                                     key: &str,
-                                     action: &str,
-                                     font: Handle<Font>| {
-                        // 按鍵背景
-                        keys.spawn((
-                            Node {
-                                padding: UiRect::new(
-                                    Val::Px(6.0),
-                                    Val::Px(6.0),
-                                    Val::Px(3.0),
-                                    Val::Px(3.0),
-                                ),
-                                border: UiRect::all(Val::Px(1.0)),
-                                min_width: Val::Px(24.0),
-                                justify_content: JustifyContent::Center,
-                                ..default()
-                            },
-                            BackgroundColor(KEY_ICON_BG),
-                            BorderColor::all(KEY_ICON_BORDER),
-                            BorderRadius::all(Val::Px(3.0)),
-                        ))
-                        .with_children(|key_bg| {
-                            key_bg.spawn((
-                                Text::new(key),
-                                TextFont {
-                                    font_size: 11.0,
-                                    font: font.clone(),
-                                    ..default()
-                                },
-                                TextColor(KEY_TEXT_COLOR),
-                            ));
-                        });
-                        // 動作說明
-                        keys.spawn((
-                            Text::new(action),
-                            TextFont {
-                                font_size: 11.0,
-                                font: font.clone(),
-                                ..default()
-                            },
-                            TextColor(ACTION_TEXT_COLOR),
-                            Node {
-                                margin: UiRect::right(Val::Px(6.0)),
-                                ..default()
-                            },
-                        ));
-                    };
-
-                    spawn_key(keys, "WASD", "移動", font.clone());
-                    spawn_key(keys, "R", "射擊", font.clone());
-                    spawn_key(keys, "1-4", "武器", font.clone());
-                    spawn_key(keys, "ESC", "暫停", font.clone());
+                    spawn_control_key(keys, "WASD", "移動", font.clone());
+                    spawn_control_key(keys, "R", "射擊", font.clone());
+                    spawn_control_key(keys, "1-4", "武器", font.clone());
+                    spawn_control_key(keys, "ESC", "暫停", font.clone());
                 });
         });
 
@@ -1018,56 +1299,15 @@ fn setup_pause_menu(commands: &mut Commands, font: &Handle<Font>) {
                         ))
                         .with_children(|menu| {
                             // 標題區
-                            menu.spawn((Node {
-                                flex_direction: FlexDirection::Column,
-                                align_items: AlignItems::Center,
-                                row_gap: Val::Px(5.0),
-                                margin: UiRect::bottom(Val::Px(10.0)),
-                                ..default()
-                            },))
-                                .with_children(|title_area| {
-                                    // 暫停圖示（用方塊模擬）
-                                    title_area
-                                        .spawn((Node {
-                                            flex_direction: FlexDirection::Row,
-                                            column_gap: Val::Px(8.0),
-                                            margin: UiRect::bottom(Val::Px(8.0)),
-                                            ..default()
-                                        },))
-                                        .with_children(|icon_row| {
-                                            // 左豎條
-                                            spawn_pause_title_bar(icon_row);
-                                            // 右豎條
-                                            spawn_pause_title_bar(icon_row);
-                                        });
-
-                                    // 標題文字
-                                    title_area.spawn((
-                                        Text::new("遊戲暫停"),
-                                        TextFont {
-                                            font_size: 32.0,
-                                            font: font.clone(),
-                                            ..default()
-                                        },
-                                        TextColor(PAUSE_TITLE_COLOR),
-                                    ));
-                                });
+                            spawn_pause_title_section(menu, font);
 
                             // 分隔線
-                            menu.spawn((
-                                Node {
-                                    width: Val::Px(220.0),
-                                    height: Val::Px(1.0),
-                                    margin: UiRect::new(
-                                        Val::Px(0.0),
-                                        Val::Px(0.0),
-                                        Val::Px(5.0),
-                                        Val::Px(10.0),
-                                    ),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(0.4, 0.4, 0.45, 0.5)),
-                            ));
+                            spawn_menu_separator(
+                                menu,
+                                5.0,
+                                10.0,
+                                Color::srgba(0.4, 0.4, 0.45, 0.5),
+                            );
 
                             // 繼續遊戲按鈕（帶邊框）
                             spawn_pause_menu_button(
@@ -1090,20 +1330,12 @@ fn setup_pause_menu(commands: &mut Commands, font: &Handle<Font>) {
                             );
 
                             // 分隔線
-                            menu.spawn((
-                                Node {
-                                    width: Val::Px(220.0),
-                                    height: Val::Px(1.0),
-                                    margin: UiRect::new(
-                                        Val::Px(0.0),
-                                        Val::Px(0.0),
-                                        Val::Px(10.0),
-                                        Val::Px(5.0),
-                                    ),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(0.3, 0.3, 0.35, 0.4)),
-                            ));
+                            spawn_menu_separator(
+                                menu,
+                                10.0,
+                                5.0,
+                                Color::srgba(0.3, 0.3, 0.35, 0.4),
+                            );
 
                             // 快捷鍵提示
                             menu.spawn((Node {
@@ -1146,45 +1378,8 @@ fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
         Val::Px(12.0),
     )
     .with_children(|parent| {
-        // === 標題區（帶邊框背景）===
-        parent
-            .spawn((Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(25.0),
-                left: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },))
-            .with_children(|title_row| {
-                title_row
-                    .spawn((
-                        Node {
-                            padding: UiRect::new(
-                                Val::Px(30.0),
-                                Val::Px(30.0),
-                                Val::Px(10.0),
-                                Val::Px(10.0),
-                            ),
-                            border: UiRect::all(Val::Px(2.0)),
-                            ..default()
-                        },
-                        BackgroundColor(FULLMAP_TITLE_BG),
-                        BorderColor::all(FULLMAP_BORDER),
-                        BorderRadius::all(Val::Px(8.0)),
-                    ))
-                    .with_children(|bg| {
-                        bg.spawn((
-                            Text::new("西門町地圖"),
-                            TextFont {
-                                font_size: 28.0,
-                                font: font.clone(),
-                                ..default()
-                            },
-                            TextColor(Color::srgba(0.9, 0.95, 0.9, 1.0)),
-                        ));
-                    });
-            });
+        // 標題區
+        spawn_fullmap_title(parent, font);
 
         // === 地圖主體（多層邊框）===
         // 外層發光框
@@ -1258,34 +1453,7 @@ fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                             ));
 
                             // 網格線（增加地圖質感）
-                            for i in 0..9 {
-                                // 水平線
-                                map.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        top: Val::Px(100.0 * i as f32),
-                                        left: Val::Px(0.0),
-                                        width: Val::Percent(100.0),
-                                        height: Val::Px(1.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(MAP_AREA_GREEN),
-                                ));
-                            }
-                            for i in 0..13 {
-                                // 垂直線
-                                map.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        top: Val::Px(0.0),
-                                        left: Val::Px(100.0 * i as f32),
-                                        width: Val::Px(1.0),
-                                        height: Val::Percent(100.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(MAP_AREA_GREEN),
-                                ));
-                            }
+                            spawn_fullmap_grid_lines(map);
 
                             // 地圖內容
                             let fm_scale = 2.0;
@@ -1303,91 +1471,8 @@ fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                                 font.clone(),
                             );
 
-                            // === 玩家標記（簡潔圓形+箭頭指針）===
-                            // 注意：容器需要包含整個箭頭，旋轉才能正確工作
-                            map.spawn((
-                                Node {
-                                    position_type: PositionType::Absolute,
-                                    width: Val::Px(30.0),
-                                    height: Val::Px(52.0), // 增加高度以包含箭頭
-                                    left: Val::Px(585.0),
-                                    top: Val::Px(374.0), // 調整位置
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    overflow: Overflow::visible(),
-                                    ..default()
-                                },
-                                Transform::default(),
-                                GlobalTransform::default(),
-                                FullMapPlayerMarker,
-                            ))
-                            .with_children(|marker| {
-                                // 淡白色外圈（脈衝動畫用）- 定位在容器下半部
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(28.0),
-                                        height: Val::Px(28.0),
-                                        left: Val::Px(1.0),
-                                        top: Val::Px(23.0), // 在容器下半部
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.25)),
-                                    BorderRadius::all(Val::Px(14.0)),
-                                ));
-                                // 黑色描邊圓
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(22.0),
-                                        height: Val::Px(22.0),
-                                        left: Val::Px(4.0),
-                                        top: Val::Px(26.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(OVERLAY_BLACK_90),
-                                    BorderRadius::all(Val::Px(11.0)),
-                                ));
-                                // 白色主圓
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(16.0),
-                                        height: Val::Px(16.0),
-                                        left: Val::Px(7.0),
-                                        top: Val::Px(29.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::WHITE),
-                                    BorderRadius::all(Val::Px(8.0)),
-                                ));
-                                // 方向指示三角（黑色描邊）- 向上指
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(14.0),
-                                        height: Val::Px(24.0),
-                                        left: Val::Px(8.0),
-                                        top: Val::Px(2.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(OVERLAY_BLACK_90),
-                                    BorderRadius::top(Val::Px(7.0)),
-                                ));
-                                // 方向指示三角（白色內部）
-                                marker.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        width: Val::Px(10.0),
-                                        height: Val::Px(22.0),
-                                        left: Val::Px(10.0),
-                                        top: Val::Px(4.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::WHITE),
-                                    BorderRadius::top(Val::Px(5.0)),
-                                ));
-                            });
+                            // 玩家標記（圓形+箭頭指針）
+                            spawn_fullmap_player_marker(map);
 
                             // === 方位標示（帶圓角背景）===
                             for (label, color, position) in [
@@ -1402,47 +1487,8 @@ fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                 });
             });
 
-        // === 圖例（帶背景容器）===
-        parent
-            .spawn((
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(25.0),
-                    padding: UiRect::new(Val::Px(20.0), Val::Px(20.0), Val::Px(8.0), Val::Px(8.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.08, 0.1, 0.08, 0.85)),
-                BorderColor::all(Color::srgba(0.3, 0.35, 0.3, 0.5)),
-                BorderRadius::all(Val::Px(6.0)),
-            ))
-            .with_children(|legend| {
-                spawn_legend_item(legend, Color::srgb(0.5, 0.5, 0.55), "道路", font.clone());
-                spawn_legend_item(legend, Color::srgb(0.8, 0.25, 0.2), "地標", font.clone());
-                spawn_legend_item(legend, PLAYER_MARKER_CORE, "你", font.clone());
-            });
-
-        // === 操作提示 ===
-        parent
-            .spawn((
-                Node {
-                    padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(6.0), Val::Px(6.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.05, 0.05, 0.05, 0.6)),
-                BorderRadius::all(Val::Px(4.0)),
-            ))
-            .with_children(|bg| {
-                bg.spawn((
-                    Text::new("[M] 關閉地圖"),
-                    TextFont {
-                        font_size: 14.0,
-                        font: font.clone(),
-                        ..default()
-                    },
-                    TextColor(TEXT_GRAY_90),
-                ));
-            });
+        // 圖例與操作提示
+        spawn_fullmap_legend_and_hints(parent, font);
     });
 }
 

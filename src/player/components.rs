@@ -1,6 +1,7 @@
 //! 玩家組件
-#![allow(dead_code)]
 
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use crate::core::{ease_out_cubic, ease_in_cubic};

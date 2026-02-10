@@ -1,8 +1,9 @@
 //! 骨骼布娃娃系統
 //!
 //! GTA5 風格的多關節布娃娃物理，每個身體部位獨立模擬。
-#![allow(dead_code)]
 
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;

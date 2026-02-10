@@ -1,6 +1,7 @@
 //! 行人組件
 //!
 //! 定義行人 NPC 的組件、狀態和資源。
+
 #![allow(dead_code)]
 
 use bevy::prelude::*;

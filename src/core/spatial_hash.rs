@@ -2,8 +2,9 @@
 //!
 //! 將 O(n²) 的鄰近查詢優化為 O(1)。
 //! 用於：行人/車輛碰撞、警察視野檢測、爆炸範圍檢測等。
-#![allow(dead_code)]
 
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use std::collections::HashMap;

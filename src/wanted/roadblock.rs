@@ -4,8 +4,9 @@
 //! - 路障生成（警車、路障、警察）
 //! - 路障破壞物理
 //! - 警察站位和射擊
-#![allow(dead_code)]
 
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;

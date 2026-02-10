@@ -1,6 +1,7 @@
 //! 任務觸發點組件
 //!
 //! 定義任務觸發區域、NPC 互動點等組件
+
 #![allow(dead_code)]
 
 use bevy::prelude::*;

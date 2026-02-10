@@ -1,6 +1,7 @@
 //! UI 常數定義
 //!
 //! 所有 UI 系統共用的顏色、尺寸常數
+
 #![allow(dead_code)]
 
 use bevy::prelude::*;

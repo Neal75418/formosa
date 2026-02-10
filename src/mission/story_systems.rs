@@ -1,8 +1,9 @@
 //! 劇情任務核心系統
 //!
 //! 處理任務觸發、目標追蹤、階段切換等核心邏輯
-#![allow(dead_code)]
 
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};

@@ -1,8 +1,9 @@
 //! 車上射擊系統
 //!
 //! 允許駕駛/乘客在車上射擊，限制武器類型和射擊角度
-#![allow(dead_code)]
 
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;

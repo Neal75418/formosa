@@ -25,6 +25,7 @@ use crate::ui::{
 };
 use crate::economy::CashPickup;
 use crate::wanted::{CrimeEvent, PoliceOfficer};
+use crate::world::{PLAYER_RESPAWN_Y, PLAYER_SPAWN_X, PLAYER_SPAWN_Z};
 
 /// 傷害系統資源參數包（解決 Bevy 16 參數限制）
 #[derive(SystemParam)]
@@ -93,7 +94,7 @@ pub struct RespawnState {
 }
 
 /// 重生位置（西門町漢中街起點）
-pub const RESPAWN_POSITION: Vec3 = Vec3::new(5.0, 0.7, -5.0);
+pub const RESPAWN_POSITION: Vec3 = Vec3::new(PLAYER_SPAWN_X, PLAYER_RESPAWN_Y, PLAYER_SPAWN_Z);
 
 // ============================================================================
 // 傷害系統常數
@@ -196,6 +197,24 @@ const PARTICLE_GROUND_LIFETIME_ACCEL: f32 = 3.0;
 const PARTICLE_MIN_SCALE_RATIO: f32 = 0.3;
 /// 粒子基礎縮放
 const PARTICLE_BASE_SCALE: f32 = 0.05;
+
+// ============================================================================
+// 其他視覺/物理常數
+// ============================================================================
+/// 血液粒子數量（每次受擊）
+const BLOOD_PARTICLE_COUNT: usize = 12;
+/// 高傷害判定閾值（影響傷害數字顏色）
+const CRITICAL_DAMAGE_THRESHOLD: f32 = 50.0;
+/// 命中位置浮動偏移（Y 軸）
+const FLOATING_DAMAGE_HIT_OFFSET: f32 = 0.3;
+/// 布娃娃靜止後加速倍率
+const RAGDOLL_SETTLE_ACCEL: f32 = 2.0;
+/// 火花速度衰減係數（每幀）
+const SPARK_VELOCITY_DECAY: f32 = 0.9;
+/// 傷害數字基礎字型大小
+const DAMAGE_NUMBER_FONT_SIZE: f32 = 24.0;
+/// 傷害數字世界空間縮放
+const DAMAGE_NUMBER_WORLD_SCALE: f32 = 0.02;
 
 // ============================================================================
 // 傷害系統輔助函數
@@ -411,7 +430,7 @@ fn get_floating_damage_position(
     transform_query: &Query<&Transform>,
 ) -> Option<Vec3> {
     if let Some(hit_pos) = hit_position {
-        return Some(hit_pos + Vec3::Y * 0.3);
+        return Some(hit_pos + Vec3::Y * FLOATING_DAMAGE_HIT_OFFSET);
     }
     transform_query
         .get(target)
@@ -980,7 +999,7 @@ fn spawn_blood_particles(
     blood_visuals: &BloodVisuals,
 ) {
     let mut rng = rand::rng();
-    let particle_count = 12;
+    let particle_count = BLOOD_PARTICLE_COUNT;
 
     for _ in 0..particle_count {
         // 隨機散射方向
@@ -1087,7 +1106,7 @@ pub fn ragdoll_update_system(
                 && ragdoll.lifetime > RAGDOLL_SETTLE_TIME_THRESHOLD
             {
                 // 加速計時器
-                ragdoll.lifetime += dt * 2.0;
+                ragdoll.lifetime += dt * RAGDOLL_SETTLE_ACCEL;
             }
         }
 
@@ -1212,7 +1231,7 @@ fn spawn_floating_damage_number(
     // 決定顏色
     let color = if damage.is_headshot {
         HEADSHOT_NUMBER_COLOR
-    } else if damage.damage >= 50.0 {
+    } else if damage.damage >= CRITICAL_DAMAGE_THRESHOLD {
         CRITICAL_NUMBER_COLOR // 高傷害用橙紅色
     } else {
         DAMAGE_NUMBER_COLOR
@@ -1234,12 +1253,12 @@ fn spawn_floating_damage_number(
         Text2d::new(text),
         TextFont {
             font: font.font.clone(),
-            font_size: 24.0 * damage.initial_scale,
+            font_size: DAMAGE_NUMBER_FONT_SIZE * damage.initial_scale,
             ..default()
         },
         TextColor(color),
         // 世界空間 Transform
-        Transform::from_translation(position).with_scale(Vec3::splat(0.02)), // 縮小到世界空間大小
+        Transform::from_translation(position).with_scale(Vec3::splat(DAMAGE_NUMBER_WORLD_SCALE)), // 縮小到世界空間大小
         GlobalTransform::default(),
         // 浮動傷害組件
         damage,
@@ -1273,7 +1292,7 @@ fn calculate_billboard_rotation(transform_pos: Vec3, camera_pos: Option<Vec3>) -
 fn get_damage_number_color(is_headshot: bool, damage: f32) -> Color {
     if is_headshot {
         HEADSHOT_NUMBER_COLOR
-    } else if damage >= 50.0 {
+    } else if damage >= CRITICAL_DAMAGE_THRESHOLD {
         CRITICAL_NUMBER_COLOR
     } else {
         DAMAGE_NUMBER_COLOR
@@ -1536,7 +1555,7 @@ pub fn armor_spark_update_system(
         }
 
         // 更新位置（快速衰減）
-        spark.velocity *= 0.9;
+        spark.velocity *= SPARK_VELOCITY_DECAY;
         transform.translation += spark.velocity * dt;
 
         // 縮小並淡出

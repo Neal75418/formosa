@@ -28,10 +28,11 @@ use super::buildings::spawn_rich_building;
 use super::characters::{spawn_cover_points, spawn_player_character};
 // 常數定義
 use super::constants::{
-    BuildingTracker, BUILDING_ROAD_BUFFER, ROAD_Y,
+    BuildingTracker, BUILDING_ROAD_BUFFER, PLAYER_SPAWN_X, PLAYER_SPAWN_Z, ROAD_MARKING_Y_OFFSET, ROAD_Y,
     W_ALLEY, W_MAIN, W_PEDESTRIAN, W_SECONDARY, W_ZHONGHUA,
     X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA,
     Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
+    ZEBRA_CROSSING_OFFSET,
 };
 // 道路系統
 use super::roads::{spawn_road_segment, spawn_zebra_crossing, RoadType};
@@ -481,7 +482,7 @@ fn setup_player_and_vehicles(
     // === 6. 玩家與 NPC ===
     // 玩家生成：漢中街徒步區中央（開闘區域，避免被建築擋住視線）
     // 位置：漢中街與峨嵋街交叉口附近，四周較空曠
-    let start_pos = Vec3::new(5.0, 0.0, -5.0); // Y=0 因為角色自帶高度
+    let start_pos = Vec3::new(PLAYER_SPAWN_X, 0.0, PLAYER_SPAWN_Z); // Y=0 因為角色自帶高度
 
     // 使用人形角色生成函數
     spawn_player_character(
@@ -907,7 +908,7 @@ fn setup_zebra_crossings(
             commands,
             meshes,
             &zebra_mat,
-            Vec3::new(cx, ROAD_Y + 0.01, cz - road_ew_w / 2.0 - 2.5),
+            Vec3::new(cx, ROAD_Y + ROAD_MARKING_Y_OFFSET, cz - road_ew_w / 2.0 - ZEBRA_CROSSING_OFFSET),
             road_ns_w,
             true,
         );
@@ -916,7 +917,7 @@ fn setup_zebra_crossings(
             commands,
             meshes,
             &zebra_mat,
-            Vec3::new(cx, ROAD_Y + 0.01, cz + road_ew_w / 2.0 + 2.5),
+            Vec3::new(cx, ROAD_Y + ROAD_MARKING_Y_OFFSET, cz + road_ew_w / 2.0 + ZEBRA_CROSSING_OFFSET),
             road_ns_w,
             true,
         );
@@ -925,7 +926,7 @@ fn setup_zebra_crossings(
             commands,
             meshes,
             &zebra_mat,
-            Vec3::new(cx - road_ns_w / 2.0 - 2.5, ROAD_Y + 0.01, cz),
+            Vec3::new(cx - road_ns_w / 2.0 - ZEBRA_CROSSING_OFFSET, ROAD_Y + ROAD_MARKING_Y_OFFSET, cz),
             road_ew_w,
             false,
         );
@@ -934,7 +935,7 @@ fn setup_zebra_crossings(
             commands,
             meshes,
             &zebra_mat,
-            Vec3::new(cx + road_ns_w / 2.0 + 2.5, ROAD_Y + 0.01, cz),
+            Vec3::new(cx + road_ns_w / 2.0 + ZEBRA_CROSSING_OFFSET, ROAD_Y + ROAD_MARKING_Y_OFFSET, cz),
             road_ew_w,
             false,
         );

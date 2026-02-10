@@ -45,6 +45,12 @@ const STICKY_DAMAGE: f32 = 200.0;
 const TRAJECTORY_SEGMENTS: usize = 30;
 /// 投擲預覽時間步長
 const TRAJECTORY_TIME_STEP: f32 = 0.05;
+/// 投擲冷卻時間（秒）
+const THROW_COOLDOWN: f32 = 0.5;
+/// 衝擊波最大存活時間（秒）
+const SHOCKWAVE_MAX_LIFETIME: f32 = 0.4;
+/// 衝擊波初始透明度
+const SHOCKWAVE_INITIAL_ALPHA: f32 = 0.8;
 
 // ============================================================================
 // 爆炸物類型
@@ -309,8 +315,8 @@ impl ShockwaveEffect {
         Self {
             max_radius,
             lifetime: 0.0,
-            max_lifetime: 0.4, // 快速擴散消失
-            initial_alpha: 0.8,
+            max_lifetime: SHOCKWAVE_MAX_LIFETIME,
+            initial_alpha: SHOCKWAVE_INITIAL_ALPHA,
         }
     }
 }
@@ -661,7 +667,7 @@ pub fn explosive_input_system(
         });
 
         inventory.consume_selected();
-        inventory.throw_cooldown = 0.5; // 投擲冷卻
+        inventory.throw_cooldown = THROW_COOLDOWN;
 
         // 重置預覽狀態
         throw_state.is_previewing = false;

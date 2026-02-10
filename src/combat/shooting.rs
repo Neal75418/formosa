@@ -25,6 +25,68 @@ use crate::player::Player;
 use crate::ui::NotificationQueue;
 
 // ============================================================================
+// 射擊系統常數
+// ============================================================================
+
+// --- 攝影機/瞄準 ---
+/// 玩家中心高度（攝影機射線起點）
+const PLAYER_CENTER_HEIGHT: f32 = 1.5;
+/// 武器基礎高度偏移（相對玩家位置）
+const WEAPON_BASE_HEIGHT: f32 = 0.55;
+
+// --- 攝影機震動 ---
+/// 攝影機震動持續時間（秒）
+const CAMERA_SHAKE_DURATION: f32 = 0.08;
+/// 手槍震動強度
+const PISTOL_SHAKE_INTENSITY: f32 = 0.02;
+/// 衝鋒槍震動強度
+const SMG_SHAKE_INTENSITY: f32 = 0.015;
+/// 霰彈槍震動強度
+const SHOTGUN_SHAKE_INTENSITY: f32 = 0.05;
+/// 步槍震動強度
+const RIFLE_SHAKE_INTENSITY: f32 = 0.025;
+
+// --- 散佈/瞄準 ---
+/// 瞄準時後座力倍率（減少 50%）
+const AIM_RECOIL_MULTIPLIER: f32 = 0.5;
+/// 瞄準時散佈倍率
+const AIM_SPREAD_MULTIPLIER: f32 = 0.5;
+/// 準星擴散增量（每次射擊）
+const CROSSHAIR_BLOOM_PER_SHOT: f32 = 0.2;
+
+// --- 霰彈槍散佈 ---
+/// 霰彈槍內圈半徑比例（佔總散佈的 50%）
+const SHOTGUN_INNER_RADIUS_RATIO: f32 = 0.5;
+/// 霰彈槍內圈隨機偏移量
+const SHOTGUN_INNER_JITTER: f32 = 0.1;
+/// 霰彈槍外圈隨機偏移量
+const SHOTGUN_OUTER_JITTER: f32 = 0.15;
+/// 霰彈槍內圈最大彈丸數
+const SHOTGUN_INNER_MAX_PELLETS: u32 = 6;
+
+// --- 近戰 ---
+/// 棍棒掃擊檢測步數
+const STAFF_SWEEP_STEPS: usize = 5;
+
+// --- 彈道視覺 ---
+/// 最小彈道軌跡長度（低於此值不生成拖尾）
+const MIN_TRACER_LENGTH: f32 = 0.1;
+/// 槍口閃光存活時間（秒）
+const MUZZLE_FLASH_LIFETIME: f32 = 0.05;
+/// 擊中特效存活時間（秒）
+const IMPACT_EFFECT_LIFETIME: f32 = 0.15;
+
+// --- 擊中特效動畫 ---
+/// 擊中特效膨脹階段比例（前 30%）
+const IMPACT_EXPAND_PHASE: f32 = 0.3;
+/// 擊中特效膨脹速率（在膨脹階段結束時達到 IMPACT_MAX_SCALE）
+const IMPACT_EXPAND_RATE: f32 = 1.67;
+/// 擊中特效最大縮放
+const IMPACT_MAX_SCALE: f32 = 1.5;
+/// 擊中特效縮小階段比例（後 70%）
+const IMPACT_SHRINK_PHASE: f32 = 0.7;
+
+// ============================================================================
 // Lifetime Trait 用於統一特效消失邏輯
 // ============================================================================
 /// 具有生命週期的組件 trait
@@ -308,7 +370,7 @@ fn calculate_aim_point(
     .normalize();
 
     // 計算攝影機位置（玩家後上方）
-    let player_center = player_pos + Vec3::Y * 1.5;
+    let player_center = player_pos + Vec3::Y * PLAYER_CENTER_HEIGHT;
     let cam_back = Vec3::new(yaw.sin(), 0.0, yaw.cos());
     let cam_up = Vec3::Y * pitch.sin().abs();
     let camera_pos = player_center + cam_back * cam_distance * pitch.cos() + cam_up * cam_distance;
@@ -338,7 +400,7 @@ fn calculate_muzzle_position(
     is_aiming: bool,
     muzzle_offset: Vec3,
 ) -> Vec3 {
-    let base_pos = player_pos + char_vecs.up * 0.55;
+    let base_pos = player_pos + char_vecs.up * WEAPON_BASE_HEIGHT;
 
     if weapon_type == WeaponType::Fist {
         // 拳頭：從手的位置出發
@@ -371,10 +433,10 @@ fn should_fire(input: &ShootingInput, weapon: &Weapon) -> bool {
 #[inline]
 fn get_camera_shake_intensity(weapon_type: WeaponType) -> f32 {
     match weapon_type {
-        WeaponType::Pistol => 0.02,
-        WeaponType::SMG => 0.015,
-        WeaponType::Shotgun => 0.05,
-        WeaponType::Rifle => 0.025,
+        WeaponType::Pistol => PISTOL_SHAKE_INTENSITY,
+        WeaponType::SMG => SMG_SHAKE_INTENSITY,
+        WeaponType::Shotgun => SHOTGUN_SHAKE_INTENSITY,
+        WeaponType::Rifle => RIFLE_SHAKE_INTENSITY,
         WeaponType::Fist | WeaponType::Staff | WeaponType::Knife => 0.0,
     }
 }
@@ -418,8 +480,8 @@ fn generate_shotgun_pattern(pellet_count: u32, base_spread: f32) -> Vec<Vec2> {
 
     // 計算內外圈彈丸數量
     let remaining = pellet_count - 1;
-    let inner_count = remaining.min(6); // 內圈最多 6 顆
-    let outer_count = remaining.saturating_sub(6); // 剩餘的放外圈
+    let inner_count = remaining.min(SHOTGUN_INNER_MAX_PELLETS); // 內圈最多 6 顆
+    let outer_count = remaining.saturating_sub(SHOTGUN_INNER_MAX_PELLETS); // 剩餘的放外圈
 
     // 內圈（較準確，佔總散佈半徑的 SHOTGUN_INNER_RADIUS_RATIO）
     let inner_radius = spread_rad * SHOTGUN_INNER_RADIUS_RATIO;
@@ -464,7 +526,7 @@ fn fire_ranged_weapon(
     transform_query: &Query<&Transform>,
 ) {
     let spread = if is_aiming {
-        weapon.stats.spread * 0.5
+        weapon.stats.spread * AIM_SPREAD_MULTIPLIER
     } else {
         weapon.stats.spread
     };
@@ -600,24 +662,9 @@ pub fn fire_weapon_system(
         weapon.consume_ammo();
         weapon.fire_cooldown = weapon.stats.fire_rate;
         combat_state.last_shot_time = time.elapsed_secs();
-        combat_state.crosshair_bloom += 0.2;
+        combat_state.crosshair_bloom += CROSSHAIR_BLOOM_PER_SHOT;
     }
 }
-
-/// 棍棒掃擊常數
-/// 攝影機震動持續時間（秒）
-const CAMERA_SHAKE_DURATION: f32 = 0.08;
-/// 瞄準時後座力倍率（減少 50%）
-const AIM_RECOIL_MULTIPLIER: f32 = 0.5;
-
-/// 霰彈槍內圈半徑比例（佔總散佈的 50%）
-const SHOTGUN_INNER_RADIUS_RATIO: f32 = 0.5;
-/// 霰彈槍內圈隨機偏移量
-const SHOTGUN_INNER_JITTER: f32 = 0.1;
-/// 霰彈槍外圈隨機偏移量
-const SHOTGUN_OUTER_JITTER: f32 = 0.15;
-/// 棍棒掃擊檢測步數
-const STAFF_SWEEP_STEPS: usize = 5;
 
 /// 近戰攻擊
 #[allow(clippy::too_many_arguments)]
@@ -887,7 +934,7 @@ pub fn spawn_bullet_tracer(
     let direction = end - start;
     let length = direction.length();
 
-    if length < 0.1 {
+    if length < MIN_TRACER_LENGTH {
         return;
     }
 
@@ -921,13 +968,13 @@ pub fn spawn_muzzle_flash(commands: &mut Commands, visuals: &CombatVisuals, posi
         Mesh3d(visuals.muzzle_mesh.clone()),
         MeshMaterial3d(visuals.muzzle_material.clone()),
         Transform::from_translation(position),
-        MuzzleFlash { lifetime: 0.05 },
+        MuzzleFlash { lifetime: MUZZLE_FLASH_LIFETIME },
     ));
 }
 
 /// 生成擊中特效（火花）
 fn spawn_impact_effect(commands: &mut Commands, visuals: &CombatVisuals, position: Vec3) {
-    let lifetime = 0.15;
+    let lifetime = IMPACT_EFFECT_LIFETIME;
     commands.spawn((
         Mesh3d(visuals.impact_mesh.clone()),
         MeshMaterial3d(visuals.impact_material.clone()),
@@ -984,13 +1031,13 @@ pub fn impact_effect_system(
         } else {
             1.0 // 預設為已完成
         };
-        let scale = if progress < 0.3 {
+        let scale = if progress < IMPACT_EXPAND_PHASE {
             // 前 30%：快速膨脹到 1.5 倍
-            1.0 + progress * 1.67
+            1.0 + progress * IMPACT_EXPAND_RATE
         } else {
             // 後 70%：從 1.5 倍縮小消失
-            let shrink_progress = (progress - 0.3) / 0.7;
-            1.5 * (1.0 - shrink_progress)
+            let shrink_progress = (progress - IMPACT_EXPAND_PHASE) / IMPACT_SHRINK_PHASE;
+            IMPACT_MAX_SCALE * (1.0 - shrink_progress)
         };
         transform.scale = Vec3::splat(scale.max(0.0));
 

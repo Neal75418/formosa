@@ -213,8 +213,6 @@ fn spawn_control_key(
     ));
 }
 
-/// 生成大地圖標題區
-
 /// 設置左下角 GTA 風格玩家狀態區（血量條、護甲條）
 pub(super) fn setup_player_status_hud(commands: &mut Commands, font: &Handle<Font>) {
     // 外發光層
@@ -251,8 +249,6 @@ pub(super) fn setup_player_status_hud(commands: &mut Commands, font: &Handle<Fon
             }); // 結束 PlayerStatusContainer
         }); // 結束外發光層
 }
-
-/// 設置右上角小地圖（GTA 風格多層邊框）
 
 /// 設置小地圖下方的時間、金錢、任務資訊顯示
 pub(super) fn setup_info_displays(commands: &mut Commands, font: &Handle<Font>) {
@@ -328,8 +324,6 @@ pub(super) fn setup_info_displays(commands: &mut Commands, font: &Handle<Font>) 
         MissionInfo,
     ));
 }
-
-/// 設置左下角控制提示（GTA 風格）
 
 /// 設置左下角控制提示（GTA 風格）
 pub(super) fn setup_control_hints(commands: &mut Commands, font: &Handle<Font>) {

@@ -179,8 +179,6 @@ fn spawn_menu_separator(
     ));
 }
 
-/// 生成小地圖裝飾（角落高光 + 標題徽章）
-
 /// 設置暫停選單（初始隱藏，GTA 風格毛玻璃效果）
 pub(super) fn setup_pause_menu(commands: &mut Commands, font: &Handle<Font>) {
     spawn_full_screen_overlay(

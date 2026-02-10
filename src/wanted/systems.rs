@@ -426,7 +426,6 @@ fn calc_facing_rotation(direction: Vec3) -> Quat {
 }
 
 /// 處理巡邏狀態
-
 fn handle_patrolling_state(
     officer: &mut PoliceOfficer,
     transform: &mut Transform,

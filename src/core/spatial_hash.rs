@@ -87,7 +87,6 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     }
 
     /// 建立指定大小和預期容量的空間哈希網格
-
     pub fn with_capacity(cell_size: f32, capacity: usize) -> Self {
         assert!(
             cell_size > 0.0,
@@ -139,7 +138,6 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     }
 
     /// 移除實體
-
     pub fn remove(&mut self, entity: T) {
         if let Some(coord) = self.entity_cells.remove(&entity) {
             if let Some(cell) = self.cells.get_mut(&coord) {
@@ -215,7 +213,6 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     }
 
     /// 查詢指定半徑內的所有實體（不含距離平方）
-
     pub fn query_radius_entities(&self, center: Vec3, radius: f32) -> Vec<T> {
         self.query_radius(center, radius)
             .into_iter()
@@ -224,7 +221,6 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     }
 
     /// 查詢最近的實體
-
     pub fn query_nearest(&self, center: Vec3, radius: f32) -> Option<(T, Vec3, f32)> {
         self.query_radius(center, radius)
             .into_iter()

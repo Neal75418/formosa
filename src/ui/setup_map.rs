@@ -216,8 +216,6 @@ fn spawn_fullmap_grid_lines(map: &mut ChildSpawnerCommands) {
     }
 }
 
-/// 生成血量區塊（圖示 + 血量條 + 數值標籤）
-
 fn spawn_fullmap_title(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
     parent
         .spawn((Node {
@@ -304,8 +302,6 @@ fn spawn_fullmap_legend_and_hints(parent: &mut ChildSpawnerCommands, font: &Hand
         });
 }
 
-/// 生成暫停選單標題區（圖示 + 文字）
-
 fn spawn_minimap_decorations(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
     // 左上角高光
     parent.spawn((
@@ -385,8 +381,6 @@ fn spawn_minimap_scan_effects(parent: &mut ChildSpawnerCommands) {
 // ============================================================================
 // 分區設置函數
 // ============================================================================
-/// 設置左下角 GTA 風格玩家狀態區（血量條、護甲條）
-
 /// 設置右上角小地圖（GTA 風格多層邊框）
 pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
     // 外層發光框
@@ -489,8 +483,6 @@ pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
             });
         });
 }
-
-/// 設置小地圖下方的時間、金錢、任務資訊顯示
 
 /// 設置大地圖（GTA 風格，初始隱藏）
 pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {

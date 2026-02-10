@@ -212,8 +212,12 @@ fn spawn_weapon_slot(
 /// 設置準星和彈藥 UI
 pub fn setup_crosshair(mut commands: Commands, chinese_font: Res<ChineseFont>) {
     let font = chinese_font.font.clone();
+    spawn_crosshair_center(&mut commands);
+    spawn_weapon_hud(&mut commands, font);
+}
 
-    // === 螢幕中央準星 - GTA 風格 ===
+/// 螢幕中央準星（點、線、外圈、命中標記）
+fn spawn_crosshair_center(commands: &mut Commands) {
     commands
         .spawn((
             Node {
@@ -337,7 +341,10 @@ pub fn setup_crosshair(mut commands: Commands, chinese_font: Res<ChineseFont>) {
                 });
         });
 
-    // === 右下角：GTA 風格武器區（多層邊框）===
+}
+
+/// 右下角 GTA 風格武器 HUD（武器名、彈藥數、彈藥網格、武器槽位）
+fn spawn_weapon_hud(commands: &mut Commands, font: Handle<Font>) {
     // 外發光層
     commands
         .spawn((

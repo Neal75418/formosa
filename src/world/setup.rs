@@ -552,237 +552,48 @@ fn setup_neon_signs(
     // 座標計算公式: x = road1_center + align1 * (road1_width/2 + building_width/2)
     //              z = road2_center + align2 * (road2_width/2 + building_depth/2)
 
-    // 萬年大樓 - 經典紅色招牌
-    // 建築: X_XINING(-55) + (-1)*(12/2+20/2) = -71, Z_EMEI(0) + (-1)*(15/2+18/2) = -16.5
-    // 招牌貼在南面（面向峨嵋街）: z + depth/2 = -16.5 + 9 = -7.5
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "萬年大樓",
-        Vec3::new(-71.0, 20.0, -7.5), // 南面牆上
-        Vec3::new(6.0, 1.5, 0.3),
-        "萬年",
-        NeonSign::flickering(Color::srgb(1.0, 0.2, 0.1), 10.0),
-    );
+    // 霓虹燈資料表：(建築名, 位置, 尺寸, 招牌文字, NeonSign 配置)
+    let neon_signs: Vec<(&str, Vec3, Vec3, &str, NeonSign)> = vec![
+        // 萬年大樓 - 經典紅色招牌（南面牆上，面向峨嵋街）
+        ("萬年大樓", Vec3::new(-71.0, 20.0, -7.5), Vec3::new(6.0, 1.5, 0.3), "萬年", NeonSign::flickering(Color::srgb(1.0, 0.2, 0.1), 10.0)),
+        // 錢櫃 KTV - 粉紫色（西面牆上，面向中華路）
+        ("錢櫃KTV", Vec3::new(100.0, 15.0, 34.0), Vec3::new(5.0, 1.2, 0.3), "錢櫃KTV", NeonSign::flickering(Color::srgb(0.9, 0.3, 0.9), 8.0)),
+        // 西門紅樓 - 溫暖黃光（北面牆上，面向成都路）
+        ("西門紅樓", Vec3::new(49.0, 10.0, 58.0), Vec3::new(4.0, 1.0, 0.3), "紅樓", NeonSign::steady(Color::srgb(1.0, 0.8, 0.3), 6.0)),
+        // 誠品西門 - 綠色霓虹（東面牆上，面向漢中街）
+        ("誠品西門", Vec3::new(-7.5, 14.0, -15.5), Vec3::new(4.0, 1.0, 0.3), "誠品", NeonSign::steady(Color::srgb(0.2, 0.9, 0.4), 7.0)),
+        // 阿宗麵線 - 橘紅色（南面牆上）
+        ("阿宗麵線", Vec3::new(-27.5, 5.0, 42.0), Vec3::new(3.0, 0.8, 0.3), "阿宗麵線", NeonSign::flickering(Color::srgb(1.0, 0.5, 0.1), 8.0)),
+        // 唐吉訶德 - 藍色霓虹（南面牆上）
+        ("Don Don Donki", Vec3::new(-35.0, 25.0, -20.5), Vec3::new(5.0, 1.2, 0.3), "Donki", NeonSign::flickering(Color::srgb(0.2, 0.5, 1.0), 9.0)),
+        // Uniqlo - 紅色霓虹（西面牆上，面向漢中街）
+        ("Uniqlo", Vec3::new(7.5, 9.0, -13.5), Vec3::new(3.5, 1.0, 0.3), "UNIQLO", NeonSign::steady(Color::srgb(0.9, 0.1, 0.1), 8.0)),
+        // 誠品武昌 - 綠色霓虹（東面牆上）
+        ("誠品武昌", Vec3::new(-7.5, 11.0, -35.5), Vec3::new(4.0, 1.0, 0.3), "誠品", NeonSign::steady(Color::srgb(0.2, 0.9, 0.4), 7.0)),
+        // 獅子林 - 故障老舊招牌（南面牆上）
+        ("獅子林", Vec3::new(-72.0, 17.0, -57.5), Vec3::new(3.0, 0.8, 0.3), "老店", NeonSign::broken(Color::srgb(0.8, 0.2, 0.3), 6.0)),
+        // H&M - 紅白霓虹（西面牆上）
+        ("H&M", Vec3::new(7.5, 13.0, 35.0), Vec3::new(3.0, 1.5, 0.3), "H&M", NeonSign::steady(Color::srgb(1.0, 0.0, 0.0), 10.0)),
+        // 國賓影城 - 紅色閃爍（建築南面）
+        ("國賓影城", Vec3::new(41.0, 25.0, -58.0), Vec3::new(5.0, 1.2, 0.3), "國賓", NeonSign::flickering(Color::srgb(1.0, 0.2, 0.2), 9.0)),
+        // 樂聲影城 - 青色閃爍（建築南面）
+        ("樂聲影城", Vec3::new(36.0, 20.0, -26.0), Vec3::new(4.0, 1.0, 0.3), "樂聲", NeonSign::flickering(Color::srgb(0.2, 0.9, 0.9), 8.0)),
+        // 麥當勞 M - 金色穩定
+        ("麥當勞", Vec3::new(-17.0, 8.0, -72.0), Vec3::new(2.5, 2.5, 0.3), "M", NeonSign::steady(Color::srgb(1.0, 0.8, 0.0), 12.0)),
+        // 湯姆熊 - 橘色閃爍
+        ("湯姆熊", Vec3::new(40.0, 15.0, -64.0), Vec3::new(4.5, 1.0, 0.3), "湯姆熊", NeonSign::flickering(Color::srgb(1.0, 0.5, 0.1), 7.0)),
+        // 刺青街 - 紫色故障風格
+        ("刺青店", Vec3::new(20.0, 8.0, -17.0), Vec3::new(3.5, 0.8, 0.3), "TATTOO", NeonSign::broken(Color::srgb(0.7, 0.2, 0.9), 8.0)),
+        // 潮牌店 - 紅色穩定
+        ("潮牌店", Vec3::new(28.0, 10.0, -8.0), Vec3::new(3.0, 0.8, 0.3), "HYPE", NeonSign::steady(Color::srgb(1.0, 0.1, 0.2), 9.0)),
+    ];
 
-    // 錢櫃 KTV - 粉紫色
-    // 建築: X_ZHONGHUA(80) + 1*(40/2+16/2) = 108, Z_CHENGDU(50) + (-1)*(16/2+16/2) = 34
-    // 招牌貼在西面（面向中華路）: x - width/2 = 108 - 8 = 100
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "錢櫃KTV",
-        Vec3::new(100.0, 15.0, 34.0), // 西面牆上
-        Vec3::new(5.0, 1.2, 0.3),
-        "錢櫃KTV",
-        NeonSign::flickering(Color::srgb(0.9, 0.3, 0.9), 8.0),
-    );
+    let count = neon_signs.len();
+    for (building, position, size, text, neon) in neon_signs {
+        try_spawn_neon_sign(commands, meshes, materials, building_tracker, building, position, size, text, neon);
+    }
 
-    // 西門紅樓 - 溫暖黃光
-    // 建築: X_ZHONGHUA(80) + (-1)*(40/2+22/2) = 49, Z_CHENGDU(50) + 1*(16/2+22/2) = 69
-    // 招牌貼在北面（面向成都路）: z - depth/2 = 69 - 11 = 58
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "西門紅樓",
-        Vec3::new(49.0, 10.0, 58.0), // 北面牆上
-        Vec3::new(4.0, 1.0, 0.3),
-        "紅樓",
-        NeonSign::steady(Color::srgb(1.0, 0.8, 0.3), 6.0),
-    );
-
-    // 誠品西門 - 綠色霓虹
-    // 建築: X_HAN(0) + (-1)*(15/2+20/2) = -17.5, Z_EMEI(0) + (-1)*(15/2+16/2) = -15.5
-    // 招牌貼在東面（面向漢中街）: x + width/2 = -17.5 + 10 = -7.5
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "誠品西門",
-        Vec3::new(-7.5, 14.0, -15.5), // 東面牆上
-        Vec3::new(4.0, 1.0, 0.3),
-        "誠品",
-        NeonSign::steady(Color::srgb(0.2, 0.9, 0.4), 7.0),
-    );
-
-    // 阿宗麵線 - 橘紅色（美食招牌）
-    // 建築位於成都路北側，西寧與漢中之間
-    // 中心: x=(-55+0)/2=-27.5, z=50+(-1)*(16/2+6/2)=39
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "阿宗麵線",
-        Vec3::new(-27.5, 5.0, 42.0), // 南面牆上 (z+3)
-        Vec3::new(3.0, 0.8, 0.3),
-        "阿宗麵線",
-        NeonSign::flickering(Color::srgb(1.0, 0.5, 0.1), 8.0),
-    );
-
-    // 唐吉訶德 (Don Don Donki) - 藍色霓虹
-    // 建築: X_XINING(-55) + 1*(12/2+28/2) = -35, Z_WUCHANG(-50) + 1*(15/2+22/2) = -31.5
-    // 招牌貼在南面: z + depth/2 = -31.5 + 11 = -20.5
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "Don Don Donki",
-        Vec3::new(-35.0, 25.0, -20.5), // 南面牆上
-        Vec3::new(5.0, 1.2, 0.3),
-        "Donki",
-        NeonSign::flickering(Color::srgb(0.2, 0.5, 1.0), 9.0),
-    );
-
-    // Uniqlo - 紅色霓虹
-    // 建築: X_HAN(0) + 1*(15/2+15/2) = 15, Z_EMEI(0) + (-1)*(15/2+12/2) = -13.5
-    // 招牌貼在西面（面向漢中街）: x - width/2 = 15 - 7.5 = 7.5
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "Uniqlo",
-        Vec3::new(7.5, 9.0, -13.5), // 西面牆上
-        Vec3::new(3.5, 1.0, 0.3),
-        "UNIQLO",
-        NeonSign::steady(Color::srgb(0.9, 0.1, 0.1), 8.0),
-    );
-
-    // 誠品武昌 - 綠色霓虹
-    // 建築: X_HAN(0) + (-1)*(15/2+18/2) = -16.5, Z_WUCHANG(-50) + 1*(15/2+14/2) = -35.5
-    // 招牌貼在東面: x + width/2 = -16.5 + 9 = -7.5
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "誠品武昌",
-        Vec3::new(-7.5, 11.0, -35.5), // 東面牆上
-        Vec3::new(4.0, 1.0, 0.3),
-        "誠品",
-        NeonSign::steady(Color::srgb(0.2, 0.9, 0.4), 7.0),
-    );
-
-    // 故障的老舊招牌 - 增加氛圍（獅子林附近）
-    // 獅子林: X_XINING(-55) + (-1)*(12/2+22/2) = -72, Z_WUCHANG(-50) + (-1)*(15/2+18/2) = -66.5
-    // 招牌貼在南面: z + depth/2 = -66.5 + 9 = -57.5
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "獅子林",
-        Vec3::new(-72.0, 17.0, -57.5), // 南面牆上
-        Vec3::new(3.0, 0.8, 0.3),
-        "老店",
-        NeonSign::broken(Color::srgb(0.8, 0.2, 0.3), 6.0),
-    );
-
-    // H&M - 紅白霓虹
-    // 建築: X_HAN(0) + 1*(15/2+18/2) = 16.5, Z_CHENGDU(50) + (-1)*(16/2+14/2) = 35
-    // 招牌貼在西面: x - width/2 = 16.5 - 9 = 7.5
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "H&M",
-        Vec3::new(7.5, 13.0, 35.0), // 西面牆上
-        Vec3::new(3.0, 1.5, 0.3),
-        "H&M",
-        NeonSign::steady(Color::srgb(1.0, 0.0, 0.0), 10.0),
-    );
-
-    // === Phase 7: 新增霓虹燈 ===
-
-    // 國賓影城 - 紅色閃爍
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "國賓影城",
-        Vec3::new(41.0, 25.0, -58.0), // 建築南面
-        Vec3::new(5.0, 1.2, 0.3),
-        "國賓",
-        NeonSign::flickering(Color::srgb(1.0, 0.2, 0.2), 9.0),
-    );
-
-    // 樂聲影城 - 青色閃爍
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "樂聲影城",
-        Vec3::new(36.0, 20.0, -26.0), // 建築南面
-        Vec3::new(4.0, 1.0, 0.3),
-        "樂聲",
-        NeonSign::flickering(Color::srgb(0.2, 0.9, 0.9), 8.0),
-    );
-
-    // 麥當勞 M - 金色穩定
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "麥當勞",
-        Vec3::new(-17.0, 8.0, -72.0), // 漢口街麥當勞上
-        Vec3::new(2.5, 2.5, 0.3),
-        "M",
-        NeonSign::steady(Color::srgb(1.0, 0.8, 0.0), 12.0),
-    );
-
-    // 湯姆熊 - 橘色閃爍
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "湯姆熊",
-        Vec3::new(40.0, 15.0, -64.0), // 湯姆熊遊樂場（配合建築位置更新）
-        Vec3::new(4.5, 1.0, 0.3),
-        "湯姆熊",
-        NeonSign::flickering(Color::srgb(1.0, 0.5, 0.1), 7.0),
-    );
-
-    // 刺青街 TATTOO - 紫色故障風格
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "刺青店",
-        Vec3::new(20.0, 8.0, -17.0), // 刺青店
-        Vec3::new(3.5, 0.8, 0.3),
-        "TATTOO",
-        NeonSign::broken(Color::srgb(0.7, 0.2, 0.9), 8.0),
-    );
-
-    // 潮牌店 HYPE - 紅色穩定
-    try_spawn_neon_sign(
-        commands,
-        meshes,
-        materials,
-        building_tracker,
-        "潮牌店",
-        Vec3::new(28.0, 10.0, -8.0), // 潮牌店
-        Vec3::new(3.0, 0.8, 0.3),
-        "HYPE",
-        NeonSign::steady(Color::srgb(1.0, 0.1, 0.2), 9.0),
-    );
-
-    info!("✨ 已生成 16 個霓虹燈招牌");
+    info!("✨ 已生成 {} 個霓虹燈招牌", count);
 }
 
 /// 路燈、自動販賣機、垃圾桶生成

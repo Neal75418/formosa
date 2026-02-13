@@ -26,6 +26,9 @@ mod weather_hud;
 #[cfg(all(debug_assertions, feature = "dev_tools"))]
 mod fps_counter;
 
+#[cfg(test)]
+mod tests;
+
 pub use components::*;
 pub use crosshair::*;
 pub use damage_indicator::*;

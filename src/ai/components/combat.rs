@@ -1,5 +1,8 @@
 //! AI 攻擊和掩體系統（GTA 5 風格）
 
+// 功能模組已實現但尚未完全整合到遊戲玩法中
+#![allow(dead_code)]
+
 use bevy::prelude::*;
 
 /// AI 攻擊組件

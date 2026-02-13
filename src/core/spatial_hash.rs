@@ -3,9 +3,11 @@
 //! 將 O(n²) 的鄰近查詢優化為 O(1)。
 //! 用於：行人/車輛碰撞、警察視野檢測、爆炸範圍檢測等。
 
+// 功能模組已實現但尚未完全整合到遊戲玩法中
+#![allow(dead_code)]
+
 // 通用數據結構，提供完整 API 供各系統使用。
 // 部分方法目前未使用但為未來擴展保留（如 remove, insert_batch）。
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 use std::collections::HashMap;

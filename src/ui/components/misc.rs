@@ -1,5 +1,6 @@
 //! 雜項組件 — UI 狀態、字體、外送 App、互動提示、天氣 HUD、劇情任務 HUD
 
+// 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
 use bevy::prelude::*;

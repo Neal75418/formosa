@@ -8,7 +8,6 @@
 //! - `visuals`: 視覺效果組件
 
 // 完整車輛系統組件定義，部分組件預留供未來關卡使用。
-#![allow(dead_code)]
 
 mod core;
 mod physics;

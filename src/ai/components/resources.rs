@@ -1,5 +1,8 @@
 //! AI 計時器資源
 
+// 功能模組已實現但尚未完全整合到遊戲玩法中
+#![allow(dead_code)]
+
 use bevy::prelude::*;
 
 /// AI 更新計時器（降低 CPU 負載）

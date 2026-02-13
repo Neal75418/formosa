@@ -10,7 +10,6 @@
 //! - `resources`: 計時器資源
 
 // 完整 AI 系統組件定義，部分組件預留供未來關卡使用。
-#![allow(dead_code)]
 
 mod state;
 mod perception;
@@ -22,5 +21,5 @@ mod resources;
 pub use state::{AiState, AiBehavior};
 pub use perception::AiPerception;
 pub use movement::{PatrolPath, AiMovement};
-pub use combat::{AiCombat, CoverType, CoverPoint, CoverSeeker};
-pub use resources::{AiUpdateTimer, EnemySpawnTimer};
+pub use combat::{AiCombat, CoverPoint, CoverSeeker};
+pub use resources::EnemySpawnTimer;

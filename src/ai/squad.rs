@@ -2,6 +2,7 @@
 //!
 //! 實現 GTA 5 風格的 AI 包抄戰術，敵人會協調進攻。
 
+// 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
 use bevy::prelude::*;

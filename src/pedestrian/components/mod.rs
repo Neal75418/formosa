@@ -11,7 +11,6 @@
 //! - `collision`: 碰撞組件
 
 // 完整行人系統組件定義，部分組件預留供未來關卡使用。
-#![allow(dead_code)]
 
 mod core;
 mod witness;
@@ -23,14 +22,12 @@ mod collision;
 // 重新導出所有公開項目
 pub use self::core::{Pedestrian, PedestrianType, PedestrianState, PedState};
 pub use witness::{WitnessState, WitnessedCrime};
-pub use appearance::PedestrianAppearance;
 pub use resources::{
     PedestrianConfig,
     PedestrianPaths,
     SidewalkPath,
     GunshotTracker,
     PedestrianVisuals,
-    PedestrianMaterialIndices,
 };
 pub use animation::{PedestrianLeg, PedestrianArm, WalkingAnimation};
 pub use collision::HitByVehicle;

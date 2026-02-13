@@ -2,9 +2,11 @@
 //!
 //! 包含錢包、商店、ATM、商品等定義
 
+// 功能模組已實現但尚未完全整合到遊戲玩法中
+#![allow(dead_code)]
+
 // 完整經濟系統定義，包含所有商店類型和商品。
 // 部分商品和商店尚未在地圖中放置（等待關卡設計）。
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};

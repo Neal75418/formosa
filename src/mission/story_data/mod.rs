@@ -12,7 +12,6 @@
 //! - `performance`: 評分系統
 
 // 完整任務系統定義，部分組件預留供未來關卡使用。
-#![allow(dead_code)]
 
 mod types;
 mod objectives;
@@ -29,7 +28,7 @@ pub use types::{
 };
 pub use objectives::{ObjectiveType, MissionObjective};
 pub use conditions::{FailCondition, UnlockCondition};
-pub use phases::{EnemySpawnData, NpcSpawnData, MissionPhase};
+pub use phases::MissionPhase;
 pub use rewards::{Difficulty, MissionRewards};
 pub use mission::{StoryMission, ActiveStoryMission};
 pub use performance::{StoryMissionRating, MissionPerformance, MissionCompletionResult};

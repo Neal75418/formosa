@@ -1,8 +1,10 @@
 //! 武器系統（類型、屬性、彈藥、冷卻）
 
+// 功能模組已實現但尚未完全整合到遊戲玩法中
+#![allow(dead_code)]
+
 // 完整武器系統定義，包含所有武器類型和配置。
 // 部分武器類型和屬性預留供未來關卡使用（如：RPG, 火焰噴射器）。
-#![allow(dead_code)]
 
 /// 彈道視覺風格
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

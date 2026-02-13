@@ -7,6 +7,7 @@
 //! - 車主反應 AI
 //! - 警報系統
 
+// 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
 use bevy::prelude::*;

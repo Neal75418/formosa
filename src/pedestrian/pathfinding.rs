@@ -323,7 +323,8 @@ mod tests {
     fn world_to_grid_and_back() {
         let grid = small_grid();
         let world_pos = Vec3::new(3.2, 0.0, 5.8);
-        let (gx, gz) = grid.world_to_grid(world_pos).unwrap();
+        let (gx, gz) = grid.world_to_grid(world_pos)
+            .expect("world_pos (3.2, 5.8) should be valid within grid bounds");
         assert_eq!((gx, gz), (3, 5));
         let back = grid.grid_to_world(gx, gz);
         assert!((back.x - 3.5).abs() < f32::EPSILON); // 格子中心
@@ -369,9 +370,9 @@ mod tests {
         let goal = Vec3::new(5.5, 0.0, 0.5);
         let path = grid.find_path(start, goal);
         assert!(path.is_some());
-        let waypoints = path.unwrap();
+        let waypoints = path.expect("path should exist for straight line from start to goal");
         assert!(waypoints.len() >= 2);
-        assert!((waypoints.last().unwrap().x - 5.5).abs() < f32::EPSILON);
+        assert!((waypoints.last().expect("waypoints should not be empty").x - 5.5).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -386,7 +387,7 @@ mod tests {
         let path = grid.find_path(start, goal);
         assert!(path.is_some());
         // 路徑應該繞過牆壁
-        let waypoints = path.unwrap();
+        let waypoints = path.expect("path should exist around the wall obstacle");
         assert!(waypoints.len() > 2);
     }
 

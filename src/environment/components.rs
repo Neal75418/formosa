@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 use bevy::prelude::*;
+use std::collections::HashSet;
 use crate::core::{EntityPool, lifetime_fade_alpha};
 
 // ============================================================================
@@ -139,6 +140,52 @@ impl Destructible {
         }
 
         false
+    }
+}
+
+// ============================================================================
+// 破壞持久化
+// ============================================================================
+
+/// 可破壞物件穩定 ID（用於存檔持久化）
+///
+/// 每個可破壞物件在生成時分配唯一 ID，存檔時記錄已破壞的 ID，
+/// 讀檔後自動將對應物件標記為已破壞並移除。
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DestructibleId(pub u32);
+
+/// 已破壞物件追蹤器
+///
+/// 在破壞發生時即時記錄物件 ID，存檔時寫入 `WorldSaveData`，
+/// 讀檔時恢復並自動移除已破壞的實體。
+#[derive(Resource, Default, Debug)]
+pub struct DestroyedObjectTracker {
+    /// 已破壞的物件 ID 集合
+    pub destroyed_ids: HashSet<u32>,
+}
+
+impl DestroyedObjectTracker {
+    /// 記錄物件已被破壞
+    pub fn mark_destroyed(&mut self, id: u32) {
+        self.destroyed_ids.insert(id);
+    }
+
+    /// 檢查物件是否已被破壞
+    pub fn is_destroyed(&self, id: u32) -> bool {
+        self.destroyed_ids.contains(&id)
+    }
+
+    /// 取得所有已破壞的 ID（sorted for deterministic saves）
+    pub fn destroyed_list(&self) -> Vec<u32> {
+        let mut ids: Vec<u32> = self.destroyed_ids.iter().copied().collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// 從存檔資料恢復
+    pub fn restore_from(&mut self, ids: &[u32]) {
+        self.destroyed_ids.clear();
+        self.destroyed_ids.extend(ids.iter().copied());
     }
 }
 
@@ -383,5 +430,104 @@ impl DestructibleVisuals {
             DestructibleMaterial::Metal => (self.metal_shard_mesh.clone(), self.metal_shard_material.clone()),
             DestructibleMaterial::Plastic => (self.plastic_chunk_mesh.clone(), self.plastic_chunk_material.clone()),
         }
+    }
+}
+
+// ============================================================================
+// 測試
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // DestroyedObjectTracker 測試
+
+    #[test]
+    fn test_tracker_default_empty() {
+        let tracker = DestroyedObjectTracker::default();
+        assert!(tracker.destroyed_ids.is_empty());
+        assert!(!tracker.is_destroyed(0));
+    }
+
+    #[test]
+    fn test_tracker_mark_and_check() {
+        let mut tracker = DestroyedObjectTracker::default();
+        tracker.mark_destroyed(5);
+        tracker.mark_destroyed(10);
+
+        assert!(tracker.is_destroyed(5));
+        assert!(tracker.is_destroyed(10));
+        assert!(!tracker.is_destroyed(3));
+    }
+
+    #[test]
+    fn test_tracker_mark_duplicate_idempotent() {
+        let mut tracker = DestroyedObjectTracker::default();
+        tracker.mark_destroyed(7);
+        tracker.mark_destroyed(7);
+        assert_eq!(tracker.destroyed_ids.len(), 1);
+    }
+
+    #[test]
+    fn test_tracker_destroyed_list_sorted() {
+        let mut tracker = DestroyedObjectTracker::default();
+        tracker.mark_destroyed(10);
+        tracker.mark_destroyed(3);
+        tracker.mark_destroyed(7);
+
+        let list = tracker.destroyed_list();
+        assert_eq!(list, vec![3, 7, 10]);
+    }
+
+    #[test]
+    fn test_tracker_restore_from() {
+        let mut tracker = DestroyedObjectTracker::default();
+        tracker.mark_destroyed(99); // 先加入一些舊資料
+
+        tracker.restore_from(&[1, 5, 12]);
+
+        assert!(tracker.is_destroyed(1));
+        assert!(tracker.is_destroyed(5));
+        assert!(tracker.is_destroyed(12));
+        assert!(!tracker.is_destroyed(99)); // 舊資料被清除
+        assert_eq!(tracker.destroyed_ids.len(), 3);
+    }
+
+    #[test]
+    fn test_tracker_restore_empty() {
+        let mut tracker = DestroyedObjectTracker::default();
+        tracker.mark_destroyed(1);
+
+        tracker.restore_from(&[]);
+        assert!(tracker.destroyed_ids.is_empty());
+    }
+
+    // DestructibleId 測試
+
+    #[test]
+    fn test_destructible_id_equality() {
+        assert_eq!(DestructibleId(0), DestructibleId(0));
+        assert_ne!(DestructibleId(0), DestructibleId(1));
+    }
+
+    // Destructible 測試
+
+    #[test]
+    fn test_destructible_take_damage_returns_true_on_destroy() {
+        let mut d = Destructible::glass_window(2.0, 3.0);
+        assert!(!d.take_damage(5.0, 0.0)); // 不足以摧毀
+        assert!(d.take_damage(5.0, 1.0)); // 摧毀
+        assert!(d.is_destroyed);
+    }
+
+    #[test]
+    fn test_destructible_already_destroyed_no_effect() {
+        let mut d = Destructible::glass_window(2.0, 3.0);
+        d.take_damage(100.0, 0.0);
+        assert!(d.is_destroyed);
+
+        // 已破壞物件再受傷不再回報
+        assert!(!d.take_damage(50.0, 1.0));
     }
 }

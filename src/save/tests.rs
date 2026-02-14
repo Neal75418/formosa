@@ -407,3 +407,45 @@ fn test_safehouse_component_fields() {
     assert!(safehouse.is_unlocked);
     assert_eq!(safehouse.save_point, Vec3::new(10.0, 0.0, 20.0));
 }
+
+// ============================================================================
+// 破壞持久化測試
+// ============================================================================
+
+#[test]
+fn test_world_save_data_destroyed_ids_default_empty() {
+    let world_data = WorldSaveData::default();
+    assert!(world_data.destroyed_object_ids.is_empty());
+}
+
+#[test]
+fn test_world_save_data_destroyed_ids_serialization() {
+    let world_data = WorldSaveData {
+        destroyed_object_ids: vec![0, 3, 7, 15],
+        ..Default::default()
+    };
+
+    let json = serde_json::to_string(&world_data).expect("Serialization failed");
+    let loaded: WorldSaveData = serde_json::from_str(&json).expect("Deserialization failed");
+
+    assert_eq!(loaded.destroyed_object_ids, vec![0, 3, 7, 15]);
+}
+
+#[test]
+fn test_world_save_data_destroyed_ids_backward_compat() {
+    // 舊版存檔沒有 destroyed_object_ids 欄位，應預設為空
+    let json = r#"{"world_hour":8.0,"weather":"Clear","weather_intensity":1.0,"unlocked_safehouses":[],"owned_vehicles":[],"vehicle_modifications":[]}"#;
+    let loaded: WorldSaveData = serde_json::from_str(json).expect("Deserialization failed");
+    assert!(loaded.destroyed_object_ids.is_empty());
+}
+
+#[test]
+fn test_save_version_bumped_to_3() {
+    assert_eq!(SAVE_VERSION, 3);
+}
+
+#[test]
+fn test_pending_destruction_restore_default() {
+    let pending = PendingDestructionRestore::default();
+    assert!(pending.ids.is_none());
+}

@@ -53,6 +53,7 @@ impl Plugin for CombatPlugin {
             .init_resource::<RespawnState>()
             .init_resource::<RagdollTracker>()
             .init_resource::<KillCamState>()
+            .init_resource::<BlockState>()
             // 設置系統
             .add_systems(Startup, setup_combat_visuals)
             .add_systems(Startup, setup_explosive_visuals)
@@ -70,6 +71,9 @@ impl Plugin for CombatPlugin {
                     melee_combo_timeout_system,    // 連擊窗口超時重置
                     // 輸入處理
                     shooting_input_system,
+                    // 格擋狀態更新（依賴輸入）
+                    block_update_system
+                        .after(shooting_input_system),
                     // 自動瞄準（輸入後更新鎖定目標）
                     auto_aim_system
                         .after(shooting_input_system),

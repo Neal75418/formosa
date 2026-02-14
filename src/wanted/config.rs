@@ -66,6 +66,24 @@ pub const SWAT_RUN_SPEED: f32 = 7.0;
 /// SWAT 出現的最低星數
 pub const SWAT_STAR_THRESHOLD: u8 = 3;
 
+/// 軍人出現的最低星數
+pub const MILITARY_STAR_THRESHOLD: u8 = 5;
+
+/// 軍人血量（高於普通警察）
+pub const MILITARY_HEALTH: f32 = 150.0;
+
+/// 軍人跑步速度
+pub const MILITARY_RUN_SPEED: f32 = 8.0;
+
+/// 軍人傷害值（步槍）
+pub const MILITARY_DAMAGE: f32 = 25.0;
+
+/// 軍人攻擊冷卻（秒）
+pub const MILITARY_ATTACK_COOLDOWN: f32 = 1.0;
+
+/// 軍人基礎命中率
+pub const MILITARY_HIT_CHANCE: f32 = 0.35;
+
 /// 警察膠囊碰撞器半高
 pub const OFFICER_CAPSULE_HALF_HEIGHT: f32 = 0.4;
 

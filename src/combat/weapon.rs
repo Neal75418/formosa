@@ -142,6 +142,9 @@ pub struct WeaponStats {
     pub recoil_vertical: f32,   // 垂直後座力（向上偏移）
     pub recoil_horizontal: f32, // 水平後座力（隨機左右偏移）
     pub recoil_recovery: f32,   // 後座力恢復速度（每秒恢復量）
+    // === 子彈穿透 ===
+    pub penetration: u8,          // 最大穿透目標數（0=不穿透）
+    pub penetration_falloff: f32, // 每層穿透傷害衰減倍率（0.7=每層損失30%傷害）
 }
 
 impl WeaponStats {
@@ -166,6 +169,9 @@ impl WeaponStats {
             recoil_vertical: 0.02,
             recoil_horizontal: 0.01,
             recoil_recovery: 8.0,
+            // 手槍：低穿透（可穿 1 人）
+            penetration: 1,
+            penetration_falloff: 0.7,
         }
     }
 
@@ -190,6 +196,9 @@ impl WeaponStats {
             recoil_vertical: 0.015,
             recoil_horizontal: 0.02,
             recoil_recovery: 10.0,
+            // 衝鋒槍：低穿透，衰減較大
+            penetration: 1,
+            penetration_falloff: 0.6,
         }
     }
 
@@ -214,6 +223,9 @@ impl WeaponStats {
             recoil_vertical: 0.05,
             recoil_horizontal: 0.03,
             recoil_recovery: 6.0,
+            // 霰彈槍：不穿透（散彈動能分散）
+            penetration: 0,
+            penetration_falloff: 0.0,
         }
     }
 
@@ -238,6 +250,9 @@ impl WeaponStats {
             recoil_vertical: 0.025,
             recoil_horizontal: 0.005,
             recoil_recovery: 7.0,
+            // 步槍：高穿透（可穿 2 人），高速子彈維持動能
+            penetration: 2,
+            penetration_falloff: 0.7,
         }
     }
 
@@ -262,6 +277,9 @@ impl WeaponStats {
             recoil_vertical: 0.0,
             recoil_horizontal: 0.0,
             recoil_recovery: 0.0,
+            // 近戰：不穿透
+            penetration: 0,
+            penetration_falloff: 0.0,
         }
     }
 
@@ -286,6 +304,9 @@ impl WeaponStats {
             recoil_vertical: 0.0,
             recoil_horizontal: 0.0,
             recoil_recovery: 0.0,
+            // 近戰：不穿透
+            penetration: 0,
+            penetration_falloff: 0.0,
         }
     }
 
@@ -310,6 +331,9 @@ impl WeaponStats {
             recoil_vertical: 0.0,
             recoil_horizontal: 0.0,
             recoil_recovery: 0.0,
+            // 近戰：不穿透
+            penetration: 0,
+            penetration_falloff: 0.0,
         }
     }
 

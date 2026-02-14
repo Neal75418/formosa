@@ -52,7 +52,7 @@ impl Default for SaveData {
 }
 
 /// 當前存檔版本
-pub const SAVE_VERSION: u32 = 2;
+pub const SAVE_VERSION: u32 = 3;
 
 /// 玩家存檔資料
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -110,6 +110,9 @@ pub struct WorldSaveData {
     /// 車輛改裝資料
     #[serde(default)]
     pub vehicle_modifications: Vec<VehicleModificationSaveData>,
+    /// 已破壞物件 ID 列表（v3+）
+    #[serde(default)]
+    pub destroyed_object_ids: Vec<u32>,
 }
 
 impl Default for WorldSaveData {
@@ -121,6 +124,7 @@ impl Default for WorldSaveData {
             unlocked_safehouses: vec!["safehouse_ximending".to_string()],
             owned_vehicles: Vec::new(),
             vehicle_modifications: Vec::new(),
+            destroyed_object_ids: Vec::new(),
         }
     }
 }

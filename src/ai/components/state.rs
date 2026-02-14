@@ -62,7 +62,21 @@ pub struct AiBehavior {
     pub is_fleeing: bool,
     /// 生成保護時間（剛生成的敵人不會立即攻擊）
     pub spawn_protection: f32,
+    /// 警覺度（0.0 = 無察覺, 0.5 = 可疑, 1.0 = 完全警覺）
+    pub awareness: f32,
 }
+
+/// 可疑閾值（超過此值敵人開始搜索）
+pub const AWARENESS_SUSPICIOUS: f32 = 0.4;
+/// 完全警覺閾值（超過此值敵人追擊/攻擊，供 AI 決策系統使用）
+#[allow(dead_code)]
+pub const AWARENESS_ALERT: f32 = 0.8;
+/// 警覺度衰減速率（每秒）
+pub const AWARENESS_DECAY_RATE: f32 = 0.15;
+/// 視覺偵測警覺增長速率（每秒）
+pub const AWARENESS_VISUAL_RATE: f32 = 1.5;
+/// 噪音偵測警覺增長速率（每秒）
+pub const AWARENESS_NOISE_RATE: f32 = 0.8;
 
 impl Default for AiBehavior {
     fn default() -> Self {
@@ -76,6 +90,7 @@ impl Default for AiBehavior {
             flee_threshold: 0.2, // 血量低於 20% 逃跑
             is_fleeing: false,
             spawn_protection: 2.0, // 生成後 2 秒內不會攻擊
+            awareness: 0.0,
         }
     }
 }
@@ -120,5 +135,11 @@ impl AiBehavior {
     /// 失去目標（超過時間沒看到）
     pub fn lose_target(&mut self, current_time: f32, timeout: f32) -> bool {
         current_time - self.last_seen_time > timeout
+    }
+
+    /// 是否尚未察覺玩家（用於靜默擊殺判定）
+    pub fn is_unaware(&self) -> bool {
+        self.awareness < AWARENESS_SUSPICIOUS
+            && matches!(self.state, AiState::Idle | AiState::Patrol)
     }
 }

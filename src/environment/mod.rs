@@ -17,6 +17,8 @@ pub struct EnvironmentPlugin;
 impl Plugin for EnvironmentPlugin {
     fn build(&self, app: &mut App) {
         app
+            // 資源
+            .init_resource::<DestroyedObjectTracker>()
             // 事件
             .add_message::<DestructionEvent>()
             // 啟動 - 初始化視覺資源，然後生成可破壞物件

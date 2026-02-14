@@ -39,6 +39,10 @@ pub enum CrimeEvent {
         position: Vec3,
         fatal: bool,
     },
+    /// 搶劫商店
+    ShopRobbery {
+        position: Vec3,
+    },
 }
 
 impl CrimeEvent {
@@ -56,6 +60,7 @@ impl CrimeEvent {
             CrimeEvent::VehicleHit { fatal, .. } => {
                 if *fatal { 20.0 } else { 8.0 }
             }
+            CrimeEvent::ShopRobbery { .. } => 40.0, // 搶劫商店 = +2★
         }
     }
 
@@ -68,6 +73,7 @@ impl CrimeEvent {
             CrimeEvent::Murder { position, .. } => *position,
             CrimeEvent::PoliceKilled { position, .. } => *position,
             CrimeEvent::VehicleHit { position, .. } => *position,
+            CrimeEvent::ShopRobbery { position } => *position,
         }
     }
 }

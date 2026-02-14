@@ -16,6 +16,20 @@ pub struct VehicleLean {
     pub lean_angle: f32,
     /// 最大傾斜角度 (弧度)
     pub max_lean_angle: f32,
+    /// 傾斜響應速度（越高越靈敏）
+    pub lean_response: f32,
+    /// 傾斜角速度（用於慣性計算）
+    pub lean_velocity: f32,
+    /// 傾斜阻尼（防止震盪）
+    pub lean_damping: f32,
+    /// 摔車臨界角度（超過此角度觸發摔車）
+    pub crash_lean_threshold: f32,
+    /// 是否正在摔車
+    pub is_crashed: bool,
+    /// 摔車恢復冷卻時間（秒）
+    pub crash_recovery_timer: f32,
+    /// 摔車恢復所需時間（秒）
+    pub crash_recovery_duration: f32,
 }
 
 impl Default for VehicleLean {
@@ -23,6 +37,13 @@ impl Default for VehicleLean {
         Self {
             lean_angle: 0.0,
             max_lean_angle: 0.0,
+            lean_response: 5.0,
+            lean_velocity: 0.0,
+            lean_damping: 8.0,
+            crash_lean_threshold: 0.70,
+            is_crashed: false,
+            crash_recovery_timer: 0.0,
+            crash_recovery_duration: 2.0,
         }
     }
 }

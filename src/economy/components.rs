@@ -394,6 +394,12 @@ pub enum MoneyChangeReason {
     AtmDeposit,
     /// 罰款
     Fine,
+    /// 購買房產
+    PropertyPurchase,
+    /// 租金收入
+    RentalIncome,
+    /// 搶劫所得
+    Robbery,
     /// 其他
     Other,
 }
@@ -531,4 +537,103 @@ pub enum AtmMode {
     Deposit,   // 存款
     Withdraw,  // 提款
     Balance,   // 查詢餘額
+}
+
+// ============================================================================
+// 房產系統
+// ============================================================================
+
+/// 房產購買互動距離
+pub const PROPERTY_INTERACTION_DISTANCE: f32 = 5.0;
+/// 租金收入時間（每天早上 6 點發放）
+pub const RENTAL_INCOME_HOUR: f32 = 6.0;
+
+/// 房產擁有權組件（附加到 Building 實體上）
+#[derive(Component, Serialize, Deserialize, Clone, Debug)]
+pub struct PropertyOwnership {
+    /// 是否已被玩家購買
+    pub owned: bool,
+    /// 購買價格
+    pub purchase_price: i32,
+    /// 每日租金收入
+    pub daily_income: i32,
+    /// 上次收租的遊戲日（避免同一天重複收租）
+    pub last_income_day: i32,
+}
+
+impl PropertyOwnership {
+    /// 建立可購買的房產
+    pub fn for_sale(price: i32, daily_income: i32) -> Self {
+        Self {
+            owned: false,
+            purchase_price: price,
+            daily_income,
+            last_income_day: -1,
+        }
+    }
+
+    /// 購買房產
+    pub fn purchase(&mut self) {
+        self.owned = true;
+    }
+
+    /// 檢查今天是否已收租
+    pub fn has_collected_today(&self, game_day: i32) -> bool {
+        self.last_income_day >= game_day
+    }
+
+    /// 收取租金
+    pub fn collect_income(&mut self, game_day: i32) -> i32 {
+        if self.owned && !self.has_collected_today(game_day) {
+            self.last_income_day = game_day;
+            self.daily_income
+        } else {
+            0
+        }
+    }
+}
+
+// ============================================================================
+// 搶劫系統
+// ============================================================================
+
+/// 搶劫互動距離
+pub const ROBBERY_INTERACTION_DISTANCE: f32 = 4.0;
+/// 搶劫最小金額
+pub const ROBBERY_MIN_AMOUNT: i32 = 500;
+/// 搶劫最大金額
+pub const ROBBERY_MAX_AMOUNT: i32 = 3000;
+/// 搶劫冷卻時間（秒）—— 同一家商店的搶劫間隔
+pub const ROBBERY_COOLDOWN: f32 = 300.0;
+
+/// 商店搶劫狀態（附加到 Shop 實體上）
+#[derive(Component, Debug)]
+pub struct RobberyState {
+    /// 搶劫冷卻計時器
+    pub cooldown: f32,
+}
+
+impl Default for RobberyState {
+    fn default() -> Self {
+        Self { cooldown: 0.0 }
+    }
+}
+
+impl RobberyState {
+    /// 是否可被搶劫
+    pub fn can_rob(&self) -> bool {
+        self.cooldown <= 0.0
+    }
+
+    /// 執行搶劫後重置冷卻
+    pub fn rob(&mut self) {
+        self.cooldown = ROBBERY_COOLDOWN;
+    }
+
+    /// 更新冷卻時間
+    pub fn tick(&mut self, dt: f32) {
+        if self.cooldown > 0.0 {
+            self.cooldown = (self.cooldown - dt).max(0.0);
+        }
+    }
 }

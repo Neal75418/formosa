@@ -21,7 +21,7 @@ mod collision;
 
 // 重新導出所有公開項目
 pub use self::core::{Pedestrian, PedestrianType, PedestrianState, PedState};
-pub use witness::{WitnessState, WitnessedCrime};
+pub use witness::{WitnessState, WitnessedCrime, BRIBE_COST, BRIBE_DISTANCE, BRIBE_HEAT_REDUCTION};
 pub use resources::{
     PedestrianConfig,
     PedestrianPaths,

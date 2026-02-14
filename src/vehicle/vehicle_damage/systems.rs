@@ -3,9 +3,12 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use super::super::{Vehicle, VehicleType};
-use super::health::{TireDamage, VehicleDamageState, VehicleHealth};
+use super::health::{
+    BodyPartDamage, TireDamage, VehicleDamageState, VehicleHealth, DoorWindowState, WindowState,
+};
 use super::explosion::VehicleExplosion;
 use super::visuals::VehicleDamageVisuals;
+use crate::audio::{AudioManager, VehicleSounds, play_collision_sound, play_explosion_sound};
 use crate::combat::{DamageEvent, DamageSource};
 
 /// 初始化車輛損壞視覺效果資源
@@ -32,9 +35,14 @@ const COLLISION_DAMAGE_MULTIPLIER: f32 = 5.0;
 /// 車輛碰撞傷害系統
 /// 根據碰撞速度計算車輛傷害
 pub fn vehicle_collision_damage_system(
+    mut commands: Commands,
     time: Res<Time>,
     rapier_context: ReadRapierContext,
-    mut vehicle_query: Query<(Entity, &Transform, &Vehicle, &mut VehicleHealth)>,
+    audio_manager: Res<AudioManager>,
+    vehicle_sounds: Res<VehicleSounds>,
+    mut vehicle_query: Query<(
+        Entity, &Transform, &Vehicle, &mut VehicleHealth, Option<&mut BodyPartDamage>,
+    )>,
 ) {
     let current_time = time.elapsed_secs();
 
@@ -42,7 +50,7 @@ pub fn vehicle_collision_damage_system(
         return;
     };
 
-    for (entity, _transform, vehicle, mut health) in vehicle_query.iter_mut() {
+    for (entity, transform, vehicle, mut health, body_parts) in vehicle_query.iter_mut() {
         // 已爆炸的車輛不處理
         if health.is_destroyed() {
             continue;
@@ -71,6 +79,19 @@ pub fn vehicle_collision_damage_system(
             // 例如：30 m/s = (30-10) * 5 = 100 傷害
             let damage = (speed - COLLISION_DAMAGE_SPEED_THRESHOLD) * COLLISION_DAMAGE_MULTIPLIER;
             health.take_damage(damage, current_time);
+
+            // 播放碰撞音效（速度 > 門檻 2 倍 = 重碰撞）
+            let is_heavy = speed > COLLISION_DAMAGE_SPEED_THRESHOLD * 2.0;
+            play_collision_sound(&mut commands, &vehicle_sounds, &audio_manager, is_heavy);
+
+            // 根據車輛前進方向分配部位傷害
+            if let Some(mut bp) = body_parts {
+                // 簡化：使用車輛前進方向作為碰撞方向
+                let forward = transform.forward().as_vec3();
+                let local_dir = transform.rotation.inverse() * forward * vehicle.current_speed.signum();
+                bp.apply_directional_damage(local_dir, damage);
+            }
+
             break; // 一次碰撞只計算一次傷害
         }
     }
@@ -99,6 +120,8 @@ fn get_explosion_damage(vehicle_type: VehicleType) -> f32 {
 pub fn vehicle_fire_system(
     mut commands: Commands,
     time: Res<Time>,
+    audio_manager: Res<AudioManager>,
+    vehicle_sounds: Res<VehicleSounds>,
     mut vehicle_query: Query<(Entity, &Transform, &Vehicle, &mut VehicleHealth)>,
     damage_visuals: Option<Res<VehicleDamageVisuals>>,
 ) {
@@ -126,6 +149,9 @@ pub fn vehicle_fire_system(
                 VehicleExplosion::new(explosion_pos, explosion_radius, explosion_damage),
             ));
         }
+
+        // 播放爆炸音效
+        play_explosion_sound(&mut commands, &vehicle_sounds, &audio_manager);
 
         if let Ok(mut entity_commands) = commands.get_entity(entity) {
             entity_commands.despawn();
@@ -233,6 +259,156 @@ fn try_pop_tire_at_hit(
         && rand::random::<f32>() < TIRE_POP_CHANCE
     {
         tire_damage.pop_tire(closest_idx);
+    }
+}
+
+// ============================================================================
+// 車門/車窗系統
+// ============================================================================
+
+/// 子彈命中車窗的判定距離平方（1.0m²）
+const WINDOW_HIT_RADIUS_SQ: f32 = 1.0;
+/// 子彈破窗機率
+const WINDOW_BREAK_CHANCE: f32 = 0.5;
+
+/// 取得車窗局部位置（左前、右前、左後、右後）
+fn get_window_local_positions(vehicle_type: VehicleType) -> [Vec3; 4] {
+    let (half_width, offset_z) = match vehicle_type {
+        VehicleType::Car | VehicleType::Taxi => (1.05, 0.6),
+        VehicleType::Bus => (1.45, 1.5),
+        VehicleType::Scooter => return [Vec3::ZERO; 4], // 機車無車窗
+    };
+    let window_y = 0.8;
+    [
+        Vec3::new(-half_width, window_y, -offset_z), // 左前
+        Vec3::new(half_width, window_y, -offset_z),  // 右前
+        Vec3::new(-half_width, window_y, offset_z),  // 左後
+        Vec3::new(half_width, window_y, offset_z),   // 右後
+    ]
+}
+
+/// 車門動畫與高速破門系統
+///
+/// - 更新車門開關動畫進度
+/// - 高速行駛時開啟的門會被風撕斷
+pub fn door_animation_system(
+    time: Res<Time>,
+    mut query: Query<(&Vehicle, &mut DoorWindowState)>,
+) {
+    let dt = time.delta_secs();
+
+    for (vehicle, mut dw) in &mut query {
+        dw.tick_doors(dt);
+        dw.check_high_speed_door_break(vehicle.current_speed.abs());
+    }
+}
+
+/// 車門互動輸入系統
+///
+/// 玩家駕駛中按 F 鍵切換駕駛座車門
+pub fn door_input_system(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut query: Query<(&Vehicle, &mut DoorWindowState)>,
+) {
+    if !keyboard.just_pressed(KeyCode::KeyF) {
+        return;
+    }
+
+    for (vehicle, mut dw) in &mut query {
+        if !vehicle.is_occupied {
+            continue;
+        }
+        // F 鍵切換駕駛座車門（左前）
+        dw.toggle_door(super::super::vehicle_damage::health::DOOR_FRONT_LEFT);
+    }
+}
+
+/// 碰撞時車窗裂痕/破碎系統
+///
+/// 中速碰撞裂痕，高速碰撞直接破碎
+pub fn collision_window_damage_system(
+    rapier_context: ReadRapierContext,
+    mut query: Query<(Entity, &Vehicle, &mut DoorWindowState)>,
+) {
+    let Ok(rapier) = rapier_context.single() else {
+        return;
+    };
+
+    for (entity, vehicle, mut dw) in &mut query {
+        let speed = vehicle.current_speed.abs();
+        if speed < COLLISION_DAMAGE_SPEED_THRESHOLD {
+            continue;
+        }
+
+        for contact_pair in rapier.contact_pairs_with(entity) {
+            if !contact_pair.has_any_active_contact() {
+                continue;
+            }
+
+            // 隨機選一扇完好的車窗造成損壞
+            let intact_indices: Vec<usize> = dw.windows.iter().enumerate()
+                .filter(|(_, w)| **w != WindowState::Broken)
+                .map(|(i, _)| i)
+                .collect();
+
+            if let Some(&idx) = intact_indices.first() {
+                if speed > COLLISION_DAMAGE_SPEED_THRESHOLD * 2.0 {
+                    dw.break_window(idx);
+                } else {
+                    dw.crack_window(idx);
+                }
+            }
+            break;
+        }
+    }
+}
+
+/// 子彈命中車窗破碎判定
+///
+/// 整合到現有 vehicle_damage_event_system，透過獨立系統處理
+pub fn bullet_window_damage_system(
+    mut damage_events: MessageReader<DamageEvent>,
+    mut vehicle_query: Query<(&Transform, &Vehicle, &mut DoorWindowState)>,
+) {
+    for event in damage_events.read() {
+        let Ok((transform, vehicle, mut dw)) = vehicle_query.get_mut(event.target) else {
+            continue;
+        };
+
+        if event.source != DamageSource::Bullet {
+            continue;
+        }
+
+        let Some(hit_pos) = event.hit_position else {
+            continue;
+        };
+
+        // 機車無車窗
+        if vehicle.vehicle_type == VehicleType::Scooter {
+            continue;
+        }
+
+        let window_positions = get_window_local_positions(vehicle.vehicle_type);
+        let inv_rotation = transform.rotation.inverse();
+        let local_hit = inv_rotation * (hit_pos - transform.translation);
+
+        // 找最近的車窗
+        let mut closest_idx = 0;
+        let mut closest_dist_sq = f32::MAX;
+        for (i, pos) in window_positions.iter().enumerate() {
+            let dist_sq = local_hit.distance_squared(*pos);
+            if dist_sq < closest_dist_sq {
+                closest_dist_sq = dist_sq;
+                closest_idx = i;
+            }
+        }
+
+        if closest_dist_sq < WINDOW_HIT_RADIUS_SQ
+            && dw.windows[closest_idx] != WindowState::Broken
+            && rand::random::<f32>() < WINDOW_BREAK_CHANCE
+        {
+            dw.break_window(closest_idx);
+        }
     }
 }
 

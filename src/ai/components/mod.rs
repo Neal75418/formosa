@@ -18,7 +18,11 @@ mod combat;
 mod resources;
 
 // 重新導出所有公開項目
-pub use state::{AiState, AiBehavior};
+#[allow(unused_imports)]
+pub use state::{
+    AiBehavior, AiState, AWARENESS_ALERT, AWARENESS_DECAY_RATE, AWARENESS_NOISE_RATE,
+    AWARENESS_SUSPICIOUS, AWARENESS_VISUAL_RATE,
+};
 pub use perception::AiPerception;
 pub use movement::{PatrolPath, AiMovement};
 pub use combat::{AiCombat, CoverPoint, CoverSeeker};

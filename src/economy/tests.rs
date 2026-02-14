@@ -668,3 +668,136 @@ fn test_wallet_total_spent_saturating_overflow() {
     assert!(result);
     assert_eq!(wallet.total_spent, i32::MAX); // total_spent 飽和
 }
+
+// ============================================================================
+// PropertyOwnership 測試
+// ============================================================================
+
+#[test]
+fn test_property_for_sale() {
+    let property = PropertyOwnership::for_sale(50000, 500);
+
+    assert!(!property.owned);
+    assert_eq!(property.purchase_price, 50000);
+    assert_eq!(property.daily_income, 500);
+    assert_eq!(property.last_income_day, -1);
+}
+
+#[test]
+fn test_property_purchase() {
+    let mut property = PropertyOwnership::for_sale(50000, 500);
+    property.purchase();
+
+    assert!(property.owned);
+}
+
+#[test]
+fn test_property_collect_income_owned() {
+    let mut property = PropertyOwnership::for_sale(50000, 500);
+    property.purchase();
+
+    let income = property.collect_income(0);
+    assert_eq!(income, 500);
+    assert_eq!(property.last_income_day, 0);
+}
+
+#[test]
+fn test_property_collect_income_not_owned() {
+    let mut property = PropertyOwnership::for_sale(50000, 500);
+
+    let income = property.collect_income(0);
+    assert_eq!(income, 0); // 未擁有不收租
+}
+
+#[test]
+fn test_property_collect_income_no_duplicate() {
+    let mut property = PropertyOwnership::for_sale(50000, 500);
+    property.purchase();
+
+    let income1 = property.collect_income(0);
+    let income2 = property.collect_income(0);
+
+    assert_eq!(income1, 500);
+    assert_eq!(income2, 0); // 同一天不重複收租
+}
+
+#[test]
+fn test_property_collect_income_next_day() {
+    let mut property = PropertyOwnership::for_sale(50000, 500);
+    property.purchase();
+
+    let income1 = property.collect_income(0);
+    let income2 = property.collect_income(1);
+
+    assert_eq!(income1, 500);
+    assert_eq!(income2, 500); // 新的一天可以再收租
+    assert_eq!(property.last_income_day, 1);
+}
+
+#[test]
+fn test_property_has_collected_today() {
+    let mut property = PropertyOwnership::for_sale(50000, 500);
+    property.purchase();
+
+    assert!(!property.has_collected_today(0));
+    property.collect_income(0);
+    assert!(property.has_collected_today(0));
+    assert!(!property.has_collected_today(1)); // 新一天尚未收租
+}
+
+#[test]
+fn test_property_constants() {
+    assert!(PROPERTY_INTERACTION_DISTANCE > 0.0);
+    assert!(RENTAL_INCOME_HOUR >= 0.0);
+    assert!(RENTAL_INCOME_HOUR < 24.0);
+}
+
+// ============================================================================
+// RobberyState 測試
+// ============================================================================
+
+#[test]
+fn test_robbery_state_default() {
+    let state = RobberyState::default();
+    assert_eq!(state.cooldown, 0.0);
+    assert!(state.can_rob());
+}
+
+#[test]
+fn test_robbery_state_rob_sets_cooldown() {
+    let mut state = RobberyState::default();
+    state.rob();
+
+    assert!(!state.can_rob());
+    assert_eq!(state.cooldown, ROBBERY_COOLDOWN);
+}
+
+#[test]
+fn test_robbery_state_tick_reduces_cooldown() {
+    let mut state = RobberyState::default();
+    state.rob();
+
+    state.tick(100.0);
+    assert!(!state.can_rob()); // 300 - 100 = 200，仍在冷卻
+
+    state.tick(200.0);
+    assert!(state.can_rob()); // 冷卻完畢
+}
+
+#[test]
+fn test_robbery_state_tick_clamps_to_zero() {
+    let mut state = RobberyState::default();
+    state.rob();
+
+    state.tick(999.0); // 超過冷卻時間
+    assert_eq!(state.cooldown, 0.0);
+    assert!(state.can_rob());
+}
+
+#[test]
+fn test_robbery_constants() {
+    assert!(ROBBERY_INTERACTION_DISTANCE > 0.0);
+    assert!(ROBBERY_MIN_AMOUNT > 0);
+    assert!(ROBBERY_MAX_AMOUNT > ROBBERY_MIN_AMOUNT);
+    assert!(ROBBERY_COOLDOWN > 0.0);
+}

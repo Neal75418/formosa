@@ -278,7 +278,9 @@ fn spawn_police_officer(
     visuals: &PoliceVisuals,
     wanted_stars: u8,
 ) {
-    let officer_type = if wanted_stars >= SWAT_STAR_THRESHOLD {
+    let officer_type = if wanted_stars >= MILITARY_STAR_THRESHOLD {
+        PoliceType::Military
+    } else if wanted_stars >= SWAT_STAR_THRESHOLD {
         PoliceType::Swat
     } else {
         PoliceType::Patrol
@@ -315,14 +317,18 @@ fn spawn_police_officer(
                 ..default()
             },
             Health {
-                current: POLICE_OFFICER_HEALTH,
-                max: POLICE_OFFICER_HEALTH,
+                current: if officer_type == PoliceType::Military { MILITARY_HEALTH } else { POLICE_OFFICER_HEALTH },
+                max: if officer_type == PoliceType::Military { MILITARY_HEALTH } else { POLICE_OFFICER_HEALTH },
                 ..default()
             },
             HitReaction::default(),
             AiMovement {
                 walk_speed: OFFICER_WALK_SPEED,
-                run_speed: if officer_type == PoliceType::Swat { SWAT_RUN_SPEED } else { OFFICER_RUN_SPEED },
+                run_speed: match officer_type {
+                    PoliceType::Military => MILITARY_RUN_SPEED,
+                    PoliceType::Swat => SWAT_RUN_SPEED,
+                    _ => OFFICER_RUN_SPEED,
+                },
                 ..default()
             },
             RigidBody::KinematicPositionBased,

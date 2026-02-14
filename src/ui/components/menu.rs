@@ -137,3 +137,66 @@ pub struct MissionResultStats;
 /// 任務結果獎勵
 #[derive(Component)]
 pub struct MissionResultReward;
+
+// ============================================================================
+// 存檔槽 UI 組件
+// ============================================================================
+
+/// 存檔槽 UI 容器（全螢幕覆蓋）
+#[derive(Component)]
+pub struct SaveSlotContainer;
+
+/// 存檔槽卡片按鈕
+#[derive(Component)]
+pub struct SaveSlotCard {
+    pub slot: usize,
+}
+
+/// 存檔槽資訊文字（第二行：日期/遊玩時間/金錢）
+#[derive(Component)]
+pub struct SaveSlotDetail {
+    pub slot: usize,
+}
+
+/// 模式切換分頁按鈕
+#[derive(Component)]
+pub struct SaveSlotModeTab {
+    pub mode: SaveSlotMode,
+}
+
+/// 存檔槽操作模式
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SaveSlotMode {
+    Save,
+    Load,
+}
+
+/// 存檔槽 UI 狀態資源
+#[derive(Resource)]
+pub struct SaveSlotUiState {
+    /// 當前模式
+    pub mode: SaveSlotMode,
+    /// 是否需要刷新存檔資訊
+    pub needs_refresh: bool,
+    /// 存檔槽快取
+    pub slot_cache: Vec<Option<SlotCacheEntry>>,
+}
+
+/// 存檔槽快取項目（掃描結果）
+#[derive(Clone, Debug)]
+pub struct SlotCacheEntry {
+    pub timestamp: u64,
+    pub play_time_secs: f64,
+    pub cash: i32,
+    pub chapter: u32,
+}
+
+impl Default for SaveSlotUiState {
+    fn default() -> Self {
+        Self {
+            mode: SaveSlotMode::Save,
+            needs_refresh: true,
+            slot_cache: vec![None; 10],
+        }
+    }
+}

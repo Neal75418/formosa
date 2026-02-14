@@ -14,7 +14,9 @@ pub struct Player {
     pub speed: f32,
     pub rotation_speed: f32,
     pub sprint_speed: f32,
+    pub crouch_speed: f32,
     pub is_sprinting: bool,
+    pub is_crouching: bool,
     pub jump_force: f32,
     pub vertical_velocity: f32,
     pub is_grounded: bool,
@@ -40,7 +42,9 @@ impl Default for Player {
             speed: 10.0,           // 基礎走路速度
             rotation_speed: 3.0,
             sprint_speed: 18.0,    // 衝刺速度
+            crouch_speed: 4.0,     // 蹲伏速度
             is_sprinting: false,
+            is_crouching: false,
             jump_force: 12.0,
             vertical_velocity: 0.0,
             is_grounded: true,
@@ -140,6 +144,66 @@ impl SprintState {
 #[derive(Component, Default)]
 pub struct PlayerSprintState {
     pub state: SprintState,
+}
+
+// ============================================================================
+// 體力系統
+// ============================================================================
+
+/// 體力組件（控制衝刺能力）
+#[derive(Component)]
+pub struct Stamina {
+    pub current: f32,
+    pub max: f32,
+    pub drain_rate: f32,   // 衝刺時消耗速度（每秒）
+    pub regen_rate: f32,   // 非衝刺時恢復速度（每秒）
+    pub exhausted: bool,   // 是否耗盡（需恢復到門檻才能再衝刺）
+}
+
+impl Default for Stamina {
+    fn default() -> Self {
+        Self {
+            current: 100.0,
+            max: 100.0,
+            drain_rate: 15.0,
+            regen_rate: 10.0,
+            exhausted: false,
+        }
+    }
+}
+
+impl Stamina {
+    /// 耗盡後恢復到此比例才能重新衝刺（防止體力閃爍）
+    pub const RECOVERY_THRESHOLD: f32 = 0.2;
+
+    /// 體力比例 (0.0 ~ 1.0)
+    pub fn ratio(&self) -> f32 {
+        self.current / self.max
+    }
+
+    /// 消耗體力，返回是否仍有體力
+    pub fn drain(&mut self, dt: f32) -> bool {
+        self.current = (self.current - self.drain_rate * dt).max(0.0);
+        if self.current <= 0.0 {
+            self.exhausted = true;
+            false
+        } else {
+            true
+        }
+    }
+
+    /// 恢復體力
+    pub fn regenerate(&mut self, dt: f32) {
+        self.current = (self.current + self.regen_rate * dt).min(self.max);
+        if self.exhausted && self.ratio() >= Self::RECOVERY_THRESHOLD {
+            self.exhausted = false;
+        }
+    }
+
+    /// 能否衝刺
+    pub fn can_sprint(&self) -> bool {
+        !self.exhausted && self.current > 0.0
+    }
 }
 
 /// 閃避狀態
@@ -400,3 +464,184 @@ pub struct VehicleDoor {
     /// 最大開門角度（弧度）
     pub max_angle: f32,
 }
+
+// ============================================================================
+// 測試
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stamina_default() {
+        let s = Stamina::default();
+        assert_eq!(s.current, 100.0);
+        assert_eq!(s.max, 100.0);
+        assert!(!s.exhausted);
+        assert!(s.can_sprint());
+    }
+
+    #[test]
+    fn stamina_drain() {
+        let mut s = Stamina::default();
+        // 1 秒消耗 15
+        assert!(s.drain(1.0));
+        assert!((s.current - 85.0).abs() < f32::EPSILON);
+        assert!(!s.exhausted);
+    }
+
+    #[test]
+    fn stamina_drain_to_zero() {
+        let mut s = Stamina::default();
+        // 消耗到 0（100 / 15 ≈ 6.67 秒）
+        assert!(!s.drain(7.0));
+        assert_eq!(s.current, 0.0);
+        assert!(s.exhausted);
+        assert!(!s.can_sprint());
+    }
+
+    #[test]
+    fn stamina_regenerate() {
+        let mut s = Stamina { current: 50.0, ..Default::default() };
+        // 1 秒恢復 10
+        s.regenerate(1.0);
+        assert!((s.current - 60.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn stamina_regenerate_capped_at_max() {
+        let mut s = Stamina { current: 95.0, ..Default::default() };
+        s.regenerate(2.0);
+        assert_eq!(s.current, 100.0);
+    }
+
+    #[test]
+    fn stamina_exhausted_recovery_threshold() {
+        let mut s = Stamina {
+            current: 0.0,
+            exhausted: true,
+            ..Default::default()
+        };
+        assert!(!s.can_sprint());
+
+        // 恢復到 15%（低於 20% 門檻）→ 仍然 exhausted
+        s.regenerate(1.5); // +15
+        assert!(s.exhausted);
+        assert!(!s.can_sprint());
+
+        // 恢復到 25%（超過 20% 門檻）→ 解除 exhausted
+        s.regenerate(1.0); // +10 = 25
+        assert!(!s.exhausted);
+        assert!(s.can_sprint());
+    }
+
+    #[test]
+    fn stamina_ratio() {
+        let s = Stamina { current: 75.0, ..Default::default() };
+        assert!((s.ratio() - 0.75).abs() < f32::EPSILON);
+    }
+
+    // ============================================================================
+    // 噪音等級測試
+    // ============================================================================
+
+    #[test]
+    fn noise_level_values() {
+        assert_eq!(NoiseLevel::Silent.value(), 0.0);
+        assert!(NoiseLevel::Low.value() > 0.0);
+        assert!(NoiseLevel::Loud.value() > NoiseLevel::Low.value());
+        assert_eq!(NoiseLevel::Max.value(), 1.0);
+    }
+
+    #[test]
+    fn noise_level_detection_radius() {
+        assert_eq!(NoiseLevel::Silent.detection_radius(), 0.0);
+        assert!(NoiseLevel::Low.detection_radius() > 0.0);
+        assert!(NoiseLevel::Loud.detection_radius() > NoiseLevel::Low.detection_radius());
+        assert!(NoiseLevel::Max.detection_radius() >= 50.0);
+    }
+
+    #[test]
+    fn stealth_state_default() {
+        let state = StealthState::default();
+        assert_eq!(state.noise_level, NoiseLevel::Low);
+        assert_eq!(state.noise_decay_timer, 0.0);
+    }
+
+    #[test]
+    fn stealth_kill_multiplier_is_high() {
+        assert!(STEALTH_KILL_MULTIPLIER >= 5.0);
+    }
+
+    #[test]
+    fn player_crouch_defaults() {
+        let player = Player::default();
+        assert!(!player.is_crouching);
+        assert!(player.crouch_speed < player.speed);
+        assert!(player.crouch_speed > 0.0);
+    }
+}
+
+// ============================================================================
+// 潛行系統
+// ============================================================================
+
+/// 噪音等級
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum NoiseLevel {
+    /// 蹲伏靜止/緩行：幾乎無聲
+    Silent,
+    /// 一般步行
+    #[default]
+    Low,
+    /// 衝刺
+    Loud,
+    /// 射擊/爆炸
+    Max,
+}
+
+impl NoiseLevel {
+    /// 噪音值（用於 AI 聽覺偵測）
+    pub fn value(&self) -> f32 {
+        match self {
+            NoiseLevel::Silent => 0.0,
+            NoiseLevel::Low => 0.3,
+            NoiseLevel::Loud => 0.7,
+            NoiseLevel::Max => 1.0,
+        }
+    }
+
+    /// 噪音偵測半徑（公尺）
+    pub fn detection_radius(&self) -> f32 {
+        match self {
+            NoiseLevel::Silent => 0.0,
+            NoiseLevel::Low => 8.0,
+            NoiseLevel::Loud => 25.0,
+            NoiseLevel::Max => 50.0,
+        }
+    }
+}
+
+/// 潛行狀態資源
+#[derive(Resource)]
+pub struct StealthState {
+    /// 當前噪音等級
+    pub noise_level: NoiseLevel,
+    /// 噪音衰減計時器（射擊後慢慢降低）
+    pub noise_decay_timer: f32,
+}
+
+impl Default for StealthState {
+    fn default() -> Self {
+        Self {
+            noise_level: NoiseLevel::Low,
+            noise_decay_timer: 0.0,
+        }
+    }
+}
+
+/// 噪音衰減時間（射擊後幾秒噪音恢復正常）
+pub const NOISE_DECAY_TIME: f32 = 2.0;
+/// 靜默擊殺傷害倍率
+pub const STEALTH_KILL_MULTIPLIER: f32 = 10.0;

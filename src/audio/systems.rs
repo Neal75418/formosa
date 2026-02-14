@@ -8,7 +8,7 @@
 
 use bevy::prelude::*;
 use crate::core::WorldTime;
-use crate::vehicle::Vehicle;
+use crate::vehicle::{Vehicle, VehicleType};
 use crate::player::Player;
 use super::{AudioManager, EngineSound, AmbientSound, WeaponSounds};
 use crate::combat::WeaponType;
@@ -150,15 +150,35 @@ pub fn play_sound_effect(
     ));
 }
 
-/// 生成機車引擎音效
+/// 生成機車引擎音效（保留向後相容）
 pub fn spawn_scooter_engine_sound(
     commands: &mut Commands,
     asset_server: &AssetServer,
     scooter_entity: Entity,
 ) {
-    let engine_sound = asset_server.load("audio/engine_scooter.ogg");
+    spawn_engine_sound(commands, asset_server, scooter_entity, super::EngineType::Scooter);
+}
 
-    commands.entity(scooter_entity).with_children(|parent| {
+/// 根據引擎類型生成對應引擎音效
+/// 各車種使用不同音效檔和音高/音量預設值：
+/// - Scooter: 高轉速（125cc 速克達）
+/// - Car: 中低音（一般轎車）
+/// - Bus: 低沉柴油引擎
+pub fn spawn_engine_sound(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    vehicle_entity: Entity,
+    engine_type: super::EngineType,
+) {
+    let (audio_path, engine_config) = match engine_type {
+        super::EngineType::Scooter => ("audio/engine_scooter.ogg", EngineSound::scooter()),
+        super::EngineType::Car => ("audio/engine_car.ogg", EngineSound::car()),
+        super::EngineType::Bus => ("audio/engine_bus.ogg", EngineSound::bus()),
+    };
+
+    let engine_sound = asset_server.load(audio_path);
+
+    commands.entity(vehicle_entity).with_children(|parent| {
         parent.spawn((
             AudioPlayer::<AudioSource>(engine_sound),
             PlaybackSettings {
@@ -167,9 +187,43 @@ pub fn spawn_scooter_engine_sound(
                 paused: true,
                 ..default()
             },
-            EngineSound::scooter(),
+            engine_config,
         ));
     });
+}
+
+/// 將 VehicleType 映射到 EngineType
+fn vehicle_type_to_engine_type(vt: VehicleType) -> super::EngineType {
+    match vt {
+        VehicleType::Scooter => super::EngineType::Scooter,
+        VehicleType::Car | VehicleType::Taxi => super::EngineType::Car,
+        VehicleType::Bus => super::EngineType::Bus,
+    }
+}
+
+/// 自動附加引擎音效系統
+/// 偵測沒有 `EngineSound` 組件的車輛，自動附加對應引擎音效
+pub fn auto_attach_engine_sounds(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    vehicle_query: Query<(Entity, &Vehicle), Without<EngineSound>>,
+    children_query: Query<&Children>,
+    engine_query: Query<&EngineSound>,
+) {
+    for (entity, vehicle) in &vehicle_query {
+        // 檢查子實體是否已有引擎音效（避免重複附加）
+        let has_engine_child = children_query
+            .get(entity)
+            .map(|children| children.iter().any(|c| engine_query.contains(c)))
+            .unwrap_or(false);
+
+        if has_engine_child {
+            continue;
+        }
+
+        let engine_type = vehicle_type_to_engine_type(vehicle.vehicle_type);
+        spawn_engine_sound(&mut commands, &asset_server, entity, engine_type);
+    }
 }
 
 /// 生成環境音效點
@@ -203,7 +257,7 @@ pub fn spawn_ambient_sound_point(
 /// 播放一次性音效（共用邏輯）
 /// 消除重複的 `if let Some(handle) = ... { commands.spawn(...) }` 模式
 #[inline]
-fn spawn_one_shot_sound(
+pub(crate) fn spawn_one_shot_sound(
     commands: &mut Commands,
     handle: Option<Handle<AudioSource>>,
     volume: f32,
@@ -221,7 +275,7 @@ fn spawn_one_shot_sound(
 
 /// 計算音效音量
 #[inline]
-fn calculate_sfx_volume(audio_manager: &AudioManager, multiplier: f32) -> f32 {
+pub(crate) fn calculate_sfx_volume(audio_manager: &AudioManager, multiplier: f32) -> f32 {
     (audio_manager.master_volume * audio_manager.sfx_volume * multiplier).min(1.0)
 }
 
@@ -533,4 +587,34 @@ pub fn play_wanted_up_sound(
 ) {
     let volume = calculate_sfx_volume(audio_manager, 1.0);
     spawn_one_shot_sound(commands, ui_sounds.wanted_up.clone(), volume);
+}
+
+/// 播放通緝消除音效
+pub fn play_wanted_clear_sound(
+    commands: &mut Commands,
+    ui_sounds: &UISounds,
+    audio_manager: &AudioManager,
+) {
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, ui_sounds.wanted_clear.clone(), volume);
+}
+
+/// 播放任務失敗音效
+pub fn play_mission_fail_sound(
+    commands: &mut Commands,
+    ui_sounds: &UISounds,
+    audio_manager: &AudioManager,
+) {
+    let volume = calculate_sfx_volume(audio_manager, 1.0);
+    spawn_one_shot_sound(commands, ui_sounds.mission_fail.clone(), volume);
+}
+
+/// 播放金錢獲得音效
+pub fn play_money_gain_sound(
+    commands: &mut Commands,
+    ui_sounds: &UISounds,
+    audio_manager: &AudioManager,
+) {
+    let volume = calculate_sfx_volume(audio_manager, 0.8);
+    spawn_one_shot_sound(commands, ui_sounds.money_gain.clone(), volume);
 }

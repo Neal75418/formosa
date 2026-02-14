@@ -356,3 +356,66 @@ fn interaction_prompt_state_fade_clamped() {
     state.update(10.0);
     assert_eq!(state.fade_progress, 0.0);
 }
+
+// ============================================================================
+// GPS 轉彎方向測試
+// ============================================================================
+
+#[test]
+fn gps_turn_direction_straight() {
+    use super::components::GpsTurnDirection;
+    assert_eq!(GpsTurnDirection::from_angle(0.0), GpsTurnDirection::Straight);
+    assert_eq!(GpsTurnDirection::from_angle(0.1), GpsTurnDirection::Straight);
+    assert_eq!(GpsTurnDirection::from_angle(-0.1), GpsTurnDirection::Straight);
+}
+
+#[test]
+fn gps_turn_direction_left_right() {
+    use super::components::GpsTurnDirection;
+    assert_eq!(GpsTurnDirection::from_angle(1.0), GpsTurnDirection::Right);
+    assert_eq!(GpsTurnDirection::from_angle(-1.0), GpsTurnDirection::Left);
+}
+
+#[test]
+fn gps_turn_direction_uturn() {
+    use super::components::GpsTurnDirection;
+    assert_eq!(GpsTurnDirection::from_angle(3.0), GpsTurnDirection::UTurn);
+    assert_eq!(GpsTurnDirection::from_angle(-3.0), GpsTurnDirection::UTurn);
+}
+
+#[test]
+fn gps_turn_direction_symbols() {
+    use super::components::GpsTurnDirection;
+    assert!(!GpsTurnDirection::Straight.symbol().is_empty());
+    assert!(!GpsTurnDirection::Left.symbol().is_empty());
+    assert!(!GpsTurnDirection::Right.symbol().is_empty());
+    assert!(!GpsTurnDirection::UTurn.symbol().is_empty());
+    assert!(!GpsTurnDirection::Arrived.symbol().is_empty());
+}
+
+#[test]
+fn gps_turn_direction_labels() {
+    use super::components::GpsTurnDirection;
+    assert_eq!(GpsTurnDirection::Straight.label(), "直行");
+    assert_eq!(GpsTurnDirection::Left.label(), "左轉");
+    assert_eq!(GpsTurnDirection::Right.label(), "右轉");
+}
+
+#[test]
+fn gps_navigation_clear_resets_turn() {
+    use super::components::{GpsNavigationState, GpsTurnDirection};
+    let mut gps = GpsNavigationState::default();
+    gps.next_turn_direction = GpsTurnDirection::Left;
+    gps.distance_to_next_turn = 50.0;
+    gps.clear();
+    assert_eq!(gps.next_turn_direction, GpsTurnDirection::Straight);
+    assert!((gps.distance_to_next_turn - 0.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn gps_distance_format() {
+    use super::gps_navigation::format_gps_distance;
+    assert_eq!(format_gps_distance(500.0), "500 m");
+    assert_eq!(format_gps_distance(1500.0), "1.5 km");
+    assert_eq!(format_gps_distance(50.0), "50 m");
+}

@@ -34,9 +34,13 @@ impl Plugin for EconomyPlugin {
                 sync_money_display,
                 handle_shop_interaction.in_set(InteractionSet::Economy),
                 handle_atm_interaction.in_set(InteractionSet::Economy),
+                property_purchase_system.in_set(InteractionSet::Economy),
+                store_robbery_system.in_set(InteractionSet::Economy),
                 process_transactions,
                 update_money_ui,
                 update_cash_pickups,
+                rental_income_system,
+                robbery_cooldown_system,
             ).chain());
     }
 }

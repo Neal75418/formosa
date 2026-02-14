@@ -93,6 +93,9 @@ fn setup_sample_dialogues(mut database: ResMut<DialogueDatabase>) {
         voice_style: None,
     });
 
+    // 註冊支線任務對話（對話 ID 200-211，含分支選項影響好感度）
+    super::side_dialogues::register_side_dialogues(&mut database);
+
     info!(
         "對話系統初始化完成，共 {} 個對話",
         database.dialogue_count()

@@ -5,10 +5,12 @@
 
 use bevy::prelude::*;
 
-use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
+use crate::combat::{Armor, CombatState, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
 use crate::core::{InteractionState, PlayerStats, WorldTime};
 use crate::player::Player;
 use crate::ui::{MoneyDisplay, NotificationQueue};
+use crate::wanted::CrimeEvent;
+use crate::world::Building;
 
 use super::components::*;
 
@@ -575,4 +577,206 @@ pub fn spawn_cash_pickup(
             interaction_type: InteractionType::Pickup,
         },
     )).id()
+}
+
+// ============================================================================
+// 房產購買系統
+// ============================================================================
+
+/// 房產購買系統
+/// 玩家按 F 鍵接近可購買的建築，支付購買價格取得擁有權
+pub fn property_purchase_system(
+    mut wallet: ResMut<PlayerWallet>,
+    mut money_events: MessageWriter<MoneyChangedEvent>,
+    mut notifications: ResMut<NotificationQueue>,
+    mut interaction: ResMut<InteractionState>,
+    player_query: Query<&Transform, With<Player>>,
+    mut property_query: Query<(&Transform, &Building, &mut PropertyOwnership)>,
+) {
+    if !interaction.can_interact() {
+        return;
+    }
+
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
+    let player_pos = player_transform.translation;
+    let interact_dist_sq = PROPERTY_INTERACTION_DISTANCE * PROPERTY_INTERACTION_DISTANCE;
+
+    for (building_transform, building, mut property) in property_query.iter_mut() {
+        if property.owned {
+            continue;
+        }
+
+        let dist_sq = building_transform.translation.distance_squared(player_pos);
+        if dist_sq > interact_dist_sq {
+            continue;
+        }
+
+        // 嘗試購買
+        if wallet.spend_cash(property.purchase_price) {
+            property.purchase();
+            interaction.consume();
+
+            money_events.write(MoneyChangedEvent {
+                amount: -property.purchase_price,
+                reason: MoneyChangeReason::PropertyPurchase,
+                new_balance: wallet.cash,
+            });
+
+            notifications.info(format!(
+                "購買 {} (-${}), 每日收入 ${}",
+                building.name, property.purchase_price, property.daily_income
+            ));
+
+            info!(
+                "購買房產: {} (${}) — 每日收入: ${}",
+                building.name, property.purchase_price, property.daily_income
+            );
+            return; // 一次只能購買一棟
+        } else {
+            notifications.warning(format!(
+                "資金不足！需要 ${}",
+                property.purchase_price
+            ));
+            return;
+        }
+    }
+}
+
+/// 租金收入系統
+/// 每天早上 6 點自動發放已擁有房產的租金
+pub fn rental_income_system(
+    world_time: Res<WorldTime>,
+    mut wallet: ResMut<PlayerWallet>,
+    mut money_events: MessageWriter<MoneyChangedEvent>,
+    mut notifications: ResMut<NotificationQueue>,
+    mut property_query: Query<(&Building, &mut PropertyOwnership)>,
+) {
+    // 只在早上 6 點前後的 0.5 小時窗口內檢查（避免漏掉）
+    let hour = world_time.hour;
+    if (hour - RENTAL_INCOME_HOUR).abs() > 0.5 {
+        return;
+    }
+
+    // WorldTime.hour 是 0-24 循環
+    // last_income_day 初始為 -1，確保首次觸發
+    // 每次 hour 在 6.0 附近且 last_income_day != 0 時收租
+    let game_day = 0_i32; // 同一天內只收一次
+
+    let mut total_income = 0;
+    let mut property_count = 0;
+
+    for (building, mut property) in property_query.iter_mut() {
+        let income = property.collect_income(game_day);
+        if income > 0 {
+            total_income += income;
+            property_count += 1;
+            debug!("租金收入: {} → ${}", building.name, income);
+        }
+    }
+
+    if total_income > 0 {
+        wallet.add_cash(total_income);
+
+        money_events.write(MoneyChangedEvent {
+            amount: total_income,
+            reason: MoneyChangeReason::RentalIncome,
+            new_balance: wallet.cash,
+        });
+
+        notifications.info(format!(
+            "租金收入 +${} ({} 物件)",
+            total_income, property_count
+        ));
+
+        info!("每日租金收入: ${} ({} 物件)", total_income, property_count);
+    }
+}
+
+// ============================================================================
+// 商店搶劫系統
+// ============================================================================
+
+/// 搶劫冷卻更新系統
+pub fn robbery_cooldown_system(
+    time: Res<Time>,
+    mut robbery_query: Query<&mut RobberyState>,
+) {
+    let dt = time.delta_secs();
+    for mut robbery in robbery_query.iter_mut() {
+        robbery.tick(dt);
+    }
+}
+
+/// 商店搶劫系統
+/// 玩家持槍瞄準接近商店時按 F 搶劫，獲得隨機金額，觸發通緝
+pub fn store_robbery_system(
+    combat_state: Res<CombatState>,
+    mut wallet: ResMut<PlayerWallet>,
+    mut money_events: MessageWriter<MoneyChangedEvent>,
+    mut crime_events: MessageWriter<CrimeEvent>,
+    mut notifications: ResMut<NotificationQueue>,
+    mut interaction: ResMut<InteractionState>,
+    player_query: Query<(&Transform, &WeaponInventory), With<Player>>,
+    mut shop_query: Query<(&Transform, &Shop, &mut RobberyState)>,
+) {
+    if !combat_state.is_aiming || !interaction.can_interact() {
+        return;
+    }
+
+    let Ok((player_transform, weapon_inventory)) = player_query.single() else {
+        return;
+    };
+
+    // 必須裝備武器
+    if weapon_inventory.current_weapon().is_none() {
+        return;
+    }
+
+    let player_pos = player_transform.translation;
+    let rob_dist_sq = ROBBERY_INTERACTION_DISTANCE * ROBBERY_INTERACTION_DISTANCE;
+
+    for (shop_transform, shop, mut robbery) in shop_query.iter_mut() {
+        let dist_sq = shop_transform.translation.distance_squared(player_pos);
+        if dist_sq > rob_dist_sq {
+            continue;
+        }
+
+        if !robbery.can_rob() {
+            notifications.warning("這家店最近已被搶過，不宜再來");
+            interaction.consume();
+            return;
+        }
+
+        // 執行搶劫
+        robbery.rob();
+        interaction.consume();
+
+        let amount = ROBBERY_MIN_AMOUNT
+            + (rand::random::<f32>() * (ROBBERY_MAX_AMOUNT - ROBBERY_MIN_AMOUNT) as f32) as i32;
+
+        wallet.add_cash(amount);
+
+        money_events.write(MoneyChangedEvent {
+            amount,
+            reason: MoneyChangeReason::Robbery,
+            new_balance: wallet.cash,
+        });
+
+        crime_events.write(CrimeEvent::ShopRobbery {
+            position: shop_transform.translation,
+        });
+
+        notifications.warning(format!(
+            "搶劫 {} 得手 ${}！通緝上升！",
+            shop.name, amount
+        ));
+
+        info!(
+            "搶劫商店: {} → +${} (位置: {:.1}, {:.1})",
+            shop.name, amount, shop_transform.translation.x, shop_transform.translation.z
+        );
+        return; // 一次只搶一家
+    }
 }

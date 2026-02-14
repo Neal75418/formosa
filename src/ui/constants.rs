@@ -144,6 +144,27 @@ pub const PAUSE_HINT_COLOR: Color = Color::srgba(0.6, 0.6, 0.65, 0.8);
 pub const PAUSE_SUBTITLE_COLOR: Color = Color::srgba(0.5, 0.5, 0.55, 0.7);
 
 // ============================================================================
+// GTA 風格存檔槽 UI 顏色
+// ============================================================================
+
+/// 存檔槽卡片背景
+pub const SAVE_SLOT_CARD_BG: Color = Color::srgba(0.1, 0.1, 0.15, 0.9);
+/// 存檔槽卡片邊框
+pub const SAVE_SLOT_CARD_BORDER: Color = Color::srgba(0.3, 0.3, 0.4, 0.6);
+/// 存檔槽卡片懸停
+pub const SAVE_SLOT_CARD_HOVER: Color = Color::srgba(0.15, 0.15, 0.22, 0.95);
+/// 存檔槽卡片按下
+pub const SAVE_SLOT_CARD_PRESSED: Color = Color::srgba(0.08, 0.08, 0.12, 0.95);
+/// 存檔槽啟用分頁色
+pub const SAVE_SLOT_ACTIVE_TAB: Color = Color::srgb(0.2, 0.5, 0.3);
+/// 存檔槽非啟用分頁色
+pub const SAVE_SLOT_INACTIVE_TAB: Color = Color::srgba(0.15, 0.15, 0.2, 0.8);
+/// 存檔槽空白文字色
+pub const SAVE_SLOT_EMPTY_TEXT: Color = Color::srgba(0.4, 0.4, 0.45, 0.7);
+/// 存檔槽標題色（金黃）
+pub const SAVE_SLOT_TITLE_COLOR: Color = Color::srgb(0.9, 0.85, 0.6);
+
+// ============================================================================
 // GTA 風格準星顏色
 // ============================================================================
 

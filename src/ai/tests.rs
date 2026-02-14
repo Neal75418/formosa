@@ -358,3 +358,47 @@ fn test_ai_state_invalid_transitions() {
     assert!(!AiState::TakingCover.can_transition_to(&AiState::Patrol));
     assert!(!AiState::Chase.can_transition_to(&AiState::Idle));
 }
+
+// ============================================================================
+// 警覺度系統測試
+// ============================================================================
+
+#[test]
+fn test_awareness_default_zero() {
+    let behavior = AiBehavior::default();
+    assert_eq!(behavior.awareness, 0.0);
+}
+
+#[test]
+fn test_is_unaware_idle() {
+    let behavior = AiBehavior::default();
+    assert!(behavior.is_unaware()); // Idle + awareness 0.0
+}
+
+#[test]
+fn test_is_unaware_patrol() {
+    let mut behavior = AiBehavior::default();
+    behavior.state = AiState::Patrol;
+    assert!(behavior.is_unaware());
+}
+
+#[test]
+fn test_is_not_unaware_when_alert_state() {
+    let mut behavior = AiBehavior::default();
+    behavior.set_state(AiState::Alert, 1.0);
+    assert!(!behavior.is_unaware());
+}
+
+#[test]
+fn test_is_not_unaware_when_high_awareness() {
+    let mut behavior = AiBehavior::default();
+    behavior.awareness = AWARENESS_SUSPICIOUS + 0.1;
+    assert!(!behavior.is_unaware());
+}
+
+#[test]
+fn test_awareness_constants() {
+    assert!(AWARENESS_SUSPICIOUS < AWARENESS_ALERT);
+    assert!(AWARENESS_DECAY_RATE > 0.0);
+    assert!(AWARENESS_VISUAL_RATE > AWARENESS_NOISE_RATE);
+}

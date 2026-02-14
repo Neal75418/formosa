@@ -68,6 +68,7 @@ pub fn enemy_spawn_system(
         EnemyType::Gangster => 0.45 + 0.25, // 0.70
         EnemyType::Thug => 0.50 + 0.28,     // 0.78
         EnemyType::Boss => 0.55 + 0.30,     // 0.85
+        EnemyType::Military => 0.50 + 0.28, // 與 Thug 相同體型
     };
 
     let spawn_pos = Vec3::new(
@@ -109,15 +110,15 @@ fn spawn_enemy(
     // 敵人尺寸（碰撞體）
     let (collider_half_height, collider_radius) = match enemy_type {
         EnemyType::Gangster => (0.45, 0.25),
-        EnemyType::Thug => (0.50, 0.28),
+        EnemyType::Thug | EnemyType::Military => (0.50, 0.28),
         EnemyType::Boss => (0.55, 0.30),
     };
 
     // 身體比例縮放因子
     let scale = match enemy_type {
         EnemyType::Gangster => 1.0,
-        EnemyType::Thug => 1.1,  // 打手更壯
-        EnemyType::Boss => 1.05, // Boss 略高
+        EnemyType::Thug | EnemyType::Military => 1.1, // 打手/軍人更壯
+        EnemyType::Boss => 1.05,                       // Boss 略高
     };
 
     // 分批插入組件以避免 tuple 大小限制
@@ -166,6 +167,16 @@ fn spawn_enemy(
                     SquadRole::Flanker
                 }
             }
+            EnemyType::Military => {
+                // 軍人：40% 壓制, 30% 突擊, 30% 側翼
+                if role_roll < 0.4 {
+                    SquadRole::Suppressor
+                } else if role_roll < 0.7 {
+                    SquadRole::Rusher
+                } else {
+                    SquadRole::Flanker
+                }
+            }
         }
     };
 
@@ -184,6 +195,7 @@ fn spawn_enemy(
                 EnemyType::Gangster => 0.4,
                 EnemyType::Thug => 0.55,
                 EnemyType::Boss => 0.7,
+                EnemyType::Military => 0.65, // 軍人精準度高
             },
             ..default()
         },
@@ -271,6 +283,15 @@ fn get_enemy_appearance(
                 Color::srgb(0.2, 0.12, 0.08),  // 棕色皮鞋
                 Color::srgb(0.05, 0.05, 0.05), // 黑髮
                 HairStyle::SlickedBack,
+                false,
+            ),
+            EnemyType::Military => (
+                Color::srgb(0.80, 0.65, 0.50), // 中等膚色
+                Color::srgb(0.25, 0.30, 0.18), // 軍綠上衣
+                Color::srgb(0.22, 0.27, 0.15), // 軍綠褲
+                Color::srgb(0.15, 0.12, 0.08), // 深棕軍靴
+                Color::srgb(0.12, 0.10, 0.06), // 深棕短髮
+                HairStyle::Bald,               // 軍人平頭
                 false,
             ),
         };

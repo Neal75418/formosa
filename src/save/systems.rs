@@ -16,6 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
 use crate::core::{GameState, PlayerStats, WeatherState, WorldTime};
 use crate::economy::{MoneyChangeReason, MoneyChangedEvent, PlayerWallet};
+use crate::environment::DestroyedObjectTracker;
 use crate::mission::{
     RelationshipManager, RespectManager, StoryMissionEvent, StoryMissionManager, UnlockManager,
 };
@@ -116,6 +117,8 @@ pub fn handle_save_events(
     game_state: Res<GameState>,
     // 車輛改裝查詢（包含穩定 ID）
     vehicle_mod_query: Query<(Entity, &VehicleId, &VehicleModifications)>,
+    // 破壞持久化
+    destroyed_tracker: Res<DestroyedObjectTracker>,
 ) {
     // 檢查是否已有存檔或讀檔任務在執行（互斥）
     if task_tracker.save_task.is_some() || task_tracker.load_task.is_some() {
@@ -139,6 +142,7 @@ pub fn handle_save_events(
             &player_stats,
             &game_state,
             &vehicle_mod_query,
+            &destroyed_tracker,
         );
 
         // 決定存檔路徑
@@ -220,6 +224,7 @@ fn collect_save_data(
     _player_stats: &PlayerStats,
     game_state: &GameState,
     vehicle_mod_query: &Query<(Entity, &VehicleId, &VehicleModifications)>,
+    destroyed_tracker: &DestroyedObjectTracker,
 ) -> SaveData {
     let mut save_data = SaveData {
         timestamp: SystemTime::now()
@@ -331,6 +336,9 @@ fn collect_save_data(
             .collect();
     }
 
+    // 破壞持久化資料
+    save_data.world.destroyed_object_ids = destroyed_tracker.destroyed_list();
+
     save_data
 }
 
@@ -423,6 +431,7 @@ pub fn apply_pending_load_data(
     )>,
     mut game_state: ResMut<GameState>,
     mut vehicle_query: Query<&mut Vehicle>,
+    mut pending_destruction: ResMut<PendingDestructionRestore>,
 ) {
     if let Some(save_data) = task_tracker.pending_load_data.take() {
         apply_save_data(
@@ -441,11 +450,38 @@ pub fn apply_pending_load_data(
             &mut game_state,
             &mut vehicle_query,
         );
+
+        // 破壞持久化：將 ID 放入緩衝，由下一個系統處理
+        if !save_data.world.destroyed_object_ids.is_empty() {
+            pending_destruction.ids = Some(save_data.world.destroyed_object_ids.clone());
+        }
+
         if task_tracker.save_task.is_none() {
             save_manager.is_busy = false;
         }
         info!("💾 存檔資料已套用");
     }
+}
+
+/// 待恢復的破壞資料（一次性緩衝，由 apply_pending_load_data 填入，
+/// 由 apply_pending_destruction_data 處理後清除）
+#[derive(Resource, Default)]
+pub struct PendingDestructionRestore {
+    pub ids: Option<Vec<u32>>,
+}
+
+/// 套用破壞持久化資料（獨立系統，在 apply_pending_load_data 之後執行）
+pub fn apply_pending_destruction_data(
+    mut commands: Commands,
+    mut pending: ResMut<PendingDestructionRestore>,
+    mut destroyed_tracker: ResMut<DestroyedObjectTracker>,
+    destructible_query: Query<(Entity, &crate::environment::DestructibleId)>,
+) {
+    let Some(ids) = pending.ids.take() else {
+        return;
+    };
+
+    apply_destruction_data(&mut commands, &mut destroyed_tracker, &destructible_query, &ids);
 }
 
 /// 非同步執行讀檔 IO
@@ -760,6 +796,33 @@ fn apply_vehicle_state(
         game_state.player_in_vehicle = false;
         game_state.current_vehicle = None;
     }
+}
+
+fn apply_destruction_data(
+    commands: &mut Commands,
+    destroyed_tracker: &mut DestroyedObjectTracker,
+    destructible_query: &Query<(Entity, &crate::environment::DestructibleId)>,
+    destroyed_ids: &[u32],
+) {
+    // 從存檔恢復已破壞物件 ID
+    destroyed_tracker.restore_from(destroyed_ids);
+
+    // 移除場景中已破壞的物件
+    let mut count = 0u32;
+    for (entity, id) in destructible_query.iter() {
+        if destroyed_tracker.is_destroyed(id.0) {
+            if let Ok(mut entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn();
+                count += 1;
+            }
+        }
+    }
+
+    info!(
+        "還原破壞狀態: {} 個已破壞（存檔記錄 {} 個）",
+        count,
+        destroyed_ids.len()
+    );
 }
 
 // ============================================================================

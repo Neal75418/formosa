@@ -15,6 +15,8 @@ mod interaction_prompt;
 mod minimap;
 mod notification;
 mod pause_menu;
+mod phone;
+mod save_slot_ui;
 mod story_mission_hud;
 mod setup_hud;
 mod setup_map;
@@ -41,6 +43,8 @@ pub use interaction_prompt::*;
 pub use minimap::*;
 pub use notification::*;
 pub use pause_menu::*;
+pub use phone::*;
+pub use save_slot_ui::*;
 pub use story_mission_hud::*;
 pub use systems::*;
 pub use weapon_wheel::*;
@@ -61,6 +65,9 @@ impl Plugin for UiPlugin {
         let ui_active = in_state(AppState::InGame).or(in_state(AppState::Paused));
 
         app
+            // 存檔槽 UI 資源
+            .init_resource::<SaveSlotUiState>()
+            .init_resource::<PhoneUiState>()
             // 暫停狀態進出
             .add_systems(OnEnter(AppState::Paused), on_enter_pause)
             .add_systems(OnExit(AppState::Paused), on_exit_pause)
@@ -78,6 +85,7 @@ impl Plugin for UiPlugin {
                 setup_interaction_prompt,
                 setup_gps_ui,
                 setup_story_mission_hud,
+                setup_phone_ui,
             ).after(setup_chinese_font))
             // Update（核心 + UI 第一組）
             .add_systems(Update, (
@@ -136,13 +144,29 @@ impl Plugin for UiPlugin {
                 update_gps_navigation,
                 update_minimap_gps_marker,
                 gps_mission_integration,
+                update_gps_turn_indicator.after(update_gps_navigation),
             )
                 .in_set(GameSet::Ui)
                 .run_if(ui_active.clone()))
             // 天氣 HUD
             .add_systems(Update, update_weather_hud.in_set(GameSet::Ui).run_if(ui_active.clone()))
             // 劇情任務 HUD
-            .add_systems(Update, update_story_mission_hud.in_set(GameSet::Ui).run_if(ui_active))
+            .add_systems(Update, update_story_mission_hud.in_set(GameSet::Ui).run_if(ui_active.clone()))
+            // 存檔槽 UI
+            .add_systems(Update, (
+                save_slot_input_system,
+                save_slot_tab_system,
+                save_slot_refresh_system,
+                save_slot_click_system,
+                save_slot_hover_system,
+            ).in_set(GameSet::Ui).run_if(ui_active.clone()))
+            // 手機 UI
+            .add_systems(Update, (
+                phone_input_system,
+                phone_visibility_system.after(phone_input_system),
+                phone_icon_highlight_system.after(phone_input_system),
+                phone_content_system.after(phone_input_system),
+            ).in_set(GameSet::Ui).run_if(ui_active))
             // UI Scale 動態更新（視窗大小改變時）
             .add_systems(Update, update_ui_scale);
 

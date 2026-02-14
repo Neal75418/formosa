@@ -2,6 +2,13 @@
 
 use bevy::prelude::*;
 
+/// 賄賂費用
+pub const BRIBE_COST: i32 = 2000;
+/// 賄賂成功後減少的熱度（約降 1 星）
+pub const BRIBE_HEAT_REDUCTION: f32 = 20.0;
+/// 賄賂互動距離
+pub const BRIBE_DISTANCE: f32 = 5.0;
+
 /// 行人報警狀態組件
 /// 當行人目擊犯罪時，會進入報警狀態
 #[derive(Component, Debug)]
@@ -20,6 +27,8 @@ pub struct WitnessState {
     pub report_cooldown: f32,
     /// 是否已完成報警
     pub has_reported: bool,
+    /// 是否已被賄賂
+    pub bribed: bool,
 }
 
 impl Default for WitnessState {
@@ -32,6 +41,7 @@ impl Default for WitnessState {
             call_duration: 3.0,  // 預設 3 秒完成報警
             report_cooldown: 0.0,
             has_reported: false,
+            bribed: false,
         }
     }
 }
@@ -76,6 +86,18 @@ impl WitnessState {
         self.crime_type = None;
         self.crime_position = None;
         self.call_progress = 0.0;
+    }
+
+    /// 接受賄賂：停止報警並標記為已賄賂
+    pub fn bribe(&mut self) {
+        self.bribed = true;
+        self.reset();
+        self.report_cooldown = 120.0; // 賄賂後 2 分鐘內不會再報警
+    }
+
+    /// 是否正在報警中（可被賄賂）
+    pub fn is_calling(&self) -> bool {
+        self.witnessed_crime && !self.has_reported && !self.bribed
     }
 }
 
@@ -164,6 +186,52 @@ mod tests {
         assert!(!ws.witnessed_crime);
         assert_eq!(ws.crime_type, None);
         assert_eq!(ws.call_progress, 0.0);
+    }
+
+    // --- Bribe ---
+
+    #[test]
+    fn bribe_stops_call_and_sets_cooldown() {
+        let mut ws = WitnessState::default();
+        ws.witness_crime(WitnessedCrime::Murder, Vec3::ZERO);
+        ws.tick(1.0); // 部分進度
+        assert!(ws.is_calling());
+
+        ws.bribe();
+        assert!(ws.bribed);
+        assert!(!ws.witnessed_crime);
+        assert!(!ws.is_calling());
+        assert_eq!(ws.report_cooldown, 120.0);
+    }
+
+    #[test]
+    fn bribed_witness_ignores_new_crimes() {
+        let mut ws = WitnessState::default();
+        ws.bribe();
+        ws.witness_crime(WitnessedCrime::Gunshot, Vec3::ZERO);
+        // report_cooldown > 0，不會再報警
+        assert!(!ws.witnessed_crime);
+    }
+
+    #[test]
+    fn is_calling_false_when_not_witnessed() {
+        let ws = WitnessState::default();
+        assert!(!ws.is_calling());
+    }
+
+    #[test]
+    fn is_calling_false_after_report() {
+        let mut ws = WitnessState::default();
+        ws.witness_crime(WitnessedCrime::Assault, Vec3::ZERO);
+        ws.tick(3.0); // 完成報警
+        assert!(!ws.is_calling());
+    }
+
+    #[test]
+    fn bribe_constants() {
+        assert_eq!(BRIBE_COST, 2000);
+        assert_eq!(BRIBE_HEAT_REDUCTION, 20.0);
+        assert_eq!(BRIBE_DISTANCE, 5.0);
     }
 
     // --- WitnessedCrime ---

@@ -72,6 +72,7 @@ impl Plugin for PedestrianPlugin {
             .add_systems(Update, (
                 witness_crime_detection_system,
                 witness_phone_call_system,
+                bribe_witness_system,
                 witness_visual_system,
                 witness_icon_follow_system,
             ).chain().run_if(in_state(AppState::InGame)))

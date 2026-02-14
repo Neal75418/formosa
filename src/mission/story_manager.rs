@@ -848,3 +848,96 @@ pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
     database.register(mission4);
     database.register(mission5);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_env() -> (StoryMissionManager, StoryMissionDatabase) {
+        let mut database = StoryMissionDatabase::default();
+        create_sample_missions(&mut database);
+        let mut manager = StoryMissionManager::default();
+        manager.unlock_mission(1);
+        (manager, database)
+    }
+
+    #[test]
+    fn test_create_checkpoint() {
+        let (mut manager, database) = setup_test_env();
+        let mission = database.get(1).unwrap();
+        let wallet = PlayerWallet::default();
+        let respect = RespectManager::default();
+        let unlocks = UnlockManager::default();
+
+        manager.start_mission(mission, &wallet, &respect, &unlocks).unwrap();
+        manager.create_checkpoint(Vec3::new(10.0, 0.0, 20.0), 1);
+
+        let checkpoint = manager.load_checkpoint().expect("應有檢查點");
+        assert_eq!(checkpoint.mission_id, 1);
+        assert_eq!(checkpoint.phase, 1);
+        assert_eq!(checkpoint.player_position, Vec3::new(10.0, 0.0, 20.0));
+    }
+
+    #[test]
+    fn test_clear_checkpoint() {
+        let (mut manager, database) = setup_test_env();
+        let mission = database.get(1).unwrap();
+        let wallet = PlayerWallet::default();
+        let respect = RespectManager::default();
+        let unlocks = UnlockManager::default();
+
+        manager.start_mission(mission, &wallet, &respect, &unlocks).unwrap();
+        manager.create_checkpoint(Vec3::ZERO, 0);
+        assert!(manager.load_checkpoint().is_some());
+
+        manager.clear_checkpoint();
+        assert!(manager.load_checkpoint().is_none());
+    }
+
+    #[test]
+    fn test_retry_from_checkpoint() {
+        let (mut manager, database) = setup_test_env();
+        let mission = database.get(1).unwrap();
+        let wallet = PlayerWallet::default();
+        let respect = RespectManager::default();
+        let unlocks = UnlockManager::default();
+
+        manager.start_mission(mission, &wallet, &respect, &unlocks).unwrap();
+        manager.create_checkpoint(Vec3::new(50.0, 0.0, 50.0), 1);
+
+        // 模擬失敗
+        manager.current_mission = None;
+
+        let position = manager.retry_from_checkpoint(&database).unwrap();
+        assert_eq!(position, Vec3::new(50.0, 0.0, 50.0));
+        assert!(manager.current_mission.is_some());
+    }
+
+    #[test]
+    fn test_retry_without_checkpoint_fails() {
+        let (mut manager, database) = setup_test_env();
+        assert!(manager.retry_from_checkpoint(&database).is_err());
+    }
+
+    #[test]
+    fn test_validate_checkpoint() {
+        let (mut manager, database) = setup_test_env();
+        let mission = database.get(1).unwrap();
+        let wallet = PlayerWallet::default();
+        let respect = RespectManager::default();
+        let unlocks = UnlockManager::default();
+
+        manager.start_mission(mission, &wallet, &respect, &unlocks).unwrap();
+        manager.create_checkpoint(Vec3::ZERO, 0);
+
+        let result = manager.validate_and_load_checkpoint(&database);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_checkpoint_no_checkpoint() {
+        let (manager, database) = setup_test_env();
+        let result = manager.validate_and_load_checkpoint(&database);
+        assert!(matches!(result, Err(CheckpointError::NoCheckpoint)));
+    }
+}

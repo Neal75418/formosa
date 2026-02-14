@@ -31,9 +31,14 @@ fn check_line_of_sight(
     }
 }
 
-fn calc_hit_chance(distance: f32, config: &PoliceConfig) -> f32 {
+fn calc_hit_chance(distance: f32, config: &PoliceConfig, officer_type: PoliceType) -> f32 {
+    let base = if officer_type == PoliceType::Military {
+        MILITARY_HIT_CHANCE
+    } else {
+        config.base_hit_chance
+    };
     let distance_penalty = (distance / config.attack_range) * config.distance_hit_penalty;
-    (config.base_hit_chance - distance_penalty).max(0.1)
+    (base - distance_penalty).max(0.1)
 }
 
 fn calc_tracer_end(player_pos: Vec3, is_hit: bool) -> Vec3 {
@@ -88,20 +93,23 @@ pub fn police_combat_system(
             continue;
         }
 
-        let hit_chance = calc_hit_chance(distance, &config);
+        let is_military = officer.officer_type == PoliceType::Military;
+        let hit_chance = calc_hit_chance(distance, &config, officer.officer_type);
         let is_hit = rand::random::<f32>() < hit_chance;
         let muzzle_pos = police_pos + Vec3::Y * 1.2 + ray_direction * MUZZLE_FORWARD_OFFSET;
         let tracer_end = calc_tracer_end(player_pos, is_hit);
 
         if let Some(ref visuals) = combat_visuals {
             spawn_muzzle_flash(&mut commands, visuals, muzzle_pos);
-            spawn_bullet_tracer(&mut commands, visuals, muzzle_pos, tracer_end, TracerStyle::Pistol);
+            let tracer_style = if is_military { TracerStyle::Rifle } else { TracerStyle::Pistol };
+            spawn_bullet_tracer(&mut commands, visuals, muzzle_pos, tracer_end, tracer_style);
         }
 
         if is_hit {
+            let damage = if is_military { MILITARY_DAMAGE } else { config.damage };
             damage_events.write(DamageEvent {
                 target: player_entity,
-                amount: config.damage,
+                amount: damage,
                 source: DamageSource::Bullet,
                 attacker: Some(police_entity),
                 hit_position: Some(player_pos),
@@ -110,7 +118,7 @@ pub fn police_combat_system(
             });
         }
 
-        officer.attack_cooldown = config.attack_cooldown;
+        officer.attack_cooldown = if is_military { MILITARY_ATTACK_COOLDOWN } else { config.attack_cooldown };
     }
 }
 

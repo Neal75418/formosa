@@ -47,6 +47,26 @@ pub struct GpsNavigationState {
     pub next_turn_point: Option<Vec3>,
     /// 路線計算冷卻（避免每幀重算）
     pub route_recalc_cooldown: f32,
+    /// 下一個轉彎方向
+    pub next_turn_direction: GpsTurnDirection,
+    /// 到下一個轉彎的距離
+    pub distance_to_next_turn: f32,
+}
+
+/// GPS 轉彎方向
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GpsTurnDirection {
+    /// 直行（無明顯轉彎）
+    #[default]
+    Straight,
+    /// 左轉
+    Left,
+    /// 右轉
+    Right,
+    /// 迴轉
+    UTurn,
+    /// 到達目的地
+    Arrived,
 }
 
 impl GpsNavigationState {
@@ -67,6 +87,8 @@ impl GpsNavigationState {
         self.route_waypoints.clear();
         self.distance_to_target = 0.0;
         self.next_turn_point = None;
+        self.next_turn_direction = GpsTurnDirection::Straight;
+        self.distance_to_next_turn = 0.0;
     }
 
     /// 檢查是否到達目標
@@ -79,6 +101,49 @@ impl GpsNavigationState {
         }
     }
 }
+
+impl GpsTurnDirection {
+    /// 轉彎方向的顯示符號
+    pub fn symbol(self) -> &'static str {
+        match self {
+            Self::Straight => "↑",
+            Self::Left => "←",
+            Self::Right => "→",
+            Self::UTurn => "↓",
+            Self::Arrived => "●",
+        }
+    }
+
+    /// 轉彎方向的描述文字
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Straight => "直行",
+            Self::Left => "左轉",
+            Self::Right => "右轉",
+            Self::UTurn => "迴轉",
+            Self::Arrived => "到達",
+        }
+    }
+
+    /// 從角度偏移（弧度）判斷轉彎方向
+    /// 正值=右轉，負值=左轉
+    pub fn from_angle(angle: f32) -> Self {
+        let abs = angle.abs();
+        if abs < 0.4 {
+            Self::Straight
+        } else if abs > 2.5 {
+            Self::UTurn
+        } else if angle > 0.0 {
+            Self::Right
+        } else {
+            Self::Left
+        }
+    }
+}
+
+/// GPS 轉彎提示 UI
+#[derive(Component)]
+pub struct GpsTurnIndicator;
 
 /// 小地圖上的 GPS 目標標記
 #[derive(Component)]

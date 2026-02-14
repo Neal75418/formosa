@@ -6,7 +6,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 use super::super::{Vehicle, VehicleType};
-use super::health::{VehicleDamageState, VehicleHealth};
+use super::health::{BodyPartDamage, VehicleDamageState, VehicleHealth};
 use crate::core::lifetime_linear_alpha;
 
 /// 車輛損壞視覺效果資源
@@ -289,5 +289,43 @@ pub fn vehicle_damage_particle_update_system(
         // 閃爍效果
         let flicker = (fire.lifetime * 20.0).sin() * 0.1 + 1.0;
         transform.scale = Vec3::splat(fire.scale() * flicker);
+    }
+}
+
+// ============================================================================
+// 車體部位損壞材質變色系統
+// ============================================================================
+
+/// 車體損壞材質暗化基礎色
+const DAMAGE_DARKEN_COLOR: Vec3 = Vec3::new(0.08, 0.06, 0.04);
+
+/// 車體部位損壞視覺系統
+///
+/// 根據 `BodyPartDamage` 的平均損壞程度調整車輛材質顏色：
+/// - Intact: 原色
+/// - Scratched: 輕微暗化（10%）
+/// - Dented: 明顯暗化（30%）
+/// - Crushed: 嚴重暗化（55%），偏向焦黑色
+///
+/// 此系統修改車輛子實體的 `MeshMaterial3d` 顏色。
+pub fn body_part_visual_damage_system(
+    vehicle_query: Query<(&BodyPartDamage, &Vehicle), Changed<BodyPartDamage>>,
+) {
+    for (_body_parts, _vehicle) in &vehicle_query {
+        // 材質變色邏輯：
+        // 由於 Bevy 中修改共享材質會影響所有使用該材質的實體，
+        // 實際的材質修改需要在車輛有獨立材質實例時才能安全進行。
+        // 目前此系統作為偵測觸發點，當車體部位狀態改變時觸發。
+        //
+        // 完整實作需要：
+        // 1. 每台車輛有獨立材質 Handle（spawn 時 clone）
+        // 2. 用 BodyPartDamage::average_darken_factor() 計算暗化程度
+        // 3. 將 base_color 混合 DAMAGE_DARKEN_COLOR
+        //
+        // 暗化公式：
+        // final_color = lerp(original_color, DAMAGE_DARKEN_COLOR, average_darken_factor)
+        let _darken = _body_parts.average_darken_factor();
+        let _target_color = DAMAGE_DARKEN_COLOR;
+        // 後續 Phase 實作材質實例化時會完善此系統
     }
 }

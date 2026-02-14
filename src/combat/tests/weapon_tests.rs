@@ -349,3 +349,65 @@ fn test_weapon_base_damage() {
     let weapon = Weapon::new(WeaponStats::shotgun());
     assert_eq!(weapon.base_damage(), weapon.stats.damage);
 }
+
+// ============================================================================
+// 子彈穿透屬性測試
+// ============================================================================
+
+#[test]
+fn test_penetration_pistol() {
+    let stats = WeaponStats::pistol();
+    assert_eq!(stats.penetration, 1);
+    assert!((stats.penetration_falloff - 0.7).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_penetration_smg() {
+    let stats = WeaponStats::smg();
+    assert_eq!(stats.penetration, 1);
+    assert!((stats.penetration_falloff - 0.6).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_penetration_shotgun_none() {
+    let stats = WeaponStats::shotgun();
+    assert_eq!(stats.penetration, 0);
+}
+
+#[test]
+fn test_penetration_rifle() {
+    let stats = WeaponStats::rifle();
+    assert_eq!(stats.penetration, 2);
+    assert!((stats.penetration_falloff - 0.7).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_penetration_melee_none() {
+    assert_eq!(WeaponStats::fist().penetration, 0);
+    assert_eq!(WeaponStats::staff().penetration, 0);
+    assert_eq!(WeaponStats::knife().penetration, 0);
+}
+
+#[test]
+fn test_penetration_damage_decay() {
+    let stats = WeaponStats::rifle();
+    let base = stats.damage;
+    let falloff = stats.penetration_falloff;
+    // 第 0 層（首個目標）：100% 傷害
+    assert!((falloff.powi(0) - 1.0).abs() < f32::EPSILON);
+    // 第 1 層：70% 傷害
+    assert!((base * falloff.powi(1) - base * 0.7).abs() < 0.01);
+    // 第 2 層：49% 傷害
+    assert!((base * falloff.powi(2) - base * 0.49).abs() < 0.01);
+}
+
+#[test]
+fn test_penetration_smg_decay_is_steeper() {
+    let smg = WeaponStats::smg();
+    let rifle = WeaponStats::rifle();
+    // SMG 每層衰減 40%（falloff=0.6），比步槍的 30% 更陡
+    assert!(smg.penetration_falloff < rifle.penetration_falloff);
+    // 驗證 SMG 穿透後第二層傷害
+    let smg_layer1 = smg.damage * smg.penetration_falloff;
+    assert!((smg_layer1 - 15.0 * 0.6).abs() < 0.01);
+}

@@ -10,7 +10,7 @@ use crate::combat::components::*;
 use crate::combat::health::*;
 use crate::ai::{CoverPoint, CoverSeeker};
 use crate::audio::{play_hit_sound, AudioManager, WeaponSounds};
-use crate::player::Player;
+use crate::player::{Player, Stamina};
 use crate::ui::{
     trigger_damage_indicator, ChineseFont, DamageIndicatorState, FloatingDamageNumber,
     FloatingDamageTracker, NotificationQueue,
@@ -345,6 +345,30 @@ fn calculate_death_hit_direction(
     Some(Vec3::new(dir.x, 0.3, dir.z).normalize_or_zero())
 }
 
+/// 計算格擋傷害減免
+///
+/// 回傳 (減免後傷害倍率, 是否精準格擋)。
+/// 僅對近戰傷害生效；遠程/爆炸傷害無法格擋。
+#[inline]
+fn calculate_block_reduction(
+    block_state: &BlockState,
+    source: DamageSource,
+    current_time: f32,
+) -> (f32, bool) {
+    // 只能格擋近戰攻擊
+    if source != DamageSource::Melee || !block_state.is_blocking {
+        return (1.0, false);
+    }
+
+    if block_state.is_parry_window(current_time) {
+        // 精準格擋：完全擋住
+        (0.0, true)
+    } else {
+        // 普通格擋：減免 60% 傷害
+        (1.0 - BLOCK_DAMAGE_REDUCTION, false)
+    }
+}
+
 /// 傷害處理系統
 #[allow(clippy::too_many_arguments)]
 pub fn damage_system(
@@ -363,6 +387,7 @@ pub fn damage_system(
     player_query: Query<Entity, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
     transform_query: Query<&Transform>,
+    mut stamina_query: Query<&mut Stamina, With<Player>>,
     // 資源參數包（解決 Bevy 16 參數限制）
     mut res: DamageSystemResources,
 ) {
@@ -388,7 +413,32 @@ pub fn damage_system(
             target_pos,
             &transform_query,
         );
-        let actual_damage = event.amount * (1.0 - cover_reduction);
+        let mut actual_damage = event.amount * (1.0 - cover_reduction);
+
+        // 格擋/精準格擋減免（僅玩家、僅近戰傷害）
+        let is_player_target = player_query.get(event.target).is_ok();
+        if is_player_target {
+            let (block_mult, is_parry) =
+                calculate_block_reduction(&res.block_state, event.source, current_time);
+            if block_mult < 1.0 {
+                actual_damage *= block_mult;
+                // 扣除體力
+                if let Ok(mut stamina) = stamina_query.get_mut(event.target) {
+                    let cost = if is_parry {
+                        PARRY_STAMINA_COST
+                    } else {
+                        BLOCK_STAMINA_COST
+                    };
+                    stamina.current = (stamina.current - cost).max(0.0);
+                }
+                if is_parry {
+                    res.block_state.activate_counter(current_time);
+                    res.notifications.success("精準格擋！反擊就緒");
+                } else {
+                    res.notifications.info("格擋");
+                }
+            }
+        }
 
         // 處理護甲吸收
         let armor_result = process_armor_absorption(&mut armor, actual_damage);

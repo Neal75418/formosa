@@ -23,6 +23,7 @@ impl Plugin for SavePlugin {
             .init_resource::<SaveManager>()
             .init_resource::<SaveTaskTracker>()
             .init_resource::<SafehouseAutoSaveTracker>()
+            .init_resource::<PendingDestructionRestore>()
             // 事件
             .add_message::<SaveGameEvent>()
             .add_message::<LoadGameEvent>()
@@ -42,6 +43,8 @@ impl Plugin for SavePlugin {
                 poll_save_task,
                 poll_load_task,
                 apply_pending_load_data,
+                // 破壞持久化恢復（在 apply_pending_load_data 之後）
+                apply_pending_destruction_data,
             ).chain());
     }
 }

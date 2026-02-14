@@ -171,12 +171,104 @@ impl MeleeComboState {
     }
 }
 
+// ============================================================================
+// 格擋/反擊系統
+// ============================================================================
+
+/// 精準格擋窗口（秒）— 按下格擋後的前 0.2 秒
+pub const PARRY_WINDOW: f32 = 0.2;
+/// 格擋傷害減免比例（60%）
+pub const BLOCK_DAMAGE_REDUCTION: f32 = 0.6;
+/// 反擊傷害倍率（精準格擋後下次攻擊）
+pub const COUNTER_DAMAGE_MULTIPLIER: f32 = 2.0;
+/// 格擋每次吸收消耗體力
+pub const BLOCK_STAMINA_COST: f32 = 5.0;
+/// 精準格擋每次消耗體力
+pub const PARRY_STAMINA_COST: f32 = 2.0;
+/// 反擊加成有效時間（秒）
+pub const COUNTER_WINDOW: f32 = 2.0;
+
+/// 格擋/反擊狀態（全域資源）
+///
+/// 近戰武器時按住右鍵 = 格擋；格擋啟動瞬間（0.2s 內）受擊 = 精準格擋，
+/// 觸發反擊加成（下一次近戰攻擊 2x 傷害）。
+#[derive(Resource)]
+pub struct BlockState {
+    /// 是否正在格擋
+    pub is_blocking: bool,
+    /// 格擋開始時間（用於判斷精準格擋窗口）
+    pub block_start_time: f32,
+    /// 反擊準備就緒（精準格擋成功後）
+    pub counter_ready: bool,
+    /// 反擊啟動時間（超過 COUNTER_WINDOW 秒後失效）
+    pub counter_start_time: f32,
+    /// 精準格擋次數（統計用）
+    pub parry_count: u32,
+}
+
+impl Default for BlockState {
+    fn default() -> Self {
+        Self {
+            is_blocking: false,
+            block_start_time: 0.0,
+            counter_ready: false,
+            counter_start_time: 0.0,
+            parry_count: 0,
+        }
+    }
+}
+
+impl BlockState {
+    /// 開始格擋
+    pub fn start_block(&mut self, time: f32) {
+        if !self.is_blocking {
+            self.is_blocking = true;
+            self.block_start_time = time;
+        }
+    }
+
+    /// 結束格擋
+    pub fn stop_block(&mut self) {
+        self.is_blocking = false;
+    }
+
+    /// 判斷當前是否在精準格擋窗口內
+    pub fn is_parry_window(&self, current_time: f32) -> bool {
+        self.is_blocking && (current_time - self.block_start_time) <= PARRY_WINDOW
+    }
+
+    /// 觸發反擊準備（精準格擋成功時呼叫）
+    pub fn activate_counter(&mut self, time: f32) {
+        self.counter_ready = true;
+        self.counter_start_time = time;
+        self.parry_count += 1;
+    }
+
+    /// 消耗反擊加成，回傳傷害倍率
+    pub fn consume_counter(&mut self) -> f32 {
+        if self.counter_ready {
+            self.counter_ready = false;
+            COUNTER_DAMAGE_MULTIPLIER
+        } else {
+            1.0
+        }
+    }
+
+    /// 更新：反擊超時失效
+    pub fn update_counter_timeout(&mut self, current_time: f32) {
+        if self.counter_ready && (current_time - self.counter_start_time) > COUNTER_WINDOW {
+            self.counter_ready = false;
+        }
+    }
+}
+
 /// 射擊輸入緩衝
 #[derive(Resource, Default)]
 pub struct ShootingInput {
     pub is_fire_pressed: bool,           // 射擊鍵按下
     pub is_fire_held: bool,              // 射擊鍵持續按住
     pub is_aim_pressed: bool,            // 瞄準鍵按住
+    pub is_block_pressed: bool,          // 格擋鍵按住（近戰右鍵）
     pub is_reload_pressed: bool,         // 換彈鍵按下
     pub weapon_switch: Option<usize>, // 切換武器 (1-4)
     pub mouse_wheel: f32,             // 滑鼠滾輪
@@ -199,6 +291,7 @@ pub enum EnemyType {
     Gangster, // 小混混
     Thug,     // 打手
     Boss,     // 老大
+    Military, // 軍人（5 星通緝出現）
 }
 
 impl EnemyType {
@@ -208,6 +301,7 @@ impl EnemyType {
             EnemyType::Gangster => 50.0,
             EnemyType::Thug => 80.0,
             EnemyType::Boss => 200.0,
+            EnemyType::Military => 150.0,
         }
     }
 
@@ -217,6 +311,7 @@ impl EnemyType {
             EnemyType::Gangster => WeaponStats::pistol(),
             EnemyType::Thug => WeaponStats::smg(),
             EnemyType::Boss => WeaponStats::shotgun(),
+            EnemyType::Military => WeaponStats::rifle(),
         }
     }
 }

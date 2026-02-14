@@ -212,6 +212,7 @@ fn test_police_type_variants() {
         PoliceType::Patrol,
         PoliceType::Swat,
         PoliceType::Vehicular,
+        PoliceType::Military,
     ];
 
     assert_variants_distinct(&types);
@@ -357,4 +358,53 @@ fn test_radio_alert_system() {
         officer.radio_alert_position,
         Some(Vec3::new(100.0, 0.0, 200.0))
     );
+}
+
+// ============================================================================
+// 軍事升級（5 星）測試
+// ============================================================================
+
+use super::config::*;
+
+#[test]
+fn test_military_star_threshold() {
+    assert_eq!(MILITARY_STAR_THRESHOLD, 5);
+    assert!(MILITARY_STAR_THRESHOLD > SWAT_STAR_THRESHOLD);
+}
+
+#[test]
+fn test_military_stats_stronger_than_police() {
+    assert!(MILITARY_HEALTH > POLICE_OFFICER_HEALTH);
+    assert!(MILITARY_RUN_SPEED > OFFICER_RUN_SPEED);
+    assert!(MILITARY_RUN_SPEED > SWAT_RUN_SPEED);
+    assert!(MILITARY_DAMAGE > 15.0); // default police damage
+    assert!(MILITARY_HIT_CHANCE > 0.28); // default police hit chance
+    assert!(MILITARY_ATTACK_COOLDOWN < 1.5); // faster than default police
+}
+
+#[test]
+fn test_military_officer_type() {
+    let mut officer = PoliceOfficer::default();
+    officer.officer_type = PoliceType::Military;
+    assert_eq!(officer.officer_type, PoliceType::Military);
+    assert_ne!(officer.officer_type, PoliceType::Swat);
+    assert_ne!(officer.officer_type, PoliceType::Patrol);
+}
+
+#[test]
+fn test_five_star_wanted_level() {
+    let level = wanted_level_with_heat(100.0);
+    assert_eq!(level.stars, 5);
+    assert_eq!(level.target_police_count(), 10);
+    assert_eq!(level.cooldown_duration(), 60.0);
+}
+
+#[test]
+fn test_five_star_escalation_from_four() {
+    let mut level = wanted_level_with_heat(80.0);
+    assert_eq!(level.stars, 4);
+
+    level.add_heat(20.0);
+    assert_eq!(level.stars, 5);
+    assert_eq!(level.heat, 100.0);
 }

@@ -23,10 +23,12 @@ impl Plugin for PlayerPlugin {
         app.init_resource::<PlayerConfig>()
             .init_resource::<DoubleTapTracker>()
             .init_resource::<VehicleTransitionState>()
+            .init_resource::<StealthState>()
             .add_systems(
                 Update,
                 (
                     player_input,
+                    stamina_system.after(player_input),
                     dodge_detection_system,
                     dodge_state_update_system,
                     climb_detection_system.after(dodge_state_update_system),
@@ -38,6 +40,7 @@ impl Plugin for PlayerPlugin {
                         .after(dodge_movement_system),
                     enter_exit_vehicle.in_set(InteractionSet::Vehicle),
                     vehicle_transition_animation_system.after(enter_exit_vehicle),
+                    stealth_noise_system.after(player_input),
                 )
                     .in_set(GameSet::Player)
                     .run_if(in_state(AppState::InGame)),

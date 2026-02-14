@@ -41,6 +41,7 @@ impl Plugin for VehiclePlugin {
             .add_message::<PurchaseModificationEvent>()
             .add_message::<PurchaseNitroEvent>()
             .add_message::<ModificationCompleteEvent>()
+            .add_message::<PurchaseVisualModEvent>()
             // Startup
             .add_systems(Startup, setup_vehicle_effects)
             .add_systems(Startup, setup_vehicle_damage_effects)
@@ -65,6 +66,7 @@ impl Plugin for VehiclePlugin {
                         vehicle_physics_integration_system,
                     )
                         .chain(),
+                    motorcycle_crash_system.after(vehicle_suspension_system),
                     update_vehicle_visuals.after(vehicle_physics_integration_system),
                     npc_vehicle_ai,
                     npc_vehicle_motion_system.after(npc_vehicle_ai),
@@ -94,6 +96,11 @@ impl Plugin for VehiclePlugin {
                     vehicle_explosion_system,
                     vehicle_damage_particle_update_system,
                     vehicle_damage_event_system,
+                    door_animation_system,
+                    door_input_system,
+                    collision_window_damage_system,
+                    bullet_window_damage_system,
+                    body_part_visual_damage_system,
                 )
                     .in_set(GameSet::Vehicle)
                     .run_if(in_state(AppState::InGame)),
@@ -118,6 +125,7 @@ impl Plugin for VehiclePlugin {
                     purchase_modification_system,
                     purchase_nitro_system,
                     nitro_boost_system,
+                    purchase_visual_mod_system,
                 )
                     .in_set(GameSet::Vehicle)
                     .run_if(in_state(AppState::InGame)),

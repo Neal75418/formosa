@@ -13,6 +13,8 @@ pub struct UiState {
     pub minimap_zoom: f32,       // 小地圖縮放倍率 (0.5 ~ 2.0)
     pub show_delivery_app: bool, // 是否顯示外送 App
     pub show_weapon_wheel: bool, // 是否顯示武器輪盤
+    pub show_save_slots: bool,   // 是否顯示存檔槽 UI
+    pub show_phone: bool,        // 是否顯示手機 UI
 }
 
 impl Default for UiState {
@@ -23,6 +25,8 @@ impl Default for UiState {
             minimap_zoom: 1.0,
             show_delivery_app: false,
             show_weapon_wheel: false,
+            show_save_slots: false,
+            show_phone: false,
         }
     }
 }
@@ -234,3 +238,136 @@ pub struct StoryMissionProgressBg;
 /// 任務進度條填充
 #[derive(Component)]
 pub struct StoryMissionProgressFill;
+
+// ============================================================================
+// 手機 UI 組件
+// ============================================================================
+
+/// 手機 App 分頁
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PhoneApp {
+    /// 主畫面（App 圖標列表）
+    #[default]
+    Home,
+    /// 聯絡人
+    Contacts,
+    /// 任務日誌
+    MissionLog,
+    /// 地圖
+    Map,
+    /// 設定
+    Settings,
+}
+
+impl PhoneApp {
+    /// 顯示名稱
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Home => "主畫面",
+            Self::Contacts => "聯絡人",
+            Self::MissionLog => "任務日誌",
+            Self::Map => "地圖",
+            Self::Settings => "設定",
+        }
+    }
+
+    /// App 圖標字元（簡易圖示）
+    pub fn icon(self) -> &'static str {
+        match self {
+            Self::Home => "H",
+            Self::Contacts => "C",
+            Self::MissionLog => "M",
+            Self::Map => "G",
+            Self::Settings => "S",
+        }
+    }
+
+    /// 所有 App（不含 Home）
+    pub fn all_apps() -> &'static [PhoneApp] {
+        &[
+            PhoneApp::Contacts,
+            PhoneApp::MissionLog,
+            PhoneApp::Map,
+            PhoneApp::Settings,
+        ]
+    }
+}
+
+/// 任務日誌分頁
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MissionJournalTab {
+    /// 進行中
+    #[default]
+    Active,
+    /// 已完成
+    Completed,
+    /// 統計
+    Stats,
+}
+
+impl MissionJournalTab {
+    /// 顯示名稱
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Active => "進行中",
+            Self::Completed => "已完成",
+            Self::Stats => "統計",
+        }
+    }
+
+    /// 所有分頁
+    pub fn all() -> &'static [MissionJournalTab] {
+        &[Self::Active, Self::Completed, Self::Stats]
+    }
+}
+
+/// 手機 UI 狀態資源
+#[derive(Resource)]
+pub struct PhoneUiState {
+    /// 當前開啟的 App
+    pub current_app: PhoneApp,
+    /// 主畫面選中的 App 索引
+    pub selected_index: usize,
+    /// 任務日誌當前分頁
+    pub journal_tab: MissionJournalTab,
+}
+
+impl Default for PhoneUiState {
+    fn default() -> Self {
+        Self {
+            current_app: PhoneApp::Home,
+            selected_index: 0,
+            journal_tab: MissionJournalTab::default(),
+        }
+    }
+}
+
+/// 手機外框容器
+#[derive(Component)]
+pub struct PhoneContainer;
+
+/// 手機螢幕區域
+#[derive(Component)]
+pub struct PhoneScreen;
+
+/// 手機 App 圖標按鈕
+#[derive(Component)]
+pub struct PhoneAppIcon {
+    pub app: PhoneApp,
+}
+
+/// 手機內容區域（各 App 內容）
+#[derive(Component)]
+pub struct PhoneContentArea;
+
+/// 手機頂部狀態列
+#[derive(Component)]
+pub struct PhoneStatusBar;
+
+/// 手機聯絡人列表容器
+#[derive(Component)]
+pub struct PhoneContactList;
+
+/// 手機任務日誌容器
+#[derive(Component)]
+pub struct PhoneMissionLogList;

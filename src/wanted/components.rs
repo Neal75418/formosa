@@ -209,6 +209,8 @@ pub enum PoliceType {
     Swat,
     /// 警車警察
     Vehicular,
+    /// 軍人（5 星通緝出現，高 HP、步槍）
+    Military,
 }
 
 /// 警察視覺資源（預加載的 Mesh 和 Material）

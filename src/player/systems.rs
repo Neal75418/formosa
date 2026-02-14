@@ -2,8 +2,8 @@
 
 use super::PlayerConfig;
 use super::{
-    ClimbState, DodgeState, DoubleTapTracker, Player, PlayerSprintState, VehicleTransitionPhase,
-    VehicleTransitionState,
+    ClimbState, DodgeState, DoubleTapTracker, NoiseLevel, Player, PlayerSprintState, Stamina,
+    StealthState, VehicleTransitionPhase, VehicleTransitionState,
 };
 use crate::combat::{CombatState, PlayerCoverState, RespawnState};
 use crate::core::{ease_in_out_cubic, rapier_real_to_f32, GameState, InteractionState};
@@ -38,9 +38,43 @@ pub fn player_input(
     }
 
     if let Ok(mut player) = query.single_mut() {
-        // 按住 Shift = 衝刺（更直覺的控制）
-        player.is_sprinting =
+        // Ctrl 切換蹲伏
+        if keyboard.just_pressed(KeyCode::ControlLeft) || keyboard.just_pressed(KeyCode::ControlRight)
+        {
+            player.is_crouching = !player.is_crouching;
+        }
+        // 按住 Shift = 衝刺（蹲伏時衝刺自動解除蹲伏）
+        let wants_sprint =
             keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+        if wants_sprint && player.is_crouching {
+            player.is_crouching = false;
+        }
+        player.is_sprinting = wants_sprint;
+    }
+}
+
+/// 體力系統（衝刺消耗、步行恢復、耗盡強制步行）
+pub fn stamina_system(
+    time: Res<Time>,
+    mut query: Query<(&mut Stamina, &mut Player)>,
+) {
+    let dt = time.delta_secs();
+    for (mut stamina, mut player) in &mut query {
+        if player.is_sprinting && player.current_speed > player.speed * 0.5 {
+            // 衝刺中消耗體力
+            if !stamina.drain(dt) {
+                // 體力耗盡，強制步行
+                player.is_sprinting = false;
+            }
+        } else {
+            // 非衝刺時恢復體力
+            stamina.regenerate(dt);
+        }
+
+        // 體力耗盡狀態下禁止衝刺
+        if stamina.exhausted {
+            player.is_sprinting = false;
+        }
     }
 }
 
@@ -173,6 +207,8 @@ pub fn player_movement(
     let target_speed = if has_input {
         if player.is_sprinting {
             player.sprint_speed
+        } else if player.is_crouching {
+            player.crouch_speed
         } else {
             player.speed
         }
@@ -791,5 +827,58 @@ fn handle_exit_vehicle_complete(
     }
     game_state.player_in_vehicle = false;
     game_state.current_vehicle = None;
+}
+
+// ============================================================================
+// 潛行噪音系統
+// ============================================================================
+
+/// 更新玩家噪音等級
+///
+/// 根據玩家移動狀態和射擊狀態計算噪音值，
+/// 射擊後噪音在 `NOISE_DECAY_TIME` 秒內衰減。
+pub fn stealth_noise_system(
+    time: Res<Time>,
+    combat_state: Res<CombatState>,
+    player_query: Query<&Player>,
+    mut stealth: ResMut<StealthState>,
+) {
+    let dt = time.delta_secs();
+    let current_time = time.elapsed_secs();
+
+    // 射擊產生最大噪音
+    let recently_fired =
+        (current_time - combat_state.last_shot_time) < super::NOISE_DECAY_TIME;
+
+    if recently_fired {
+        stealth.noise_level = NoiseLevel::Max;
+        stealth.noise_decay_timer = super::NOISE_DECAY_TIME
+            - (current_time - combat_state.last_shot_time);
+        return;
+    }
+
+    // 衰減計時器
+    if stealth.noise_decay_timer > 0.0 {
+        stealth.noise_decay_timer -= dt;
+        if stealth.noise_decay_timer > 0.0 {
+            stealth.noise_level = NoiseLevel::Loud;
+            return;
+        }
+    }
+
+    // 根據移動狀態決定噪音
+    let Ok(player) = player_query.single() else {
+        return;
+    };
+
+    stealth.noise_level = if player.is_crouching {
+        NoiseLevel::Silent
+    } else if player.is_sprinting && player.current_speed > player.speed * 0.5 {
+        NoiseLevel::Loud
+    } else if player.current_speed > 0.5 {
+        NoiseLevel::Low
+    } else {
+        NoiseLevel::Silent
+    };
 }
 

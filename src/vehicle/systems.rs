@@ -3,8 +3,9 @@
 
 use super::{
     NitroBoost, TireDamage, Vehicle, VehicleBodyDynamics,
-    VehicleBraking, VehicleConfig, VehicleDrift, VehicleInput, VehicleLean, VehicleModifications,
-    VehiclePhysicsMode, VehiclePowerBand, VehicleSteering, VehicleType, VehicleVisualRoot,
+    VehicleBraking, VehicleConfig, VehicleDrift, VehicleHealth, VehicleInput,
+    VehicleLean, VehicleModifications, VehiclePhysicsMode, VehiclePowerBand, VehicleSteering,
+    VehicleType, VehicleVisualRoot,
 };
 use crate::core::{GameState, WeatherState, WeatherType};
 use bevy::prelude::*;
@@ -622,16 +623,32 @@ pub fn vehicle_suspension_system(
 
     let dt = time.delta_secs();
 
-    // Scooter lean
+    // Scooter lean — spring-damper model with crash detection
     if vehicle.vehicle_type == VehicleType::Scooter {
+        // 摔車恢復中不更新傾斜
+        if lean.is_crashed {
+            lean.lean_angle *= 1.0 - dt * 2.0; // 慢慢回正
+            return;
+        }
+
         let speed_factor = (vehicle.current_speed / vehicle.max_speed).clamp(0.0, 1.0);
-        let target_lean = input.steer_input * lean.max_lean_angle * speed_factor;
-        let lean_speed = 5.0;
-        let lean_diff = target_lean - lean.lean_angle;
-        lean.lean_angle += lean_diff * lean_speed * dt;
+
+        // 目標傾斜 = 轉向 × 最大角度 × 速度因子
+        // 高速時傾斜更深（離心力效果）
+        let centripetal_factor = 1.0 + speed_factor * 0.3;
+        let target_lean = input.steer_input * lean.max_lean_angle * speed_factor * centripetal_factor;
+
+        // Spring-damper: F = -k*(x - target) - c*v
+        let spring_force = lean.lean_response * (target_lean - lean.lean_angle);
+        let damping_force = -lean.lean_damping * lean.lean_velocity;
+        let acceleration = spring_force + damping_force;
+
+        lean.lean_velocity += acceleration * dt;
+        lean.lean_angle += lean.lean_velocity * dt;
         lean.lean_angle = lean
             .lean_angle
-            .clamp(-lean.max_lean_angle, lean.max_lean_angle);
+            .clamp(-lean.crash_lean_threshold, lean.crash_lean_threshold);
+
         return;
     }
 
@@ -738,6 +755,78 @@ pub(super) fn get_weather_factor(
     }
 }
 
+// ============================================================================
+// 機車摔車系統
+// ============================================================================
+
+/// 摔車傷害常數
+const MOTORCYCLE_CRASH_DAMAGE: f32 = 150.0;
+/// 摔車速度損失比例
+const MOTORCYCLE_CRASH_SPEED_LOSS: f32 = 0.8;
+/// 觸發摔車的最低速度（m/s）
+const MOTORCYCLE_CRASH_MIN_SPEED: f32 = 8.0;
+
+/// 機車摔車偵測與恢復系統
+///
+/// 當機車傾斜角度超過 crash_lean_threshold 且車速夠快時觸發摔車：
+/// - 大幅降速
+/// - 車輛受傷
+/// - 進入恢復冷卻期
+pub fn motorcycle_crash_system(
+    time: Res<Time>,
+    game_state: Res<GameState>,
+    mut vehicles: Query<(
+        &mut Vehicle,
+        &mut VehicleLean,
+        Option<&mut VehicleHealth>,
+    )>,
+) {
+    if !game_state.player_in_vehicle {
+        return;
+    }
+    let Some(vehicle_entity) = game_state.current_vehicle else {
+        return;
+    };
+    let Ok((mut vehicle, mut lean, health)) = vehicles.get_mut(vehicle_entity) else {
+        return;
+    };
+
+    if vehicle.vehicle_type != VehicleType::Scooter {
+        return;
+    }
+
+    let dt = time.delta_secs();
+
+    // 摔車恢復中
+    if lean.is_crashed {
+        lean.crash_recovery_timer -= dt;
+        if lean.crash_recovery_timer <= 0.0 {
+            lean.is_crashed = false;
+            lean.crash_recovery_timer = 0.0;
+            lean.lean_angle = 0.0;
+            lean.lean_velocity = 0.0;
+        }
+        return;
+    }
+
+    // 檢測摔車條件：傾斜超過臨界角度 + 速度夠快
+    if lean.lean_angle.abs() >= lean.crash_lean_threshold
+        && vehicle.current_speed.abs() >= MOTORCYCLE_CRASH_MIN_SPEED
+    {
+        lean.is_crashed = true;
+        lean.crash_recovery_timer = lean.crash_recovery_duration;
+        lean.lean_velocity = 0.0;
+
+        // 大幅降速
+        vehicle.current_speed *= 1.0 - MOTORCYCLE_CRASH_SPEED_LOSS;
+
+        // 對車輛造成傷害（使用 take_damage 以正確處理無敵/已毀狀態）
+        if let Some(mut hp) = health {
+            hp.take_damage(MOTORCYCLE_CRASH_DAMAGE, time.elapsed_secs());
+        }
+    }
+}
+
 /// 計算非線性加速力（扭力曲線）
 fn calculate_acceleration_force(
     vehicle: &Vehicle,
@@ -762,4 +851,151 @@ fn calculate_acceleration_force(
     };
 
     vehicle.acceleration * torque_multiplier
+}
+
+// ============================================================================
+// 測試
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vehicle::VehiclePreset;
+
+    // --- VehicleLean 測試 ---
+
+    #[test]
+    fn test_lean_default() {
+        let lean = VehicleLean::default();
+        assert_eq!(lean.lean_angle, 0.0);
+        assert_eq!(lean.lean_velocity, 0.0);
+        assert!(!lean.is_crashed);
+    }
+
+    #[test]
+    fn test_scooter_preset_max_lean_35_degrees() {
+        let preset = VehiclePreset::scooter();
+        // 35° ≈ 0.611 rad
+        assert!((preset.lean.max_lean_angle - 0.611).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_scooter_preset_crash_threshold() {
+        let preset = VehiclePreset::scooter();
+        // 摔車角度 (~40°) 應大於最大傾斜角度 (35°)
+        assert!(preset.lean.crash_lean_threshold > preset.lean.max_lean_angle);
+    }
+
+    #[test]
+    fn test_crash_constants() {
+        // 摔車傷害合理（機車 500 HP，摔一次 150）
+        assert!(MOTORCYCLE_CRASH_DAMAGE > 0.0);
+        assert!(MOTORCYCLE_CRASH_DAMAGE < 500.0);
+        // 速度損失 80%
+        assert!(MOTORCYCLE_CRASH_SPEED_LOSS > 0.0);
+        assert!(MOTORCYCLE_CRASH_SPEED_LOSS <= 1.0);
+        // 最低觸發速度
+        assert!(MOTORCYCLE_CRASH_MIN_SPEED > 0.0);
+    }
+
+    #[test]
+    fn test_lean_spring_damper_convergence() {
+        // 模擬 spring-damper lean 計算：應該朝目標收斂
+        let mut lean = VehicleLean {
+            max_lean_angle: 0.611,
+            lean_response: 6.0,
+            lean_damping: 10.0,
+            crash_lean_threshold: 0.70,
+            ..Default::default()
+        };
+
+        let target = 0.4; // 目標傾斜角
+        let dt = 1.0 / 60.0;
+
+        // 模擬 300 幀（5 秒，overdamped 系統需要較長收斂時間）
+        for _ in 0..300 {
+            let spring_force = lean.lean_response * (target - lean.lean_angle);
+            let damping_force = -lean.lean_damping * lean.lean_velocity;
+            let accel = spring_force + damping_force;
+            lean.lean_velocity += accel * dt;
+            lean.lean_angle += lean.lean_velocity * dt;
+        }
+
+        // 5秒後應該收斂到目標附近
+        assert!(
+            (lean.lean_angle - target).abs() < 0.1,
+            "lean_angle={} target={} diff={}",
+            lean.lean_angle, target, (lean.lean_angle - target).abs()
+        );
+    }
+
+    #[test]
+    fn test_lean_spring_damper_no_overshoot_beyond_crash() {
+        // 確認 spring-damper 不會大幅過衝超過 crash threshold
+        let mut lean = VehicleLean {
+            max_lean_angle: 0.611,
+            lean_response: 6.0,
+            lean_damping: 10.0,
+            crash_lean_threshold: 0.70,
+            ..Default::default()
+        };
+
+        let target = 0.611; // 全力傾斜
+        let dt = 1.0 / 60.0;
+
+        for _ in 0..120 {
+            let spring_force = lean.lean_response * (target - lean.lean_angle);
+            let damping_force = -lean.lean_damping * lean.lean_velocity;
+            let accel = spring_force + damping_force;
+            lean.lean_velocity += accel * dt;
+            lean.lean_angle += lean.lean_velocity * dt;
+            // 系統中有 clamp 到 crash_lean_threshold
+            lean.lean_angle = lean.lean_angle.clamp(-lean.crash_lean_threshold, lean.crash_lean_threshold);
+        }
+
+        // 不應超過 crash threshold
+        assert!(lean.lean_angle.abs() <= lean.crash_lean_threshold + 0.001);
+    }
+
+    #[test]
+    fn test_crash_recovery_timer() {
+        let mut lean = VehicleLean {
+            is_crashed: true,
+            crash_recovery_timer: 2.0,
+            crash_recovery_duration: 2.0,
+            ..Default::default()
+        };
+
+        // 模擬 1 秒
+        lean.crash_recovery_timer -= 1.0;
+        assert!(lean.is_crashed);
+        assert!(lean.crash_recovery_timer > 0.0);
+
+        // 模擬再 1.5 秒
+        lean.crash_recovery_timer -= 1.5;
+        assert!(lean.crash_recovery_timer <= 0.0);
+        // 系統會在 timer <= 0 時重置 is_crashed
+    }
+
+    #[test]
+    fn test_vehicle_dynamics_modifiers_default() {
+        let mods = VehicleDynamicsModifiers::new(None, None, None);
+        assert_eq!(mods.accel, 1.0);
+        assert_eq!(mods.speed, 1.0);
+        assert_eq!(mods.brake, 1.0);
+        assert_eq!(mods.traction, 1.0);
+        assert_eq!(mods.nitro, 1.0);
+    }
+
+    #[test]
+    fn test_car_preset_no_lean() {
+        let preset = VehiclePreset::car();
+        assert_eq!(preset.lean.max_lean_angle, 0.0);
+    }
+
+    #[test]
+    fn test_bus_preset_no_lean() {
+        let preset = VehiclePreset::bus();
+        assert_eq!(preset.lean.max_lean_angle, 0.0);
+    }
 }

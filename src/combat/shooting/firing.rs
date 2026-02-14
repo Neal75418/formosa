@@ -16,8 +16,9 @@ use crate::combat::health::{
 use crate::combat::visuals::*;
 use crate::combat::weapon::*;
 use crate::audio::{play_weapon_fire_sound, AudioManager, WeaponSounds};
+use crate::ai::AiBehavior;
 use crate::core::{rapier_real_to_f32, CameraSettings, CameraShake, RecoilState};
-use crate::player::Player;
+use crate::player::{Player, StealthState, STEALTH_KILL_MULTIPLIER};
 
 /// 武器音效資源（合併為 SystemParam 以減少系統參數數量）
 #[derive(SystemParam)]
@@ -26,11 +27,14 @@ pub(crate) struct FireWeaponAudio<'w> {
     audio_manager: Res<'w, AudioManager>,
 }
 
-/// 近戰戰鬥上下文（鎖定 + 連擊狀態，合併為 SystemParam）
+/// 近戰戰鬥上下文（鎖定 + 連擊 + 格擋 + 潛行狀態，合併為 SystemParam）
 #[derive(SystemParam)]
-pub(crate) struct MeleeCombatContext<'w> {
+pub(crate) struct MeleeCombatContext<'w, 's> {
     pub lock_on: Res<'w, LockOnState>,
     pub combo: ResMut<'w, MeleeComboState>,
+    pub block: ResMut<'w, BlockState>,
+    pub stealth: Res<'w, StealthState>,
+    pub ai_query: Query<'w, 's, &'static AiBehavior>,
 }
 
 // ============================================================================
@@ -163,6 +167,19 @@ fn calculate_muzzle_position(
         let tilted_forward = (char_vecs.forward * 0.8 + char_vecs.up * (-0.2)).normalize();
         hand_pos + tilted_forward * muzzle_offset.z * 0.8
     }
+}
+
+/// 檢查近戰攻擊是否為背後偷襲
+///
+/// 條件：攻擊者位於目標背後 120° 範圍內。
+/// 回傳 true 表示攻擊來自目標視野外（背面）。
+#[inline]
+fn is_backstab(attacker_pos: Vec3, target_pos: Vec3, target_forward: Vec3) -> bool {
+    let to_attacker = (attacker_pos - target_pos).normalize_or_zero();
+    let forward_2d = Vec3::new(target_forward.x, 0.0, target_forward.z).normalize_or_zero();
+    let attacker_2d = Vec3::new(to_attacker.x, 0.0, to_attacker.z).normalize_or_zero();
+    // dot < -0.5 ≈ 角度 > 120°（背後）
+    forward_2d.dot(attacker_2d) < -0.5
 }
 
 /// 檢查武器是否應該發射
@@ -367,9 +384,48 @@ pub fn fire_weapon_system(
         let direction = (aim_point - muzzle_pos).normalize();
 
         // 根據武器類型發射
+        // 格擋中不可同時攻擊
+        if input.is_block_pressed {
+            continue;
+        }
+
         if weapon.stats.weapon_type.is_melee() {
-            let combo_mult = melee_ctx.combo.damage_multiplier();
-            let is_finisher = melee_ctx.combo.current_step.is_finisher();
+            // 反擊加成：精準格擋後的攻擊獲得 2x 傷害
+            let counter_mult = melee_ctx.block.consume_counter();
+            // 靜默擊殺檢測：蹲伏 + 目標未察覺 + 背後攻擊
+            let stealth_mult = if melee_ctx.stealth.noise_level == crate::player::NoiseLevel::Silent
+            {
+                // 射線前方找到的目標是否滿足靜默擊殺條件
+                let filter = QueryFilter::default().exclude_collider(player_entity);
+                if let Some((target_entity, _)) = rapier.cast_ray(
+                    muzzle_pos,
+                    direction,
+                    weapon.stats.range as bevy_rapier3d::prelude::Real,
+                    true,
+                    filter,
+                ) {
+                    let target_unaware = melee_ctx
+                        .ai_query
+                        .get(target_entity)
+                        .is_ok_and(|ai| ai.is_unaware());
+                    let from_behind = transform_query
+                        .get(target_entity)
+                        .is_ok_and(|t| is_backstab(player_pos, t.translation, t.forward().as_vec3()));
+                    if target_unaware && from_behind {
+                        STEALTH_KILL_MULTIPLIER
+                    } else {
+                        1.0
+                    }
+                } else {
+                    1.0
+                }
+            } else {
+                1.0
+            };
+            let combo_mult =
+                melee_ctx.combo.damage_multiplier() * counter_mult * stealth_mult;
+            let is_finisher = melee_ctx.combo.current_step.is_finisher()
+                || stealth_mult > 1.0; // 靜默擊殺也觸發擊退
             let hit = fire_melee(
                 &mut commands,
                 player_entity,
@@ -385,8 +441,16 @@ pub fn fire_weapon_system(
             if hit {
                 let current_time = time.elapsed_secs();
                 melee_ctx.combo.register_hit(current_time);
+                // 靜默擊殺：強化攝影機震動
+                if stealth_mult > 1.0 {
+                    camera_shake.trigger(0.08, 0.25);
+                }
+                // 反擊成功附加攝影機震動
+                if counter_mult > 1.0 {
+                    camera_shake.trigger(0.06, 0.2);
+                }
                 // 終結技附加攝影機震動
-                if is_finisher {
+                if is_finisher && stealth_mult <= 1.0 {
                     camera_shake.trigger(0.04, 0.15);
                 }
             }
@@ -660,46 +724,44 @@ fn fire_bullet_with_offset(
     // 取得武器彈道風格
     let tracer_style = ctx.weapon.stats.weapon_type.tracer_style();
 
-    // 使用 Raycast 檢測命中
+    let max_toi = ctx.weapon.stats.range as bevy_rapier3d::prelude::Real;
+    let penetration = ctx.weapon.stats.penetration;
+
+    if penetration == 0 {
+        // === 無穿透：使用原有的 cast_ray（效能最佳）===
+        fire_bullet_single_hit(commands, ctx, spread_dir, max_toi, filter, tracer_style, damage_events, damageable_query, transform_query);
+    } else {
+        // === 有穿透：收集射線路徑上所有命中 ===
+        fire_bullet_penetrating(commands, ctx, spread_dir, max_toi, filter, tracer_style, penetration, damage_events, damageable_query, transform_query);
+    }
+}
+
+/// 無穿透射擊（單目標，原有邏輯）
+fn fire_bullet_single_hit(
+    commands: &mut Commands,
+    ctx: &FireContext,
+    spread_dir: Vec3,
+    max_toi: bevy_rapier3d::prelude::Real,
+    filter: QueryFilter,
+    tracer_style: TracerStyle,
+    damage_events: &mut MessageWriter<DamageEvent>,
+    damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
+    transform_query: &Query<&Transform>,
+) {
     if let Some((hit_entity, toi)) = ctx.rapier.cast_ray(
-        ctx.origin,
-        spread_dir,
-        ctx.weapon.stats.range as bevy_rapier3d::prelude::Real,
-        true,
-        filter,
+        ctx.origin, spread_dir, max_toi, true, filter,
     ) {
         let hit_pos = ctx.origin + spread_dir * rapier_real_to_f32(toi);
         let distance = rapier_real_to_f32(toi);
 
-        // 生成子彈拖尾（使用武器專屬風格）
         spawn_bullet_tracer(commands, ctx.visuals, ctx.origin, hit_pos, tracer_style);
 
-        // 計算距離傷害衰減（對所有目標都適用）
         let falloff_multiplier = ctx.weapon.stats.calculate_damage_falloff(distance);
 
-        // 計算最終傷害和爆頭（僅對可受傷實體進行爆頭檢測）
-        let (final_damage, is_headshot) = if damageable_query.get(hit_entity).is_ok() {
-            let mut damage = ctx.weapon.stats.damage * falloff_multiplier;
+        let (final_damage, is_headshot) = calculate_hit_damage(
+            ctx, hit_entity, hit_pos, distance, falloff_multiplier, 1.0, damageable_query, transform_query,
+        );
 
-            // 檢查爆頭
-            let headshot = if let Ok(target_transform) = transform_query.get(hit_entity) {
-                let target_base_y = target_transform.translation.y;
-                check_headshot(hit_pos, target_base_y)
-            } else {
-                false
-            };
-
-            // 爆頭加成
-            if headshot {
-                damage *= HEADSHOT_MULTIPLIER;
-            }
-            (damage, headshot)
-        } else {
-            // 對可破壞物件等其他目標，使用基礎傷害（無爆頭）
-            (ctx.weapon.stats.damage * falloff_multiplier, false)
-        };
-
-        // 對所有命中目標發送傷害事件（讓接收系統自行過濾）
         damage_events.write(
             DamageEvent::new(hit_entity, final_damage, DamageSource::Bullet)
                 .with_attacker(ctx.attacker)
@@ -707,11 +769,99 @@ fn fire_bullet_with_offset(
                 .with_headshot(is_headshot),
         );
 
-        // 生成命中效果（火花）
         spawn_impact_effect(commands, ctx.visuals, hit_pos);
     } else {
-        // 未命中，子彈飛到最大距離
         let end_pos = ctx.origin + spread_dir * ctx.weapon.stats.range;
         spawn_bullet_tracer(commands, ctx.visuals, ctx.origin, end_pos, tracer_style);
+    }
+}
+
+/// 穿透射擊（多目標）
+fn fire_bullet_penetrating(
+    commands: &mut Commands,
+    ctx: &FireContext,
+    spread_dir: Vec3,
+    max_toi: bevy_rapier3d::prelude::Real,
+    filter: QueryFilter,
+    tracer_style: TracerStyle,
+    penetration: u8,
+    damage_events: &mut MessageWriter<DamageEvent>,
+    damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
+    transform_query: &Query<&Transform>,
+) {
+    // 收集射線路徑上所有命中（最多 penetration + 1 個目標）
+    let max_hits = (penetration as usize) + 1;
+    let mut hits: Vec<(Entity, f32)> = Vec::with_capacity(max_hits);
+
+    ctx.rapier.intersect_ray(
+        ctx.origin, spread_dir, max_toi, true, filter,
+        |entity, intersection| {
+            hits.push((entity, rapier_real_to_f32(intersection.time_of_impact)));
+            hits.len() < max_hits
+        },
+    );
+
+    if hits.is_empty() {
+        let end_pos = ctx.origin + spread_dir * ctx.weapon.stats.range;
+        spawn_bullet_tracer(commands, ctx.visuals, ctx.origin, end_pos, tracer_style);
+        return;
+    }
+
+    // 按距離排序（確保穿透順序正確）
+    hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // 子彈拖尾到最遠命中點
+    let farthest_hit_pos = ctx.origin + spread_dir * hits.last().unwrap().1;
+    spawn_bullet_tracer(commands, ctx.visuals, ctx.origin, farthest_hit_pos, tracer_style);
+
+    // 對每個命中目標造成傷害，逐層衰減
+    let penetration_falloff = ctx.weapon.stats.penetration_falloff;
+    for (layer, &(hit_entity, distance)) in hits.iter().enumerate() {
+        let hit_pos = ctx.origin + spread_dir * distance;
+        let falloff_multiplier = ctx.weapon.stats.calculate_damage_falloff(distance);
+        let penetration_multiplier = penetration_falloff.powi(layer as i32);
+
+        let (final_damage, is_headshot) = calculate_hit_damage(
+            ctx, hit_entity, hit_pos, distance, falloff_multiplier, penetration_multiplier,
+            damageable_query, transform_query,
+        );
+
+        damage_events.write(
+            DamageEvent::new(hit_entity, final_damage, DamageSource::Bullet)
+                .with_attacker(ctx.attacker)
+                .with_position(hit_pos)
+                .with_headshot(is_headshot),
+        );
+
+        spawn_impact_effect(commands, ctx.visuals, hit_pos);
+    }
+}
+
+/// 計算單次命中傷害（含距離衰減、穿透衰減、爆頭檢測）
+fn calculate_hit_damage(
+    ctx: &FireContext,
+    hit_entity: Entity,
+    hit_pos: Vec3,
+    _distance: f32,
+    falloff_multiplier: f32,
+    penetration_multiplier: f32,
+    damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
+    transform_query: &Query<&Transform>,
+) -> (f32, bool) {
+    if damageable_query.get(hit_entity).is_ok() {
+        let mut damage = ctx.weapon.stats.damage * falloff_multiplier * penetration_multiplier;
+
+        let headshot = if let Ok(target_transform) = transform_query.get(hit_entity) {
+            check_headshot(hit_pos, target_transform.translation.y)
+        } else {
+            false
+        };
+
+        if headshot {
+            damage *= HEADSHOT_MULTIPLIER;
+        }
+        (damage, headshot)
+    } else {
+        (ctx.weapon.stats.damage * falloff_multiplier * penetration_multiplier, false)
     }
 }

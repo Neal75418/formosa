@@ -18,6 +18,7 @@ use crate::combat::{DamageEvent, DamageSource, Health, HitReaction};
 use crate::ai::AiMovement;
 
 use super::components::*;
+use super::config::*;
 
 // ============================================================================
 // 常數
@@ -339,13 +340,13 @@ fn spawn_roadblock(
         ));
     }
 
-    // 生成警察
+    // 生成警察（5 星路障增加額外軍人）
     let police_count = ROADBLOCK_POLICE_COUNT + (wanted_stars as u32 - 3);
     for i in 0..police_count {
         let offset = direction * ((i as f32 - police_count as f32 / 2.0) * 3.0);
         let police_pos = position - direction.cross(Vec3::Y).normalize() * 5.0 + offset;
 
-        let police = spawn_roadblock_police(commands, police_pos, direction, police_visuals);
+        let police = spawn_roadblock_police(commands, police_pos, direction, police_visuals, wanted_stars);
         police_officers.push(police);
     }
 
@@ -367,12 +368,17 @@ fn spawn_roadblock_police(
     position: Vec3,
     facing_direction: Vec3,
     visuals: &PoliceVisuals,
+    wanted_stars: u8,
 ) -> Entity {
     let rotation = Quat::from_rotation_y((-facing_direction.x).atan2(-facing_direction.z));
+    let is_military = wanted_stars >= MILITARY_STAR_THRESHOLD;
+    let officer_type = if is_military { PoliceType::Military } else { PoliceType::Patrol };
+    let health = if is_military { MILITARY_HEALTH } else { POLICE_OFFICER_HEALTH };
+    let run_speed = if is_military { MILITARY_RUN_SPEED } else { OFFICER_RUN_SPEED };
 
     let police_entity = commands
         .spawn((
-            Name::new("RoadblockPolice"),
+            Name::new(if is_military { "RoadblockMilitary" } else { "RoadblockPolice" }),
             Transform::from_translation(position + Vec3::Y * 0.9).with_rotation(rotation),
             GlobalTransform::default(),
             Visibility::default(),
@@ -382,19 +388,19 @@ fn spawn_roadblock_police(
         .insert((
             PoliceOfficer {
                 state: PoliceState::Engaging, // 路障警察直接進入交戰狀態
-                officer_type: PoliceType::Patrol,
+                officer_type,
                 target_player: true,
                 ..default()
             },
             Health {
-                current: 100.0,
-                max: 100.0,
+                current: health,
+                max: health,
                 ..default()
             },
             HitReaction::default(),
             AiMovement {
-                walk_speed: 3.0,
-                run_speed: 5.5,
+                walk_speed: OFFICER_WALK_SPEED,
+                run_speed,
                 ..default()
             },
         ))

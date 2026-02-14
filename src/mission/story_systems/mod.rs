@@ -59,6 +59,7 @@ impl Plugin for StoryMissionPlugin {
                     objective_tracking::mission_phase_system.after(objective_tracking::mission_objective_tracking_system),
                     objective_tracking::mission_fail_check_system.after(objective_tracking::mission_phase_system),
                     mission_event_handler,
+                    objective_tracking::checkpoint_retry_system,
                 )
                     .in_set(InteractionSet::Mission),
             );
@@ -78,8 +79,18 @@ fn setup_story_missions(
     mut manager: ResMut<StoryMissionManager>,
 ) {
     create_sample_missions(&mut database);
+
+    // 註冊 Strangers & Freaks 支線任務
+    super::side_missions::register_side_missions(&mut database);
+
+    // 解鎖主線與支線
     manager.unlock_mission(1);
-    info!("劇情任務系統初始化完成，共 {} 個任務", database.total_count());
+    // 支線任務預設解鎖（不需主線前置）
+    for id in 100..=105 {
+        manager.unlock_mission(id);
+    }
+
+    info!("任務系統初始化完成，共 {} 個任務（含支線）", database.total_count());
 }
 
 fn mission_event_handler(

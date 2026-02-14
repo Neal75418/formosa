@@ -29,6 +29,7 @@ pub fn shooting_input_system(
         input.is_fire_pressed = false;
         input.is_fire_held = false;
         input.is_aim_pressed = false;
+        input.is_block_pressed = false;
         input.is_reload_pressed = false;
         input.weapon_switch = None;
         input.mouse_wheel = 0.0;
@@ -48,6 +49,8 @@ pub fn shooting_input_system(
     input.is_fire_held = keyboard.pressed(KeyCode::KeyR);
     // 近戰武器狀態下不啟用瞄準模式（沒有準星）
     input.is_aim_pressed = !is_melee && mouse.pressed(MouseButton::Right);
+    // 近戰武器右鍵 = 格擋
+    input.is_block_pressed = is_melee && mouse.pressed(MouseButton::Right);
     // 換彈：T 鍵
     input.is_reload_pressed = keyboard.just_pressed(KeyCode::KeyT);
 
@@ -254,4 +257,24 @@ pub fn reload_system(
             play_reload_sound_if_available(&mut commands, &weapon_sounds, &audio_manager, false);
         }
     }
+}
+
+/// 格擋狀態更新系統
+///
+/// 根據 `ShootingInput.is_block_pressed` 更新 `BlockState`，
+/// 並處理反擊加成超時失效。
+pub fn block_update_system(
+    time: Res<Time>,
+    input: Res<ShootingInput>,
+    mut block_state: ResMut<BlockState>,
+) {
+    let current_time = time.elapsed_secs();
+
+    if input.is_block_pressed {
+        block_state.start_block(current_time);
+    } else {
+        block_state.stop_block();
+    }
+
+    block_state.update_counter_timeout(current_time);
 }

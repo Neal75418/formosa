@@ -152,6 +152,7 @@ pub fn mission_phase_system(
     mut dialogue_events: MessageWriter<DialogueEvent>,
     mut cutscene_events: MessageWriter<CutsceneEvent>,
     mut mission_events: MessageWriter<StoryMissionEvent>,
+    player_query: Query<&Transform, With<crate::player::Player>>,
 ) {
     if is_dialogue_active(&dialogue_state) || is_cutscene_active(&cutscene_state) { return; }
 
@@ -174,13 +175,26 @@ pub fn mission_phase_system(
     let next_phase_index = current_phase + 1;
 
     if let Some(next_phase) = mission.get_phase(next_phase_index) {
+        // 階段轉換時自動保存檢查點
+        let player_pos = player_query
+            .single()
+            .map(|t| t.translation)
+            .unwrap_or(Vec3::ZERO);
+        manager.create_checkpoint(player_pos, next_phase_index as u32);
+
+        // 重新取得 active（create_checkpoint 借用了 manager）
+        let active = manager.current_mission.as_mut().unwrap();
         active.advance_phase(next_phase);
         mission_events.write(StoryMissionEvent::PhaseChanged {
             mission_id,
             new_phase: next_phase_index as u32,
         });
+        mission_events.write(StoryMissionEvent::CheckpointReached {
+            mission_id,
+            phase: next_phase_index as u32,
+        });
         play_phase_start_events(next_phase, &mut dialogue_events, &mut cutscene_events);
-        info!("📋 任務 {} 進入階段 {}", mission_id, next_phase_index);
+        info!("📋 任務 {} 進入階段 {} (檢查點已保存)", mission_id, next_phase_index);
     } else {
         let rewards = mission.rewards.clone();
         manager.grant_rewards(&rewards, &mut wallet, &mut respect, &mut unlocks);
@@ -334,4 +348,61 @@ pub struct CurrentMissionInfo {
     pub phase_description: String,
     pub objectives: Vec<MissionObjective>,
     pub time_remaining: Option<f32>,
+}
+
+// ============================================================================
+// 檢查點重啟系統
+// ============================================================================
+
+/// 任務失敗後，若有檢查點，按 R 鍵從檢查點重新開始
+pub fn checkpoint_retry_system(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut manager: ResMut<StoryMissionManager>,
+    database: Res<StoryMissionDatabase>,
+    mut player_query: Query<&mut Transform, With<crate::player::Player>>,
+    mut events: MessageWriter<StoryMissionEvent>,
+    mut notifications: ResMut<crate::ui::NotificationQueue>,
+) {
+    // 只在沒有進行中任務且有檢查點時觸發
+    if manager.current_mission.is_some() {
+        return;
+    }
+
+    let Some(checkpoint) = manager.load_checkpoint() else {
+        return;
+    };
+
+    let checkpoint_mission_id = checkpoint.mission_id;
+    let checkpoint_phase = checkpoint.phase;
+
+    // 顯示提示（每秒只提示一次，避免刷屏）
+    // 用 R 鍵重試，用 Escape 放棄
+    if keyboard.just_pressed(KeyCode::KeyR) {
+        match manager.retry_from_checkpoint(&database) {
+            Ok(position) => {
+                // 傳送玩家到檢查點位置
+                if let Ok(mut player_transform) = player_query.single_mut() {
+                    player_transform.translation = position;
+                }
+
+                events.write(StoryMissionEvent::CheckpointReached {
+                    mission_id: checkpoint_mission_id,
+                    phase: checkpoint_phase,
+                });
+
+                notifications.info("從檢查點重新開始");
+                info!(
+                    "從檢查點重試: 任務 {}, 階段 {}",
+                    checkpoint_mission_id, checkpoint_phase
+                );
+            }
+            Err(e) => {
+                notifications.warning(format!("無法從檢查點重試: {}", e));
+                warn!("檢查點重試失敗: {}", e);
+            }
+        }
+    } else if keyboard.just_pressed(KeyCode::Escape) {
+        manager.clear_checkpoint();
+        notifications.info("已放棄任務");
+    }
 }

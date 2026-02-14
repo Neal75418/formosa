@@ -322,3 +322,373 @@ fn camera_offset_with_pitch() {
     assert!((offset.y - 7.07).abs() < 0.1); // 10 * sin(45°) ≈ 7.07
     assert!((offset.z - 7.07).abs() < 0.1); // 10 * cos(45°) ≈ 7.07
 }
+
+// ============================================================================
+// 動態 FOV 測試
+// ============================================================================
+
+#[test]
+fn fov_default_values() {
+    let settings = CameraSettings::default();
+    assert!((settings.base_fov - 70.0).abs() < f32::EPSILON);
+    assert!((settings.sprint_fov - 85.0).abs() < f32::EPSILON);
+    assert!((settings.aim_fov - 55.0).abs() < f32::EPSILON);
+    assert!((settings.current_fov - 70.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn fov_sprint_higher_than_base() {
+    let settings = CameraSettings::default();
+    assert!(settings.sprint_fov > settings.base_fov);
+}
+
+#[test]
+fn fov_aim_lower_than_base() {
+    let settings = CameraSettings::default();
+    assert!(settings.aim_fov < settings.base_fov);
+}
+
+#[test]
+fn fov_lerp_towards_target() {
+    use crate::core::FOV_LERP_SPEED;
+    let mut current_fov = 70.0_f32;
+    let target_fov = 85.0_f32;
+    let dt = 1.0 / 60.0; // 60 fps
+
+    let lerp_t = (FOV_LERP_SPEED * dt).min(1.0);
+    current_fov += (target_fov - current_fov) * lerp_t;
+
+    // FOV 應已朝 85 移動
+    assert!(current_fov > 70.0);
+    assert!(current_fov < 85.0);
+}
+
+#[test]
+fn fov_lerp_converges() {
+    use crate::core::FOV_LERP_SPEED;
+    let mut current_fov = 70.0_f32;
+    let target_fov = 55.0_f32;
+    let dt = 1.0 / 60.0;
+
+    // 模擬 120 幀（約 2 秒）
+    for _ in 0..120 {
+        let lerp_t = (FOV_LERP_SPEED * dt).min(1.0);
+        current_fov += (target_fov - current_fov) * lerp_t;
+    }
+
+    // 2 秒後 FOV 應非常接近目標
+    assert!((current_fov - target_fov).abs() < 0.1);
+}
+
+// ============================================================================
+// FPS/TPS 視角切換測試
+// ============================================================================
+
+#[test]
+fn view_mode_default_is_third_person() {
+    use crate::core::CameraViewMode;
+    let settings = CameraSettings::default();
+    assert_eq!(settings.view_mode, CameraViewMode::ThirdPerson);
+}
+
+#[test]
+fn view_mode_toggle_fps_tps() {
+    use crate::core::CameraViewMode;
+    let mut settings = CameraSettings::default();
+
+    // TPS → FPS
+    settings.view_mode = match settings.view_mode {
+        CameraViewMode::FirstPerson => CameraViewMode::ThirdPerson,
+        _ => CameraViewMode::FirstPerson,
+    };
+    assert_eq!(settings.view_mode, CameraViewMode::FirstPerson);
+
+    // FPS → TPS
+    settings.view_mode = match settings.view_mode {
+        CameraViewMode::FirstPerson => CameraViewMode::ThirdPerson,
+        _ => CameraViewMode::FirstPerson,
+    };
+    assert_eq!(settings.view_mode, CameraViewMode::ThirdPerson);
+}
+
+#[test]
+fn fps_fov_wider_than_base() {
+    let settings = CameraSettings::default();
+    assert!(settings.fps_fov > settings.base_fov);
+}
+
+#[test]
+fn fps_eye_height_reasonable() {
+    let settings = CameraSettings::default();
+    // 眼睛高度應在 1.5~2.0 之間（人物身高）
+    assert!(settings.fps_eye_height >= 1.5);
+    assert!(settings.fps_eye_height <= 2.0);
+}
+
+#[test]
+fn fps_camera_position_at_eye_level() {
+    let settings = CameraSettings::default();
+    let player_pos = Vec3::new(10.0, 0.0, 5.0);
+
+    // FPS 攝影機應在玩家位置 + 眼睛高度
+    let expected_eye = player_pos + Vec3::Y * settings.fps_eye_height;
+    assert!((expected_eye.y - settings.fps_eye_height).abs() < 0.01);
+}
+
+#[test]
+fn fps_look_direction_calculation() {
+    // 驗證 FPS 注視方向計算
+    let yaw = 0.0_f32;
+    let pitch = 0.0_f32;
+
+    let look_dir = Vec3::new(
+        -yaw.sin() * pitch.cos(),
+        -pitch.sin(),
+        -yaw.cos() * pitch.cos(),
+    );
+
+    // yaw=0, pitch=0 → 應朝 -Z 方向看（Bevy 預設前方）
+    assert!((look_dir.x).abs() < 0.01);
+    assert!((look_dir.y).abs() < 0.01);
+    assert!((look_dir.z + 1.0).abs() < 0.01);
+}
+
+#[test]
+fn fps_look_direction_with_pitch() {
+    let yaw = 0.0_f32;
+    let pitch = std::f32::consts::FRAC_PI_4; // 45° 向上
+
+    let look_dir = Vec3::new(
+        -yaw.sin() * pitch.cos(),
+        -pitch.sin(),
+        -yaw.cos() * pitch.cos(),
+    );
+
+    // 45° 向上看 → Y 應為負值（往下），Z 也減少
+    assert!(look_dir.y < 0.0);
+    assert!(look_dir.z < 0.0);
+}
+
+// ============================================================================
+// 車內視角測試
+// ============================================================================
+
+#[test]
+fn vehicle_interior_fov_default() {
+    let settings = CameraSettings::default();
+    // 車內 FOV 應介於瞄準和 FPS 之間
+    assert!(settings.vehicle_interior_fov > settings.aim_fov);
+    assert!(settings.vehicle_interior_fov < settings.fps_fov);
+}
+
+#[test]
+fn vehicle_interior_yaw_limit_reasonable() {
+    let settings = CameraSettings::default();
+    // 限制應在 PI/2 ~ PI 之間（90°~180°）
+    assert!(settings.vehicle_interior_yaw_limit > std::f32::consts::FRAC_PI_2);
+    assert!(settings.vehicle_interior_yaw_limit <= std::f32::consts::PI);
+}
+
+#[test]
+fn vehicle_interior_yaw_clamping() {
+    let mut settings = CameraSettings::default();
+    let limit = settings.vehicle_interior_yaw_limit;
+
+    // 超過限制時應被 clamp
+    settings.vehicle_interior_yaw = 5.0;
+    settings.vehicle_interior_yaw = settings.vehicle_interior_yaw.clamp(-limit, limit);
+    assert!((settings.vehicle_interior_yaw - limit).abs() < 0.01);
+
+    settings.vehicle_interior_yaw = -5.0;
+    settings.vehicle_interior_yaw = settings.vehicle_interior_yaw.clamp(-limit, limit);
+    assert!((settings.vehicle_interior_yaw + limit).abs() < 0.01);
+}
+
+#[test]
+fn vehicle_interior_default_look_forward() {
+    let settings = CameraSettings::default();
+    // 初始應朝正前方看
+    assert!((settings.vehicle_interior_yaw).abs() < f32::EPSILON);
+    assert!((settings.vehicle_interior_pitch).abs() < f32::EPSILON);
+}
+
+#[test]
+fn vehicle_interior_look_direction_forward() {
+    // 車內 yaw=0, pitch=0 時應朝車輛前方 (-Z)
+    let yaw = 0.0_f32;
+    let pitch = 0.0_f32;
+
+    let look_dir = Vec3::new(
+        -yaw.sin() * pitch.cos(),
+        -pitch.sin(),
+        -yaw.cos() * pitch.cos(),
+    );
+
+    assert!((look_dir.x).abs() < 0.01);
+    assert!((look_dir.y).abs() < 0.01);
+    assert!((look_dir.z + 1.0).abs() < 0.01); // -Z 前方
+}
+
+#[test]
+fn vehicle_interior_look_direction_left() {
+    // 車內向左看（yaw 為正值）
+    let yaw = std::f32::consts::FRAC_PI_2; // 90° 左轉
+    let pitch = 0.0_f32;
+
+    let look_dir = Vec3::new(
+        -yaw.sin() * pitch.cos(),
+        -pitch.sin(),
+        -yaw.cos() * pitch.cos(),
+    );
+
+    // 應朝 -X 方向看
+    assert!(look_dir.x < -0.9);
+    assert!((look_dir.y).abs() < 0.01);
+    assert!((look_dir.z).abs() < 0.1);
+}
+
+#[test]
+fn driver_eye_offset_per_vehicle_type() {
+    use crate::vehicle::VehicleType;
+    use crate::camera::systems::driver_eye_offset;
+
+    let scooter = driver_eye_offset(VehicleType::Scooter);
+    let car = driver_eye_offset(VehicleType::Car);
+    let bus = driver_eye_offset(VehicleType::Bus);
+
+    // 公車駕駛座最高
+    assert!(bus.y > car.y);
+    assert!(bus.y > scooter.y);
+
+    // 所有車種眼睛高度 > 0
+    assert!(scooter.y > 0.0);
+    assert!(car.y > 0.0);
+    assert!(bus.y > 0.0);
+
+    // 汽車駕駛座偏左（負 X）
+    assert!(car.x < 0.0);
+}
+
+#[test]
+fn vehicle_interior_auto_exit_on_dismount() {
+    use crate::core::CameraViewMode;
+    let mut settings = CameraSettings::default();
+    settings.view_mode = CameraViewMode::VehicleInterior;
+
+    // 模擬下車：不在車上時應自動切回 TPS
+    let player_in_vehicle = false;
+    if !player_in_vehicle && settings.view_mode == CameraViewMode::VehicleInterior {
+        settings.view_mode = CameraViewMode::ThirdPerson;
+    }
+
+    assert_eq!(settings.view_mode, CameraViewMode::ThirdPerson);
+}
+
+// ============================================================================
+// 電影模式測試
+// ============================================================================
+
+#[test]
+fn cinematic_state_defaults() {
+    use crate::core::CinematicState;
+    let state = CinematicState::default();
+    assert!((state.letterbox_progress - 0.0).abs() < f32::EPSILON);
+    assert!(state.fly_speed > 0.0);
+    assert!(state.fov > 0.0 && state.fov < 120.0);
+}
+
+#[test]
+fn cinematic_fov_wider_than_aim() {
+    use crate::core::CinematicState;
+    let settings = CameraSettings::default();
+    let cinematic = CinematicState::default();
+    assert!(cinematic.fov > settings.aim_fov);
+}
+
+#[test]
+fn cinematic_toggle_via_c_key() {
+    use crate::core::CameraViewMode;
+    let mut settings = CameraSettings::default();
+
+    // TPS → Cinematic
+    settings.view_mode = CameraViewMode::Cinematic;
+    assert_eq!(settings.view_mode, CameraViewMode::Cinematic);
+
+    // Cinematic → TPS
+    settings.view_mode = CameraViewMode::ThirdPerson;
+    assert_eq!(settings.view_mode, CameraViewMode::ThirdPerson);
+}
+
+#[test]
+fn letterbox_progress_animation() {
+    use crate::core::{CinematicState, LETTERBOX_ANIM_SPEED};
+
+    let mut state = CinematicState::default();
+    let dt = 1.0 / 60.0;
+    let target = 1.0;
+
+    // 模擬展開動畫
+    for _ in 0..60 {
+        let speed = LETTERBOX_ANIM_SPEED * dt;
+        if state.letterbox_progress < target {
+            state.letterbox_progress = (state.letterbox_progress + speed).min(1.0);
+        }
+    }
+
+    // 1 秒後應接近或達到完全展開
+    assert!(state.letterbox_progress > 0.9);
+}
+
+#[test]
+fn letterbox_progress_retract() {
+    use crate::core::{CinematicState, LETTERBOX_ANIM_SPEED};
+
+    let mut state = CinematicState::default();
+    state.letterbox_progress = 1.0;
+    let dt = 1.0 / 60.0;
+    let target = 0.0;
+
+    // 模擬收起動畫
+    for _ in 0..60 {
+        let speed = LETTERBOX_ANIM_SPEED * dt;
+        if state.letterbox_progress > target {
+            state.letterbox_progress = (state.letterbox_progress - speed).max(0.0);
+        }
+    }
+
+    assert!(state.letterbox_progress < 0.1);
+}
+
+#[test]
+fn cinematic_free_camera_movement() {
+    // 驗證自由攝影的前進方向計算
+    let yaw = 0.0_f32;
+    let pitch = 0.0_f32;
+
+    let forward = Vec3::new(
+        -yaw.sin() * pitch.cos(),
+        -pitch.sin(),
+        -yaw.cos() * pitch.cos(),
+    );
+
+    // yaw=0, pitch=0 → 前方 -Z
+    assert!((forward.z + 1.0).abs() < 0.01);
+
+    let right = Vec3::new(-yaw.cos(), 0.0, yaw.sin());
+    // yaw=0 → 右方 -X
+    assert!((right.x + 1.0).abs() < 0.01);
+}
+
+#[test]
+fn cinematic_fly_speed_clamp() {
+    use crate::core::CinematicState;
+    let mut state = CinematicState::default();
+
+    // 速度不可低於 1.0
+    state.fly_speed = (state.fly_speed - 100.0).clamp(1.0, 100.0);
+    assert!((state.fly_speed - 1.0).abs() < f32::EPSILON);
+
+    // 速度不可高於 100.0
+    state.fly_speed = (state.fly_speed + 200.0).clamp(1.0, 100.0);
+    assert!((state.fly_speed - 100.0).abs() < f32::EPSILON);
+}

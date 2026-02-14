@@ -6,6 +6,20 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct ThirdPersonCameraTarget;
 
+/// 攝影機視角模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CameraViewMode {
+    /// 第三人稱（預設）
+    #[default]
+    ThirdPerson,
+    /// 第一人稱
+    FirstPerson,
+    /// 車內視角
+    VehicleInterior,
+    /// 電影模式
+    Cinematic,
+}
+
 /// 攝影機設定
 #[derive(Resource)]
 pub struct CameraSettings {
@@ -18,7 +32,30 @@ pub struct CameraSettings {
     pub aim_distance: f32,         // 瞄準時攝影機距離
     #[allow(dead_code)]
     pub aim_pitch: f32,            // 瞄準時俯仰角
+    // 動態 FOV
+    pub base_fov: f32,    // 預設 FOV（度）
+    pub sprint_fov: f32,  // 衝刺 FOV（度）
+    pub aim_fov: f32,     // 瞄準 FOV（度）
+    pub current_fov: f32, // 當前 FOV（度，平滑插值中間值）
+    // 視角模式
+    pub view_mode: CameraViewMode,
+    /// FPS 模式時眼睛高度偏移
+    pub fps_eye_height: f32,
+    /// FPS 模式時 FOV（度）
+    pub fps_fov: f32,
+    // 車內視角
+    /// 車內視角 FOV（度）
+    pub vehicle_interior_fov: f32,
+    /// 車內視角滑鼠 yaw 相對於車身的限制（弧度，±此值）
+    pub vehicle_interior_yaw_limit: f32,
+    /// 車內視角相對於車身的 yaw 偏移（弧度）
+    pub vehicle_interior_yaw: f32,
+    /// 車內視角相對於車身的 pitch 偏移（弧度）
+    pub vehicle_interior_pitch: f32,
 }
+
+/// FOV 插值速度（每秒）
+pub const FOV_LERP_SPEED: f32 = 6.0;
 
 impl Default for CameraSettings {
     fn default() -> Self {
@@ -31,6 +68,20 @@ impl Default for CameraSettings {
             aim_shoulder_offset: 1.5,  // 向右肩偏移 1.5 公尺
             aim_distance: 8.0,         // 瞄準時拉近攝影機
             aim_pitch: 0.2,            // 瞄準時降低俯角
+            // 動態 FOV
+            base_fov: 70.0,
+            sprint_fov: 85.0,
+            aim_fov: 55.0,
+            current_fov: 70.0,
+            // 視角模式
+            view_mode: CameraViewMode::ThirdPerson,
+            fps_eye_height: 1.7,
+            fps_fov: 80.0,
+            // 車內視角
+            vehicle_interior_fov: 75.0,
+            vehicle_interior_yaw_limit: 2.1, // ±120° 可左右看出車窗
+            vehicle_interior_yaw: 0.0,
+            vehicle_interior_pitch: 0.0,
         }
     }
 }
@@ -129,3 +180,37 @@ impl CameraShake {
         }
     }
 }
+
+/// 電影模式狀態
+#[derive(Resource)]
+pub struct CinematicState {
+    /// letterbox 動畫進度（0.0=隱藏，1.0=完全顯示）
+    pub letterbox_progress: f32,
+    /// 自由攝影飛行速度（公尺/秒）
+    pub fly_speed: f32,
+    /// 電影模式 FOV（度）
+    pub fov: f32,
+}
+
+/// Letterbox 動畫速度（每秒）
+pub const LETTERBOX_ANIM_SPEED: f32 = 4.0;
+/// Letterbox 黑邊高度比例（螢幕高度的百分比）
+pub const LETTERBOX_HEIGHT_RATIO: f32 = 0.12;
+
+impl Default for CinematicState {
+    fn default() -> Self {
+        Self {
+            letterbox_progress: 0.0,
+            fly_speed: 10.0,
+            fov: 65.0,
+        }
+    }
+}
+
+/// 電影模式 Letterbox 上黑邊標記
+#[derive(Component)]
+pub struct LetterboxTop;
+
+/// 電影模式 Letterbox 下黑邊標記
+#[derive(Component)]
+pub struct LetterboxBottom;

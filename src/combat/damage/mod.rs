@@ -53,6 +53,7 @@ pub struct DamageSystemResources<'w> {
     pub damage_indicator: ResMut<'w, DamageIndicatorState>,
     pub damage_tracker: ResMut<'w, FloatingDamageTracker>,
     pub font: Option<Res<'w, ChineseFont>>,
+    pub block_state: ResMut<'w, BlockState>,
 }
 
 /// 死亡處理系統資源參數包

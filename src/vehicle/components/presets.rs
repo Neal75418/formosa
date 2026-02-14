@@ -54,7 +54,11 @@ impl VehiclePreset {
                 ..Default::default()
             },
             lean: VehicleLean {
-                max_lean_angle: 0.5,
+                max_lean_angle: 0.611,        // 35°
+                lean_response: 6.0,
+                lean_damping: 10.0,
+                crash_lean_threshold: 0.70,   // ~40°
+                crash_recovery_duration: 2.0,
                 ..Default::default()
             },
             power_band: VehiclePowerBand {

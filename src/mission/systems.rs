@@ -4,7 +4,7 @@
 use bevy::prelude::*;
 use super::{
     MissionManager, MissionMarker, MissionStatus, ActiveMission, DeliveryRating,
-    MissionType, MissionData, RaceMedal, TaxiRating,
+    MissionType, MissionData, RaceMedal, TaxiRating, CompletedMissionRecord,
 };
 use crate::player::Player;
 use crate::core::InteractionState;
@@ -368,10 +368,30 @@ fn handle_mission_completion(
     materials: &mut Assets<StandardMaterial>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
+    let mission_title = mission_manager.active_mission.as_ref()
+        .map(|a| a.data.title.clone())
+        .unwrap_or_default();
 
     // 計算獎勵
     let final_reward = mission_manager.complete_delivery(rating);
     wallet.add_cash(final_reward as i32);
+
+    // 記錄到任務日誌
+    let star_count = match rating {
+        DeliveryRating::None => 0,
+        DeliveryRating::OneStar => 1,
+        DeliveryRating::TwoStars => 2,
+        DeliveryRating::ThreeStars => 3,
+        DeliveryRating::FourStars => 4,
+        DeliveryRating::FiveStars => 5,
+    };
+    mission_manager.completed_missions.push(CompletedMissionRecord {
+        title: mission_title,
+        mission_type: MissionType::Delivery,
+        reward: final_reward,
+        stars: star_count,
+        rating_label: rating.stars().to_string(),
+    });
 
     // 顯示結果
     let streak_msg = if mission_manager.delivery_streak > 1 {
@@ -417,6 +437,9 @@ fn handle_race_completion(
     marker_query: &Query<(Entity, &MissionMarker)>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
+    let mission_title = mission_manager.active_mission.as_ref()
+        .map(|a| a.data.title.clone())
+        .unwrap_or_default();
 
     // 計算獎勵
     let base_reward = mission_manager.active_mission.as_ref()
@@ -427,6 +450,25 @@ fn handle_race_completion(
     wallet.add_cash(final_reward as i32);
     mission_manager.completed_count += 1;
     mission_manager.total_earnings += final_reward;
+
+    // 記錄到任務日誌
+    let star_count = match medal {
+        RaceMedal::Gold => 5,
+        RaceMedal::Silver => 4,
+        RaceMedal::Bronze => 3,
+        RaceMedal::None => 2,
+    };
+    mission_manager.completed_missions.push(CompletedMissionRecord {
+        title: mission_title,
+        mission_type: MissionType::Race,
+        reward: final_reward,
+        stars: star_count,
+        rating_label: if medal != RaceMedal::None {
+            medal.emoji().to_string()
+        } else {
+            "完成".to_string()
+        },
+    });
 
     // 顯示結果
     let medal_text = if medal != RaceMedal::None {
@@ -457,6 +499,9 @@ fn handle_taxi_completion(
     marker_query: &Query<(Entity, &MissionMarker)>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
+    let mission_title = mission_manager.active_mission.as_ref()
+        .map(|a| a.data.title.clone())
+        .unwrap_or_default();
 
     // 計算車資和小費
     let base_reward = mission_manager.active_mission.as_ref()
@@ -468,6 +513,22 @@ fn handle_taxi_completion(
     wallet.add_cash(final_reward as i32);
     mission_manager.completed_count += 1;
     mission_manager.total_earnings += final_reward;
+
+    // 記錄到任務日誌
+    let star_count = match rating {
+        TaxiRating::Excellent => 5,
+        TaxiRating::Good => 4,
+        TaxiRating::Average => 3,
+        TaxiRating::Poor => 2,
+        TaxiRating::Terrible => 1,
+    };
+    mission_manager.completed_missions.push(CompletedMissionRecord {
+        title: mission_title,
+        mission_type: MissionType::Taxi,
+        reward: final_reward,
+        stars: star_count,
+        rating_label: rating.emoji().to_string(),
+    });
 
     // 顯示結果
     let tip_msg = if tip > 0 {

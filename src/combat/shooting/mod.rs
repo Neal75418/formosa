@@ -23,5 +23,6 @@ pub use effects::{
 };
 pub use firing::fire_weapon_system;
 pub use input::{
-    melee_combo_timeout_system, reload_system, shooting_input_system, weapon_cooldown_system,
+    block_update_system, melee_combo_timeout_system, reload_system, shooting_input_system,
+    weapon_cooldown_system,
 };

@@ -4,11 +4,13 @@ use bevy::prelude::*;
 use rand::Rng;
 
 use crate::combat::{WeaponInventory, WeaponType};
+use crate::economy::PlayerWallet;
 use crate::pedestrian::components::{
     PedState, Pedestrian, PedestrianState, WitnessState, WitnessedCrime,
+    BRIBE_COST, BRIBE_DISTANCE, BRIBE_HEAT_REDUCTION,
 };
 use crate::player::Player;
-use crate::wanted::{CrimeEvent, WitnessReport};
+use crate::wanted::{CrimeEvent, WantedLevel, WantedLevelChanged, WitnessReport};
 
 /// 目擊者 UI 顯示距離平方 (30.0²)
 #[allow(dead_code)]
@@ -44,6 +46,7 @@ fn crime_event_to_witnessed_crime(crime: &CrimeEvent) -> WitnessedCrime {
         CrimeEvent::VehicleTheft { .. } => WitnessedCrime::VehicleTheft,
         CrimeEvent::VehicleHit { .. } => WitnessedCrime::VehicleHit,
         CrimeEvent::PoliceKilled { .. } => WitnessedCrime::Murder,
+        CrimeEvent::ShopRobbery { .. } => WitnessedCrime::Assault,
     }
 }
 
@@ -355,4 +358,75 @@ pub fn witness_progress_ui_system(
 
     // UI 渲染在 ui 模組中處理，這裡只做資料準備
     // 實際的 UI 會在 ui/systems.rs 中讀取 WitnessState 並渲染進度條
+}
+
+// ============================================================================
+// GTA 5 風格賄賂證人系統
+// ============================================================================
+
+/// 賄賂證人系統
+/// 玩家按 B 鍵接近正在報警的行人，支付 $2000 讓其閉嘴
+/// 成功賄賂：證人停止報警、熱度降低 20（約 1 星）
+pub fn bribe_witness_system(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut wallet: ResMut<PlayerWallet>,
+    mut wanted: ResMut<WantedLevel>,
+    mut level_changed: MessageWriter<WantedLevelChanged>,
+    player_query: Query<&Transform, With<Player>>,
+    mut ped_query: Query<
+        (Entity, &Transform, &mut PedestrianState, &mut WitnessState),
+        With<Pedestrian>,
+    >,
+) {
+    if !keyboard.just_pressed(KeyCode::KeyB) {
+        return;
+    }
+
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
+    let player_pos = player_transform.translation;
+    let bribe_dist_sq = BRIBE_DISTANCE * BRIBE_DISTANCE;
+
+    // Phase 1: 找最近的正在報警的證人 Entity
+    let nearest_entity = ped_query
+        .iter()
+        .filter(|(_, _, _, witness)| witness.is_calling())
+        .filter_map(|(entity, transform, _, _)| {
+            let dist_sq = transform.translation.distance_squared(player_pos);
+            (dist_sq < bribe_dist_sq).then_some((entity, dist_sq))
+        })
+        .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(entity, _)| entity);
+
+    let Some(target) = nearest_entity else {
+        return;
+    };
+
+    // 檢查玩家是否有足夠現金
+    if wallet.cash < BRIBE_COST {
+        info!("賄賂失敗：現金不足（需要 ${}）", BRIBE_COST);
+        return;
+    }
+
+    // Phase 2: 執行賄賂
+    if let Ok((_, _, mut state, mut witness)) = ped_query.get_mut(target) {
+        witness.bribe();
+        state.state = PedState::Walking;
+        state.fear_level = 0.0;
+
+        wallet.spend_cash(BRIBE_COST);
+
+        let old_stars = wanted.stars;
+        wanted.reduce_heat(BRIBE_HEAT_REDUCTION);
+
+        if wanted.stars != old_stars {
+            level_changed.write(WantedLevelChanged::new(old_stars, wanted.stars));
+        }
+
+        info!(
+            "賄賂成功！支付 ${}, 熱度降低 {:.0}, 通緝: {} → {}",
+            BRIBE_COST, BRIBE_HEAT_REDUCTION, old_stars, wanted.stars
+        );
+    }
 }

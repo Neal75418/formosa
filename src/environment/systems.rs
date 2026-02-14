@@ -9,7 +9,7 @@ use bevy_rapier3d::prelude::*;
 use rand::Rng;
 use std::f32::consts::TAU;
 
-use super::{Destructible, DestructibleMaterial, DestructibleVisuals, Debris, DestructionEvent, DebrisPool};
+use super::{Destructible, DestructibleMaterial, DestructibleVisuals, Debris, DestructionEvent, DebrisPool, DestructibleId, DestroyedObjectTracker};
 use crate::combat::{DamageEvent, Damageable};
 use crate::core::COLLISION_GROUP_STATIC;
 
@@ -38,6 +38,8 @@ fn process_destructible_damage(
     hit_position: Option<Vec3>,
     current_time: f32,
     destruction_events: &mut MessageWriter<DestructionEvent>,
+    destructible_id: Option<&DestructibleId>,
+    tracker: &mut DestroyedObjectTracker,
 ) {
     // 計算方向（從攻擊者到目標）
     let impact_direction = hit_position.map(|pos| {
@@ -65,6 +67,11 @@ fn process_destructible_damage(
 
     destruction_events.write(destruction_event);
 
+    // 記錄已破壞物件 ID（用於存檔持久化）
+    if let Some(id) = destructible_id {
+        tracker.mark_destroyed(id.0);
+    }
+
     // 移除原始實體
     if let Ok(mut entity_commands) = commands.get_entity(entity) {
         entity_commands.despawn();
@@ -78,12 +85,13 @@ pub fn destructible_damage_system(
     time: Res<Time>,
     mut damage_events: MessageReader<DamageEvent>,
     mut destruction_events: MessageWriter<DestructionEvent>,
-    mut destructible_query: Query<(Entity, &Transform, &mut Destructible)>,
+    mut destructible_query: Query<(Entity, &Transform, &mut Destructible, Option<&DestructibleId>)>,
+    mut tracker: ResMut<DestroyedObjectTracker>,
 ) {
     let current_time = time.elapsed_secs();
 
     for event in damage_events.read() {
-        let Ok((entity, transform, mut destructible)) = destructible_query.get_mut(event.target) else {
+        let Ok((entity, transform, mut destructible, dest_id)) = destructible_query.get_mut(event.target) else {
             continue;
         };
 
@@ -100,6 +108,8 @@ pub fn destructible_damage_system(
             event.hit_position,
             current_time,
             &mut destruction_events,
+            dest_id,
+            &mut tracker,
         );
     }
 }
@@ -407,6 +417,7 @@ fn spawn_glass_window_cached(
     position: Vec3,
     size: Vec2,  // (width, height)
     rotation: Quat,
+    id: DestructibleId,
 ) {
     let thickness = 0.05;
 
@@ -422,6 +433,7 @@ fn spawn_glass_window_cached(
         ),
         Destructible::glass_window(size.x, size.y),
         Damageable,
+        id,
         Name::new("GlassWindow"),
     ));
 }
@@ -434,6 +446,7 @@ pub fn spawn_glass_window(
     position: Vec3,
     size: Vec2,
     rotation: Quat,
+    id: DestructibleId,
 ) {
     let glass_material = materials.add(StandardMaterial {
         base_color: Color::srgba(0.7, 0.85, 1.0, 0.4),
@@ -442,7 +455,7 @@ pub fn spawn_glass_window(
         perceptual_roughness: 0.1,
         ..default()
     });
-    spawn_glass_window_cached(commands, meshes, glass_material, position, size, rotation);
+    spawn_glass_window_cached(commands, meshes, glass_material, position, size, rotation, id);
 }
 
 /// 生成木製障礙物（使用快取材質）
@@ -452,6 +465,7 @@ fn spawn_wooden_barrier_cached(
     material: Handle<StandardMaterial>,
     position: Vec3,
     size: Vec3,
+    id: DestructibleId,
 ) {
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::from_size(size))),
@@ -465,6 +479,7 @@ fn spawn_wooden_barrier_cached(
         ),
         Destructible::wooden_plank(size.x, size.y, size.z),
         Damageable,
+        id,
         Name::new("WoodenBarrier"),
     ));
 }
@@ -476,13 +491,14 @@ pub fn spawn_wooden_barrier(
     materials: &mut Assets<StandardMaterial>,
     position: Vec3,
     size: Vec3,
+    id: DestructibleId,
 ) {
     let wood_material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.6, 0.4, 0.25),
         perceptual_roughness: 0.85,
         ..default()
     });
-    spawn_wooden_barrier_cached(commands, meshes, wood_material, position, size);
+    spawn_wooden_barrier_cached(commands, meshes, wood_material, position, size, id);
 }
 
 // ============================================================================
@@ -519,9 +535,13 @@ pub fn setup_world_destructibles(
         (Vec3::new(50.5, 3.0, 25.0), Vec2::new(5.0, 4.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
     ];
 
+    // 可破壞物件 ID 計數器（用於存檔持久化）
+    let mut next_id: u32 = 0;
+
     let window_count = glass_windows.len();
     for (position, size, rotation) in glass_windows {
-        spawn_glass_window_cached(&mut commands, &mut meshes, cache.glass.clone(), position, size, rotation);
+        spawn_glass_window_cached(&mut commands, &mut meshes, cache.glass.clone(), position, size, rotation, DestructibleId(next_id));
+        next_id += 1;
     }
 
     // === 木製障礙物（路障、柵欄等）===
@@ -542,7 +562,8 @@ pub fn setup_world_destructibles(
 
     let barrier_count = wooden_barriers.len();
     for (position, size) in wooden_barriers {
-        spawn_wooden_barrier_cached(&mut commands, &mut meshes, cache.wood.clone(), position, size);
+        spawn_wooden_barrier_cached(&mut commands, &mut meshes, cache.wood.clone(), position, size, DestructibleId(next_id));
+        next_id += 1;
     }
 
     // === 金屬物件（廢棄車輛零件、垃圾桶等）===
@@ -556,7 +577,8 @@ pub fn setup_world_destructibles(
 
     let metal_count = metal_objects.len();
     for (position, size) in metal_objects {
-        spawn_metal_object_cached(&mut commands, &mut meshes, cache.metal.clone(), position, size);
+        spawn_metal_object_cached(&mut commands, &mut meshes, cache.metal.clone(), position, size, DestructibleId(next_id));
+        next_id += 1;
     }
 
     // 將快取儲存為資源供後續使用
@@ -575,6 +597,7 @@ fn spawn_metal_object_cached(
     material: Handle<StandardMaterial>,
     position: Vec3,
     size: Vec3,
+    id: DestructibleId,
 ) {
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::from_size(size))),
@@ -595,6 +618,7 @@ fn spawn_metal_object_cached(
             last_damage_time: 0.0,
         },
         Damageable,
+        id,
         Name::new("MetalObject"),
     ));
 }
@@ -606,6 +630,7 @@ pub fn spawn_metal_object(
     materials: &mut Assets<StandardMaterial>,
     position: Vec3,
     size: Vec3,
+    id: DestructibleId,
 ) {
     let metal_material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.5, 0.5, 0.55),
@@ -613,5 +638,33 @@ pub fn spawn_metal_object(
         perceptual_roughness: 0.4,
         ..default()
     });
-    spawn_metal_object_cached(commands, meshes, metal_material, position, size);
+    spawn_metal_object_cached(commands, meshes, metal_material, position, size, id);
+}
+
+/// 移除已破壞的物件（讀檔後執行）
+///
+/// 查詢所有帶有 `DestructibleId` 的實體，若其 ID 在 `DestroyedObjectTracker` 中，
+/// 則立即 despawn 該實體。
+pub fn despawn_destroyed_objects(
+    mut commands: Commands,
+    tracker: Res<DestroyedObjectTracker>,
+    query: Query<(Entity, &DestructibleId)>,
+) {
+    if tracker.destroyed_ids.is_empty() {
+        return;
+    }
+
+    let mut count = 0u32;
+    for (entity, id) in &query {
+        if tracker.is_destroyed(id.0) {
+            if let Ok(mut entity_commands) = commands.get_entity(entity) {
+                entity_commands.despawn();
+                count += 1;
+            }
+        }
+    }
+
+    if count > 0 {
+        info!("💾 已從存檔恢復 {} 個破壞物件狀態", count);
+    }
 }

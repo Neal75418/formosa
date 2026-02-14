@@ -62,7 +62,12 @@ pub fn toggle_pause(
     mut next_state: ResMut<NextState<AppState>>,
     resume_query: Query<&Interaction, (Changed<Interaction>, With<ResumeButton>)>,
     quit_query: Query<&Interaction, (Changed<Interaction>, With<QuitButton>)>,
+    ui_state: Res<UiState>,
 ) {
+    // 存檔槽 UI 開啟時，ESC 由該系統處理，此處跳過
+    if ui_state.show_save_slots {
+        return;
+    }
     // 檢查「繼續遊戲」按鈕點擊
     if is_button_pressed(&resume_query) {
         next_state.set(AppState::InGame);

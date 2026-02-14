@@ -422,3 +422,102 @@ fn test_punch_animation_for_combo_step() {
     assert_eq!(anim.timer, 0.0);
     assert_eq!(anim.phase, PunchPhase::WindUp);
 }
+
+// ============================================================================
+// BlockState 測試
+// ============================================================================
+
+#[test]
+fn test_block_state_default() {
+    let state = BlockState::default();
+    assert!(!state.is_blocking);
+    assert!(!state.counter_ready);
+    assert_eq!(state.parry_count, 0);
+}
+
+#[test]
+fn test_block_start_stop() {
+    let mut state = BlockState::default();
+    state.start_block(1.0);
+    assert!(state.is_blocking);
+    assert_eq!(state.block_start_time, 1.0);
+
+    state.stop_block();
+    assert!(!state.is_blocking);
+}
+
+#[test]
+fn test_block_start_idempotent() {
+    let mut state = BlockState::default();
+    state.start_block(1.0);
+    state.start_block(2.0); // 已在格擋中，不更新時間
+    assert_eq!(state.block_start_time, 1.0);
+}
+
+#[test]
+fn test_parry_window_within() {
+    let mut state = BlockState::default();
+    state.start_block(1.0);
+    // 0.1s 內 = 精準格擋
+    assert!(state.is_parry_window(1.1));
+    // 接近 0.2s 邊界 = 仍在窗口內
+    assert!(state.is_parry_window(1.19));
+}
+
+#[test]
+fn test_parry_window_expired() {
+    let mut state = BlockState::default();
+    state.start_block(1.0);
+    // 超過 0.2s = 不在精準格擋窗口
+    assert!(!state.is_parry_window(1.3));
+}
+
+#[test]
+fn test_parry_window_not_blocking() {
+    let state = BlockState::default();
+    assert!(!state.is_parry_window(0.0));
+}
+
+#[test]
+fn test_counter_activate_and_consume() {
+    let mut state = BlockState::default();
+    state.activate_counter(1.0);
+    assert!(state.counter_ready);
+    assert_eq!(state.parry_count, 1);
+
+    let mult = state.consume_counter();
+    assert_eq!(mult, COUNTER_DAMAGE_MULTIPLIER);
+    assert!(!state.counter_ready);
+}
+
+#[test]
+fn test_counter_consume_without_activation() {
+    let mut state = BlockState::default();
+    let mult = state.consume_counter();
+    assert_eq!(mult, 1.0); // 未啟動 = 無加成
+}
+
+#[test]
+fn test_counter_timeout() {
+    let mut state = BlockState::default();
+    state.activate_counter(1.0);
+    assert!(state.counter_ready);
+
+    // 2s 內仍有效
+    state.update_counter_timeout(2.5);
+    assert!(state.counter_ready);
+
+    // 超過 COUNTER_WINDOW 秒失效
+    state.update_counter_timeout(3.1);
+    assert!(!state.counter_ready);
+}
+
+#[test]
+fn test_block_constants() {
+    assert_eq!(PARRY_WINDOW, 0.2);
+    assert_eq!(BLOCK_DAMAGE_REDUCTION, 0.6);
+    assert_eq!(COUNTER_DAMAGE_MULTIPLIER, 2.0);
+    assert_eq!(BLOCK_STAMINA_COST, 5.0);
+    assert_eq!(PARRY_STAMINA_COST, 2.0);
+    assert_eq!(COUNTER_WINDOW, 2.0);
+}

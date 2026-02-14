@@ -5,8 +5,8 @@
 use bevy::prelude::*;
 
 use super::components::{
-    ChineseFont, GpsDirectionArrow, GpsDistanceDisplay, GpsNavigationState, MinimapContainer,
-    MinimapGpsMarker,
+    ChineseFont, GpsDirectionArrow, GpsDistanceDisplay, GpsNavigationState, GpsTurnDirection,
+    GpsTurnIndicator, MinimapContainer, MinimapGpsMarker,
 };
 use crate::mission::{MissionManager, MissionType};
 use crate::player::Player;
@@ -52,6 +52,49 @@ pub fn setup_gps_ui(mut commands: Commands, font: Option<Res<ChineseFont>>) {
             ));
         });
 
+    // 轉彎提示（在方向箭頭旁邊）
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(330.0),
+                right: Val::Px(85.0), // 方向箭頭左側
+                width: Val::Px(50.0),
+                height: Val::Px(40.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+            BorderRadius::all(Val::Px(6.0)),
+            Visibility::Hidden,
+            GpsTurnIndicator,
+            Name::new("GPS_TurnIndicator"),
+        ))
+        .with_children(|parent| {
+            // 轉彎方向符號
+            parent.spawn((
+                Text::new("↑"),
+                TextFont {
+                    font: font.font.clone(),
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+            ));
+            // 距離文字
+            parent.spawn((
+                Text::new(""),
+                TextFont {
+                    font: font.font.clone(),
+                    font_size: 10.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(0.8, 0.8, 0.8, 0.8)),
+            ));
+        });
+
     // 距離顯示（在方向箭頭下方）
     commands
         .spawn((
@@ -93,7 +136,7 @@ fn calculate_gps_direction_angle(player_forward: Vec3, to_dest: Vec3) -> f32 {
 }
 
 /// 格式化 GPS 距離顯示
-fn format_gps_distance(distance_xz: f32) -> String {
+pub fn format_gps_distance(distance_xz: f32) -> String {
     if distance_xz >= 1000.0 {
         format!("{:.1} km", distance_xz / 1000.0)
     } else {
@@ -164,6 +207,16 @@ pub fn update_gps_navigation(
     for (mut vis, mut transform, _children) in arrow_query.iter_mut() {
         *vis = Visibility::Visible;
         transform.rotation = Quat::from_rotation_z(angle);
+    }
+
+    // 計算轉彎方向
+    let turn_dir = GpsTurnDirection::from_angle(angle);
+    gps.next_turn_direction = turn_dir;
+    gps.distance_to_next_turn = distance_xz.min(50.0); // 簡化：以直線距離作為轉彎距離
+
+    // 到達臨近時標記為 Arrived
+    if distance_xz < 10.0 {
+        gps.next_turn_direction = GpsTurnDirection::Arrived;
     }
 
     // 更新距離顯示
@@ -282,7 +335,11 @@ fn set_gps_for_mission(gps: &mut GpsNavigationState, mission: &crate::mission::A
 
     match data.mission_type {
         MissionType::Delivery => {
-            gps.set_destination(data.end_pos, "送貨目的地");
+            if mission.picked_up {
+                gps.set_destination(data.end_pos, "送貨目的地");
+            } else {
+                gps.set_destination(data.start_pos, "取餐點");
+            }
         }
         MissionType::Taxi => {
             if let Some(taxi_data) = &data.taxi_data {
@@ -328,5 +385,36 @@ pub fn gps_mission_integration(
         }
     } else if gps.active && should_clear_mission_gps(&gps.destination_name) {
         gps.clear();
+    }
+}
+
+/// 更新 GPS 轉彎提示 UI
+pub fn update_gps_turn_indicator(
+    gps: Res<GpsNavigationState>,
+    mut turn_query: Query<(&mut Visibility, &Children), With<GpsTurnIndicator>>,
+    mut text_query: Query<&mut Text>,
+) {
+    for (mut vis, children) in turn_query.iter_mut() {
+        if !gps.active || gps.destination.is_none() {
+            *vis = Visibility::Hidden;
+            continue;
+        }
+
+        *vis = Visibility::Visible;
+        let mut child_iter = children.iter();
+
+        // 更新方向符號
+        if let Some(child) = child_iter.next() {
+            if let Ok(mut text) = text_query.get_mut(child) {
+                **text = gps.next_turn_direction.symbol().to_string();
+            }
+        }
+
+        // 更新距離文字
+        if let Some(child) = child_iter.next() {
+            if let Ok(mut text) = text_query.get_mut(child) {
+                **text = gps.next_turn_direction.label().to_string();
+            }
+        }
     }
 }

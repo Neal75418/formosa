@@ -4,9 +4,12 @@
 #![allow(clippy::needless_pass_by_value)]
 
 use bevy::prelude::*;
-use crate::core::{GameState, CameraSettings, RecoilState, CameraShake};
-use crate::player::Player;
-use crate::vehicle::Vehicle;
+use crate::core::{
+    GameState, CameraSettings, CameraViewMode, RecoilState, CameraShake, FOV_LERP_SPEED,
+    CinematicState, LetterboxTop, LetterboxBottom, LETTERBOX_ANIM_SPEED, LETTERBOX_HEIGHT_RATIO,
+};
+use crate::player::{Player, PlayerSprintState};
+use crate::vehicle::{Vehicle, VehicleType};
 use crate::combat::{CombatState, Enemy, LockOnState, WeaponInventory, WeaponType};
 
 /// 攝影機自動跟隨速度（越大越快跟上玩家）
@@ -85,9 +88,44 @@ pub fn camera_input(
     mut scroll: MessageReader<bevy::input::mouse::MouseWheel>,
     mut camera_settings: ResMut<CameraSettings>,
     mut combat_state: ResMut<CombatState>,
+    game_state: Res<GameState>,
     time: Res<Time>,
     player_query: Query<&WeaponInventory, With<Player>>,
 ) {
+    // 電影模式下跳過一般輸入（由 cinematic_camera_system 處理）
+    if camera_settings.view_mode == CameraViewMode::Cinematic {
+        mouse_motion.clear();
+        scroll.clear();
+        return;
+    }
+
+    // 下車時自動切回 TPS（防止步行時卡在車內視角）
+    if !game_state.player_in_vehicle && camera_settings.view_mode == CameraViewMode::VehicleInterior {
+        camera_settings.view_mode = CameraViewMode::ThirdPerson;
+    }
+
+    // V 鍵切換視角
+    // 車上：ThirdPerson ↔ VehicleInterior
+    // 步行：ThirdPerson ↔ FirstPerson
+    if keyboard.just_pressed(KeyCode::KeyV) {
+        if game_state.player_in_vehicle {
+            camera_settings.view_mode = match camera_settings.view_mode {
+                CameraViewMode::VehicleInterior => CameraViewMode::ThirdPerson,
+                _ => {
+                    // 進入車內視角時重置相對 yaw/pitch
+                    camera_settings.vehicle_interior_yaw = 0.0;
+                    camera_settings.vehicle_interior_pitch = 0.0;
+                    CameraViewMode::VehicleInterior
+                }
+            };
+        } else {
+            camera_settings.view_mode = match camera_settings.view_mode {
+                CameraViewMode::FirstPerson => CameraViewMode::ThirdPerson,
+                _ => CameraViewMode::FirstPerson,
+            };
+        }
+    }
+
     // 鍵盤旋轉
     handle_keyboard_rotation(&keyboard, &mut camera_settings, time.delta_secs());
 
@@ -100,23 +138,55 @@ pub fn camera_input(
     let left_pressed = mouse_button.pressed(MouseButton::Left);
     let right_pressed = mouse_button.pressed(MouseButton::Right);
 
-    if left_pressed || right_pressed {
-        handle_mouse_motion(&mut mouse_motion, &mut camera_settings, is_aiming, left_pressed && right_pressed);
+    let view_mode = camera_settings.view_mode;
+    let is_fps = view_mode == CameraViewMode::FirstPerson;
+    let is_interior = view_mode == CameraViewMode::VehicleInterior;
+
+    if is_interior {
+        // 車內視角：滑鼠直接控制相對 yaw/pitch（不需按住按鍵）
+        let sensitivity = camera_settings.sensitivity;
+        let yaw_limit = camera_settings.vehicle_interior_yaw_limit;
+        for event in mouse_motion.read() {
+            camera_settings.vehicle_interior_yaw -= event.delta.x * sensitivity;
+            camera_settings.vehicle_interior_pitch += event.delta.y * sensitivity;
+        }
+        // 限制車內視角範圍
+        camera_settings.vehicle_interior_yaw = camera_settings.vehicle_interior_yaw.clamp(-yaw_limit, yaw_limit);
+        camera_settings.vehicle_interior_pitch = camera_settings.vehicle_interior_pitch.clamp(PITCH_MIN, 0.8);
+        scroll.clear();
+    } else if is_fps {
+        // FPS 模式：滑鼠直接控制 yaw + pitch
+        handle_mouse_motion(&mut mouse_motion, &mut camera_settings, true, false);
+        camera_settings.pitch = camera_settings.pitch.clamp(PITCH_MIN, PITCH_MAX_WITH_RECOIL);
+        scroll.clear();
     } else {
-        mouse_motion.clear();
-    }
-
-    // 限制俯仰角範圍
-    camera_settings.pitch = camera_settings.pitch.clamp(PITCH_MIN, PITCH_MAX_INPUT);
-
-    // 滾輪縮放
-    for event in scroll.read() {
-        camera_settings.distance -= event.y * 0.4;
-        camera_settings.distance = camera_settings.distance.clamp(5.0, 80.0);
+        // TPS 模式
+        if left_pressed || right_pressed {
+            handle_mouse_motion(&mut mouse_motion, &mut camera_settings, is_aiming, left_pressed && right_pressed);
+        } else {
+            mouse_motion.clear();
+        }
+        camera_settings.pitch = camera_settings.pitch.clamp(PITCH_MIN, PITCH_MAX_INPUT);
+        for event in scroll.read() {
+            camera_settings.distance -= event.y * 0.4;
+            camera_settings.distance = camera_settings.distance.clamp(5.0, 80.0);
+        }
     }
 }
 
-/// 攝影機跟隨（支援過肩瞄準模式、後座力、震動、鎖定追蹤）
+/// 根據車種回傳駕駛座眼睛偏移（車輛本地座標）
+pub fn driver_eye_offset(vehicle_type: VehicleType) -> Vec3 {
+    match vehicle_type {
+        // 機車：騎士坐姿較高、略微偏後
+        VehicleType::Scooter => Vec3::new(0.0, 1.4, 0.1),
+        // 汽車/計程車：左駕座、略低
+        VehicleType::Car | VehicleType::Taxi => Vec3::new(-0.5, 1.2, 0.4),
+        // 公車：駕駛座高、偏左、偏前
+        VehicleType::Bus => Vec3::new(-0.8, 2.8, 1.8),
+    }
+}
+
+/// 攝影機跟隨（支援過肩瞄準模式、後座力、震動、鎖定追蹤、車內視角）
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn camera_follow(
     game_state: Res<GameState>,
@@ -126,7 +196,7 @@ pub fn camera_follow(
     recoil_state: Res<RecoilState>,
     camera_shake: Res<CameraShake>,
     player_query: Query<&Transform, (With<Player>, Without<GameCamera>, Without<Vehicle>)>,
-    vehicle_query: Query<&Transform, (With<Vehicle>, Without<GameCamera>, Without<Player>)>,
+    vehicle_query: Query<(&Transform, &Vehicle), (Without<GameCamera>, Without<Player>)>,
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
     enemy_query: Query<&Transform, (With<Enemy>, Without<GameCamera>, Without<Player>, Without<Vehicle>)>,
     time: Res<Time>,
@@ -135,13 +205,69 @@ pub fn camera_follow(
 
     let target_pos = if game_state.player_in_vehicle {
         if let Some(vehicle_entity) = game_state.current_vehicle {
-            vehicle_query.get(vehicle_entity).map(|t| t.translation).unwrap_or(Vec3::ZERO)
+            vehicle_query.get(vehicle_entity).map(|(t, _)| t.translation).unwrap_or(Vec3::ZERO)
         } else {
             return;
         }
     } else {
         player_query.single().map(|t| t.translation).unwrap_or(Vec3::ZERO)
     };
+
+    // ===== 車內視角 =====
+    if camera_settings.view_mode == CameraViewMode::VehicleInterior {
+        if let Some(vehicle_entity) = game_state.current_vehicle {
+            if let Ok((vehicle_transform, vehicle)) = vehicle_query.get(vehicle_entity) {
+                let eye_offset = driver_eye_offset(vehicle.vehicle_type);
+
+                // 將本地偏移轉換為世界座標（跟隨車輛旋轉）
+                let world_offset = vehicle_transform.rotation * eye_offset;
+                let eye_pos = vehicle_transform.translation + world_offset;
+
+                let shake_offset = camera_shake.get_offset(time.elapsed_secs());
+                camera_transform.translation = eye_pos + shake_offset;
+
+                // 注視方向：車輛前方 + 玩家相對 yaw/pitch 偏移
+                let interior_yaw = camera_settings.vehicle_interior_yaw;
+                let interior_pitch = camera_settings.vehicle_interior_pitch;
+
+                // 以車輛前方為基準旋轉
+                let local_look = Vec3::new(
+                    -interior_yaw.sin() * interior_pitch.cos(),
+                    -interior_pitch.sin(),
+                    -interior_yaw.cos() * interior_pitch.cos(),
+                );
+                let world_look = vehicle_transform.rotation * local_look;
+                let look_at = camera_transform.translation + world_look * 10.0;
+                camera_transform.look_at(look_at, Vec3::Y);
+            }
+        }
+        return;
+    }
+
+    // ===== FPS 模式 =====
+    if camera_settings.view_mode == CameraViewMode::FirstPerson {
+        let yaw = camera_settings.yaw + recoil_state.current_offset.x;
+        let pitch = (camera_settings.pitch + recoil_state.current_offset.y)
+            .clamp(PITCH_MIN, PITCH_MAX_WITH_RECOIL);
+
+        // 攝影機位於角色眼睛位置
+        let eye_pos = target_pos + Vec3::Y * camera_settings.fps_eye_height;
+        let shake_offset = camera_shake.get_offset(time.elapsed_secs());
+
+        camera_transform.translation = eye_pos + shake_offset;
+
+        // 計算注視方向（yaw + pitch）
+        let look_dir = Vec3::new(
+            -yaw.sin() * pitch.cos(),
+            -pitch.sin(),
+            -yaw.cos() * pitch.cos(),
+        );
+        let look_at = camera_transform.translation + look_dir * 10.0;
+        camera_transform.look_at(look_at, Vec3::Y);
+        return;
+    }
+
+    // ===== TPS 模式（以下為原有邏輯）=====
 
     // 應用後座力偏移到 yaw 和 pitch
     let yaw = camera_settings.yaw + recoil_state.current_offset.x;
@@ -233,6 +359,46 @@ pub fn recoil_and_shake_update_system(
     recoil_state.update_recovery(recovery_rate, dt);
 }
 
+/// 動態 FOV 系統（衝刺 → 擴大 FOV，瞄準 → 縮小 FOV）
+pub fn dynamic_fov_system(
+    mut camera_settings: ResMut<CameraSettings>,
+    combat_state: Res<CombatState>,
+    cinematic: Res<CinematicState>,
+    sprint_query: Query<&PlayerSprintState, With<Player>>,
+    mut camera_query: Query<&mut Projection, With<GameCamera>>,
+    time: Res<Time>,
+) {
+    // 決定目標 FOV：電影 > 車內 > FPS > 瞄準 > 衝刺 > 預設
+    let target_fov = if camera_settings.view_mode == CameraViewMode::Cinematic {
+        cinematic.fov
+    } else if camera_settings.view_mode == CameraViewMode::VehicleInterior {
+        camera_settings.vehicle_interior_fov
+    } else if camera_settings.view_mode == CameraViewMode::FirstPerson {
+        camera_settings.fps_fov
+    } else if combat_state.is_aiming {
+        camera_settings.aim_fov
+    } else if sprint_query.single().ok().is_some_and(|s| s.state.is_sprint_related()) {
+        // 根據衝刺進度混合 FOV（加速中漸增、減速中漸減）
+        let sprint_progress = sprint_query.single().ok().map_or(0.0, |s| s.state.animation_blend());
+        camera_settings.base_fov + (camera_settings.sprint_fov - camera_settings.base_fov) * sprint_progress
+    } else {
+        camera_settings.base_fov
+    };
+
+    // 平滑插值
+    let dt = time.delta_secs();
+    let lerp_t = (FOV_LERP_SPEED * dt).min(1.0);
+    camera_settings.current_fov += (target_fov - camera_settings.current_fov) * lerp_t;
+
+    // 套用到攝影機投影
+    let fov_radians = camera_settings.current_fov.to_radians();
+    for mut projection in &mut camera_query {
+        if let Projection::Perspective(ref mut persp) = *projection {
+            persp.fov = fov_radians;
+        }
+    }
+}
+
 /// 攝影機自動跟隨玩家方向（GTA 風格）
 /// 當玩家移動時，攝影機會自動旋轉到玩家背後
 #[allow(clippy::too_many_arguments)]
@@ -248,8 +414,11 @@ pub fn camera_auto_follow(
     // 不跟隨的情況：
     // 1. 在車上（車輛有自己的攝影機邏輯）
     // 2. 瞄準模式（需要自由控制攝影機）
-    // 3. 手動旋轉攝影機（Q/E 或滑鼠按住）
-    if game_state.player_in_vehicle || combat_state.is_aiming {
+    // 3. FPS 模式（玩家完全控制視角）
+    // 4. 手動旋轉攝影機（Q/E 或滑鼠按住）
+    if game_state.player_in_vehicle || combat_state.is_aiming
+        || camera_settings.view_mode == CameraViewMode::FirstPerson
+    {
         return;
     }
 
@@ -297,4 +466,168 @@ pub fn camera_auto_follow(
     // 平滑插值
     let dt = time.delta_secs();
     camera_settings.yaw += angle_diff * CAMERA_FOLLOW_SPEED * dt;
+}
+
+// ============================================================================
+// 電影模式系統
+// ============================================================================
+
+/// 電影模式輸入與自由攝影
+/// C 鍵切換進入/退出電影模式。模式中 WASD 飛行、滑鼠旋轉、滾輪調速。
+pub fn cinematic_camera_system(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
+    mut scroll: MessageReader<bevy::input::mouse::MouseWheel>,
+    mut camera_settings: ResMut<CameraSettings>,
+    mut cinematic: ResMut<CinematicState>,
+    mut camera_query: Query<&mut Transform, With<GameCamera>>,
+    time: Res<Time>,
+) {
+    // C 鍵切換電影模式
+    if keyboard.just_pressed(KeyCode::KeyC) {
+        if camera_settings.view_mode == CameraViewMode::Cinematic {
+            camera_settings.view_mode = CameraViewMode::ThirdPerson;
+        } else {
+            camera_settings.view_mode = CameraViewMode::Cinematic;
+        }
+    }
+
+    // 非電影模式時不處理
+    if camera_settings.view_mode != CameraViewMode::Cinematic {
+        mouse_motion.clear();
+        scroll.clear();
+        return;
+    }
+
+    let Ok(mut cam_tf) = camera_query.single_mut() else {
+        mouse_motion.clear();
+        scroll.clear();
+        return;
+    };
+
+    let dt = time.delta_secs();
+    let sensitivity = camera_settings.sensitivity;
+
+    // 滑鼠旋轉
+    for event in mouse_motion.read() {
+        camera_settings.yaw -= event.delta.x * sensitivity;
+        camera_settings.pitch += event.delta.y * sensitivity;
+    }
+    camera_settings.pitch = camera_settings.pitch.clamp(-1.4, 1.4); // 接近 ±80°
+
+    // 滾輪調整飛行速度
+    for event in scroll.read() {
+        cinematic.fly_speed = (cinematic.fly_speed + event.y * 2.0).clamp(1.0, 100.0);
+    }
+
+    // WASD + QE 飛行
+    let yaw = camera_settings.yaw;
+    let pitch = camera_settings.pitch;
+
+    // 攝影機前方向量（考慮 pitch，可以向上/下飛行）
+    let forward = Vec3::new(
+        -yaw.sin() * pitch.cos(),
+        -pitch.sin(),
+        -yaw.cos() * pitch.cos(),
+    );
+    // 水平右方向量
+    let right = Vec3::new(-yaw.cos(), 0.0, yaw.sin());
+    let up = Vec3::Y;
+
+    let mut move_dir = Vec3::ZERO;
+    if keyboard.pressed(KeyCode::KeyW) { move_dir += forward; }
+    if keyboard.pressed(KeyCode::KeyS) { move_dir -= forward; }
+    if keyboard.pressed(KeyCode::KeyA) { move_dir -= right; }
+    if keyboard.pressed(KeyCode::KeyD) { move_dir += right; }
+    if keyboard.pressed(KeyCode::KeyE) { move_dir += up; }
+    if keyboard.pressed(KeyCode::KeyQ) { move_dir -= up; }
+
+    // Shift 加速
+    let speed_mult = if keyboard.pressed(KeyCode::ShiftLeft) { 3.0 } else { 1.0 };
+
+    if move_dir.length_squared() > 0.0 {
+        move_dir = move_dir.normalize();
+        cam_tf.translation += move_dir * cinematic.fly_speed * speed_mult * dt;
+    }
+
+    // 更新攝影機旋轉
+    let look_at = cam_tf.translation + forward * 10.0;
+    cam_tf.look_at(look_at, Vec3::Y);
+}
+
+/// Letterbox 動畫系統
+/// 電影模式啟動時展開黑邊，退出時收起。
+pub fn cinematic_letterbox_system(
+    camera_settings: Res<CameraSettings>,
+    mut cinematic: ResMut<CinematicState>,
+    mut top_query: Query<&mut Node, (With<LetterboxTop>, Without<LetterboxBottom>)>,
+    mut bottom_query: Query<&mut Node, (With<LetterboxBottom>, Without<LetterboxTop>)>,
+    time: Res<Time>,
+) {
+    let is_cinematic = camera_settings.view_mode == CameraViewMode::Cinematic;
+    let dt = time.delta_secs();
+
+    // 動畫進度趨向目標
+    let target = if is_cinematic { 1.0 } else { 0.0 };
+    let speed = LETTERBOX_ANIM_SPEED * dt;
+    if cinematic.letterbox_progress < target {
+        cinematic.letterbox_progress = (cinematic.letterbox_progress + speed).min(1.0);
+    } else if cinematic.letterbox_progress > target {
+        cinematic.letterbox_progress = (cinematic.letterbox_progress - speed).max(0.0);
+    }
+
+    // 更新黑邊高度
+    let bar_height = Val::Percent(LETTERBOX_HEIGHT_RATIO * 100.0 * cinematic.letterbox_progress);
+    for mut node in &mut top_query {
+        node.height = bar_height;
+    }
+    for mut node in &mut bottom_query {
+        node.height = bar_height;
+    }
+}
+
+/// 設置 Letterbox UI 節點（在 setup 階段呼叫一次）
+pub fn setup_cinematic_letterbox(mut commands: Commands) {
+    // 上方黑邊
+    commands.spawn((
+        LetterboxTop,
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(0.0),
+            left: Val::Px(0.0),
+            width: Val::Percent(100.0),
+            height: Val::Px(0.0),
+            ..default()
+        },
+        BackgroundColor(Color::BLACK),
+        ZIndex(100), // 確保在最上層
+    ));
+
+    // 下方黑邊
+    commands.spawn((
+        LetterboxBottom,
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(0.0),
+            left: Val::Px(0.0),
+            width: Val::Percent(100.0),
+            height: Val::Px(0.0),
+            ..default()
+        },
+        BackgroundColor(Color::BLACK),
+        ZIndex(100),
+    ));
+}
+
+/// 電影模式 HUD 隱藏系統
+/// 在電影模式中隱藏所有 HUD 元素（letterbox 進度 > 0.5 時開始隱藏）
+pub fn cinematic_hud_toggle_system(
+    cinematic: Res<CinematicState>,
+    mut hud_query: Query<&mut Visibility, With<crate::ui::PlayerStatusContainer>>,
+) {
+    let should_hide = cinematic.letterbox_progress > 0.5;
+    let target = if should_hide { Visibility::Hidden } else { Visibility::Inherited };
+    for mut vis in &mut hud_query {
+        *vis = target;
+    }
 }

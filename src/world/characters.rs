@@ -128,6 +128,7 @@ pub fn spawn_player_character(
         .insert(crate::wanted::PlayerSurrenderState::default())
         .insert(crate::vehicle::PlayerTheftState::default())
         .insert(crate::player::PlayerSprintState::default())
+        .insert(crate::player::Stamina::default())
         .insert(CollisionGroups::new(
             COLLISION_GROUP_CHARACTER,
             COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,

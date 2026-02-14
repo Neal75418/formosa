@@ -393,6 +393,33 @@ impl TaxiRating {
     }
 }
 
+/// 已完成任務記錄（用於任務日誌）
+#[derive(Clone, Debug)]
+pub struct CompletedMissionRecord {
+    pub title: String,
+    pub mission_type: MissionType,
+    pub reward: u32,
+    pub stars: u8,
+    pub rating_label: String,
+}
+
+impl CompletedMissionRecord {
+    /// 取得星星顯示字串
+    pub fn stars_display(&self) -> String {
+        "★".repeat(self.stars as usize)
+    }
+
+    /// 取得任務類型顯示名稱
+    pub fn type_label(&self) -> &'static str {
+        match self.mission_type {
+            MissionType::Delivery => "外送",
+            MissionType::Taxi => "載客",
+            MissionType::Race => "競速",
+            MissionType::Explore => "探索",
+        }
+    }
+}
+
 /// 任務管理器
 #[derive(Resource)]
 pub struct MissionManager {
@@ -400,6 +427,7 @@ pub struct MissionManager {
     pub active_mission: Option<ActiveMission>,
     pub completed_count: u32,
     pub total_earnings: u32,
+    pub completed_missions: Vec<CompletedMissionRecord>, // 已完成任務歷史
     // 外送系統專用
     pub delivery_orders: Vec<MissionData>,     // 可接的外送訂單
     pub delivery_orders_changed: bool,          // 訂單列表是否變更（用於 UI 優化）
@@ -421,6 +449,7 @@ impl Default for MissionManager {
             active_mission: None,
             completed_count: 0,
             total_earnings: 0,
+            completed_missions: Vec::new(),
             delivery_orders: Vec::new(),
             delivery_orders_changed: true, // 初始為 true 以觸發首次渲染
             delivery_streak: 0,

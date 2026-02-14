@@ -133,13 +133,13 @@ pub fn update_interaction_prompt_state(
             continue;
         }
 
-        // 計算距離
-        let distance = player_pos.distance(trigger_transform.translation);
+        // 計算距離平方（避免 sqrt）
+        let distance_sq = player_pos.distance_squared(trigger_transform.translation);
 
         // 保留最近的觸發點
-        let is_closer = closest_trigger.is_none_or(|(_, d)| distance < d);
+        let is_closer = closest_trigger.is_none_or(|(_, d)| distance_sq < d);
         if is_closer {
-            closest_trigger = Some((trigger, distance));
+            closest_trigger = Some((trigger, distance_sq));
         }
     }
 

@@ -103,9 +103,9 @@ pub fn interior_proximity_system(
     // 檢查每個門
     for (_door_entity, door_transform, door) in door_query.iter() {
         let door_pos = door_transform.translation;
-        let distance = player_pos.distance(door_pos);
+        let distance_sq = player_pos.distance_squared(door_pos);
 
-        if distance >= door.interact_radius {
+        if distance_sq >= door.interact_radius * door.interact_radius {
             continue;
         }
 
@@ -155,9 +155,9 @@ pub fn interior_enter_system(
     // 尋找可進入的門
     for (door_transform, mut door) in door_query.iter_mut() {
         let door_pos = door_transform.translation;
-        let distance = player_pos.distance(door_pos);
+        let distance_sq = player_pos.distance_squared(door_pos);
 
-        if distance >= door.interact_radius {
+        if distance_sq >= door.interact_radius * door.interact_radius {
             continue;
         }
 

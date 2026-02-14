@@ -161,10 +161,10 @@ pub fn update_enemy_health_bars(
             // 檢查是否在攝影機前方
             let forward = camera_transform.forward();
             let direction = (world_pos - camera_transform.translation()).normalize();
-            let distance = world_pos.distance(camera_transform.translation());
+            let distance_sq = world_pos.distance_squared(camera_transform.translation());
 
-            // 只在一定距離內且在攝影機前方顯示
-            if forward.dot(direction) > 0.0 && distance < 50.0 {
+            // 只在一定距離內且在攝影機前方顯示（50² = 2500）
+            if forward.dot(direction) > 0.0 && distance_sq < 2500.0 {
                 *visibility = Visibility::Visible;
                 // 置中血條（考慮外發光層的額外尺寸）
                 node.left = Val::Px(screen_pos.x - total_width / 2.0);

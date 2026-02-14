@@ -765,10 +765,10 @@ fn has_witness_nearby(
     pedestrian_query: &Query<&Transform, (With<Pedestrian>, Without<Player>, Without<Vehicle>)>,
     config: &PlayerConfig,
 ) -> bool {
-    let witness_range = config.interaction.witness_range;
+    let witness_range_sq = config.interaction.witness_range * config.interaction.witness_range;
     pedestrian_query
         .iter()
-        .any(|ped_transform| ped_transform.translation.distance(vehicle_pos) < witness_range)
+        .any(|ped_transform| ped_transform.translation.distance_squared(vehicle_pos) < witness_range_sq)
 }
 
 /// 處理上車動畫完成

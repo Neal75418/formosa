@@ -22,12 +22,18 @@ impl Plugin for SavePlugin {
             // 資源
             .init_resource::<SaveManager>()
             .init_resource::<SaveTaskTracker>()
+            .init_resource::<SafehouseAutoSaveTracker>()
             // 事件
             .add_message::<SaveGameEvent>()
             .add_message::<LoadGameEvent>()
             .add_message::<AutoSaveEvent>()
             // 系統
             .add_systems(Update, (
+                // 自動存檔觸發（寫入 AutoSaveEvent）
+                mission_complete_auto_save_system,
+                safehouse_auto_save_system,
+                purchase_auto_save_system,
+                // 輸入與事件處理（讀取 AutoSaveEvent）
                 handle_save_input,
                 handle_save_events,
                 handle_load_events,

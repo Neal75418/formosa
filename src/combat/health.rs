@@ -179,6 +179,8 @@ pub struct DamageEvent {
     pub attacker: Option<Entity>,
     pub hit_position: Option<Vec3>,
     pub is_headshot: bool,
+    /// 強制擊退（連擊終結技）
+    pub force_knockback: bool,
 }
 
 impl DamageEvent {
@@ -191,6 +193,7 @@ impl DamageEvent {
             attacker: None,
             hit_position: None,
             is_headshot: false,
+            force_knockback: false,
         }
     }
 

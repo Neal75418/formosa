@@ -1,6 +1,7 @@
 //! 存檔系統單元測試
 
 use super::components::*;
+use super::systems::*;
 use crate::combat::WeaponType;
 use crate::core::WeatherType;
 use std::path::PathBuf;
@@ -299,4 +300,110 @@ fn test_load_type_equality() {
     assert_eq!(LoadType::QuickLoad, LoadType::QuickLoad);
     assert_eq!(LoadType::AutoSave, LoadType::AutoSave);
     assert_ne!(LoadType::Slot, LoadType::QuickLoad);
+}
+
+// ============================================================================
+// SafehouseAutoSaveTracker 測試
+// ============================================================================
+
+#[test]
+fn test_safehouse_tracker_default() {
+    let tracker = SafehouseAutoSaveTracker::default();
+    assert!(tracker.last_safehouse_id.is_none());
+    assert_eq!(tracker.last_save_time, 0.0);
+}
+
+#[test]
+fn test_safehouse_tracker_same_house_within_cooldown() {
+    let tracker = SafehouseAutoSaveTracker {
+        last_safehouse_id: Some("safehouse_a".to_string()),
+        last_save_time: 10.0,
+    };
+    // 20 秒後（冷卻 30 秒），不應觸發
+    let current_time = 30.0;
+    let elapsed = current_time - tracker.last_save_time;
+    assert!(elapsed <= SAFEHOUSE_SAVE_COOLDOWN);
+}
+
+#[test]
+fn test_safehouse_tracker_same_house_after_cooldown() {
+    let tracker = SafehouseAutoSaveTracker {
+        last_safehouse_id: Some("safehouse_a".to_string()),
+        last_save_time: 10.0,
+    };
+    // 45 秒後（冷卻 30 秒），應觸發
+    let current_time = 55.0;
+    let elapsed = current_time - tracker.last_save_time;
+    assert!(elapsed > SAFEHOUSE_SAVE_COOLDOWN);
+}
+
+#[test]
+fn test_safehouse_tracker_different_house_always_triggers() {
+    let tracker = SafehouseAutoSaveTracker {
+        last_safehouse_id: Some("safehouse_a".to_string()),
+        last_save_time: 10.0,
+    };
+    // 不同安全屋 ID，不管冷卻
+    let new_id = "safehouse_b";
+    let is_different = tracker.last_safehouse_id.as_deref() != Some(new_id);
+    assert!(is_different);
+}
+
+// ============================================================================
+// AutoSaveReason 測試
+// ============================================================================
+
+#[test]
+fn test_auto_save_reason_debug() {
+    // 確保所有 variant 可以 Debug 列印
+    let reasons = [
+        AutoSaveReason::MissionComplete,
+        AutoSaveReason::EnteredSafehouse,
+        AutoSaveReason::Timer,
+        AutoSaveReason::ImportantPurchase,
+    ];
+    for reason in &reasons {
+        let debug_str = format!("{:?}", reason);
+        assert!(!debug_str.is_empty());
+    }
+}
+
+// ============================================================================
+// 購買門檻常數測試
+// ============================================================================
+
+#[test]
+fn test_important_purchase_threshold() {
+    // 門檻為 $1000
+    assert_eq!(IMPORTANT_PURCHASE_THRESHOLD, 1000);
+    // 武器最便宜的手槍 $1500 應觸發
+    assert!(1500 >= IMPORTANT_PURCHASE_THRESHOLD);
+    // 便當 $80 不應觸發
+    assert!(80 < IMPORTANT_PURCHASE_THRESHOLD);
+    // 防彈背心 $500 不應觸發
+    assert!(500 < IMPORTANT_PURCHASE_THRESHOLD);
+}
+
+#[test]
+fn test_safehouse_trigger_distance() {
+    // 5m 觸發距離
+    assert_eq!(SAFEHOUSE_TRIGGER_DISTANCE_SQ, 25.0);
+    // 4m 距離 → 16.0 < 25.0 → 在範圍內
+    assert!(4.0_f32.powi(2) < SAFEHOUSE_TRIGGER_DISTANCE_SQ);
+    // 6m 距離 → 36.0 > 25.0 → 超出範圍
+    assert!(6.0_f32.powi(2) > SAFEHOUSE_TRIGGER_DISTANCE_SQ);
+}
+
+#[test]
+fn test_safehouse_component_fields() {
+    use bevy::prelude::Vec3;
+    let safehouse = Safehouse {
+        id: "test_safehouse".to_string(),
+        name: "測試安全屋".to_string(),
+        is_unlocked: true,
+        save_point: Vec3::new(10.0, 0.0, 20.0),
+    };
+    assert_eq!(safehouse.id, "test_safehouse");
+    assert!(safehouse.is_unlocked);
+    assert_eq!(safehouse.save_point, Vec3::new(10.0, 0.0, 20.0));
 }

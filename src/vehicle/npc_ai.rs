@@ -13,16 +13,6 @@ use bevy_rapier3d::prelude::{Real as RapierReal, *};
 // NPC 車輛 AI 駕駛系統
 // ============================================================================
 
-/// 取得車輛高度
-#[allow(dead_code)]
-fn get_vehicle_height(vehicle_type: &VehicleType) -> f32 {
-    match vehicle_type {
-        VehicleType::Scooter => 1.5,
-        VehicleType::Car | VehicleType::Taxi => 1.5,
-        VehicleType::Bus => 3.0,
-    }
-}
-
 #[derive(Clone, Copy)]
 enum ObstacleHitKind {
     Front,
@@ -410,16 +400,17 @@ pub fn npc_vehicle_motion_system(
             &VehicleDrift,
             &mut VehicleInput,
             Option<&VehicleModifications>,
+            Option<&TireDamage>,
         ),
         With<NpcVehicle>,
     >,
 ) {
     let dt = time.delta_secs();
 
-    for (mut transform, mut vehicle, power_band, braking, steering, drift, mut input, mods) in
+    for (mut transform, mut vehicle, power_band, braking, steering, drift, mut input, mods, tire_damage) in
         npc_query.iter_mut()
     {
-        let modifiers = VehicleDynamicsModifiers::new(mods, None);
+        let modifiers = VehicleDynamicsModifiers::new(mods, None, tire_damage);
 
         let weather_traction = get_weather_factor(&weather, &config.weather.traction_params());
         let effective_traction = weather_traction * modifiers.traction;

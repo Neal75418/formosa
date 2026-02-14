@@ -543,6 +543,7 @@ pub fn roadblock_collision_system(
                 attacker: None,
                 hit_position: None,
                 is_headshot: false,
+                force_knockback: false,
             });
 
             info!("撞擊路障！路障血量: {:.0}", roadblock.health);

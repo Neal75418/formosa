@@ -23,7 +23,6 @@ use crate::economy::PlayerWallet;
 const NPC_LAO_WANG: u32 = 100;
 
 /// 範例對話 ID
-const DIALOGUE_ID_MISSION1: DialogueId = 1;
 const DIALOGUE_ID_MISSION2: DialogueId = 2;
 
 /// 對話動作事件（用於跨系統觸發）

@@ -36,8 +36,6 @@ const OWNER_FIGHT_CHANCE: f32 = 0.2;
 const ALARM_DURATION: f32 = 30.0;
 /// 車門互動距離
 const DOOR_INTERACT_DISTANCE: f32 = 3.0;
-/// 解鎖車輛進入距離
-const UNLOCKED_ENTER_DISTANCE: f32 = 4.0;
 
 // 視覺效果常數
 /// 玻璃碎片旋轉速度 X

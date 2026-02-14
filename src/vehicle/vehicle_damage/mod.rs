@@ -12,7 +12,7 @@ mod systems;
 mod visuals;
 
 // 重新導出公開項目
-pub use health::VehicleHealth;
+pub use health::{VehicleHealth, TireDamage};
 pub use explosion::vehicle_explosion_system;
 pub use systems::{
     setup_vehicle_damage_effects,

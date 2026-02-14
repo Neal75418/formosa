@@ -88,10 +88,6 @@ pub const MINIMAP_BORDER: Color = Color::srgba(0.15, 0.35, 0.2, 0.95);
 pub const MINIMAP_INNER_BORDER: Color = Color::srgba(0.05, 0.15, 0.08, 0.9);
 /// 小地圖背景色（深綠軍事風）
 pub const MINIMAP_BG: Color = Color::srgba(0.08, 0.12, 0.08, 0.92);
-/// 小地圖內層背景（稍亮）
-pub const MINIMAP_BG_INNER: Color = Color::srgba(0.1, 0.15, 0.1, 0.95);
-/// 玩家標記發光色
-pub const PLAYER_MARKER_GLOW: Color = Color::srgba(1.0, 0.9, 0.3, 0.6);
 /// 玩家標記核心色
 pub const PLAYER_MARKER_CORE: Color = Color::srgb(1.0, 0.15, 0.1);
 /// 方位標示背景色
@@ -163,6 +159,8 @@ pub const HIT_MARKER_COLOR: Color = Color::srgba(1.0, 0.2, 0.2, 0.95);
 pub const HEADSHOT_MARKER_COLOR: Color = Color::srgba(1.0, 0.85, 0.2, 1.0);
 /// 準星瞄準時色（收縮變亮）
 pub const CROSSHAIR_AIM: Color = Color::srgba(0.9, 1.0, 0.95, 0.95);
+/// 準星鎖定目標時色（紅色，GTA 5 風格）
+pub const CROSSHAIR_LOCKED: Color = Color::srgba(1.0, 0.25, 0.2, 0.95);
 
 // ============================================================================
 // GTA 風格敵人血條顏色
@@ -218,8 +216,6 @@ pub const ORDER_CARD_GLOW: Color = Color::srgba(0.5, 0.3, 0.1, 0.15);
 pub const ORDER_CARD_BG: Color = Color::srgba(0.12, 0.1, 0.15, 0.92);
 /// 訂單卡片邊框
 pub const ORDER_CARD_BORDER: Color = Color::srgba(0.6, 0.35, 0.15, 0.6);
-/// 訂單卡片懸停邊框
-pub const ORDER_CARD_HOVER_BORDER: Color = Color::srgba(0.9, 0.5, 0.2, 0.9);
 /// 餐廳名稱色
 pub const RESTAURANT_NAME_COLOR: Color = Color::srgb(1.0, 0.85, 0.6);
 /// 地址文字色
@@ -276,8 +272,6 @@ pub const HUD_BORDER_HIGHLIGHT: Color = Color::srgba(0.5, 0.6, 0.75, 0.6);
 
 /// 深黑半透明背景（90%）
 pub const OVERLAY_BLACK_90: Color = Color::srgba(0.0, 0.0, 0.0, 0.9);
-/// 深黑半透明背景（70%）
-pub const OVERLAY_BLACK_70: Color = Color::srgba(0.0, 0.0, 0.0, 0.7);
 /// 深灰按鈕背景
 pub const BUTTON_BG_DARK: Color = Color::srgba(0.2, 0.2, 0.25, 0.8);
 /// 深灰按鈕邊框（70%）
@@ -296,10 +290,6 @@ pub const TEXT_MUTED: Color = Color::srgba(0.5, 0.5, 0.55, 0.8);
 pub const PANEL_BORDER_GRAY: Color = Color::srgba(0.3, 0.3, 0.35, 0.4);
 /// 綠色地圖區塊
 pub const MAP_AREA_GREEN: Color = Color::srgba(0.3, 0.4, 0.3, 0.1);
-/// 亮白色
-pub const TEXT_WHITE: Color = Color::srgb(0.95, 0.95, 0.95);
-/// 金黃標題色
-pub const TITLE_GOLD: Color = Color::srgb(1.0, 0.85, 0.0);
 /// 誠品綠
 pub const ESLITE_GREEN: Color = Color::srgb(0.2, 0.35, 0.25);
 
@@ -325,17 +315,12 @@ pub const FULLMAP_HEIGHT: f32 = 800.0;
 
 /// 狀態條寬度（血量、護甲共用）
 pub const STATUS_BAR_WIDTH: f32 = 180.0;
-/// 狀態條高度
-pub const STATUS_BAR_HEIGHT: f32 = 18.0;
-
 // ============================================================================
 // 準星動畫參數
 // ============================================================================
 
 /// 準星命中反彈持續時間（秒）
 pub const HIT_MARKER_DURATION: f32 = 0.2;
-/// 低彈量閃爍頻率（Hz）
-pub const LOW_AMMO_BLINK_FREQ: f32 = 8.0;
 
 // ============================================================================
 // 共用 Node 建構函數

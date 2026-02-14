@@ -15,7 +15,6 @@ use crate::combat::ragdoll::convert_to_skeletal_ragdoll;
 use crate::combat::visuals::*;
 use crate::ai::{AiBehavior, AiCombat, AiMovement, AiPerception};
 use crate::economy::CashPickup;
-use crate::pedestrian::Pedestrian;
 use crate::player::Player;
 use crate::ui::NotificationQueue;
 use crate::wanted::{CrimeEvent, PoliceOfficer};
@@ -143,32 +142,6 @@ fn handle_police_death_crime(
         position: police_transform.translation,
     });
     notifications.warning("⚠️ 擊殺警察！通緝等級大幅上升！");
-}
-
-/// 處理行人死亡犯罪事件
-#[inline]
-#[allow(dead_code)]
-fn handle_pedestrian_death_crime(
-    entity: Entity,
-    killer: Option<Entity>,
-    player_entity: Option<Entity>,
-    pedestrian_query: &Query<
-        (Entity, &Transform, &Children),
-        (With<Pedestrian>, Without<Player>, Without<Enemy>),
-    >,
-    crime_events: &mut MessageWriter<CrimeEvent>,
-) {
-    let Ok((_, ped_transform, _)) = pedestrian_query.get(entity) else {
-        return;
-    };
-    if killer != player_entity {
-        return;
-    }
-
-    crime_events.write(CrimeEvent::Murder {
-        victim: entity,
-        position: ped_transform.translation,
-    });
 }
 
 /// 判斷 Kill Cam 觸發類型
@@ -494,29 +467,6 @@ pub fn player_respawn_system(
 
         respawn_state.is_dead = false;
         notifications.success("🔄 你已重生！");
-    }
-}
-
-/// 生命回復系統（可選，給有回復能力的實體使用）
-#[allow(dead_code)]
-fn health_regeneration_system(time: Res<Time>, mut query: Query<&mut Health>) {
-    let current_time = time.elapsed_secs();
-    let dt = time.delta_secs();
-
-    for mut health in query.iter_mut() {
-        if health.regeneration <= 0.0 || health.is_dead() || health.is_full() {
-            continue;
-        }
-
-        // 檢查是否過了回復延遲
-        let time_since_damage = current_time - health.last_damage_time;
-        if time_since_damage < health.regen_delay {
-            continue;
-        }
-
-        // 回復生命（先讀取再修改，避免借用衝突）
-        let regen_amount = health.regeneration * dt;
-        health.heal(regen_amount);
     }
 }
 

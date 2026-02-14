@@ -86,6 +86,37 @@ pub fn weapon_cooldown_system(
     }
 }
 
+/// 連擊窗口超時重置系統
+///
+/// 當距離上次近戰命中超過 COMBO_WINDOW 秒時，重置連擊鏈。
+/// 切換到非近戰武器時也會重置。
+pub fn melee_combo_timeout_system(
+    time: Res<Time>,
+    mut combo: ResMut<MeleeComboState>,
+    player_query: Query<&WeaponInventory, With<Player>>,
+) {
+    if !combo.active {
+        return;
+    }
+
+    let current_time = time.elapsed_secs();
+
+    // 超時重置
+    if (current_time - combo.last_hit_time) > COMBO_WINDOW {
+        combo.reset();
+        return;
+    }
+
+    // 切換到非近戰武器時重置
+    for inventory in player_query.iter() {
+        if let Some(weapon) = inventory.current_weapon() {
+            if !weapon.stats.weapon_type.is_melee() {
+                combo.reset();
+            }
+        }
+    }
+}
+
 /// 顯示武器切換通知
 fn notify_weapon_switch(notifications: &mut NotificationQueue, inventory: &WeaponInventory) {
     if let Some(weapon) = inventory.current_weapon() {

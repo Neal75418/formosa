@@ -141,6 +141,7 @@ pub fn spawn_npc_vehicle(
             },
             Name::new(format!("NpcVehicle_{:?}", vehicle_type)),
         ))
+        .insert(TireDamage::default()) // 輪胎損壞狀態（分離插入避免 tuple 大小限制）
         .with_children(|parent| {
             parent
                 .spawn((
@@ -522,6 +523,7 @@ pub fn spawn_scooter(
             ), // 機車與角色、載具、靜態物碰撞
             VehiclePreset::scooter().into_components(),
             VehicleHealth::for_vehicle_type(VehicleType::Scooter), // 車輛血量
+            TireDamage::default(),                                 // 輪胎損壞狀態
             VehicleId::new(),                                      // 穩定識別碼（用於存檔）
             VehicleModifications::default(),                       // 改裝狀態（用於存檔）
         ))

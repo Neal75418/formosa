@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use crate::core::{GameState, CameraSettings, RecoilState, CameraShake};
 use crate::player::Player;
 use crate::vehicle::Vehicle;
-use crate::combat::{CombatState, WeaponInventory, WeaponType};
+use crate::combat::{CombatState, Enemy, LockOnState, WeaponInventory, WeaponType};
 
 /// 攝影機自動跟隨速度（越大越快跟上玩家）
 const CAMERA_FOLLOW_SPEED: f32 = 3.0;
@@ -116,17 +116,19 @@ pub fn camera_input(
     }
 }
 
-/// 攝影機跟隨（支援過肩瞄準模式、後座力、震動）
+/// 攝影機跟隨（支援過肩瞄準模式、後座力、震動、鎖定追蹤）
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn camera_follow(
     game_state: Res<GameState>,
     camera_settings: Res<CameraSettings>,
     combat_state: Res<CombatState>,
+    lock_on: Res<LockOnState>,
     recoil_state: Res<RecoilState>,
     camera_shake: Res<CameraShake>,
     player_query: Query<&Transform, (With<Player>, Without<GameCamera>, Without<Vehicle>)>,
     vehicle_query: Query<&Transform, (With<Vehicle>, Without<GameCamera>, Without<Player>)>,
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
+    enemy_query: Query<&Transform, (With<Enemy>, Without<GameCamera>, Without<Player>, Without<Vehicle>)>,
     time: Res<Time>,
 ) {
     let Ok(mut camera_transform) = camera_query.single_mut() else { return; };
@@ -189,7 +191,16 @@ pub fn camera_follow(
             -pitch.sin(),
             -yaw.cos() * pitch.cos(),
         );
-        target_pos + Vec3::Y * 1.5 + aim_forward * 10.0
+        let mut look = target_pos + Vec3::Y * 1.5 + aim_forward * 10.0;
+
+        // 鎖定目標時微調攝影機看向目標（30% 混合，自然追蹤感）
+        if let Some(locked_entity) = lock_on.locked_target {
+            if let Ok(locked_transform) = enemy_query.get(locked_entity) {
+                let locked_center = locked_transform.translation + Vec3::Y * 1.0;
+                look = look.lerp(locked_center, 0.3);
+            }
+        }
+        look
     } else {
         target_pos
     };

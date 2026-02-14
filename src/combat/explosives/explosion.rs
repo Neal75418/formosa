@@ -62,6 +62,7 @@ pub fn handle_explosion_event_system(
                         attacker: event.source,
                         hit_position: Some(target_pos),
                         is_headshot: false,
+                        force_knockback: false,
                     });
                 }
             }
@@ -176,6 +177,7 @@ pub fn fire_zone_update_system(
                         attacker: None,
                         hit_position: Some(target_transform.translation),
                         is_headshot: false,
+                        force_knockback: false,
                     });
                 }
             }

@@ -110,6 +110,7 @@ fn test_damage_event_new() {
     assert!(event.attacker.is_none());
     assert!(event.hit_position.is_none());
     assert!(!event.is_headshot);
+    assert!(!event.force_knockback);
 }
 
 #[test]
@@ -303,4 +304,121 @@ fn test_bleed_constants() {
     assert_eq!(BLEED_DAMAGE_PER_SECOND, 5.0);
     assert_eq!(BLEED_DURATION, 4.0);
     assert_eq!(BLEED_CHANCE, 0.35);
+}
+
+// ============================================================================
+// MeleeComboState 測試
+// ============================================================================
+
+#[test]
+fn test_combo_step_damage_multiplier() {
+    assert_eq!(ComboStep::Jab.damage_multiplier(), 1.0);
+    assert_eq!(ComboStep::Hook.damage_multiplier(), 1.2);
+    assert_eq!(ComboStep::Uppercut.damage_multiplier(), 1.5);
+    assert_eq!(ComboStep::Finisher.damage_multiplier(), 2.0);
+}
+
+#[test]
+fn test_combo_step_next_chain() {
+    assert_eq!(ComboStep::Jab.next(), ComboStep::Hook);
+    assert_eq!(ComboStep::Hook.next(), ComboStep::Uppercut);
+    assert_eq!(ComboStep::Uppercut.next(), ComboStep::Finisher);
+    assert_eq!(ComboStep::Finisher.next(), ComboStep::Jab); // 循環回起始
+}
+
+#[test]
+fn test_combo_step_is_finisher() {
+    assert!(!ComboStep::Jab.is_finisher());
+    assert!(!ComboStep::Hook.is_finisher());
+    assert!(!ComboStep::Uppercut.is_finisher());
+    assert!(ComboStep::Finisher.is_finisher());
+}
+
+#[test]
+fn test_combo_step_animation_duration() {
+    // 終結技動畫應最長
+    assert!(ComboStep::Finisher.animation_duration() > ComboStep::Jab.animation_duration());
+    // 所有動畫時長在合理範圍
+    for step in [ComboStep::Jab, ComboStep::Hook, ComboStep::Uppercut, ComboStep::Finisher] {
+        let d = step.animation_duration();
+        assert!(d >= 0.2 && d <= 0.5, "動畫時長 {d} 超出合理範圍");
+    }
+}
+
+#[test]
+fn test_combo_state_default() {
+    let state = MeleeComboState::default();
+    assert_eq!(state.current_step, ComboStep::Jab);
+    assert!(!state.active);
+    assert_eq!(state.damage_multiplier(), 1.0);
+}
+
+#[test]
+fn test_combo_register_hit_starts_combo() {
+    let mut state = MeleeComboState::default();
+    state.register_hit(1.0);
+    assert!(state.active);
+    assert_eq!(state.current_step, ComboStep::Jab); // 首次命中 = Jab
+    assert_eq!(state.last_hit_time, 1.0);
+}
+
+#[test]
+fn test_combo_chain_within_window() {
+    let mut state = MeleeComboState::default();
+    state.register_hit(1.0); // Jab
+    state.register_hit(1.3); // 窗口內 → Hook
+    assert_eq!(state.current_step, ComboStep::Hook);
+    state.register_hit(1.5); // → Uppercut
+    assert_eq!(state.current_step, ComboStep::Uppercut);
+    state.register_hit(1.8); // → Finisher
+    assert_eq!(state.current_step, ComboStep::Finisher);
+    assert_eq!(state.damage_multiplier(), 2.0);
+}
+
+#[test]
+fn test_combo_timeout_resets() {
+    let mut state = MeleeComboState::default();
+    state.register_hit(1.0); // Jab
+    state.register_hit(1.3); // Hook
+    // 超出窗口 (> 0.6s)
+    state.register_hit(2.0);
+    assert_eq!(state.current_step, ComboStep::Jab); // 重置
+}
+
+#[test]
+fn test_combo_reset() {
+    let mut state = MeleeComboState::default();
+    state.register_hit(1.0);
+    state.register_hit(1.3);
+    assert_eq!(state.current_step, ComboStep::Hook);
+
+    state.reset();
+    assert_eq!(state.current_step, ComboStep::Jab);
+    assert!(!state.active);
+}
+
+#[test]
+fn test_combo_full_cycle_wraps() {
+    let mut state = MeleeComboState::default();
+    state.register_hit(1.0);  // Jab
+    state.register_hit(1.2);  // Hook
+    state.register_hit(1.4);  // Uppercut
+    state.register_hit(1.6);  // Finisher
+    state.register_hit(1.8);  // Wraps → Jab
+    assert_eq!(state.current_step, ComboStep::Jab);
+}
+
+#[test]
+fn test_combo_damage_multiplier_when_inactive() {
+    let state = MeleeComboState::default();
+    assert_eq!(state.damage_multiplier(), 1.0); // 未啟動 = 1x
+}
+
+#[test]
+fn test_punch_animation_for_combo_step() {
+    let anim = PunchAnimation::for_combo_step(ComboStep::Finisher);
+    assert_eq!(anim.combo_step, ComboStep::Finisher);
+    assert_eq!(anim.duration, ComboStep::Finisher.animation_duration());
+    assert_eq!(anim.timer, 0.0);
+    assert_eq!(anim.phase, PunchPhase::WindUp);
 }

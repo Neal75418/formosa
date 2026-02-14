@@ -2,9 +2,11 @@
 //!
 //! 處理武器發射邏輯：瞄準計算、彈道射線、近戰攻擊、霰彈散佈。
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
+use super::auto_aim::apply_lock_on_aim_assist;
 use super::effects::{spawn_bullet_tracer, spawn_impact_effect, spawn_muzzle_flash};
 use crate::combat::components::*;
 use crate::combat::health::{
@@ -16,6 +18,20 @@ use crate::combat::weapon::*;
 use crate::audio::{play_weapon_fire_sound, AudioManager, WeaponSounds};
 use crate::core::{rapier_real_to_f32, CameraSettings, CameraShake, RecoilState};
 use crate::player::Player;
+
+/// 武器音效資源（合併為 SystemParam 以減少系統參數數量）
+#[derive(SystemParam)]
+pub(crate) struct FireWeaponAudio<'w> {
+    weapon_sounds: Option<Res<'w, WeaponSounds>>,
+    audio_manager: Res<'w, AudioManager>,
+}
+
+/// 近戰戰鬥上下文（鎖定 + 連擊狀態，合併為 SystemParam）
+#[derive(SystemParam)]
+pub(crate) struct MeleeCombatContext<'w> {
+    pub lock_on: Res<'w, LockOnState>,
+    pub combo: ResMut<'w, MeleeComboState>,
+}
 
 // ============================================================================
 // 射擊常數
@@ -297,12 +313,12 @@ pub fn fire_weapon_system(
     input: Res<ShootingInput>,
     time: Res<Time>,
     camera_settings: Res<CameraSettings>,
+    mut melee_ctx: MeleeCombatContext,
     rapier_context: ReadRapierContext,
     mut commands: Commands,
     combat_visuals: Option<Res<CombatVisuals>>,
     weapon_visuals: Option<Res<WeaponVisuals>>,
-    weapon_sounds: Option<Res<WeaponSounds>>,
-    audio_manager: Res<AudioManager>,
+    audio: FireWeaponAudio,
     mut player_query: Query<(Entity, &Transform, &mut WeaponInventory), With<Player>>,
     mut combat_state: ResMut<CombatState>,
     mut recoil_state: ResMut<RecoilState>,
@@ -330,8 +346,9 @@ pub fn fire_weapon_system(
         let player_pos = player_transform.translation;
         let char_vecs = CharacterVectors::from_yaw(camera_settings.yaw);
 
-        // 計算瞄準點和槍口位置
-        let aim_point = calculate_aim_point(&camera_settings, player_pos, &rapier);
+        // 計算瞄準點（含自動瞄準吸附）
+        let raw_aim_point = calculate_aim_point(&camera_settings, player_pos, &rapier);
+        let aim_point = apply_lock_on_aim_assist(raw_aim_point, &melee_ctx.lock_on, &transform_query);
 
         let muzzle_offset = weapon_visuals
             .as_ref()
@@ -351,7 +368,9 @@ pub fn fire_weapon_system(
 
         // 根據武器類型發射
         if weapon.stats.weapon_type.is_melee() {
-            fire_melee(
+            let combo_mult = melee_ctx.combo.damage_multiplier();
+            let is_finisher = melee_ctx.combo.current_step.is_finisher();
+            let hit = fire_melee(
                 &mut commands,
                 player_entity,
                 muzzle_pos,
@@ -360,7 +379,17 @@ pub fn fire_weapon_system(
                 &rapier,
                 &mut damage_events,
                 &damageable_query,
+                combo_mult,
+                is_finisher,
             );
+            if hit {
+                let current_time = time.elapsed_secs();
+                melee_ctx.combo.register_hit(current_time);
+                // 終結技附加攝影機震動
+                if is_finisher {
+                    camera_shake.trigger(0.04, 0.15);
+                }
+            }
         } else {
             fire_ranged_weapon(
                 &mut commands,
@@ -384,11 +413,11 @@ pub fn fire_weapon_system(
         }
 
         // 播放槍聲
-        if let Some(ref sounds) = weapon_sounds {
+        if let Some(ref sounds) = audio.weapon_sounds {
             play_weapon_fire_sound(
                 &mut commands,
                 sounds,
-                &audio_manager,
+                &audio.audio_manager,
                 weapon.stats.weapon_type,
             );
         }
@@ -405,7 +434,7 @@ pub fn fire_weapon_system(
 // 近戰攻擊
 // ============================================================================
 
-/// 近戰攻擊
+/// 近戰攻擊（回傳是否命中，用於推進連擊）
 #[allow(clippy::too_many_arguments)]
 fn fire_melee(
     commands: &mut Commands,
@@ -416,10 +445,13 @@ fn fire_melee(
     rapier: &RapierContext,
     damage_events: &mut MessageWriter<DamageEvent>,
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
-) {
+    combo_multiplier: f32,
+    is_finisher: bool,
+) -> bool {
     let filter = QueryFilter::default().exclude_collider(attacker);
+    let damage = weapon.stats.damage * combo_multiplier;
 
-    match weapon.stats.weapon_type {
+    let hit = match weapon.stats.weapon_type {
         WeaponType::Staff => {
             // 棍棒：弧形掃擊，可命中多個目標
             fire_staff_sweep(
@@ -431,7 +463,9 @@ fn fire_melee(
                 rapier,
                 damage_events,
                 filter,
-            );
+                combo_multiplier,
+                is_finisher,
+            )
         }
         WeaponType::Knife => {
             // 刀：單目標，有機率觸發流血
@@ -444,7 +478,9 @@ fn fire_melee(
                 rapier,
                 damage_events,
                 filter,
-            );
+                combo_multiplier,
+                is_finisher,
+            )
         }
         _ => {
             // 拳頭或其他近戰：單目標直線攻擊
@@ -456,19 +492,25 @@ fn fire_melee(
                 filter,
             ) {
                 let hit_pos = origin + direction * rapier_real_to_f32(toi);
-                damage_events.write(
-                    DamageEvent::new(hit_entity, weapon.stats.damage, DamageSource::Melee)
-                        .with_attacker(attacker)
-                        .with_position(hit_pos),
-                );
+                let mut event = DamageEvent::new(hit_entity, damage, DamageSource::Melee)
+                    .with_attacker(attacker)
+                    .with_position(hit_pos);
+                if is_finisher {
+                    event.force_knockback = true;
+                }
+                damage_events.write(event);
+                true
+            } else {
+                false
             }
         }
-    }
+    };
 
     let _ = damageable_query; // 保留參數以供未來使用
+    hit
 }
 
-/// 棍棒弧形掃擊攻擊
+/// 棍棒弧形掃擊攻擊（回傳是否命中）
 fn fire_staff_sweep(
     _commands: &mut Commands,
     attacker: Entity,
@@ -478,9 +520,12 @@ fn fire_staff_sweep(
     rapier: &RapierContext,
     damage_events: &mut MessageWriter<DamageEvent>,
     filter: QueryFilter,
-) {
+    combo_multiplier: f32,
+    is_finisher: bool,
+) -> bool {
     let sweep_angle = weapon.stats.spread.to_radians(); // 使用 spread 作為掃擊角度
     let mut hit_entities: Vec<Entity> = Vec::new();
+    let damage = weapon.stats.damage * combo_multiplier;
 
     // 在弧形範圍內進行多次射線檢測
     for i in 0..STAFF_SWEEP_STEPS {
@@ -502,17 +547,20 @@ fn fire_staff_sweep(
                 hit_entities.push(hit_entity);
 
                 let hit_pos = origin + rotated_dir * rapier_real_to_f32(toi);
-                damage_events.write(
-                    DamageEvent::new(hit_entity, weapon.stats.damage, DamageSource::Melee)
-                        .with_attacker(attacker)
-                        .with_position(hit_pos),
-                );
+                let mut event = DamageEvent::new(hit_entity, damage, DamageSource::Melee)
+                    .with_attacker(attacker)
+                    .with_position(hit_pos);
+                if is_finisher {
+                    event.force_knockback = true;
+                }
+                damage_events.write(event);
             }
         }
     }
+    !hit_entities.is_empty()
 }
 
-/// 刀攻擊（有流血效果）
+/// 刀攻擊（有流血效果，回傳是否命中）
 fn fire_knife_attack(
     commands: &mut Commands,
     attacker: Entity,
@@ -522,7 +570,9 @@ fn fire_knife_attack(
     rapier: &RapierContext,
     damage_events: &mut MessageWriter<DamageEvent>,
     filter: QueryFilter,
-) {
+    combo_multiplier: f32,
+    is_finisher: bool,
+) -> bool {
     if let Some((hit_entity, toi)) = rapier.cast_ray(
         origin,
         direction,
@@ -531,13 +581,16 @@ fn fire_knife_attack(
         filter,
     ) {
         let hit_pos = origin + direction * rapier_real_to_f32(toi);
+        let damage = weapon.stats.damage * combo_multiplier;
 
         // 發送傷害事件
-        damage_events.write(
-            DamageEvent::new(hit_entity, weapon.stats.damage, DamageSource::Melee)
-                .with_attacker(attacker)
-                .with_position(hit_pos),
-        );
+        let mut event = DamageEvent::new(hit_entity, damage, DamageSource::Melee)
+            .with_attacker(attacker)
+            .with_position(hit_pos);
+        if is_finisher {
+            event.force_knockback = true;
+        }
+        damage_events.write(event);
 
         // 機率觸發流血效果
         if rand::random::<f32>() < BLEED_CHANCE {
@@ -545,6 +598,9 @@ fn fire_knife_attack(
                 .entity(hit_entity)
                 .insert(BleedEffect::new(attacker));
         }
+        true
+    } else {
+        false
     }
 }
 

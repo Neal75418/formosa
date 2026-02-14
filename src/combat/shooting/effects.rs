@@ -215,6 +215,7 @@ pub fn punch_animation_trigger_system(
     mut commands: Commands,
     input: Res<ShootingInput>,
     game_state: Res<GameState>,
+    combo_state: Res<MeleeComboState>,
     respawn_state: Res<crate::combat::RespawnState>,
     player_query: Query<(&WeaponInventory, &Children), With<Player>>,
     arm_query: Query<(Entity, &PlayerArm), Without<PunchAnimation>>,
@@ -247,22 +248,70 @@ pub fn punch_animation_trigger_system(
         return;
     }
 
-    // 找到右手臂並添加揮拳動畫
+    // 找到右手臂並添加揮拳動畫（根據連擊階段差異化）
+    let combo_step = combo_state.current_step;
     for child in children.iter() {
         if let Ok((arm_entity, arm)) = arm_query.get(child) {
             if arm.is_right {
                 commands
                     .entity(arm_entity)
-                    .insert(PunchAnimation::default());
+                    .insert(PunchAnimation::for_combo_step(combo_step));
                 break;
             }
         }
     }
 }
 
+/// 連擊動畫參數（每個階段不同的軌跡）
+struct ComboAnimParams {
+    windup_rot: Vec3,    // 蓄力旋轉 (euler XYZ)
+    windup_offset: Vec3, // 蓄力位移
+    strike_rot: Vec3,    // 出拳旋轉終點
+    strike_offset: Vec3, // 出拳位移終點
+    arc_x: f32,          // X 軸弧線幅度
+}
+
+/// 根據連擊階段取得動畫參數
+fn combo_animation_params(step: ComboStep) -> ComboAnimParams {
+    match step {
+        ComboStep::Jab => ComboAnimParams {
+            // 直拳：平直快速前伸
+            windup_rot: Vec3::new(0.3, -0.2, 0.1),
+            windup_offset: Vec3::new(-0.05, -0.05, -0.08),
+            strike_rot: Vec3::new(-0.3, 0.1, 0.0),
+            strike_offset: Vec3::new(0.02, 0.05, 0.35),
+            arc_x: 0.03,
+        },
+        ComboStep::Hook => ComboAnimParams {
+            // 鉤拳：大幅度外側繞入
+            windup_rot: Vec3::new(0.2, -0.6, 0.3),
+            windup_offset: Vec3::new(-0.15, -0.08, -0.05),
+            strike_rot: Vec3::new(-0.4, 0.5, 0.0),
+            strike_offset: Vec3::new(0.1, 0.1, 0.3),
+            arc_x: 0.12,
+        },
+        ComboStep::Uppercut => ComboAnimParams {
+            // 上勾拳：從下方大弧度揮上（原始動畫加強版）
+            windup_rot: Vec3::new(0.5, -0.3, 0.2),
+            windup_offset: Vec3::new(-0.08, -0.15, -0.1),
+            strike_rot: Vec3::new(-1.0, 0.2, 0.0),
+            strike_offset: Vec3::new(0.05, 0.35, 0.3),
+            arc_x: 0.05,
+        },
+        ComboStep::Finisher => ComboAnimParams {
+            // 重拳終結技：大幅後拉 + 強力前伸
+            windup_rot: Vec3::new(0.6, -0.4, 0.3),
+            windup_offset: Vec3::new(-0.1, -0.1, -0.15),
+            strike_rot: Vec3::new(-0.8, 0.3, 0.0),
+            strike_offset: Vec3::new(0.08, 0.2, 0.45),
+            arc_x: 0.08,
+        },
+    }
+}
+
 /// 揮拳動畫更新系統
 /// 處理手臂動畫的三個階段：WindUp → Strike → Return
-/// 模擬自然的上勾拳：手臂從下方沿弧線向上揮出
+/// 根據連擊階段（Jab/Hook/Uppercut/Finisher）差異化動畫軌跡
 pub fn punch_animation_update_system(
     time: Res<Time>,
     mut commands: Commands,
@@ -285,60 +334,49 @@ pub fn punch_animation_update_system(
             continue;
         }
 
-        // 自然上勾拳動畫
+        // 根據連擊階段選擇動畫參數
+        let params = combo_animation_params(anim.combo_step);
+
         match anim.phase {
             PunchPhase::WindUp => {
-                // 蓄力：手臂向下、向後、向外側收（準備上勾）
+                // 蓄力：手臂收回準備
                 let phase_progress = t / wind_up_end;
                 let ease = ease_out_quad(phase_progress);
 
                 let rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    0.5 * ease,  // X: 手臂向下/向後（正值）
-                    -0.3 * ease, // Y: 向外側旋轉
-                    0.2 * ease,  // Z: 稍微內傾
+                    params.windup_rot.x * ease,
+                    params.windup_rot.y * ease,
+                    params.windup_rot.z * ease,
                 );
 
-                let offset = Vec3::new(
-                    -0.08 * ease, // X: 往外側
-                    -0.12 * ease, // Y: 向下沉（蓄力）
-                    -0.1 * ease,  // Z: 往後
-                );
+                let offset = params.windup_offset * ease;
 
                 transform.translation = arm.rest_position + offset;
                 transform.rotation = rotation;
             }
             PunchPhase::Strike => {
-                // 出拳：從下方沿弧線向上+向前揮出（上勾拳）
+                // 出拳：沿弧線揮出
                 let phase_t = t - wind_up_end;
                 let phase_duration = strike_end - wind_up_end;
                 let phase_progress = phase_t / phase_duration;
                 let ease = ease_out_cubic(phase_progress);
 
-                // 旋轉：從下方（0.5）揮到上方（-1.0）
-                // X 軸：正值=向下，負值=向上
-                let start_x = 0.5;
-                let end_x = -1.0;
-                let current_x = start_x + (end_x - start_x) * ease;
-
-                // Y 軸：從外側（-0.3）揮到前方（+0.2），創造弧線
-                let start_y = -0.3;
-                let end_y = 0.2;
-                let current_y = start_y + (end_y - start_y) * ease;
+                let current_x = params.windup_rot.x + (params.strike_rot.x - params.windup_rot.x) * ease;
+                let current_y = params.windup_rot.y + (params.strike_rot.y - params.windup_rot.y) * ease;
 
                 let rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    current_x,          // X: 從下往上揮
-                    current_y,          // Y: 從外側到前方（弧線）
-                    0.2 * (1.0 - ease), // Z: 從傾斜到直
+                    current_x,
+                    current_y,
+                    params.windup_rot.z * (1.0 - ease),
                 );
 
-                // 位置：弧線軌跡（從下後外 → 上前中）
                 let arc = (phase_progress * std::f32::consts::PI).sin();
                 let offset = Vec3::new(
-                    -0.08 + 0.13 * ease + 0.05 * arc, // X: 從外側繞回中間
-                    -0.12 + 0.42 * ease,              // Y: 從下往上（-0.12 → +0.3）
-                    -0.1 + 0.4 * ease,                // Z: 向前伸出
+                    params.windup_offset.x + (params.strike_offset.x - params.windup_offset.x) * ease + params.arc_x * arc,
+                    params.windup_offset.y + (params.strike_offset.y - params.windup_offset.y) * ease,
+                    params.windup_offset.z + (params.strike_offset.z - params.windup_offset.z) * ease,
                 );
 
                 transform.translation = arm.rest_position + offset;
@@ -351,17 +389,15 @@ pub fn punch_animation_update_system(
                 let phase_progress = phase_t / phase_duration;
                 let ease = ease_in_out_quad(phase_progress);
 
-                // 從上勾拳終點插值回原位
                 let strike_rotation = Quat::from_euler(
                     EulerRot::XYZ,
-                    -1.0, // 手臂向上的終點
-                    0.2,  // 在前方
+                    params.strike_rot.x,
+                    params.strike_rot.y,
                     0.0,
                 );
-                let strike_offset = Vec3::new(0.05, 0.3, 0.3);
 
                 transform.translation =
-                    (arm.rest_position + strike_offset).lerp(arm.rest_position, ease);
+                    (arm.rest_position + params.strike_offset).lerp(arm.rest_position, ease);
                 transform.rotation = strike_rotation.slerp(arm.rest_rotation, ease);
             }
         }

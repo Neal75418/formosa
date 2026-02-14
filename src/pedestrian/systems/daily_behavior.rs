@@ -20,10 +20,6 @@ const SHELTER_SEEK_PROBABILITY_FACTOR: f32 = 0.02;
 const SHELTER_SEARCH_RADIUS: f32 = 80.0;
 /// 商店櫥窗搜索半徑（備用庇護）
 const SHOP_FALLBACK_SEARCH_RADIUS: f32 = 50.0;
-/// 到達庇護點的判定距離
-#[allow(dead_code)]
-const SHELTER_ARRIVAL_DISTANCE: f32 = 2.0;
-
 /// 庇護點到達距離平方 (2.0²)
 const SHELTER_ARRIVAL_SQ: f32 = 4.0;
 

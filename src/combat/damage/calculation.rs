@@ -149,13 +149,22 @@ fn trigger_hit_reaction(
     attacker: Option<Entity>,
     target: Entity,
     is_headshot: bool,
+    force_knockback: bool,
     transform_query: &Query<&Transform>,
 ) {
     let Some(ref mut reaction) = hit_reaction else {
         return;
     };
     let hit_direction = calculate_hit_direction(attacker, target, transform_query);
-    reaction.trigger(damage_dealt, hit_direction, is_headshot);
+    /// 連擊終結技的最低擊退傷害值（確保超過 Knockback 門檻 40.0）
+    const FINISHER_KNOCKBACK_FORCE: f32 = 50.0;
+
+    if force_knockback {
+        // 連擊終結技：取實際傷害與最低擊退力的較大值
+        reaction.trigger(damage_dealt.max(FINISHER_KNOCKBACK_FORCE), hit_direction, false);
+    } else {
+        reaction.trigger(damage_dealt, hit_direction, is_headshot);
+    }
 }
 
 /// 處理玩家受傷通知
@@ -401,6 +410,7 @@ pub fn damage_system(
             event.attacker,
             event.target,
             event.is_headshot,
+            event.force_knockback,
             &transform_query,
         );
 

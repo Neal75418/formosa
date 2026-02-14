@@ -324,6 +324,7 @@ pub fn police_car_collision_system(
             attacker: Some(police_entity),
             hit_position: Some(transform.translation),
             is_headshot: false,
+            force_knockback: false,
         });
 
         info!("警車碰撞！相對速度: {:.1} m/s, 玩家傷害: {:.1}, 警車傷害: {:.1}, 警車血量: {:.0}",

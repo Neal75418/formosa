@@ -1,7 +1,5 @@
 //! 車輛健康和損壞狀態組件
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 use super::super::VehicleType;
@@ -127,6 +125,7 @@ impl VehicleHealth {
     }
 
     /// 修復
+    #[allow(dead_code)] // 修車廠系統預留
     pub fn repair(&mut self, amount: f32) {
         if self.damage_state == VehicleDamageState::Destroyed {
             return;
@@ -154,6 +153,7 @@ impl VehicleHealth {
     }
 
     /// 完全修復
+    #[allow(dead_code)] // 修車廠系統預留
     pub fn full_repair(&mut self) {
         self.current = self.max;
         self.damage_state = VehicleDamageState::Pristine;
@@ -238,6 +238,7 @@ impl TireDamage {
     }
 
     /// 修復指定輪胎
+    #[allow(dead_code)] // 修車廠系統預留
     pub fn repair_tire(&mut self, index: usize) {
         if index < 4 {
             self.flat_tires[index] = false;
@@ -246,6 +247,7 @@ impl TireDamage {
     }
 
     /// 修復所有輪胎
+    #[allow(dead_code)] // 修車廠系統預留
     pub fn repair_all(&mut self) {
         self.flat_tires = [false; 4];
         self.handling_penalty = 0.0;
@@ -280,11 +282,13 @@ impl TireDamage {
     }
 
     /// 檢查前輪是否有爆胎（影響轉向）
+    #[allow(dead_code)] // 進階操控差異化預留
     pub fn has_front_flat(&self) -> bool {
         self.flat_tires[0] || self.flat_tires[1]
     }
 
     /// 檢查後輪是否有爆胎（影響穩定性）
+    #[allow(dead_code)] // 進階操控差異化預留
     pub fn has_rear_flat(&self) -> bool {
         self.flat_tires[2] || self.flat_tires[3]
     }

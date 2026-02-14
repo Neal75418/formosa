@@ -48,6 +48,8 @@ impl Plugin for CombatPlugin {
             // 資源
             .init_resource::<CombatState>()
             .init_resource::<ShootingInput>()
+            .init_resource::<LockOnState>()
+            .init_resource::<MeleeComboState>()
             .init_resource::<RespawnState>()
             .init_resource::<RagdollTracker>()
             .init_resource::<KillCamState>()
@@ -64,17 +66,27 @@ impl Plugin for CombatPlugin {
                     spawn_player_weapons,
                     weapon_visibility_system,
                     weapon_visibility_init_system,
-                    weapon_cooldown_system, // 純計時器更新，無依賴
+                    weapon_cooldown_system,        // 純計時器更新，無依賴
+                    melee_combo_timeout_system,    // 連擊窗口超時重置
                     // 輸入處理
                     shooting_input_system,
+                    // 自動瞄準（輸入後更新鎖定目標）
+                    auto_aim_system
+                        .after(shooting_input_system),
                     // 依賴輸入的系統
                     (
                         holding_pose_system,
                         reload_system,
-                        fire_weapon_system,
+                        // 觸發先於射擊：確保動畫讀取 combo 狀態後，射擊才推進
                         punch_animation_trigger_system,
                     )
-                        .after(shooting_input_system),
+                        .after(shooting_input_system)
+                        .after(auto_aim_system),
+                    // 射擊系統在動畫觸發之後（推進 combo 狀態不影響當幀動畫）
+                    fire_weapon_system
+                        .after(shooting_input_system)
+                        .after(auto_aim_system)
+                        .after(punch_animation_trigger_system),
                     // 動畫更新依賴觸發
                     punch_animation_update_system.after(punch_animation_trigger_system),
                 )

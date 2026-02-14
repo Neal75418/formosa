@@ -15,8 +15,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats, WeaponType};
 use crate::core::{GameState, PlayerStats, WeatherState, WorldTime};
-use crate::economy::PlayerWallet;
-use crate::mission::{RelationshipManager, RespectManager, StoryMissionManager, UnlockManager};
+use crate::economy::{MoneyChangeReason, MoneyChangedEvent, PlayerWallet};
+use crate::mission::{
+    RelationshipManager, RespectManager, StoryMissionEvent, StoryMissionManager, UnlockManager,
+};
 use crate::player::Player;
 use crate::vehicle::{ModLevel, NitroBoost, Vehicle, VehicleId, VehicleModifications};
 
@@ -909,5 +911,102 @@ fn weapon_stats_from_type(weapon_type: WeaponType) -> WeaponStats {
         WeaponType::SMG => WeaponStats::smg(),
         WeaponType::Shotgun => WeaponStats::shotgun(),
         WeaponType::Rifle => WeaponStats::rifle(),
+    }
+}
+
+// ============================================================================
+// 自動存檔觸發系統
+// ============================================================================
+
+/// 安全屋自動存檔追蹤（防止反覆觸發）
+#[derive(Resource, Default)]
+pub struct SafehouseAutoSaveTracker {
+    /// 上次觸發存檔的安全屋 ID
+    pub last_safehouse_id: Option<String>,
+    /// 上次存檔時間
+    pub last_save_time: f32,
+}
+
+/// 安全屋自動存檔冷卻時間（秒）
+pub(crate) const SAFEHOUSE_SAVE_COOLDOWN: f32 = 30.0;
+/// 安全屋觸發距離的平方（5m）
+pub(crate) const SAFEHOUSE_TRIGGER_DISTANCE_SQ: f32 = 25.0;
+/// 重要購買的最低金額門檻
+pub(crate) const IMPORTANT_PURCHASE_THRESHOLD: i32 = 1000;
+
+/// 任務完成時觸發自動存檔
+pub fn mission_complete_auto_save_system(
+    mut mission_events: MessageReader<StoryMissionEvent>,
+    mut auto_save_events: MessageWriter<AutoSaveEvent>,
+) {
+    for event in mission_events.read() {
+        if matches!(event, StoryMissionEvent::Completed { .. }) {
+            auto_save_events.write(AutoSaveEvent {
+                reason: AutoSaveReason::MissionComplete,
+            });
+            info!("💾 任務完成，觸發自動存檔");
+        }
+    }
+}
+
+/// 進入安全屋時觸發自動存檔
+pub fn safehouse_auto_save_system(
+    time: Res<Time>,
+    player_query: Query<&Transform, With<Player>>,
+    safehouse_query: Query<(&Transform, &Safehouse)>,
+    mut auto_save_events: MessageWriter<AutoSaveEvent>,
+    mut tracker: ResMut<SafehouseAutoSaveTracker>,
+) {
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
+    let player_pos = player_transform.translation;
+    let current_time = time.elapsed_secs();
+
+    for (safehouse_transform, safehouse) in &safehouse_query {
+        if !safehouse.is_unlocked {
+            continue;
+        }
+
+        let distance_sq = player_pos.distance_squared(safehouse_transform.translation);
+        if distance_sq > SAFEHOUSE_TRIGGER_DISTANCE_SQ {
+            continue;
+        }
+
+        // 冷卻檢查：同一安全屋在冷卻期內不重複觸發
+        let should_save = match &tracker.last_safehouse_id {
+            Some(last_id) if last_id == &safehouse.id => {
+                current_time - tracker.last_save_time > SAFEHOUSE_SAVE_COOLDOWN
+            }
+            _ => true, // 不同安全屋或首次進入
+        };
+
+        if should_save {
+            tracker.last_safehouse_id = Some(safehouse.id.clone());
+            tracker.last_save_time = current_time;
+            auto_save_events.write(AutoSaveEvent {
+                reason: AutoSaveReason::EnteredSafehouse,
+            });
+            info!("💾 進入安全屋 {}，觸發自動存檔", safehouse.name);
+            break; // 一次只觸發一個
+        }
+    }
+}
+
+/// 購買重要物品時觸發自動存檔
+pub fn purchase_auto_save_system(
+    mut money_events: MessageReader<MoneyChangedEvent>,
+    mut auto_save_events: MessageWriter<AutoSaveEvent>,
+) {
+    for event in money_events.read() {
+        // 只處理購買類型的支出，且金額達到門檻
+        if matches!(event.reason, MoneyChangeReason::Purchase)
+            && event.amount.abs() >= IMPORTANT_PURCHASE_THRESHOLD
+        {
+            auto_save_events.write(AutoSaveEvent {
+                reason: AutoSaveReason::ImportantPurchase,
+            });
+            info!("💾 重要購買 (${})，觸發自動存檔", event.amount.abs());
+        }
     }
 }

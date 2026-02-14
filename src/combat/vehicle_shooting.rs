@@ -242,6 +242,7 @@ pub fn vehicle_shooting_fire_system(
                 attacker: Some(player_entity),
                 hit_position: Some(hit_pos),
                 is_headshot: false, // 車上射擊不計爆頭
+                force_knockback: false,
             });
             combat_state.last_hit_time = Some(time.elapsed_secs());
         }

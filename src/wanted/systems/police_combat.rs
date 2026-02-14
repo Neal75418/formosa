@@ -106,6 +106,7 @@ pub fn police_combat_system(
                 attacker: Some(police_entity),
                 hit_position: Some(player_pos),
                 is_headshot: false,
+                force_knockback: false,
             });
         }
 

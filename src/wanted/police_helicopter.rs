@@ -736,6 +736,7 @@ pub fn helicopter_combat_system(
                     attacker: Some(heli_entity),
                     hit_position: Some(player_pos),
                     is_headshot: false,
+                    force_knockback: false,
                 });
             }
         }

@@ -29,8 +29,6 @@ const EVENT_MAX_DISTANCE: f32 = 50.0;
 const EVENT_ACTIVE_DISTANCE: f32 = 15.0;
 /// 事件超時時間（秒）
 const EVENT_TIMEOUT: f32 = 120.0;
-/// 基礎獎勵金額
-const BASE_REWARD: i32 = 200;
 
 // ============================================================================
 // 組件與資源

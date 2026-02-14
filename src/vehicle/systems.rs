@@ -2,7 +2,7 @@
 
 
 use super::{
-    NitroBoost, Vehicle, VehicleBodyDynamics,
+    NitroBoost, TireDamage, Vehicle, VehicleBodyDynamics,
     VehicleBraking, VehicleConfig, VehicleDrift, VehicleInput, VehicleLean, VehicleModifications,
     VehiclePhysicsMode, VehiclePowerBand, VehicleSteering, VehicleType, VehicleVisualRoot,
 };
@@ -146,6 +146,7 @@ pub fn vehicle_acceleration_system(
         &mut VehicleInput,
         Option<&VehicleModifications>,
         Option<&NitroBoost>,
+        Option<&TireDamage>,
     )>,
 ) {
     if !game_state.player_in_vehicle {
@@ -154,14 +155,14 @@ pub fn vehicle_acceleration_system(
     let Some(vehicle_entity) = game_state.current_vehicle else {
         return;
     };
-    let Ok((mut vehicle, power_band, braking, drift, mut input, mods, nitro)) =
+    let Ok((mut vehicle, power_band, braking, drift, mut input, mods, nitro, tire_damage)) =
         vehicles.get_mut(vehicle_entity)
     else {
         return;
     };
 
     let dt = time.delta_secs();
-    let modifiers = VehicleDynamicsModifiers::new(mods, nitro);
+    let modifiers = VehicleDynamicsModifiers::new(mods, nitro, tire_damage);
 
     // Weather Traction
     let weather_traction = get_weather_factor(&weather, &config.weather.traction_params());
@@ -239,7 +240,11 @@ pub(super) struct VehicleDynamicsModifiers {
 }
 
 impl VehicleDynamicsModifiers {
-    pub(super) fn new(mods: Option<&VehicleModifications>, nitro: Option<&NitroBoost>) -> Self {
+    pub(super) fn new(
+        mods: Option<&VehicleModifications>,
+        nitro: Option<&NitroBoost>,
+        tire_damage: Option<&TireDamage>,
+    ) -> Self {
         let (accel, speed, _, brake, traction) = if let Some(m) = mods {
             (
                 m.engine.multiplier(),
@@ -262,9 +267,12 @@ impl VehicleDynamicsModifiers {
             1.0
         };
 
+        // 輪胎爆胎懲罰
+        let speed_penalty = tire_damage.map(|td| td.speed_penalty).unwrap_or(0.0);
+
         Self {
             accel,
-            speed,
+            speed: speed * (1.0 - speed_penalty),
             brake,
             traction,
             nitro: nitro_mult,
@@ -370,6 +378,7 @@ pub fn vehicle_steering_system(
         &VehicleInput,
         &mut Velocity,
         Option<&VehicleModifications>,
+        Option<&TireDamage>,
     )>,
 ) {
     if !game_state.player_in_vehicle {
@@ -378,7 +387,7 @@ pub fn vehicle_steering_system(
     let Some(vehicle_entity) = game_state.current_vehicle else {
         return;
     };
-    let Ok((vehicle, steering, drift, input, mut velocity, mods)) =
+    let Ok((vehicle, steering, drift, input, mut velocity, mods, tire_damage)) =
         vehicles.get_mut(vehicle_entity)
     else {
         return;
@@ -398,7 +407,9 @@ pub fn vehicle_steering_system(
     } else {
         1.0
     };
-    let effective_handling = weather_handling * handling_mod;
+    // 輪胎爆胎操控懲罰
+    let tire_handling = tire_damage.map(|td| 1.0 - td.handling_penalty).unwrap_or(1.0);
+    let effective_handling = weather_handling * handling_mod * tire_handling;
 
     // Turning Logic
     let speed_ratio = if vehicle.max_speed > 0.0 {

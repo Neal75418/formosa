@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::combat::{CombatState, WeaponInventory};
+use crate::combat::{CombatState, LockOnState, WeaponInventory};
 use crate::core::GameState;
 use crate::player::Player;
 use crate::ui::components::{
@@ -95,6 +95,7 @@ pub fn update_crosshair(
     time: Res<Time>,
     mut combat_state: ResMut<CombatState>,
     game_state: Res<GameState>,
+    lock_on: Res<LockOnState>,
     player_query: Query<&WeaponInventory, With<Player>>,
     mut crosshair_query: Query<&mut Visibility, With<Crosshair>>,
     mut line_query: Query<(&mut Node, &CrosshairLine), Without<CrosshairOuterRing>>,
@@ -130,8 +131,10 @@ pub fn update_crosshair(
         node.height = Val::Px(ring_size);
     }
 
-    // 瞄準時中心點變亮
-    let dot_color = if is_aiming {
+    // 準星顏色：鎖定+瞄準 → 紅色 / 瞄準 → 亮白 / 一般 → 白色
+    let dot_color = if lock_on.locked_target.is_some() && is_aiming {
+        CROSSHAIR_LOCKED
+    } else if is_aiming {
         CROSSHAIR_AIM
     } else {
         CROSSHAIR_MAIN

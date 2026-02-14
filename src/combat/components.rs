@@ -28,6 +28,149 @@ pub struct CombatState {
     pub last_hit_time: Option<f32>, // 上次命中時間
 }
 
+/// 自動瞄準/鎖定狀態（GTA 5 風格）
+///
+/// 瞄準時自動鎖定最近的敵人，提供瞄準吸附和目標追蹤。
+/// Tab 鍵切換目標，停止瞄準或目標死亡/超出距離時解除鎖定。
+#[derive(Resource)]
+pub struct LockOnState {
+    /// 當前鎖定的目標實體
+    pub locked_target: Option<Entity>,
+    /// 鎖定搜索範圍（公尺）
+    pub lock_range: f32,
+    /// 最大保持距離（超出則解鎖）
+    pub max_range: f32,
+    /// 鎖定視野半角（弧度）
+    pub fov_half_angle: f32,
+    /// 瞄準吸附強度 (0.0 = 無吸附, 1.0 = 完全鎖定)
+    pub snap_strength: f32,
+    /// 失去視線計時器
+    pub los_lost_timer: f32,
+    /// 失去視線容忍時間（秒）
+    pub los_timeout: f32,
+}
+
+impl Default for LockOnState {
+    fn default() -> Self {
+        Self {
+            locked_target: None,
+            lock_range: 30.0,
+            max_range: 40.0,
+            fov_half_angle: 0.52, // ~30°
+            snap_strength: 0.85,
+            los_lost_timer: 0.0,
+            los_timeout: 2.0,
+        }
+    }
+}
+
+// ============================================================================
+// 近戰連擊系統
+// ============================================================================
+
+/// 連擊階段（GTA 5 風格四段連擊鏈）
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ComboStep {
+    #[default]
+    Jab,       // 第 1 擊：直拳
+    Hook,      // 第 2 擊：鉤拳
+    Uppercut,  // 第 3 擊：上勾拳
+    Finisher,  // 第 4 擊：重拳（強制擊退）
+}
+
+impl ComboStep {
+    /// 傷害倍率
+    pub fn damage_multiplier(self) -> f32 {
+        match self {
+            ComboStep::Jab => 1.0,
+            ComboStep::Hook => 1.2,
+            ComboStep::Uppercut => 1.5,
+            ComboStep::Finisher => 2.0,
+        }
+    }
+
+    /// 動畫時長（秒）— 終結技較慢
+    pub fn animation_duration(self) -> f32 {
+        match self {
+            ComboStep::Jab => 0.28,
+            ComboStep::Hook => 0.30,
+            ComboStep::Uppercut => 0.32,
+            ComboStep::Finisher => 0.40,
+        }
+    }
+
+    /// 下一階段（Finisher 後回到 Jab）
+    pub fn next(self) -> Self {
+        match self {
+            ComboStep::Jab => ComboStep::Hook,
+            ComboStep::Hook => ComboStep::Uppercut,
+            ComboStep::Uppercut => ComboStep::Finisher,
+            ComboStep::Finisher => ComboStep::Jab,
+        }
+    }
+
+    /// 是否為終結技
+    pub fn is_finisher(self) -> bool {
+        self == ComboStep::Finisher
+    }
+}
+
+/// 連擊窗口超時時間（秒）
+pub const COMBO_WINDOW: f32 = 0.6;
+
+/// 近戰連擊狀態（全域資源）
+///
+/// 追蹤玩家的連擊鏈：每次近戰命中在窗口內推進到下一階段，
+/// 超時或切換武器則重置。終結技（第 4 擊）自帶擊退效果。
+#[derive(Resource)]
+pub struct MeleeComboState {
+    /// 當前連擊階段
+    pub current_step: ComboStep,
+    /// 上次命中時間（用於判斷連擊窗口）
+    pub last_hit_time: f32,
+    /// 連擊是否啟動中
+    pub active: bool,
+}
+
+impl Default for MeleeComboState {
+    fn default() -> Self {
+        Self {
+            current_step: ComboStep::Jab,
+            last_hit_time: 0.0,
+            active: false,
+        }
+    }
+}
+
+impl MeleeComboState {
+    /// 註冊一次近戰命中 — 推進連擊階段
+    pub fn register_hit(&mut self, time: f32) {
+        if self.active && (time - self.last_hit_time) <= COMBO_WINDOW {
+            self.current_step = self.current_step.next();
+        } else {
+            // 超時或首次攻擊 → 從 Jab 開始
+            self.current_step = ComboStep::Jab;
+            self.active = true;
+        }
+        self.last_hit_time = time;
+    }
+
+    /// 重置連擊（切換武器、被擊中等）
+    pub fn reset(&mut self) {
+        self.current_step = ComboStep::Jab;
+        self.active = false;
+    }
+
+    /// 取得當前傷害倍率
+    pub fn damage_multiplier(&self) -> f32 {
+        if self.active {
+            self.current_step.damage_multiplier()
+        } else {
+            1.0
+        }
+    }
+}
+
 /// 射擊輸入緩衝
 #[derive(Resource, Default)]
 pub struct ShootingInput {
@@ -159,9 +302,10 @@ pub trait PunchAnimatable {
 /// 揮拳動畫組件
 #[derive(Component, Debug)]
 pub struct PunchAnimation {
-    pub timer: f32,        // 動畫計時器
-    pub duration: f32,     // 總時長
-    pub phase: PunchPhase, // 當前階段
+    pub timer: f32,            // 動畫計時器
+    pub duration: f32,         // 總時長
+    pub phase: PunchPhase,     // 當前階段
+    pub combo_step: ComboStep, // 連擊階段（影響動畫軌跡）
 }
 
 impl Default for PunchAnimation {
@@ -170,6 +314,19 @@ impl Default for PunchAnimation {
             timer: 0.0,
             duration: 0.3, // 0.3 秒完成
             phase: PunchPhase::WindUp,
+            combo_step: ComboStep::Jab,
+        }
+    }
+}
+
+impl PunchAnimation {
+    /// 根據連擊階段建立動畫
+    pub fn for_combo_step(step: ComboStep) -> Self {
+        Self {
+            timer: 0.0,
+            duration: step.animation_duration(),
+            phase: PunchPhase::WindUp,
+            combo_step: step,
         }
     }
 }

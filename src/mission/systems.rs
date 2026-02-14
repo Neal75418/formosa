@@ -125,8 +125,12 @@ fn update_active_mission(
         MissionType::Taxi => {
             update_taxi_mission(active, player_pos, player_in_vehicle, interaction, time_delta, commands, meshes, materials, notifications)
         }
-        MissionType::Explore => {
-            // 探索任務：直接檢查終點 (使用 distance_squared 優化)
+        MissionType::Explore
+        | MissionType::Assassination
+        | MissionType::Escort
+        | MissionType::ChaseDown
+        | MissionType::Photography => {
+            // 通用目標型任務：到達終點即完成
             let distance_sq = player_pos.distance_squared(active.data.end_pos);
             if distance_sq < MISSION_INTERACT_DIST_SQ {
                 MissionResult::Completed(DeliveryRating::ThreeStars)
@@ -610,11 +614,22 @@ fn accept_mission(
                 ));
             }
         }
-        MissionType::Explore => {
+        MissionType::Explore
+        | MissionType::Assassination
+        | MissionType::Escort
+        | MissionType::ChaseDown
+        | MissionType::Photography => {
+            let icon = match mission.mission_type {
+                MissionType::Assassination => "🎯",
+                MissionType::Escort => "🛡️",
+                MissionType::ChaseDown => "🚗",
+                MissionType::Photography => "📷",
+                _ => "🔍",
+            };
             let time_msg = mission.time_limit.map_or(String::new(), |limit| format!(" ⏱️{:.0}秒", limit));
             notifications.info(format!(
-                "🔍 {} | ${}{}",
-                mission.title, mission.reward, time_msg
+                "{} {} | ${}{}",
+                icon, mission.title, mission.reward, time_msg
             ));
             spawn_marker(commands, meshes, materials, mission.end_pos, mission.id, false);
         }

@@ -12,6 +12,7 @@ mod systems;
 mod theft;
 mod traffic_lights;
 mod vehicle_damage;
+pub mod watercraft;
 
 pub use components::*;
 pub use config::*;
@@ -23,6 +24,8 @@ pub use systems::*;
 pub use theft::*;
 pub use traffic_lights::*;
 pub use vehicle_damage::*;
+#[allow(unused_imports)]
+pub use watercraft::*;
 
 use crate::core::{AppState, GameSet};
 use crate::world;
@@ -36,6 +39,7 @@ impl Plugin for VehiclePlugin {
         app
             // Resources
             .init_resource::<VehicleConfig>()
+            .init_resource::<WaveParams>()
             // Message
             .add_message::<TheftEvent>()
             .add_message::<PurchaseModificationEvent>()
@@ -126,6 +130,16 @@ impl Plugin for VehiclePlugin {
                     purchase_nitro_system,
                     nitro_boost_system,
                     purchase_visual_mod_system,
+                )
+                    .in_set(GameSet::Vehicle)
+                    .run_if(in_state(AppState::InGame)),
+            )
+            // 水上載具
+            .add_systems(
+                Update,
+                (
+                    watercraft_buoyancy_system,
+                    watercraft_movement_system,
                 )
                     .in_set(GameSet::Vehicle)
                     .run_if(in_state(AppState::InGame)),

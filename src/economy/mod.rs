@@ -2,13 +2,19 @@
 //!
 //! 統一管理金錢、商店、ATM 互動
 
+pub mod casino;
 mod components;
+pub mod enterprise;
+pub mod stock_market;
 mod systems;
 
 #[cfg(test)]
 mod tests;
 
+pub use casino::*;
 pub use components::*;
+pub use enterprise::*;
+pub use stock_market::*;
 pub use systems::*;
 
 use bevy::prelude::*;
@@ -25,6 +31,11 @@ impl Plugin for EconomyPlugin {
             .insert_resource(ShopInventory::new())
             .init_resource::<ShopMenuState>()
             .init_resource::<AtmMenuState>()
+            .init_resource::<StockMarket>()
+            .init_resource::<CasinoMenuState>()
+            .init_resource::<BlackjackGame>()
+            .init_resource::<SlotMachine>()
+            .init_resource::<EnterpriseManager>()
             // 事件
             .add_message::<MoneyChangedEvent>()
             .add_message::<PurchaseEvent>()
@@ -41,6 +52,11 @@ impl Plugin for EconomyPlugin {
                 update_cash_pickups,
                 rental_income_system,
                 robbery_cooldown_system,
+                stock_price_update_system,
+                blackjack_bet_system,
+                blackjack_play_system,
+                slot_machine_system,
+                enterprise_income_system,
             ).chain());
     }
 }

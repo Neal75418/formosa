@@ -9,6 +9,7 @@
 //! 注意：部分任務類型為將來擴展預留
 
 // 一般任務系統
+pub mod advanced_missions;
 mod data;
 mod systems;
 
@@ -31,6 +32,8 @@ mod side_dialogues;
 mod unlocks;
 
 // 重新導出一般任務
+#[allow(unused_imports)]
+pub use advanced_missions::*;
 pub use data::*;
 pub use systems::*;
 

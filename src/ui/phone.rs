@@ -670,6 +670,10 @@ fn spawn_journal_active(
             crate::mission::MissionType::Taxi => "載客",
             crate::mission::MissionType::Race => "競速",
             crate::mission::MissionType::Explore => "探索",
+            crate::mission::MissionType::Assassination => "暗殺",
+            crate::mission::MissionType::Escort => "護送",
+            crate::mission::MissionType::ChaseDown => "飛車追逐",
+            crate::mission::MissionType::Photography => "拍照",
         };
         spawn_mission_detail_row(parent, font, "類型", type_label);
         spawn_mission_detail_row(parent, font, "獎勵", &format!("${}", current.data.reward));

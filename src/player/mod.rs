@@ -2,14 +2,19 @@
 //!
 //! 注意：部分玩家屬性為將來擴展預留
 
+pub mod character_switch;
 mod climb;
 mod components;
 mod config;
+pub mod skills;
 mod systems;
 
+#[allow(unused_imports)]
+pub use character_switch::*;
 pub use climb::*;
 pub use components::*;
 pub use config::*;
+pub use skills::*;
 pub use systems::*;
 
 use crate::core::{AppState, GameSet, InteractionSet};
@@ -24,6 +29,8 @@ impl Plugin for PlayerPlugin {
             .init_resource::<DoubleTapTracker>()
             .init_resource::<VehicleTransitionState>()
             .init_resource::<StealthState>()
+            .init_resource::<PlayerSkills>()
+            .init_resource::<CharacterManager>()
             .add_systems(
                 Update,
                 (
@@ -41,6 +48,11 @@ impl Plugin for PlayerPlugin {
                     enter_exit_vehicle.in_set(InteractionSet::Vehicle),
                     vehicle_transition_animation_system.after(enter_exit_vehicle),
                     stealth_noise_system.after(player_input),
+                    // 技能成長系統
+                    skills::driving_skill_system,
+                    skills::stamina_skill_system,
+                    skills::stealth_skill_system,
+                    character_switch::character_switch_cooldown_system,
                 )
                     .in_set(GameSet::Player)
                     .run_if(in_state(AppState::InGame)),

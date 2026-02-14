@@ -361,7 +361,11 @@ fn set_gps_for_mission(gps: &mut GpsNavigationState, mission: &crate::mission::A
                 }
             }
         }
-        MissionType::Explore => {
+        MissionType::Explore
+        | MissionType::Assassination
+        | MissionType::Escort
+        | MissionType::ChaseDown
+        | MissionType::Photography => {
             gps.set_destination(data.end_pos, "目標位置");
         }
     }

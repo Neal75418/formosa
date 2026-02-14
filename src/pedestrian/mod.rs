@@ -6,6 +6,7 @@ mod components;
 mod pathfinding;
 mod behavior;
 mod panic;
+pub mod swimming;
 mod systems;
 
 pub use components::*;
@@ -14,6 +15,8 @@ pub use pathfinding::*;
 #[allow(unused_imports)]
 pub use behavior::*;
 pub use panic::*;
+#[allow(unused_imports)]
+pub use swimming::*;
 pub use systems::*;
 
 use bevy::prelude::*;
@@ -82,6 +85,11 @@ impl Plugin for PedestrianPlugin {
                 panic_wave_propagation_system,    // 恐慌波傳播
                 pedestrian_scream_system,         // 行人尖叫傳播
                 panic_flee_direction_system,      // 恐慌逃跑方向
-            ).chain().run_if(in_state(AppState::InGame)));
+            ).chain().run_if(in_state(AppState::InGame)))
+            // 游泳系統
+            .add_systems(Update, (
+                npc_water_detection_system,
+                npc_swim_system.after(npc_water_detection_system),
+            ).run_if(in_state(AppState::InGame)));
     }
 }

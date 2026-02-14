@@ -101,6 +101,14 @@ pub enum MissionType {
     Taxi,
     Race,
     Explore,
+    /// 暗殺任務：消滅特定目標
+    Assassination,
+    /// 護送任務：護送 NPC 到目的地
+    Escort,
+    /// 飛車追逐：追上並攔截逃跑車輛
+    ChaseDown,
+    /// 拍照任務：到指定地點拍攝特定場景
+    Photography,
 }
 
 /// 外送評價星級
@@ -416,6 +424,10 @@ impl CompletedMissionRecord {
             MissionType::Taxi => "載客",
             MissionType::Race => "競速",
             MissionType::Explore => "探索",
+            MissionType::Assassination => "暗殺",
+            MissionType::Escort => "護送",
+            MissionType::ChaseDown => "飛車追逐",
+            MissionType::Photography => "拍照",
         }
     }
 }
@@ -436,7 +448,7 @@ pub struct MissionManager {
     pub total_deliveries: u32,                  // 總配送數
     pub restaurants: Vec<Restaurant>,           // 餐廳列表
     pub customer_locations: Vec<CustomerLocation>, // 顧客地點列表
-    next_mission_id: u32,                       // 下一個任務 ID
+    pub(crate) next_mission_id: u32,              // 下一個任務 ID
 }
 
 impl Default for MissionManager {

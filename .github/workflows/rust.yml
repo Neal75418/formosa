@@ -18,13 +18,12 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
-  CARGO_BUILD_JOBS: 2
 
 jobs:
   ci:
     name: Clippy & Test
     runs-on: [self-hosted, linux]
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -35,10 +34,10 @@ jobs:
           mkdir -p .cargo
           cat > .cargo/config.toml << 'TOML'
           [profile.dev]
-          opt-level = 1
+          opt-level = 0
 
           [profile.dev.package."*"]
-          opt-level = 1
+          opt-level = 0
           TOML
           cat .cargo/config.toml
 
@@ -49,4 +48,4 @@ jobs:
         run: cargo test 2>&1
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings

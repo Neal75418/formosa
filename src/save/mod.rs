@@ -3,12 +3,14 @@
 //! 處理遊戲進度保存與讀取
 
 mod components;
+mod save_loader;
 mod systems;
 
 #[cfg(test)]
 mod tests;
 
 pub use components::*;
+pub use save_loader::*;
 pub use systems::*;
 
 use bevy::prelude::*;

@@ -12,6 +12,7 @@ mod auto_aim;
 mod effects;
 mod firing;
 mod input;
+mod melee;
 
 // Re-exports — 保持對外 API 不變
 pub use auto_aim::auto_aim_system;

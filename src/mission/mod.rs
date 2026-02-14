@@ -11,6 +11,7 @@
 // 一般任務系統
 pub mod advanced_missions;
 mod data;
+mod mission_generator;
 mod systems;
 
 // 劇情任務系統
@@ -27,6 +28,8 @@ mod story_systems;
 mod trigger;
 #[allow(dead_code)]
 mod side_missions;
+#[allow(dead_code)]
+mod side_dialogue_data;
 #[allow(dead_code)]
 mod side_dialogues;
 mod unlocks;

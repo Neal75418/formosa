@@ -1,6 +1,7 @@
 //! 存檔系統單元測試
 
 use super::components::*;
+use super::save_loader::*;
 use super::systems::*;
 use crate::combat::WeaponType;
 use crate::core::WeatherType;

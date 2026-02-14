@@ -16,6 +16,7 @@ mod minimap;
 mod notification;
 mod pause_menu;
 mod phone;
+mod phone_apps;
 mod save_slot_ui;
 mod story_mission_hud;
 mod setup_hud;

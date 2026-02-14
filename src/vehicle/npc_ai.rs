@@ -1,6 +1,6 @@
 //! NPC 車輛 AI 駕駛系統
 
-use super::systems::{apply_vehicle_motion_physics, get_weather_factor, VehicleDynamicsModifiers};
+use super::vehicle_physics::{apply_vehicle_motion_physics, get_weather_factor, VehicleDynamicsModifiers};
 use super::*;
 use crate::core::math::rapier_real_to_f32;
 use crate::core::{

@@ -144,7 +144,7 @@ pub fn panic_wave_propagation_system(
 
     // 階段 1：使用空間哈希找出被恐慌波影響的行人
     let panic_triggers =
-        collect_panic_triggers(&panic_manager.active_waves, &ped_hash, WAVE_FRONT_WIDTH);
+        collect_panic_triggers(panic_manager.active_waves.make_contiguous(), &ped_hash, WAVE_FRONT_WIDTH);
 
     // 階段 2：處理所有行人（更新計時器）
     for (_, _, mut panic_state) in ped_query.iter_mut() {

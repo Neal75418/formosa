@@ -811,7 +811,8 @@ fn fire_bullet_penetrating(
     hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // 子彈拖尾到最遠命中點
-    let farthest_hit_pos = ctx.origin + spread_dir * hits.last().unwrap().1;
+    let Some(farthest_hit) = hits.last() else { return; };
+    let farthest_hit_pos = ctx.origin + spread_dir * farthest_hit.1;
     spawn_bullet_tracer(commands, ctx.visuals, ctx.origin, farthest_hit_pos, tracer_style);
 
     // 對每個命中目標造成傷害，逐層衰減

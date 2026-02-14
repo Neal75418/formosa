@@ -242,10 +242,14 @@ impl BlackjackGame {
         self.result = None;
 
         // 發兩張牌給玩家和莊家（交替發牌）
-        self.player_hand.push(self.deck.draw().unwrap());
-        self.dealer_hand.push(self.deck.draw().unwrap());
-        self.player_hand.push(self.deck.draw().unwrap());
-        self.dealer_hand.push(self.deck.draw().unwrap());
+        let Some(c1) = self.deck.draw() else { return; };
+        let Some(c2) = self.deck.draw() else { return; };
+        let Some(c3) = self.deck.draw() else { return; };
+        let Some(c4) = self.deck.draw() else { return; };
+        self.player_hand.push(c1);
+        self.dealer_hand.push(c2);
+        self.player_hand.push(c3);
+        self.dealer_hand.push(c4);
 
         // 檢查 Blackjack
         if is_blackjack(&self.player_hand) {

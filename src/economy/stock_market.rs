@@ -347,12 +347,10 @@ impl StockMarket {
         let price = self.get(symbol).price;
         let total_cost = (price * shares as f32).ceil() as i32;
 
-        if wallet.cash < total_cost {
+        if !wallet.spend_cash(total_cost) {
             return Err("現金不足");
         }
 
-        wallet.cash -= total_cost;
-        wallet.total_spent += total_cost;
         self.portfolio.buy(symbol, shares, price);
         Ok(price)
     }
@@ -373,8 +371,7 @@ impl StockMarket {
 
         let price = self.get(symbol).price;
         let total_value = (price * shares as f32).floor() as i32;
-        wallet.cash += total_value;
-        wallet.total_earned += total_value;
+        wallet.add_cash(total_value);
         Ok(price)
     }
 }

@@ -5,6 +5,7 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
+use std::collections::VecDeque;
 use bevy::prelude::*;
 use super::components::PedState;
 
@@ -36,7 +37,7 @@ pub struct PanicWaveHit {
 #[derive(Resource, Default)]
 pub struct PanicWaveManager {
     /// 活躍的恐慌波列表
-    pub active_waves: Vec<PanicWave>,
+    pub active_waves: VecDeque<PanicWave>,
 }
 
 /// 同時存在的最大恐慌波數量
@@ -46,9 +47,9 @@ impl PanicWaveManager {
     /// 添加新的恐慌波
     pub fn add_wave(&mut self, origin: Vec3, max_radius: f32, speed: f32, intensity: f32, spawn_time: f32) {
         if self.active_waves.len() >= MAX_ACTIVE_WAVES {
-            self.active_waves.remove(0);
+            self.active_waves.pop_front();
         }
-        self.active_waves.push(PanicWave {
+        self.active_waves.push_back(PanicWave {
             origin,
             current_radius: 0.0,
             max_radius,
@@ -371,7 +372,7 @@ mod tests {
         manager.add_wave(Vec3::new(999.0, 0.0, 0.0), 10.0, 5.0, 1.0, 0.0);
         assert_eq!(manager.active_waves.len(), MAX_ACTIVE_WAVES);
         // 最新的在末尾
-        assert_eq!(manager.active_waves.last().unwrap().origin.x, 999.0);
+        assert_eq!(manager.active_waves.back().unwrap().origin.x, 999.0);
         // 最舊的（index 0）被移除，現在 index 0 是原來的 index 1
         assert_eq!(manager.active_waves[0].origin.x, 1.0);
     }

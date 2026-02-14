@@ -49,7 +49,8 @@ cargo fmt                    # 格式化
 |------|------|------|------|
 | World Inspector | F7 | 全螢幕 | 即時編輯實體/組件 |
 | FPS Counter | - | 左上角 | 綠(>60)/黃(30-60)/紅(<30) |
-| Debug Viz | F3 | - | 警察視野/路徑/恐慌範圍 |
+| AI Debug | F3 | - | AI 視野/聽覺範圍 |
+| Debug Viz | F4 | - | 警察視野/路徑/恐慌範圍 |
 | Rapier Debug | - | 場景中 | 綠色碰撞箱線框 |
 | Entity Names | - | Inspector | 每秒自動命名（英文） |
 
@@ -587,7 +588,8 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 | 按鍵 | 功能 |
 |------|------|
-| F3 | 切換 Debug 可視化（Gizmos） |
+| F3 | 切換 AI Debug 可視化 |
+| F4 | 切換通緝系統 Debug 可視化（Gizmos） |
 | F7 | 開啟 World Inspector |
 
 ## 驗證

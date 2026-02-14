@@ -243,8 +243,7 @@ fn notification_queue_error_convenience() {
 
 #[test]
 fn notification_queue_version_wrapping() {
-    let mut queue = NotificationQueue::default();
-    queue.version = u32::MAX - 1;
+    let mut queue = NotificationQueue { version: u32::MAX - 1, ..Default::default() };
 
     queue.push(Notification::info("1"));
     assert_eq!(queue.version, u32::MAX);
@@ -404,9 +403,11 @@ fn gps_turn_direction_labels() {
 #[test]
 fn gps_navigation_clear_resets_turn() {
     use super::components::{GpsNavigationState, GpsTurnDirection};
-    let mut gps = GpsNavigationState::default();
-    gps.next_turn_direction = GpsTurnDirection::Left;
-    gps.distance_to_next_turn = 50.0;
+    let mut gps = GpsNavigationState {
+        next_turn_direction: GpsTurnDirection::Left,
+        distance_to_next_turn: 50.0,
+        ..Default::default()
+    };
     gps.clear();
     assert_eq!(gps.next_turn_direction, GpsTurnDirection::Straight);
     assert!((gps.distance_to_next_turn - 0.0).abs() < f32::EPSILON);

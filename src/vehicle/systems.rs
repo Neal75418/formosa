@@ -265,6 +265,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_crash_constants() {
         // 摔車傷害合理（機車 500 HP，摔一次 150）
         assert!(MOTORCYCLE_CRASH_DAMAGE > 0.0);

@@ -374,6 +374,7 @@ fn test_auto_save_reason_debug() {
 // ============================================================================
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_important_purchase_threshold() {
     // 門檻為 $1000
     assert_eq!(IMPORTANT_PURCHASE_THRESHOLD, 1000);
@@ -449,4 +450,19 @@ fn test_save_version_bumped_to_3() {
 fn test_pending_destruction_restore_default() {
     let pending = PendingDestructionRestore::default();
     assert!(pending.ids.is_none());
+}
+
+#[test]
+fn test_inconsistent_vehicle_state_serializes() {
+    // in_vehicle=true 但 current_vehicle_id=None 是不一致狀態。
+    // apply_vehicle_state() 會防禦性地回退為步行（需 Bevy World 環境才能測試完整行為）。
+    // 此測試確保此不一致狀態可被序列化/反序列化（例如損壞的存檔）。
+    let mut save = SaveData::default();
+    save.player.in_vehicle = true;
+    save.player.current_vehicle_id = None;
+
+    let json = serde_json::to_string(&save).unwrap();
+    let loaded: SaveData = serde_json::from_str(&json).unwrap();
+    assert!(loaded.player.in_vehicle);
+    assert!(loaded.player.current_vehicle_id.is_none());
 }

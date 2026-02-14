@@ -13,6 +13,7 @@ use super::economy::RespectManager;
 use super::story_data::*;
 use super::unlocks::UnlockManager;
 use crate::combat::WeaponType;
+use crate::core::WorldTime;
 use crate::economy::PlayerWallet;
 
 /// 劇情任務管理器資源
@@ -96,6 +97,7 @@ impl StoryMissionManager {
         wallet: &PlayerWallet,
         respect: &RespectManager,
         unlocks: &UnlockManager,
+        world_time: &WorldTime,
     ) -> Result<(), String> {
         // 檢查是否已有進行中任務
         if self.current_mission.is_some() {
@@ -109,7 +111,7 @@ impl StoryMissionManager {
         }
 
         // 檢查解鎖條件
-        if !self.check_unlock_conditions(&mission.unlock_conditions, wallet, respect, unlocks) {
+        if !self.check_unlock_conditions(&mission.unlock_conditions, wallet, respect, unlocks, world_time) {
             return Err("不滿足解鎖條件".to_string());
         }
 
@@ -338,10 +340,11 @@ impl StoryMissionManager {
         wallet: &PlayerWallet,
         respect: &RespectManager,
         unlocks: &UnlockManager,
+        world_time: &WorldTime,
     ) -> bool {
         conditions
             .iter()
-            .all(|c| self.check_unlock_condition(c, wallet, respect, unlocks))
+            .all(|c| self.check_unlock_condition(c, wallet, respect, unlocks, world_time))
     }
 
     /// 檢查單個解鎖條件
@@ -351,6 +354,7 @@ impl StoryMissionManager {
         wallet: &PlayerWallet,
         _respect: &RespectManager,
         _unlocks: &UnlockManager,
+        world_time: &WorldTime,
     ) -> bool {
         match condition {
             UnlockCondition::CompleteMission(id) => {
@@ -358,10 +362,17 @@ impl StoryMissionManager {
             }
             UnlockCondition::ChapterReached(chapter) => self.current_chapter >= *chapter,
             UnlockCondition::MoneyAmount(min) => wallet.cash >= *min as i32,
-            UnlockCondition::TimeOfDay(_start, _end) => {
-                // 需要從外部傳入當前時間
-                // 這裡暫時返回 true
-                true
+            UnlockCondition::TimeOfDay(start, end) => {
+                if (*start - *end).abs() < f32::EPSILON {
+                    return true; // 相同起止時間 = 全天可用
+                }
+                let hour = world_time.hour;
+                if start < end {
+                    hour >= *start && hour < *end
+                } else {
+                    // 跨午夜（例如 22:00 ~ 06:00）
+                    hour >= *start || hour < *end
+                }
             }
             UnlockCondition::HasFlag(flag) => self.get_flag(flag),
             UnlockCondition::None => true,
@@ -869,7 +880,7 @@ mod tests {
         let respect = RespectManager::default();
         let unlocks = UnlockManager::default();
 
-        manager.start_mission(mission, &wallet, &respect, &unlocks).unwrap();
+        manager.start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default()).unwrap();
         manager.create_checkpoint(Vec3::new(10.0, 0.0, 20.0), 1);
 
         let checkpoint = manager.load_checkpoint().expect("應有檢查點");
@@ -886,7 +897,7 @@ mod tests {
         let respect = RespectManager::default();
         let unlocks = UnlockManager::default();
 
-        manager.start_mission(mission, &wallet, &respect, &unlocks).unwrap();
+        manager.start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default()).unwrap();
         manager.create_checkpoint(Vec3::ZERO, 0);
         assert!(manager.load_checkpoint().is_some());
 
@@ -902,7 +913,7 @@ mod tests {
         let respect = RespectManager::default();
         let unlocks = UnlockManager::default();
 
-        manager.start_mission(mission, &wallet, &respect, &unlocks).unwrap();
+        manager.start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default()).unwrap();
         manager.create_checkpoint(Vec3::new(50.0, 0.0, 50.0), 1);
 
         // 模擬失敗
@@ -927,7 +938,7 @@ mod tests {
         let respect = RespectManager::default();
         let unlocks = UnlockManager::default();
 
-        manager.start_mission(mission, &wallet, &respect, &unlocks).unwrap();
+        manager.start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default()).unwrap();
         manager.create_checkpoint(Vec3::ZERO, 0);
 
         let result = manager.validate_and_load_checkpoint(&database);

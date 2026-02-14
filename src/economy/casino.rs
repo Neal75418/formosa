@@ -663,13 +663,14 @@ mod tests {
 
     #[test]
     fn blackjack_hit_and_bust() {
-        let mut game = BlackjackGame::default();
-        // 手動設定手牌讓玩家接近爆牌
-        game.phase = BlackjackPhase::PlayerTurn;
-        game.player_hand = vec![
-            Card::new(Suit::Spades, Rank::Ten),
-            Card::new(Suit::Hearts, Rank::Ten),
-        ];
+        let mut game = BlackjackGame {
+            phase: BlackjackPhase::PlayerTurn,
+            player_hand: vec![
+                Card::new(Suit::Spades, Rank::Ten),
+                Card::new(Suit::Hearts, Rank::Ten),
+            ],
+            ..Default::default()
+        };
         // 20 點再 hit 很可能爆牌，但結果取決於抽到的牌
         game.hit();
         // 如果抽到 2-Ace，不爆牌繼續；否則爆牌
@@ -696,8 +697,7 @@ mod tests {
 
     #[test]
     fn blackjack_payout_values() {
-        let mut game = BlackjackGame::default();
-        game.bet = 1000;
+        let mut game = BlackjackGame { bet: 1000, ..Default::default() };
 
         game.result = Some(BlackjackResult::PlayerBlackjack);
         assert_eq!(game.payout(), 1500); // 1.5x
@@ -780,9 +780,7 @@ mod tests {
 
     #[test]
     fn slot_machine_net_payout() {
-        let mut slot = SlotMachine::default();
-        slot.bet = 100;
-        slot.last_win = 200;
+        let mut slot = SlotMachine { bet: 100, last_win: 200, ..Default::default() };
         assert_eq!(slot.net_payout(), 100); // 200 - 100
 
         slot.last_win = 0;

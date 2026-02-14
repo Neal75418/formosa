@@ -570,6 +570,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn stealth_kill_multiplier_is_high() {
         assert!(STEALTH_KILL_MULTIPLIER >= 5.0);
     }

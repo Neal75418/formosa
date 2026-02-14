@@ -572,8 +572,7 @@ fn driver_eye_offset_per_vehicle_type() {
 #[test]
 fn vehicle_interior_auto_exit_on_dismount() {
     use crate::core::CameraViewMode;
-    let mut settings = CameraSettings::default();
-    settings.view_mode = CameraViewMode::VehicleInterior;
+    let mut settings = CameraSettings { view_mode: CameraViewMode::VehicleInterior, ..Default::default() };
 
     // 模擬下車：不在車上時應自動切回 TPS
     let player_in_vehicle = false;
@@ -608,10 +607,9 @@ fn cinematic_fov_wider_than_aim() {
 #[test]
 fn cinematic_toggle_via_c_key() {
     use crate::core::CameraViewMode;
-    let mut settings = CameraSettings::default();
+    let mut settings = CameraSettings { view_mode: CameraViewMode::Cinematic, ..Default::default() };
 
-    // TPS → Cinematic
-    settings.view_mode = CameraViewMode::Cinematic;
+    // TPS → Cinematic (已設定)
     assert_eq!(settings.view_mode, CameraViewMode::Cinematic);
 
     // Cinematic → TPS
@@ -643,8 +641,7 @@ fn letterbox_progress_animation() {
 fn letterbox_progress_retract() {
     use crate::core::{CinematicState, LETTERBOX_ANIM_SPEED};
 
-    let mut state = CinematicState::default();
-    state.letterbox_progress = 1.0;
+    let mut state = CinematicState { letterbox_progress: 1.0, ..Default::default() };
     let dt = 1.0 / 60.0;
     let target = 0.0;
 

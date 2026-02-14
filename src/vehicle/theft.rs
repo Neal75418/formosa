@@ -777,11 +777,12 @@ pub fn hotwire_spark_update_system(
 pub fn theft_ui_system(
     mut commands: Commands,
     player_query: Query<&PlayerTheftState, With<Player>>,
-    mut ui_query: Query<(Entity, &mut Node, &mut BackgroundColor), With<TheftProgressUI>>,
+    ui_query: Query<(Entity, &Children), With<TheftProgressUI>>,
+    mut bar_query: Query<&mut Node, Without<TheftProgressUI>>,
 ) {
     let Ok(theft_state) = player_query.single() else {
         // 移除 UI
-        for (entity, _, _) in &ui_query {
+        for (entity, _) in &ui_query {
             commands.entity(entity).despawn();
         }
         return;
@@ -815,14 +816,18 @@ pub fn theft_ui_system(
                 ));
             });
         } else {
-            // 更新進度條
-            for (_, _, _) in &mut ui_query {
-                // 這裡簡化處理，實際需要更新子節點的寬度
+            // 更新進度條寬度
+            for (_, children) in &ui_query {
+                for child in children.iter() {
+                    if let Ok(mut node) = bar_query.get_mut(child) {
+                        node.width = Val::Percent(theft_state.progress * 100.0);
+                    }
+                }
             }
         }
     } else {
         // 移除 UI
-        for (entity, _, _) in &ui_query {
+        for (entity, _) in &ui_query {
             commands.entity(entity).despawn();
         }
     }

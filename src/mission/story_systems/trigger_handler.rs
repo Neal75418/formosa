@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::core::InteractionState;
+use crate::core::{InteractionState, WorldTime};
 use crate::economy::PlayerWallet;
 
 use super::super::dialogue::DialogueEvent;
@@ -29,6 +29,7 @@ pub fn mission_trigger_event_handler(
     wallet: Res<PlayerWallet>,
     respect: Res<RespectManager>,
     unlocks: Res<UnlockManager>,
+    world_time: Res<WorldTime>,
     trigger_query: Query<&Trigger>,
 ) {
     for event in events.read() {
@@ -45,6 +46,7 @@ pub fn mission_trigger_event_handler(
                 &wallet,
                 &respect,
                 &unlocks,
+                &world_time,
             );
         }
     }
@@ -114,9 +116,10 @@ fn try_start_mission(
     wallet: &PlayerWallet,
     respect: &RespectManager,
     unlocks: &UnlockManager,
+    world_time: &WorldTime,
 ) {
     if let Some(mission) = database.get(mission_id) {
-        if manager.start_mission(mission, wallet, respect, unlocks).is_ok() {
+        if manager.start_mission(mission, wallet, respect, unlocks, world_time).is_ok() {
             events.write(StoryMissionEvent::Started(mission_id));
         }
     }
@@ -133,6 +136,7 @@ fn try_start_npc_mission(
     wallet: &PlayerWallet,
     respect: &RespectManager,
     unlocks: &UnlockManager,
+    world_time: &WorldTime,
     mission_events: &mut MessageWriter<StoryMissionEvent>,
     dialogue_events: &mut MessageWriter<DialogueEvent>,
 ) -> bool {
@@ -142,7 +146,7 @@ fn try_start_npc_mission(
     }
 
     if let Some(mission) = database.get(mission_id) {
-        if manager.start_mission(mission, wallet, respect, unlocks).is_ok() {
+        if manager.start_mission(mission, wallet, respect, unlocks, world_time).is_ok() {
             mission_events.write(StoryMissionEvent::Started(mission_id));
         } else {
             return false;
@@ -192,6 +196,7 @@ pub fn mission_npc_interaction_system(
     wallet: Res<PlayerWallet>,
     respect: Res<RespectManager>,
     unlocks: Res<UnlockManager>,
+    world_time: Res<WorldTime>,
     dialogue_state: Res<super::super::dialogue::DialogueState>,
     mut dialogue_events: MessageWriter<DialogueEvent>,
     mut mission_events: MessageWriter<StoryMissionEvent>,
@@ -212,7 +217,7 @@ pub fn mission_npc_interaction_system(
         if let Some(mission_id) = npc.offers_mission {
             if try_start_npc_mission(
                 mission_id, &mut manager, &database, &wallet,
-                &respect, &unlocks, &mut mission_events, &mut dialogue_events,
+                &respect, &unlocks, &world_time, &mut mission_events, &mut dialogue_events,
             ) {
                 interaction.consume();
                 return;

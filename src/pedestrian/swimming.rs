@@ -286,8 +286,7 @@ mod tests {
 
     #[test]
     fn land_recovers_stamina() {
-        let mut swim = NpcSwimming::default();
-        swim.stamina = 30.0; // 消耗了一半
+        let mut swim = NpcSwimming { stamina: 30.0, ..Default::default() };
 
         swim.tick(1.0); // 陸地上恢復 10/秒
         assert!((swim.stamina - 40.0).abs() < f32::EPSILON);
@@ -327,8 +326,7 @@ mod tests {
 
     #[test]
     fn drowned_cannot_re_enter_water() {
-        let mut swim = NpcSwimming::default();
-        swim.state = SwimState::Drowned;
+        let mut swim = NpcSwimming { state: SwimState::Drowned, ..Default::default() };
 
         swim.enter_water(); // 應該無效（only OnLand → Swimming）
         assert_eq!(swim.state, SwimState::Drowned);

@@ -100,12 +100,13 @@ fn mission_event_handler(
     wallet: Res<crate::economy::PlayerWallet>,
     respect: Res<super::economy::RespectManager>,
     unlocks: Res<super::unlocks::UnlockManager>,
+    world_time: Res<crate::core::WorldTime>,
 ) {
     for event in events.read() {
         match event {
             StoryMissionEvent::Started(mission_id) => {
                 if let Some(mission) = database.get(*mission_id) {
-                    if let Err(e) = manager.start_mission(mission, &wallet, &respect, &unlocks) {
+                    if let Err(e) = manager.start_mission(mission, &wallet, &respect, &unlocks, &world_time) {
                         warn!("無法開始任務 {}: {}", mission_id, e);
                     } else {
                         info!("📋 任務開始: {} - {}", mission_id, mission.title);

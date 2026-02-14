@@ -367,12 +367,14 @@ fn test_radio_alert_system() {
 use super::config::*;
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_military_star_threshold() {
     assert_eq!(MILITARY_STAR_THRESHOLD, 5);
     assert!(MILITARY_STAR_THRESHOLD > SWAT_STAR_THRESHOLD);
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_military_stats_stronger_than_police() {
     assert!(MILITARY_HEALTH > POLICE_OFFICER_HEALTH);
     assert!(MILITARY_RUN_SPEED > OFFICER_RUN_SPEED);
@@ -384,8 +386,7 @@ fn test_military_stats_stronger_than_police() {
 
 #[test]
 fn test_military_officer_type() {
-    let mut officer = PoliceOfficer::default();
-    officer.officer_type = PoliceType::Military;
+    let officer = PoliceOfficer { officer_type: PoliceType::Military, ..Default::default() };
     assert_eq!(officer.officer_type, PoliceType::Military);
     assert_ne!(officer.officer_type, PoliceType::Swat);
     assert_ne!(officer.officer_type, PoliceType::Patrol);

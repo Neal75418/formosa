@@ -541,8 +541,7 @@ mod tests {
 
     #[test]
     fn market_closed_blocks_trading() {
-        let mut market = StockMarket::default();
-        market.is_open = false;
+        let mut market = StockMarket { is_open: false, ..Default::default() };
         let mut wallet = PlayerWallet {
             cash: 100000,
             bank: 0,

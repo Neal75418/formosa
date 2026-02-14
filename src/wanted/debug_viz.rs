@@ -106,12 +106,12 @@ pub fn debug_panic_propagation(
     }
 }
 
-/// F3 切換除錯可視化
+/// F4 切換除錯可視化（F3 已由 AI debug 使用）
 pub fn toggle_debug_visualization(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<super::DebugVisualizationState>,
 ) {
-    if keyboard.just_pressed(KeyCode::F3) {
+    if keyboard.just_pressed(KeyCode::F4) {
         state.enabled = !state.enabled;
         info!(
             "🎨 Debug 可視化: {}",

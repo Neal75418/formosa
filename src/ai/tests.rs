@@ -377,8 +377,7 @@ fn test_is_unaware_idle() {
 
 #[test]
 fn test_is_unaware_patrol() {
-    let mut behavior = AiBehavior::default();
-    behavior.state = AiState::Patrol;
+    let behavior = AiBehavior { state: AiState::Patrol, ..Default::default() };
     assert!(behavior.is_unaware());
 }
 
@@ -391,12 +390,12 @@ fn test_is_not_unaware_when_alert_state() {
 
 #[test]
 fn test_is_not_unaware_when_high_awareness() {
-    let mut behavior = AiBehavior::default();
-    behavior.awareness = AWARENESS_SUSPICIOUS + 0.1;
+    let behavior = AiBehavior { awareness: AWARENESS_SUSPICIOUS + 0.1, ..Default::default() };
     assert!(!behavior.is_unaware());
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_awareness_constants() {
     assert!(AWARENESS_SUSPICIOUS < AWARENESS_ALERT);
     assert!(AWARENESS_DECAY_RATE > 0.0);

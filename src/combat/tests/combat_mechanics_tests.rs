@@ -341,7 +341,7 @@ fn test_combo_step_animation_duration() {
     // 所有動畫時長在合理範圍
     for step in [ComboStep::Jab, ComboStep::Hook, ComboStep::Uppercut, ComboStep::Finisher] {
         let d = step.animation_duration();
-        assert!(d >= 0.2 && d <= 0.5, "動畫時長 {d} 超出合理範圍");
+        assert!((0.2..=0.5).contains(&d), "動畫時長 {d} 超出合理範圍");
     }
 }
 

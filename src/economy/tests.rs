@@ -746,6 +746,7 @@ fn test_property_has_collected_today() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_property_constants() {
     assert!(PROPERTY_INTERACTION_DISTANCE > 0.0);
     assert!(RENTAL_INCOME_HOUR >= 0.0);
@@ -795,6 +796,7 @@ fn test_robbery_state_tick_clamps_to_zero() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_robbery_constants() {
     assert!(ROBBERY_INTERACTION_DISTANCE > 0.0);
     assert!(ROBBERY_MIN_AMOUNT > 0);

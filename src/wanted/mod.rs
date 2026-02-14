@@ -36,7 +36,7 @@ pub use debug_viz::*;
 use bevy::prelude::*;
 use crate::core::{AppState, PoliceSpatialHash};
 
-/// Debug 可視化開關（F3 切換）
+/// Debug 可視化開關（F4 切換）
 #[cfg(all(debug_assertions, feature = "dev_tools"))]
 #[derive(Resource, Default)]
 pub struct DebugVisualizationState {
@@ -136,7 +136,7 @@ impl Plugin for WantedPlugin {
         #[cfg(all(debug_assertions, feature = "dev_tools"))]
         {
             app
-                // F3 切換開關
+                // F4 切換開關
                 .add_systems(Update, toggle_debug_visualization)
                 // 除錯繪製系統（僅在啟用時執行）
                 .add_systems(Update, (

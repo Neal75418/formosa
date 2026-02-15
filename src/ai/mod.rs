@@ -41,6 +41,8 @@ impl Plugin for AiPlugin {
             // AiUpdateTimer 已改為系統本地計時器，避免資源競爭
             .init_resource::<DebugSettings>()
             .init_resource::<SquadManager>()
+            // 預建敵人共享視覺資源（避免每次 spawn 分配 ~59 個 GPU 資源）
+            .add_systems(Startup, setup_enemy_visuals)
             // 系統 - 使用精確依賴而非全部串行化
             .add_systems(
                 Update,

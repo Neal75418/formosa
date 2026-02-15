@@ -6,13 +6,26 @@ use rand::Rng;
 
 use super::{
     AiBehavior, AiCombat, AiConfig, AiMovement, AiPerception, CoverSeeker, EnemySpawnTimer,
-    SquadMember, SquadRole,
+    EnemyTypeAppearance, EnemyVisuals, HairStyle, SquadMember, SquadRole,
 };
 use crate::combat::{
     Damageable, DeathEvent, Enemy, EnemyArm, EnemyType, Health, HitReaction, Ragdoll, Weapon,
 };
 use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::player::Player;
+
+// ============================================================================
+// Startup：預建敵人共享視覺資源
+// ============================================================================
+
+/// 預建敵人共享 Mesh / Material（避免每次 spawn 分配 ~59 個 GPU 資源）
+pub fn setup_enemy_visuals(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    commands.insert_resource(EnemyVisuals::new(&mut meshes, &mut materials));
+}
 
 // ============================================================================
 // 敵人生成系統
@@ -24,8 +37,7 @@ pub fn enemy_spawn_system(
     time: Res<Time>,
     config: Res<AiConfig>,
     mut timer: ResMut<EnemySpawnTimer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    visuals: Res<EnemyVisuals>,
     player_query: Query<&Transform, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
 ) {
@@ -77,12 +89,11 @@ pub fn enemy_spawn_system(
         player_pos.z + angle.sin() * distance,
     );
 
-    // 生成敵人
+    // 生成敵人（使用共享 mesh/material handles，近乎零成本）
     spawn_enemy(
         &config,
         &mut commands,
-        &mut meshes,
-        &mut materials,
+        &visuals,
         spawn_pos,
         enemy_type,
         &mut rng,
@@ -98,14 +109,13 @@ pub fn enemy_spawn_system(
 fn spawn_enemy(
     config: &AiConfig,
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    visuals: &EnemyVisuals,
     position: Vec3,
     enemy_type: EnemyType,
     rng: &mut rand::prelude::ThreadRng,
 ) {
-    // === 根據敵人類型定義外觀 ===
-    let appearance = get_enemy_appearance(enemy_type, materials);
+    // === 根據敵人類型取得共享外觀（Handle::clone = Arc clone，近乎零成本）===
+    let app = visuals.appearance(enemy_type);
 
     // 敵人尺寸（碰撞體）
     let (collider_half_height, collider_radius) = match enemy_type {
@@ -219,132 +229,24 @@ fn spawn_enemy(
         ViewVisibility::default(),
     ));
 
-    // 添加子實體（完整人形視覺網格）
+    // 添加子實體（完整人形視覺網格 — 使用共享 Handle::clone，近乎零 GPU 成本）
     commands.entity(entity).with_children(|parent| {
-        spawn_humanoid_mesh(parent, meshes, &appearance, scale, collider_half_height);
+        spawn_humanoid_mesh(parent, visuals, app, scale, collider_half_height);
     });
 }
 
 // ============================================================================
-// 敵人外觀
+// 人形網格建構（使用共享 Handle::clone，近乎零 GPU 成本）
 // ============================================================================
 
-/// 敵人外觀數據
-struct EnemyAppearance {
-    skin: Handle<StandardMaterial>,
-    shirt: Handle<StandardMaterial>,
-    pants: Handle<StandardMaterial>,
-    shoes: Handle<StandardMaterial>,
-    hair: Handle<StandardMaterial>,
-    eye_white: Handle<StandardMaterial>,
-    eye_iris: Handle<StandardMaterial>,
-    lip: Handle<StandardMaterial>,
-    hair_style: HairStyle,
-    has_beard: bool,
-}
-
-/// 髮型類型
-#[derive(Clone, Copy)]
-enum HairStyle {
-    ShortSpiky,  // 小混混：短刺頭
-    Bald,        // 打手：光頭
-    SlickedBack, // Boss：油頭後梳
-}
-
-/// 根據敵人類型獲取外觀
-fn get_enemy_appearance(
-    enemy_type: EnemyType,
-    materials: &mut Assets<StandardMaterial>,
-) -> EnemyAppearance {
-    let (skin_color, shirt_color, pants_color, shoe_color, hair_color, hair_style, has_beard) =
-        match enemy_type {
-            EnemyType::Gangster => (
-                Color::srgb(0.87, 0.72, 0.62), // 淺膚色
-                Color::srgb(0.15, 0.15, 0.2),  // 深灰 T 恤
-                Color::srgb(0.2, 0.22, 0.3),   // 牛仔褲藍
-                Color::srgb(0.9, 0.9, 0.95),   // 白色球鞋
-                Color::srgb(0.15, 0.12, 0.08), // 深棕髮
-                HairStyle::ShortSpiky,
-                false,
-            ),
-            EnemyType::Thug => (
-                Color::srgb(0.75, 0.58, 0.45), // 較深膚色
-                Color::srgb(0.08, 0.08, 0.08), // 黑色背心
-                Color::srgb(0.25, 0.2, 0.15),  // 卡其褲
-                Color::srgb(0.12, 0.12, 0.12), // 黑色靴子
-                Color::srgb(0.1, 0.08, 0.06),  // 黑髮（光頭用）
-                HairStyle::Bald,
-                true, // 有鬍子
-            ),
-            EnemyType::Boss => (
-                Color::srgb(0.82, 0.68, 0.58), // 中等膚色
-                Color::srgb(0.1, 0.1, 0.12),   // 黑色西裝
-                Color::srgb(0.08, 0.08, 0.1),  // 黑色西褲
-                Color::srgb(0.2, 0.12, 0.08),  // 棕色皮鞋
-                Color::srgb(0.05, 0.05, 0.05), // 黑髮
-                HairStyle::SlickedBack,
-                false,
-            ),
-            EnemyType::Military => (
-                Color::srgb(0.80, 0.65, 0.50), // 中等膚色
-                Color::srgb(0.25, 0.30, 0.18), // 軍綠上衣
-                Color::srgb(0.22, 0.27, 0.15), // 軍綠褲
-                Color::srgb(0.15, 0.12, 0.08), // 深棕軍靴
-                Color::srgb(0.12, 0.10, 0.06), // 深棕短髮
-                HairStyle::Bald,               // 軍人平頭
-                false,
-            ),
-        };
-
-    EnemyAppearance {
-        skin: materials.add(StandardMaterial {
-            base_color: skin_color,
-            perceptual_roughness: 0.6,
-            ..default()
-        }),
-        shirt: materials.add(StandardMaterial {
-            base_color: shirt_color,
-            perceptual_roughness: 0.8,
-            ..default()
-        }),
-        pants: materials.add(StandardMaterial {
-            base_color: pants_color,
-            perceptual_roughness: 0.7,
-            ..default()
-        }),
-        shoes: materials.add(StandardMaterial {
-            base_color: shoe_color,
-            perceptual_roughness: 0.5,
-            ..default()
-        }),
-        hair: materials.add(StandardMaterial {
-            base_color: hair_color,
-            perceptual_roughness: 0.9,
-            ..default()
-        }),
-        eye_white: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.95, 0.95, 0.95),
-            ..default()
-        }),
-        eye_iris: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.2, 0.15, 0.1),
-            ..default()
-        }),
-        lip: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.7, 0.45, 0.4),
-            perceptual_roughness: 0.4,
-            ..default()
-        }),
-        hair_style,
-        has_beard,
-    }
-}
-
 /// 生成完整人形網格（有關節）
+///
+/// 所有 mesh/material 來自 `EnemyVisuals`（Startup 預建），
+/// spawn 時僅做 `Handle::clone()`（Arc clone），不再呼叫 `meshes.add()`。
 fn spawn_humanoid_mesh(
     parent: &mut ChildSpawnerCommands,
-    meshes: &mut Assets<Mesh>,
-    app: &EnemyAppearance,
+    v: &EnemyVisuals,
+    app: &EnemyTypeAppearance,
     scale: f32,
     half_height: f32,
 ) {
@@ -356,50 +258,50 @@ fn spawn_humanoid_mesh(
     let hip_y = -0.18 * scale;
 
     // === 頭部 ===
-    spawn_head(parent, meshes, app, head_y, scale);
+    spawn_head(parent, v, app, head_y, scale);
 
     // === 脖子 ===
     parent.spawn((
-        Mesh3d(meshes.add(Cylinder::new(0.04 * scale, 0.08 * scale))),
+        Mesh3d(v.neck.clone()),
         MeshMaterial3d(app.skin.clone()),
-        Transform::from_xyz(0.0, neck_y, 0.0),
+        Transform::from_xyz(0.0, neck_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
 
     // === 軀幹（胸部 + 腰部 + 臀部）===
     // 胸部
     parent.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.28 * scale, 0.2 * scale, 0.14 * scale))),
+        Mesh3d(v.chest.clone()),
         MeshMaterial3d(app.shirt.clone()),
-        Transform::from_xyz(0.0, chest_y, 0.0),
+        Transform::from_xyz(0.0, chest_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
     // 腰部（較窄）
     parent.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.22 * scale, 0.1 * scale, 0.12 * scale))),
+        Mesh3d(v.waist_mesh.clone()),
         MeshMaterial3d(app.shirt.clone()),
-        Transform::from_xyz(0.0, waist_y, 0.0),
+        Transform::from_xyz(0.0, waist_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
     // 臀部/髖部
     parent.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.26 * scale, 0.1 * scale, 0.14 * scale))),
+        Mesh3d(v.hip_body.clone()),
         MeshMaterial3d(app.pants.clone()),
-        Transform::from_xyz(0.0, hip_y, 0.0),
+        Transform::from_xyz(0.0, hip_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
 
     // === 手臂（上臂 + 肘關節 + 前臂 + 手）===
-    spawn_arm(parent, meshes, app, scale, chest_y, true); // 左臂
-    spawn_arm(parent, meshes, app, scale, chest_y, false); // 右臂
+    spawn_arm(parent, v, app, scale, chest_y, true); // 左臂
+    spawn_arm(parent, v, app, scale, chest_y, false); // 右臂
 
     // === 腿部（大腿 + 膝關節 + 小腿 + 腳踝 + 腳掌）===
-    spawn_leg(parent, meshes, app, scale, hip_y, true); // 左腿
-    spawn_leg(parent, meshes, app, scale, hip_y, false); // 右腿
+    spawn_leg(parent, v, app, scale, hip_y, true); // 左腿
+    spawn_leg(parent, v, app, scale, hip_y, false); // 右腿
 }
 
 /// 生成頭部（含臉部細節和髮型）
 #[allow(clippy::too_many_lines)]
 fn spawn_head(
     parent: &mut ChildSpawnerCommands,
-    meshes: &mut Assets<Mesh>,
-    app: &EnemyAppearance,
+    v: &EnemyVisuals,
+    app: &EnemyTypeAppearance,
     head_y: f32,
     scale: f32,
 ) {
@@ -407,9 +309,10 @@ fn spawn_head(
 
     // 頭部主體（略扁的球體）
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(head_radius))),
+        Mesh3d(v.head.clone()),
         MeshMaterial3d(app.skin.clone()),
-        Transform::from_xyz(0.0, head_y, 0.0).with_scale(Vec3::new(0.95, 1.0, 0.9)),
+        Transform::from_xyz(0.0, head_y, 0.0)
+            .with_scale(Vec3::new(0.95 * scale, 1.0 * scale, 0.9 * scale)),
     ));
 
     // === 臉部細節 ===
@@ -420,67 +323,76 @@ fn spawn_head(
 
     // 眼白
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.018 * scale))),
-        MeshMaterial3d(app.eye_white.clone()),
-        Transform::from_xyz(eye_spacing, eye_y, eye_z).with_scale(Vec3::new(1.2, 0.8, 0.5)),
+        Mesh3d(v.eye_white.clone()),
+        MeshMaterial3d(v.eye_white_mat.clone()),
+        Transform::from_xyz(eye_spacing, eye_y, eye_z)
+            .with_scale(Vec3::new(1.2 * scale, 0.8 * scale, 0.5 * scale)),
     ));
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.018 * scale))),
-        MeshMaterial3d(app.eye_white.clone()),
-        Transform::from_xyz(-eye_spacing, eye_y, eye_z).with_scale(Vec3::new(1.2, 0.8, 0.5)),
+        Mesh3d(v.eye_white.clone()),
+        MeshMaterial3d(v.eye_white_mat.clone()),
+        Transform::from_xyz(-eye_spacing, eye_y, eye_z)
+            .with_scale(Vec3::new(1.2 * scale, 0.8 * scale, 0.5 * scale)),
     ));
 
     // 瞳孔
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.008 * scale))),
-        MeshMaterial3d(app.eye_iris.clone()),
-        Transform::from_xyz(eye_spacing, eye_y, eye_z + 0.008),
+        Mesh3d(v.pupil.clone()),
+        MeshMaterial3d(v.eye_iris_mat.clone()),
+        Transform::from_xyz(eye_spacing, eye_y, eye_z + 0.008)
+            .with_scale(Vec3::splat(scale)),
     ));
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.008 * scale))),
-        MeshMaterial3d(app.eye_iris.clone()),
-        Transform::from_xyz(-eye_spacing, eye_y, eye_z + 0.008),
+        Mesh3d(v.pupil.clone()),
+        MeshMaterial3d(v.eye_iris_mat.clone()),
+        Transform::from_xyz(-eye_spacing, eye_y, eye_z + 0.008)
+            .with_scale(Vec3::splat(scale)),
     ));
 
     // 眉毛
-    let brow_mat = app.hair.clone();
     parent.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.03 * scale, 0.008 * scale, 0.01 * scale))),
-        MeshMaterial3d(brow_mat.clone()),
-        Transform::from_xyz(eye_spacing, eye_y + 0.025 * scale, eye_z - 0.005),
+        Mesh3d(v.brow.clone()),
+        MeshMaterial3d(app.hair.clone()),
+        Transform::from_xyz(eye_spacing, eye_y + 0.025 * scale, eye_z - 0.005)
+            .with_scale(Vec3::splat(scale)),
     ));
     parent.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.03 * scale, 0.008 * scale, 0.01 * scale))),
-        MeshMaterial3d(brow_mat),
-        Transform::from_xyz(-eye_spacing, eye_y + 0.025 * scale, eye_z - 0.005),
+        Mesh3d(v.brow.clone()),
+        MeshMaterial3d(app.hair.clone()),
+        Transform::from_xyz(-eye_spacing, eye_y + 0.025 * scale, eye_z - 0.005)
+            .with_scale(Vec3::splat(scale)),
     ));
 
     // 鼻子
     parent.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.02 * scale, 0.035 * scale, 0.025 * scale))),
+        Mesh3d(v.nose.clone()),
         MeshMaterial3d(app.skin.clone()),
-        Transform::from_xyz(0.0, head_y - 0.01 * scale, eye_z + 0.01),
+        Transform::from_xyz(0.0, head_y - 0.01 * scale, eye_z + 0.01)
+            .with_scale(Vec3::splat(scale)),
     ));
 
     // 嘴巴
     parent.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.04 * scale, 0.012 * scale, 0.015 * scale))),
-        MeshMaterial3d(app.lip.clone()),
-        Transform::from_xyz(0.0, head_y - 0.045 * scale, eye_z - 0.01),
+        Mesh3d(v.mouth.clone()),
+        MeshMaterial3d(v.lip_mat.clone()),
+        Transform::from_xyz(0.0, head_y - 0.045 * scale, eye_z - 0.01)
+            .with_scale(Vec3::splat(scale)),
     ));
 
     // 耳朵
     let ear_y = head_y;
     let ear_x = head_radius * 0.9;
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.025 * scale))),
+        Mesh3d(v.ear.clone()),
         MeshMaterial3d(app.skin.clone()),
-        Transform::from_xyz(ear_x, ear_y, 0.0).with_scale(Vec3::new(0.4, 1.0, 0.7)),
+        Transform::from_xyz(ear_x, ear_y, 0.0)
+            .with_scale(Vec3::new(0.4 * scale, 1.0 * scale, 0.7 * scale)),
     ));
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.025 * scale))),
+        Mesh3d(v.ear.clone()),
         MeshMaterial3d(app.skin.clone()),
-        Transform::from_xyz(-ear_x, ear_y, 0.0).with_scale(Vec3::new(0.4, 1.0, 0.7)),
+        Transform::from_xyz(-ear_x, ear_y, 0.0)
+            .with_scale(Vec3::new(0.4 * scale, 1.0 * scale, 0.7 * scale)),
     ));
 
     // === 髮型（根據類型變化）===
@@ -493,47 +405,46 @@ fn spawn_head(
                 let spike_x = angle.cos() * head_radius * 0.6;
                 let spike_z = angle.sin() * head_radius * 0.6 - 0.02;
                 parent.spawn((
-                    Mesh3d(meshes.add(Capsule3d::new(0.015 * scale, 0.04 * scale))),
+                    Mesh3d(v.spike_hair.clone()),
                     MeshMaterial3d(app.hair.clone()),
                     Transform::from_xyz(spike_x, head_y + head_radius * 0.7, spike_z)
-                        .with_rotation(Quat::from_rotation_x(-0.3 + angle.sin() * 0.2)),
+                        .with_rotation(Quat::from_rotation_x(-0.3 + angle.sin() * 0.2))
+                        .with_scale(Vec3::splat(scale)),
                 ));
             }
         }
         HairStyle::Bald => {
             // 光頭：只有一點點陰影/刺青
             parent.spawn((
-                Mesh3d(meshes.add(Sphere::new(head_radius * 1.01))),
+                Mesh3d(v.bald_shadow.clone()),
                 MeshMaterial3d(app.hair.clone()),
                 Transform::from_xyz(0.0, head_y + head_radius * 0.3, -head_radius * 0.3)
-                    .with_scale(Vec3::new(0.5, 0.2, 0.5)),
+                    .with_scale(Vec3::new(0.5 * scale, 0.2 * scale, 0.5 * scale)),
             ));
             // 鬍子
             if app.has_beard {
                 parent.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(0.06 * scale, 0.04 * scale, 0.02 * scale))),
+                    Mesh3d(v.beard_mesh.clone()),
                     MeshMaterial3d(app.hair.clone()),
-                    Transform::from_xyz(0.0, head_y - 0.06 * scale, eye_z - 0.02),
+                    Transform::from_xyz(0.0, head_y - 0.06 * scale, eye_z - 0.02)
+                        .with_scale(Vec3::splat(scale)),
                 ));
             }
         }
         HairStyle::SlickedBack => {
             // 油頭後梳：光滑的髮型
             parent.spawn((
-                Mesh3d(meshes.add(Sphere::new(head_radius * 1.08))),
+                Mesh3d(v.slicked_hair.clone()),
                 MeshMaterial3d(app.hair.clone()),
                 Transform::from_xyz(0.0, head_y + head_radius * 0.15, -head_radius * 0.2)
-                    .with_scale(Vec3::new(1.0, 0.5, 1.2)),
+                    .with_scale(Vec3::new(1.0 * scale, 0.5 * scale, 1.2 * scale)),
             ));
             // 側面髮際線
             parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(
-                    head_radius * 2.1,
-                    0.02 * scale,
-                    head_radius * 0.8,
-                ))),
+                Mesh3d(v.slicked_side.clone()),
                 MeshMaterial3d(app.hair.clone()),
-                Transform::from_xyz(0.0, head_y + head_radius * 0.6, -head_radius * 0.3),
+                Transform::from_xyz(0.0, head_y + head_radius * 0.6, -head_radius * 0.3)
+                    .with_scale(Vec3::splat(scale)),
             ));
         }
     }
@@ -543,8 +454,8 @@ fn spawn_head(
 /// 比例：手指到大腿中段
 fn spawn_arm(
     parent: &mut ChildSpawnerCommands,
-    meshes: &mut Assets<Mesh>,
-    app: &EnemyAppearance,
+    v: &EnemyVisuals,
+    app: &EnemyTypeAppearance,
     scale: f32,
     chest_y: f32,
     is_left: bool,
@@ -578,56 +489,58 @@ fn spawn_arm(
         .with_children(|arm| {
             // 肩關節（球形）- 相對於手臂根
             arm.spawn((
-                Mesh3d(meshes.add(Sphere::new(0.038 * scale))),
+                Mesh3d(v.joint_medium.clone()),
                 MeshMaterial3d(app.shirt.clone()),
-                Transform::from_xyz(0.0, 0.0, 0.0),
+                Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::splat(scale)),
             ));
 
             // 上臂（縮短：手指到大腿中段）
             let upper_arm_len = 0.10 * scale;
             arm.spawn((
-                Mesh3d(meshes.add(Capsule3d::new(0.030 * scale, upper_arm_len))),
+                Mesh3d(v.upper_arm.clone()),
                 MeshMaterial3d(app.shirt.clone()),
-                Transform::from_xyz(0.0, -upper_arm_len, 0.0),
+                Transform::from_xyz(0.0, -upper_arm_len, 0.0).with_scale(Vec3::splat(scale)),
             ));
 
             // 肘關節（球形）
             let elbow_y = -upper_arm_len * 2.0 - 0.015 * scale;
             arm.spawn((
-                Mesh3d(meshes.add(Sphere::new(0.026 * scale))),
+                Mesh3d(v.elbow.clone()),
                 MeshMaterial3d(app.skin.clone()),
-                Transform::from_xyz(0.0, elbow_y, 0.0),
+                Transform::from_xyz(0.0, elbow_y, 0.0).with_scale(Vec3::splat(scale)),
             ));
 
             // 前臂（縮短）
             let forearm_len = 0.08 * scale;
             let forearm_y = elbow_y - forearm_len;
             arm.spawn((
-                Mesh3d(meshes.add(Capsule3d::new(0.024 * scale, forearm_len))),
+                Mesh3d(v.forearm.clone()),
                 MeshMaterial3d(app.skin.clone()),
-                Transform::from_xyz(0.0, forearm_y, 0.0),
+                Transform::from_xyz(0.0, forearm_y, 0.0).with_scale(Vec3::splat(scale)),
             ));
 
-            // 手腕
+            // 手腕（Sphere(0.018) — 與 eye_white 共用 mesh）
             let wrist_y = forearm_y - forearm_len;
             arm.spawn((
-                Mesh3d(meshes.add(Sphere::new(0.018 * scale))),
+                Mesh3d(v.eye_white.clone()),
                 MeshMaterial3d(app.skin.clone()),
-                Transform::from_xyz(0.0, wrist_y, 0.0),
+                Transform::from_xyz(0.0, wrist_y, 0.0).with_scale(Vec3::splat(scale)),
             ));
 
             // 手掌
             arm.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.038 * scale, 0.055 * scale, 0.018 * scale))),
+                Mesh3d(v.hand.clone()),
                 MeshMaterial3d(app.skin.clone()),
-                Transform::from_xyz(0.0, wrist_y - 0.038 * scale, 0.0),
+                Transform::from_xyz(0.0, wrist_y - 0.038 * scale, 0.0)
+                    .with_scale(Vec3::splat(scale)),
             ));
 
             // 手指（簡化為一組）
             arm.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.032 * scale, 0.035 * scale, 0.014 * scale))),
+                Mesh3d(v.fingers.clone()),
                 MeshMaterial3d(app.skin.clone()),
-                Transform::from_xyz(0.0, wrist_y - 0.08 * scale, 0.0),
+                Transform::from_xyz(0.0, wrist_y - 0.08 * scale, 0.0)
+                    .with_scale(Vec3::splat(scale)),
             ));
         });
 }
@@ -636,8 +549,8 @@ fn spawn_arm(
 /// 比例修正：腿部總長度應在碰撞體範圍內（約 0.52 從臀部到腳底）
 fn spawn_leg(
     parent: &mut ChildSpawnerCommands,
-    meshes: &mut Assets<Mesh>,
-    app: &EnemyAppearance,
+    v: &EnemyVisuals,
+    app: &EnemyTypeAppearance,
     scale: f32,
     hip_y: f32,
     is_left: bool,
@@ -648,58 +561,59 @@ fn spawn_leg(
     // 髖關節（球形）
     let joint_y = hip_y - 0.03 * scale;
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.045 * scale))),
+        Mesh3d(v.hip_joint.clone()),
         MeshMaterial3d(app.pants.clone()),
-        Transform::from_xyz(hip_x, joint_y, 0.0),
+        Transform::from_xyz(hip_x, joint_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
 
     // 大腿（縮短）
     let thigh_len = 0.11 * scale;
     let thigh_y = joint_y - thigh_len;
     parent.spawn((
-        Mesh3d(meshes.add(Capsule3d::new(0.045 * scale, thigh_len))),
+        Mesh3d(v.thigh.clone()),
         MeshMaterial3d(app.pants.clone()),
-        Transform::from_xyz(hip_x, thigh_y, 0.0),
+        Transform::from_xyz(hip_x, thigh_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
 
-    // 膝關節（球形）
+    // 膝關節（Sphere(0.038) — 與肩關節共用 mesh）
     let knee_y = thigh_y - thigh_len - 0.015 * scale;
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.038 * scale))),
+        Mesh3d(v.joint_medium.clone()),
         MeshMaterial3d(app.pants.clone()),
-        Transform::from_xyz(hip_x, knee_y, 0.0),
+        Transform::from_xyz(hip_x, knee_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
 
     // 小腿（縮短）
     let shin_len = 0.10 * scale;
     let shin_y = knee_y - shin_len;
     parent.spawn((
-        Mesh3d(meshes.add(Capsule3d::new(0.034 * scale, shin_len))),
+        Mesh3d(v.shin.clone()),
         MeshMaterial3d(app.pants.clone()),
-        Transform::from_xyz(hip_x, shin_y, 0.0),
+        Transform::from_xyz(hip_x, shin_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
 
-    // 腳踝
+    // 腳踝（Sphere(0.028) — 與鞋頭共用 mesh）
     let ankle_y = shin_y - shin_len - 0.015 * scale;
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.028 * scale))),
+        Mesh3d(v.ankle_toe.clone()),
         MeshMaterial3d(app.shoes.clone()),
-        Transform::from_xyz(hip_x, ankle_y, 0.0),
+        Transform::from_xyz(hip_x, ankle_y, 0.0).with_scale(Vec3::splat(scale)),
     ));
 
     // 腳掌（鞋子）
     let foot_y = ankle_y - 0.02 * scale;
     parent.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.055 * scale, 0.035 * scale, 0.10 * scale))),
+        Mesh3d(v.foot.clone()),
         MeshMaterial3d(app.shoes.clone()),
-        Transform::from_xyz(hip_x, foot_y, 0.02 * scale),
+        Transform::from_xyz(hip_x, foot_y, 0.02 * scale).with_scale(Vec3::splat(scale)),
     ));
 
-    // 鞋頭（腳趾部分）
+    // 鞋頭（腳趾部分，Sphere(0.028) — 與腳踝共用 mesh）
     parent.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.028 * scale))),
+        Mesh3d(v.ankle_toe.clone()),
         MeshMaterial3d(app.shoes.clone()),
-        Transform::from_xyz(hip_x, foot_y, 0.065 * scale).with_scale(Vec3::new(1.0, 0.7, 1.2)),
+        Transform::from_xyz(hip_x, foot_y, 0.065 * scale)
+            .with_scale(Vec3::new(1.0 * scale, 0.7 * scale, 1.2 * scale)),
     ));
 }
 

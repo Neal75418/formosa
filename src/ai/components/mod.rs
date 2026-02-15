@@ -18,7 +18,7 @@ mod combat;
 mod resources;
 
 // 重新導出所有公開項目
-#[allow(unused_imports)]
+#[allow(unused_imports)] // re-export: public API constants for AI awareness thresholds
 pub use state::{
     AiBehavior, AiState, AWARENESS_ALERT, AWARENESS_DECAY_RATE, AWARENESS_NOISE_RATE,
     AWARENESS_SUSPICIOUS, AWARENESS_VISUAL_RATE,
@@ -26,4 +26,4 @@ pub use state::{
 pub use perception::AiPerception;
 pub use movement::{PatrolPath, AiMovement};
 pub use combat::{AiCombat, CoverPoint, CoverSeeker};
-pub use resources::EnemySpawnTimer;
+pub use resources::{EnemySpawnTimer, EnemyTypeAppearance, EnemyVisuals, HairStyle};

@@ -12,7 +12,7 @@ pub struct WindowUpdateTimer(pub Timer);
 
 impl Default for WindowUpdateTimer {
     fn default() -> Self {
-        Self(Timer::from_seconds(5.0, TimerMode::Repeating))
+        Self(Timer::from_seconds(7.0, TimerMode::Repeating))
     }
 }
 

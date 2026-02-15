@@ -12,15 +12,15 @@
 
 ### 高頻克隆檔案
 
-| 檔案 | .clone() 次數 | 主要用途 |
-|------|--------------|---------|
-| `ai/lifecycle.rs` | 34 | AI 實體生成（材質句柄） |
-| `world/characters.rs` | 33 | 角色模型生成（材質句柄） |
-| `world/setup.rs` | 31 | 世界初始化（材質、配置） |
-| `combat/visuals.rs` | 28 | 武器視覺效果（句柄） |
-| `audio/systems.rs` | 28 | 音效播放（音源句柄） |
-| `ui/delivery_app.rs` | 25 | UI 數據綁定 |
-| `vehicle/spawning.rs` | 23 | 車輛生成（配置、材質） |
+| 檔案                    | .clone() 次數 | 主要用途          |
+|-----------------------|-------------|---------------|
+| `ai/lifecycle.rs`     | 34          | AI 實體生成（材質句柄） |
+| `world/characters.rs` | 33          | 角色模型生成（材質句柄）  |
+| `world/setup.rs`      | 31          | 世界初始化（材質、配置）  |
+| `combat/visuals.rs`   | 28          | 武器視覺效果（句柄）    |
+| `audio/systems.rs`    | 28          | 音效播放（音源句柄）    |
+| `ui/delivery_app.rs`  | 25          | UI 數據綁定       |
+| `vehicle/spawning.rs` | 23          | 車輛生成（配置、材質）   |
 
 ### 分析結論
 

@@ -1,11 +1,12 @@
 //! NPC 車輛 AI 駕駛系統
 
-use super::vehicle_physics::{apply_vehicle_motion_physics, get_weather_factor, VehicleDynamicsModifiers, VehiclePhysicsFrame};
+use super::vehicle_physics::{apply_vehicle_motion_physics, get_weather_factor, speed_turn_factor, VehicleDynamicsModifiers, VehiclePhysicsFrame};
 use super::*;
 use crate::core::math::rapier_real_to_f32;
 use crate::core::{
     WeatherState, COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE,
 };
+use crate::world::MapBounds;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
@@ -31,7 +32,7 @@ fn check_obstacle(
     vehicle_entity: Entity,
     _vehicle_type: &VehicleType,
     rapier_context: &ReadRapierContext,
-    config: &crate::vehicle::config::NpcDrivingConfig,
+    config: &NpcDrivingConfig,
 ) -> Option<ObstacleHit> {
     let rapier = rapier_context.single().ok()?;
     let vehicle_pos = vehicle_transform.translation;
@@ -101,7 +102,7 @@ fn update_npc_state_from_obstacle(
     vehicle_entity: Entity,
     rapier_context: &ReadRapierContext,
     dt: f32,
-    config: &crate::vehicle::config::NpcDrivingConfig,
+    config: &NpcDrivingConfig,
 ) {
     if let Some(hit) = check_obstacle(
         transform,
@@ -138,7 +139,7 @@ fn determine_npc_reaction(
     hit: ObstacleHit,
     current_speed: f32,
     stuck_timer: f32,
-    config: &crate::vehicle::config::NpcDrivingConfig,
+    config: &NpcDrivingConfig,
 ) -> (NpcState, bool) {
     match hit.kind {
         ObstacleHitKind::Side => {
@@ -174,7 +175,7 @@ fn navigate_to_waypoint(
     npc: &mut NpcVehicle,
     transform: &Transform,
     input: &mut VehicleInput,
-    config: &crate::vehicle::config::NpcDrivingConfig,
+    config: &NpcDrivingConfig,
 ) {
     if npc.waypoints.is_empty() {
         return;
@@ -218,7 +219,7 @@ fn handle_cruising_state(
     transform: &mut Transform,
     input: &mut VehicleInput,
     _dt: f32,
-    config: &crate::vehicle::config::NpcDrivingConfig,
+    config: &NpcDrivingConfig,
 ) {
     navigate_to_waypoint(npc, transform, input, config);
     input.throttle_input = input.throttle_input.min(0.7); // 巡航限速，保留轉彎減速
@@ -264,7 +265,7 @@ fn should_stop_for_traffic_light(
     vehicle_pos: Vec3,
     vehicle_forward: Vec3,
     traffic_light_query: &Query<(&Transform, &TrafficLight), Without<NpcVehicle>>,
-    npc_config: &crate::vehicle::config::NpcDrivingConfig,
+    npc_config: &NpcDrivingConfig,
 ) -> bool {
     // 簡單判斷：尋找前方且面向自己的紅燈
     for (light_transform, light) in traffic_light_query.iter() {
@@ -364,7 +365,7 @@ fn handle_waiting_at_light_state(
     transform: &Transform,
     traffic_light_query: &Query<(&Transform, &TrafficLight), Without<NpcVehicle>>,
     dt: f32,
-    npc_config: &crate::vehicle::config::NpcDrivingConfig,
+    npc_config: &NpcDrivingConfig,
 ) {
     // 重置輸入：鬆油門 + 踩煞車（由 npc_vehicle_motion_system 的煞車物理處理減速）
     input.throttle_input = 0.0;
@@ -388,7 +389,7 @@ pub fn npc_vehicle_motion_system(
     time: Res<Time>,
     weather: Res<WeatherState>,
     config: Res<VehicleConfig>,
-    map_bounds: Res<crate::world::MapBounds>,
+    map_bounds: Res<MapBounds>,
     mut npc_query: Query<
         (
             &mut Transform,
@@ -484,12 +485,7 @@ fn apply_npc_steering(
 
     let speed_ratio = (vehicle.current_speed.abs() / vehicle.max_speed).clamp(0.0, 1.0);
     let low_threshold = config.physics.torque_low_speed_ratio;
-    let speed_turn_factor = if speed_ratio < low_threshold {
-        1.0
-    } else {
-        let high_speed_falloff = (speed_ratio - low_threshold) / (1.0 - low_threshold).max(0.01);
-        1.0 - high_speed_falloff * (1.0 - steering.high_speed_turn_factor)
-    };
+    let stf = speed_turn_factor(speed_ratio, low_threshold, steering.high_speed_turn_factor);
 
     let drift_turn_bonus = if drift.is_drifting {
         1.0 + drift.drift_angle.abs() * steering.counter_steer_assist
@@ -501,7 +497,7 @@ fn apply_npc_steering(
     let yaw_rate = vehicle.turn_speed
         * steering.handling
         * effective_handling
-        * speed_turn_factor
+        * stf
         * drift_turn_bonus
         * input.steer_input
         * direction;

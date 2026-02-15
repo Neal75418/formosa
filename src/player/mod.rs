@@ -51,10 +51,10 @@ impl Plugin for PlayerPlugin {
                     vehicle_transition_animation_system.after(enter_exit_vehicle),
                     stealth_noise_system.after(player_input),
                     // 技能成長系統
-                    skills::driving_skill_system,
-                    skills::stamina_skill_system,
-                    skills::stealth_skill_system,
-                    character_switch::character_switch_cooldown_system,
+                    driving_skill_system,
+                    stamina_skill_system,
+                    stealth_skill_system,
+                    character_switch_cooldown_system,
                 )
                     .in_set(GameSet::Player)
                     .run_if(in_state(AppState::InGame)),

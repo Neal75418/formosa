@@ -14,7 +14,7 @@ use super::components::{
     SaveSlotModeTab, SaveSlotMode, SaveSlotUiState, UiState,
 };
 use super::constants::*;
-use super::systems::spawn_full_screen_overlay;
+use super::systems::{spawn_full_screen_overlay, spawn_key_hint};
 use crate::save::{
     LoadGameEvent, LoadType, SaveData, SaveGameEvent, SaveManager, SaveType,
 };
@@ -269,67 +269,34 @@ fn spawn_bottom_hints(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
             ..default()
         })
         .with_children(|row| {
-            spawn_key_hint(row, "ESC", "關閉", font);
-            spawn_key_hint(row, "F7", "存檔", font);
-            spawn_key_hint(row, "F8", "讀檔", font);
-        });
-}
-
-fn spawn_key_hint(
-    parent: &mut ChildSpawnerCommands,
-    key: &str,
-    label: &str,
-    font: &Handle<Font>,
-) {
-    parent
-        .spawn(Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(5.0),
-            ..default()
-        })
-        .with_children(|hint| {
-            hint.spawn((
-                Node {
-                    padding: UiRect::new(
-                        Val::Px(6.0),
-                        Val::Px(6.0),
-                        Val::Px(2.0),
-                        Val::Px(2.0),
-                    ),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(BUTTON_BG_DARK),
-                BorderColor::all(BUTTON_BORDER_GRAY_70),
-                BorderRadius::all(Val::Px(3.0)),
-            ))
-            .with_children(|key_box| {
-                key_box.spawn((
-                    Text::new(key),
-                    TextFont {
-                        font_size: 11.0,
-                        font: font.clone(),
-                        ..default()
-                    },
-                    TextColor(TEXT_LIGHT_GRAY),
-                ));
-            });
-            hint.spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: 13.0,
-                    font: font.clone(),
-                    ..default()
-                },
-                TextColor(PAUSE_HINT_COLOR),
-            ));
+            spawn_key_hint(row, "ESC", "關閉", 6.0, font);
+            spawn_key_hint(row, "F7", "存檔", 6.0, font);
+            spawn_key_hint(row, "F8", "讀檔", 6.0, font);
         });
 }
 
 // ============================================================================
 // 輸入系統
 // ============================================================================
+
+/// 切換存檔槽模式：若已開啟同模式則關閉，否則切換至目標模式
+fn toggle_save_slot_mode(
+    is_visible: bool,
+    target_mode: SaveSlotMode,
+    save_slot_state: &mut SaveSlotUiState,
+    ui_state: &mut UiState,
+    visibility: &mut Visibility,
+) {
+    if is_visible && save_slot_state.mode == target_mode {
+        *visibility = Visibility::Hidden;
+        ui_state.show_save_slots = false;
+    } else {
+        save_slot_state.mode = target_mode;
+        save_slot_state.needs_refresh = true;
+        *visibility = Visibility::Visible;
+        ui_state.show_save_slots = true;
+    }
+}
 
 /// 存檔槽 UI 開關（F7 存檔、F8 讀檔、ESC 關閉）
 pub fn save_slot_input_system(
@@ -353,29 +320,13 @@ pub fn save_slot_input_system(
 
     // F7 = 存檔模式切換
     if keyboard.just_pressed(KeyCode::F7) {
-        if is_visible && save_slot_state.mode == SaveSlotMode::Save {
-            *visibility = Visibility::Hidden;
-            ui_state.show_save_slots = false;
-        } else {
-            save_slot_state.mode = SaveSlotMode::Save;
-            save_slot_state.needs_refresh = true;
-            *visibility = Visibility::Visible;
-            ui_state.show_save_slots = true;
-        }
+        toggle_save_slot_mode(is_visible, SaveSlotMode::Save, &mut save_slot_state, &mut ui_state, &mut visibility);
         return;
     }
 
     // F8 = 讀檔模式切換
     if keyboard.just_pressed(KeyCode::F8) {
-        if is_visible && save_slot_state.mode == SaveSlotMode::Load {
-            *visibility = Visibility::Hidden;
-            ui_state.show_save_slots = false;
-        } else {
-            save_slot_state.mode = SaveSlotMode::Load;
-            save_slot_state.needs_refresh = true;
-            *visibility = Visibility::Visible;
-            ui_state.show_save_slots = true;
-        }
+        toggle_save_slot_mode(is_visible, SaveSlotMode::Load, &mut save_slot_state, &mut ui_state, &mut visibility);
     }
 }
 

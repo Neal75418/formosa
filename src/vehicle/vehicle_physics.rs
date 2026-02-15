@@ -13,6 +13,17 @@ use crate::core::{GameState, WeatherState, WeatherType};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
+/// 計算高速轉向衰減因子
+pub(super) fn speed_turn_factor(speed_ratio: f32, low_threshold: f32, high_speed_turn_factor: f32) -> f32 {
+    if speed_ratio < low_threshold {
+        1.0
+    } else {
+        let high_speed_falloff =
+            (speed_ratio - low_threshold) / (1.0 - low_threshold).max(0.01);
+        1.0 - high_speed_falloff * (1.0 - high_speed_turn_factor)
+    }
+}
+
 // ============================================================================
 // 載具加速與煞車系統
 // ============================================================================
@@ -293,12 +304,7 @@ pub fn vehicle_steering_system(
         0.0
     };
     let low_threshold = config.physics.torque_low_speed_ratio;
-    let speed_turn_factor = if speed_ratio < low_threshold {
-        1.0
-    } else {
-        let high_speed_falloff = (speed_ratio - low_threshold) / (1.0 - low_threshold).max(0.01);
-        1.0 - high_speed_falloff * (1.0 - steering.high_speed_turn_factor)
-    };
+    let stf = speed_turn_factor(speed_ratio, low_threshold, steering.high_speed_turn_factor);
 
     let drift_turn_bonus = if drift.is_drifting {
         1.0 + drift.drift_angle.abs() * steering.counter_steer_assist
@@ -310,7 +316,7 @@ pub fn vehicle_steering_system(
     let yaw_rate = vehicle.turn_speed
         * steering.handling
         * effective_handling
-        * speed_turn_factor
+        * stf
         * drift_turn_bonus
         * input.steer_input
         * direction;

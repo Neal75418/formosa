@@ -191,8 +191,8 @@ pub(super) struct PauseMenuPlugin;
 
 impl Plugin for PauseMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(crate::core::AppState::Paused), on_enter_pause)
-            .add_systems(OnExit(crate::core::AppState::Paused), on_exit_pause)
+        app.add_systems(OnEnter(AppState::Paused), on_enter_pause)
+            .add_systems(OnExit(AppState::Paused), on_exit_pause)
             .add_systems(
                 Update,
                 (

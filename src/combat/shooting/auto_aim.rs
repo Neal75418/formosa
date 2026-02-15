@@ -134,6 +134,28 @@ pub fn apply_lock_on_aim_assist(
 }
 
 // ============================================================================
+// 視線檢測
+// ============================================================================
+
+/// 檢查從 `origin` 沿 `direction` 到 `max_dist` 是否能看到 `target`
+fn has_line_of_sight(
+    rapier: &RapierContext,
+    origin: Vec3,
+    direction: Vec3,
+    max_dist: f32,
+    filter: QueryFilter,
+    target: Entity,
+) -> bool {
+    if let Some((hit_entity, _)) =
+        rapier.cast_ray(origin, direction, max_dist as bevy_rapier3d::prelude::Real, true, filter)
+    {
+        hit_entity == target
+    } else {
+        true // 無遮擋
+    }
+}
+
+// ============================================================================
 // 目標驗證
 // ============================================================================
 
@@ -177,17 +199,7 @@ fn validate_locked_target(
     let direction = to_target / to_target_len;
     let filter = QueryFilter::default().exclude_collider(player_entity);
 
-    let has_los = if let Some((hit_entity, _)) = rapier.cast_ray(
-        eye_pos,
-        direction,
-        to_target_len as bevy_rapier3d::prelude::Real,
-        true,
-        filter,
-    ) {
-        hit_entity == target_entity
-    } else {
-        true // 無遮擋
-    };
+    let has_los = has_line_of_sight(rapier, eye_pos, direction, to_target_len, filter, target_entity);
 
     if has_los {
         lock_on.los_lost_timer = 0.0;
@@ -296,17 +308,7 @@ fn find_target_with_filter(
         }
 
         // LOS 射線檢測：確保目標沒有被遮擋
-        let has_los = if let Some((hit_entity, _)) = rapier.cast_ray(
-            eye_pos,
-            direction,
-            distance as bevy_rapier3d::prelude::Real,
-            true,
-            filter,
-        ) {
-            hit_entity == entity
-        } else {
-            true // 無遮擋
-        };
+        let has_los = has_line_of_sight(rapier, eye_pos, direction, distance, filter, entity);
 
         if !has_los {
             continue;

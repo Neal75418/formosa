@@ -347,6 +347,7 @@ fn spawn_minimap_decorations(parent: &mut ChildSpawnerCommands, font: &Handle<Fo
             },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
             BorderRadius::all(Val::Px(4.0)),
+            GlobalTransform::default(), // B0004: Text 子實體需要 GlobalTransform
         ))
         .with_children(|title_bg| {
             title_bg.spawn((
@@ -399,6 +400,7 @@ pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
             },
             BackgroundColor(MINIMAP_GLOW),
             BorderRadius::all(Val::Px(12.0)),
+            GlobalTransform::default(), // B0004: 後代有 Transform（玩家標記）
         ))
         .with_children(|glow| {
             // 主邊框層
@@ -415,6 +417,7 @@ pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                 BackgroundColor(MINIMAP_BORDER),
                 BorderColor::all(MINIMAP_INNER_BORDER),
                 BorderRadius::all(Val::Px(10.0)),
+                GlobalTransform::default(), // B0004: 後代有 Transform（玩家標記）
             ))
             .with_children(|frame| {
                 // 實際地圖容器
@@ -428,6 +431,7 @@ pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                         },
                         BackgroundColor(MINIMAP_BG),
                         BorderRadius::all(Val::Px(6.0)),
+                        GlobalTransform::default(), // B0004: 子實體需要 GlobalTransform
                         MinimapContainer,
                     ))
                     .with_children(|parent| {
@@ -493,6 +497,7 @@ pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
         FlexDirection::Column,
         Val::Px(12.0),
     )
+    .insert(GlobalTransform::default()) // B0004: 後代有 Transform（玩家標記）
     .with_children(|parent| {
         // 標題區
         spawn_fullmap_title(parent, font);
@@ -511,6 +516,7 @@ pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                 },
                 BackgroundColor(Color::srgba(0.2, 0.35, 0.2, 0.4)),
                 BorderRadius::all(Val::Px(12.0)),
+                GlobalTransform::default(), // B0004: 後代有 Transform（玩家標記）
             ))
             .with_children(|glow| {
                 // 主邊框層
@@ -527,6 +533,7 @@ pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                     BackgroundColor(FULLMAP_BORDER),
                     BorderColor::all(Color::srgba(0.15, 0.2, 0.15, 0.9)),
                     BorderRadius::all(Val::Px(10.0)),
+                    GlobalTransform::default(), // B0004: 後代有 Transform（玩家標記）
                 ))
                 .with_children(|frame| {
                     // 實際地圖容器
@@ -540,6 +547,7 @@ pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                             },
                             BackgroundColor(FULLMAP_MAIN_BG),
                             BorderRadius::all(Val::Px(6.0)),
+                            GlobalTransform::default(), // B0004: 後代有 Transform（玩家標記）
                         ))
                         .with_children(|map| {
                             // 角落高光效果

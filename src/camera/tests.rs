@@ -277,7 +277,7 @@ fn aim_mode_shoulder_offset() {
     let settings = CameraSettings::default();
 
     // 瞄準時應該有過肩偏移
-    assert!(settings.aim_shoulder_offset != 0.0);
+    assert_ne!(settings.aim_shoulder_offset, 0.0);
     // 通常向右肩偏移（正值）
     assert!(settings.aim_shoulder_offset > 0.0);
 }
@@ -300,8 +300,8 @@ fn camera_offset_calculation() {
     );
 
     // pitch = 0, yaw = 0：攝影機應該在目標正後方（+Z 方向）
-    assert!((offset.x - 0.0).abs() < 0.01);
-    assert!((offset.y - 0.0).abs() < 0.01);
+    assert!(offset.x.abs() < 0.01);
+    assert!(offset.y.abs() < 0.01);
     assert!((offset.z - 10.0).abs() < 0.01);
 }
 
@@ -318,7 +318,7 @@ fn camera_offset_with_pitch() {
     );
 
     // 45 度俯仰時，Y 和 Z 分量應該大致相等
-    assert!((offset.x - 0.0).abs() < 0.01);
+    assert!(offset.x.abs() < 0.01);
     assert!((offset.y - 7.07).abs() < 0.1); // 10 * sin(45°) ≈ 7.07
     assert!((offset.z - 7.07).abs() < 0.1); // 10 * cos(45°) ≈ 7.07
 }
@@ -448,8 +448,8 @@ fn fps_look_direction_calculation() {
     );
 
     // yaw=0, pitch=0 → 應朝 -Z 方向看（Bevy 預設前方）
-    assert!((look_dir.x).abs() < 0.01);
-    assert!((look_dir.y).abs() < 0.01);
+    assert!(look_dir.x.abs() < 0.01);
+    assert!(look_dir.y.abs() < 0.01);
     assert!((look_dir.z + 1.0).abs() < 0.01);
 }
 
@@ -508,8 +508,8 @@ fn vehicle_interior_yaw_clamping() {
 fn vehicle_interior_default_look_forward() {
     let settings = CameraSettings::default();
     // 初始應朝正前方看
-    assert!((settings.vehicle_interior_yaw).abs() < f32::EPSILON);
-    assert!((settings.vehicle_interior_pitch).abs() < f32::EPSILON);
+    assert!(settings.vehicle_interior_yaw.abs() < f32::EPSILON);
+    assert!(settings.vehicle_interior_pitch.abs() < f32::EPSILON);
 }
 
 #[test]
@@ -524,8 +524,8 @@ fn vehicle_interior_look_direction_forward() {
         -yaw.cos() * pitch.cos(),
     );
 
-    assert!((look_dir.x).abs() < 0.01);
-    assert!((look_dir.y).abs() < 0.01);
+    assert!(look_dir.x.abs() < 0.01);
+    assert!(look_dir.y.abs() < 0.01);
     assert!((look_dir.z + 1.0).abs() < 0.01); // -Z 前方
 }
 
@@ -543,8 +543,8 @@ fn vehicle_interior_look_direction_left() {
 
     // 應朝 -X 方向看
     assert!(look_dir.x < -0.9);
-    assert!((look_dir.y).abs() < 0.01);
-    assert!((look_dir.z).abs() < 0.1);
+    assert!(look_dir.y.abs() < 0.01);
+    assert!(look_dir.z.abs() < 0.1);
 }
 
 #[test]
@@ -591,7 +591,7 @@ fn vehicle_interior_auto_exit_on_dismount() {
 fn cinematic_state_defaults() {
     use crate::core::CinematicState;
     let state = CinematicState::default();
-    assert!((state.letterbox_progress - 0.0).abs() < f32::EPSILON);
+    assert!(state.letterbox_progress.abs() < f32::EPSILON);
     assert!(state.fly_speed > 0.0);
     assert!(state.fov > 0.0 && state.fov < 120.0);
 }

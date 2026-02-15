@@ -35,7 +35,7 @@ pub fn update_ui_scale(mut resize_events: MessageReader<WindowResized>, mut ui_s
     for event in resize_events.read() {
         let scale = event.height / BASE_RESOLUTION_HEIGHT;
         ui_scale.0 = scale;
-        info!(
+        debug!(
             "📐 UI Scale 更新: {:.2} (視窗: {}x{})",
             scale, event.width, event.height
         );

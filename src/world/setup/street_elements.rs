@@ -156,7 +156,7 @@ pub(super) fn setup_special_elements(
     info!("🎬 已生成 {} 個電影看板", billboard_configs.len());
 
     // 塗鴉牆
-    let graffiti_pos = Vec3::new(X_KANGDING - crate::world::constants::W_MAIN / 2.0 - 7.5 - 2.0, 2.5, Z_EMEI + 18.0);
+    let graffiti_pos = Vec3::new(X_KANGDING - W_MAIN / 2.0 - 7.5 - 2.0, 2.5, Z_EMEI + 18.0);
     spawn_graffiti_wall(commands, meshes, materials, graffiti_pos);
 
     // AI 掩體點

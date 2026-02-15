@@ -89,6 +89,63 @@ pub(super) fn spawn_status_bar_label(
         });
 }
 
+/// 生成文字子節點（Text + TextFont + TextColor）
+pub(super) fn spawn_text_child(
+    parent: &mut ChildSpawnerCommands,
+    text: &str,
+    font_size: f32,
+    color: Color,
+    font: &Handle<Font>,
+) {
+    parent.spawn((
+        Text::new(text),
+        TextFont {
+            font_size,
+            font: font.clone(),
+            ..default()
+        },
+        TextColor(color),
+    ));
+}
+
+/// 生成鍵盤快捷鍵提示（按鍵框 + 說明文字）
+pub(super) fn spawn_key_hint(
+    parent: &mut ChildSpawnerCommands,
+    key: &str,
+    label: &str,
+    key_padding_h: f32,
+    font: &Handle<Font>,
+) {
+    parent
+        .spawn(Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(6.0),
+            ..default()
+        })
+        .with_children(|hint| {
+            hint.spawn((
+                Node {
+                    padding: UiRect::new(
+                        Val::Px(key_padding_h),
+                        Val::Px(key_padding_h),
+                        Val::Px(3.0),
+                        Val::Px(3.0),
+                    ),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(BUTTON_BG_DARK),
+                BorderColor::all(BUTTON_BORDER_GRAY_70),
+                BorderRadius::all(Val::Px(4.0)),
+            ))
+            .with_children(|key_box| {
+                spawn_text_child(key_box, key, 11.0, TEXT_LIGHT_GRAY, font);
+            });
+            spawn_text_child(hint, label, 13.0, PAUSE_HINT_COLOR, font);
+        });
+}
+
 /// 生成方位標示
 pub(super) fn spawn_compass_marker(
     parent: &mut ChildSpawnerCommands,
@@ -118,15 +175,7 @@ pub(super) fn spawn_compass_marker(
             BorderRadius::all(Val::Px(bg_size / 2.0)),
         ))
         .with_children(|bg| {
-            bg.spawn((
-                Text::new(text),
-                TextFont {
-                    font_size,
-                    font: font.clone(),
-                    ..default()
-                },
-                TextColor(color),
-            ));
+            spawn_text_child(bg, text, font_size, color, font);
         });
 }
 

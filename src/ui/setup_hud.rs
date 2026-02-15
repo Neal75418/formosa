@@ -9,7 +9,7 @@ use super::components::{
     PlayerStatusContainer, TimeDisplay, UiText,
 };
 use super::constants::*;
-use super::systems::{spawn_status_bar_fill, spawn_status_bar_label};
+use super::systems::{spawn_status_bar_fill, spawn_status_bar_label, spawn_text_child};
 
 fn spawn_health_section(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
     parent
@@ -188,15 +188,7 @@ fn spawn_control_key(
         BorderRadius::all(Val::Px(3.0)),
     ))
     .with_children(|key_bg| {
-        key_bg.spawn((
-            Text::new(key),
-            TextFont {
-                font_size: 11.0,
-                font: font.clone(),
-                ..default()
-            },
-            TextColor(KEY_TEXT_COLOR),
-        ));
+        spawn_text_child(key_bg, key, 11.0, KEY_TEXT_COLOR, &font);
     });
     keys.spawn((
         Text::new(action),

@@ -2,6 +2,7 @@
 //\!
 //\! 從 phone.rs 拆分，降低單檔行數。
 
+use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 
 use super::components::MissionJournalTab;
@@ -13,6 +14,25 @@ const CONTENT_ITEM_BG: Color = Color::srgba(0.1, 0.12, 0.18, 0.8);
 // ============================================================================
 // 輔助函數
 // ============================================================================
+
+/// 生成內容列容器（寬 100%、橫向、兩端對齊、padding 8px、圓角 4px）
+fn spawn_content_row<'a>(
+    parent: &'a mut ChildSpawnerCommands,
+    bg_color: Color,
+) -> EntityCommands<'a> {
+    parent.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            padding: UiRect::all(Val::Px(8.0)),
+            ..default()
+        },
+        BackgroundColor(bg_color),
+        BorderRadius::all(Val::Px(4.0)),
+    ))
+}
 
 pub(super) fn spawn_section_title(parent: &mut ChildSpawnerCommands, font: &Handle<Font>, title: &str) {
     parent.spawn((
@@ -40,20 +60,7 @@ pub(super) fn spawn_contact_item(
     name: &str,
     role: &str,
 ) {
-    parent
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::SpaceBetween,
-                align_items: AlignItems::Center,
-                padding: UiRect::all(Val::Px(8.0)),
-                ..default()
-            },
-            BackgroundColor(CONTENT_ITEM_BG),
-            BorderRadius::all(Val::Px(4.0)),
-        ))
-        .with_children(|row| {
+    spawn_content_row(parent, CONTENT_ITEM_BG).with_children(|row| {
             row.spawn((
                 Text::new(name),
                 TextFont {
@@ -456,20 +463,7 @@ pub(super) fn spawn_mission_item(
         CONTENT_ITEM_BG
     };
 
-    parent
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::SpaceBetween,
-                align_items: AlignItems::Center,
-                padding: UiRect::all(Val::Px(8.0)),
-                ..default()
-            },
-            BackgroundColor(bg_color),
-            BorderRadius::all(Val::Px(4.0)),
-        ))
-        .with_children(|row| {
+    spawn_content_row(parent, bg_color).with_children(|row| {
             row.spawn((
                 Text::new(name),
                 TextFont {

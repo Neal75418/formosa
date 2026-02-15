@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use super::components::{ButtonScaleState, PauseMenu, QuitButton, ResumeButton};
 use super::constants::*;
-use super::systems::spawn_full_screen_overlay;
+use super::systems::{spawn_full_screen_overlay, spawn_key_hint, spawn_text_child};
 
 /// 生成暫停選單按鈕（帶邊框和縮放狀態）
 fn spawn_pause_menu_button(
@@ -41,15 +41,7 @@ fn spawn_pause_menu_button(
                     ButtonScaleState::default(),
                 ))
                 .with_children(|btn| {
-                    btn.spawn((
-                        Text::new(text),
-                        TextFont {
-                            font_size: 20.0,
-                            font: font.clone(),
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
+                    spawn_text_child(btn, text, 20.0, Color::WHITE, font);
                 });
         });
 }
@@ -65,60 +57,6 @@ fn spawn_pause_title_bar(parent: &mut ChildSpawnerCommands) {
         BackgroundColor(PAUSE_TITLE_COLOR),
         BorderRadius::all(Val::Px(2.0)),
     ));
-}
-
-/// 生成鍵盤快捷鍵提示（按鍵框 + 說明文字）
-fn spawn_keyboard_hint(
-    parent: &mut ChildSpawnerCommands,
-    key_text: &str,
-    label_text: &str,
-    key_padding_h: f32,
-    font: &Handle<Font>,
-) {
-    parent
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(6.0),
-            ..default()
-        },))
-        .with_children(|hint| {
-            hint.spawn((
-                Node {
-                    padding: UiRect::new(
-                        Val::Px(key_padding_h),
-                        Val::Px(key_padding_h),
-                        Val::Px(3.0),
-                        Val::Px(3.0),
-                    ),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(BUTTON_BG_DARK),
-                BorderColor::all(BUTTON_BORDER_GRAY_70),
-                BorderRadius::all(Val::Px(4.0)),
-            ))
-            .with_children(|key| {
-                key.spawn((
-                    Text::new(key_text),
-                    TextFont {
-                        font_size: 11.0,
-                        font: font.clone(),
-                        ..default()
-                    },
-                    TextColor(TEXT_LIGHT_GRAY),
-                ));
-            });
-            hint.spawn((
-                Text::new(label_text),
-                TextFont {
-                    font_size: 13.0,
-                    font: font.clone(),
-                    ..default()
-                },
-                TextColor(PAUSE_HINT_COLOR),
-            ));
-        });
 }
 
 fn spawn_pause_title_section(menu: &mut ChildSpawnerCommands, font: &Handle<Font>) {
@@ -294,8 +232,8 @@ pub(super) fn setup_pause_menu(commands: &mut Commands, font: &Handle<Font>) {
                                 ..default()
                             },))
                                 .with_children(|hint_row| {
-                                    spawn_keyboard_hint(hint_row, "ESC", "繼續", 6.0, font);
-                                    spawn_keyboard_hint(hint_row, "Q", "退出", 8.0, font);
+                                    spawn_key_hint(hint_row, "ESC", "繼續", 6.0, font);
+                                    spawn_key_hint(hint_row, "Q", "退出", 8.0, font);
                                 });
 
                             // 遊戲標題

@@ -45,14 +45,14 @@ cargo fmt                    # 格式化
 
 條件編譯：`#[cfg(all(debug_assertions, feature = "dev_tools"))]`
 
-| 工具 | 按鍵 | 位置 | 說明 |
-|------|------|------|------|
-| World Inspector | F7 | 全螢幕 | 即時編輯實體/組件 |
-| FPS Counter | - | 左上角 | 綠(>60)/黃(30-60)/紅(<30) |
-| AI Debug | F3 | - | AI 視野/聽覺範圍 |
-| Debug Viz | F4 | - | 警察視野/路徑/恐慌範圍 |
-| Rapier Debug | - | 場景中 | 綠色碰撞箱線框 |
-| Entity Names | - | Inspector | 每秒自動命名（英文） |
+| 工具              | 按鍵 | 位置        | 說明                     |
+|-----------------|----|-----------|------------------------|
+| World Inspector | F7 | 全螢幕       | 即時編輯實體/組件              |
+| FPS Counter     | -  | 左上角       | 綠(>60)/黃(30-60)/紅(<30) |
+| AI Debug        | F3 | -         | AI 視野/聽覺範圍             |
+| Debug Viz       | F4 | -         | 警察視野/路徑/恐慌範圍           |
+| Rapier Debug    | -  | 場景中       | 綠色碰撞箱線框                |
+| Entity Names    | -  | Inspector | 每秒自動命名（英文）             |
 
 **Gizmos 可視化**：
 - 警察 FOV 錐 - 綠色扇形（半徑：`PoliceConfig.vision_range`）
@@ -536,43 +536,43 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ### 測試覆蓋
 
-| 模組                 | 測試數     | 覆蓋範圍              |
-|--------------------|---------|-------------------|
-| combat             | 88      | 武器、傷害、護甲、布娃娃、出血   |
-| economy            | 47      | 錢包、商店、ATM         |
-| pedestrian         | 43      | 恐慌波、尋路、目擊者、行為、動畫  |
-| vehicle            | 41      | 血量、輪胎、交通燈、改裝、爆炸   |
-| ai                 | 26      | 狀態轉換、感知、逃跑        |
-| wanted             | 22      | 通緝等級、警察狀態、搜索區     |
-| save               | 17      | 序列化、存檔路徑          |
-| mission            | 15      | 任務目標、評分、競速、計程車    |
-| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶 |
-| core/spatial_hash  | 12      | 插入、查詢、邊界          |
-| ui                 | 30      | 通知系統、互動提示、淡入淡出    |
-| camera             | 21      | pitch 限制、距離調整、角度正規化 |
-| player/climb       | 5       | 攀爬類型、緩動函數         |
+| 模組                 | 測試數     | 覆蓋範圍                 |
+|--------------------|---------|----------------------|
+| combat             | 88      | 武器、傷害、護甲、布娃娃、出血      |
+| economy            | 47      | 錢包、商店、ATM            |
+| pedestrian         | 43      | 恐慌波、尋路、目擊者、行為、動畫     |
+| vehicle            | 41      | 血量、輪胎、交通燈、改裝、爆炸      |
+| ai                 | 26      | 狀態轉換、感知、逃跑           |
+| wanted             | 22      | 通緝等級、警察狀態、搜索區        |
+| save               | 17      | 序列化、存檔路徑             |
+| mission            | 15      | 任務目標、評分、競速、計程車       |
+| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶    |
+| core/spatial_hash  | 12      | 插入、查詢、邊界             |
+| ui                 | 30      | 通知系統、互動提示、淡入淡出       |
+| camera             | 21      | pitch 限制、距離調整、角度正規化  |
+| player/climb       | 5       | 攀爬類型、緩動函數            |
 | **合計**             | **386** | *(+57 from Phase 3)* |
 
 ## 關鍵檔案速查
 
-| 系統     | 檔案                                          |
-|--------|---------------------------------------------|
-| 空間哈希   | `src/core/spatial_hash.rs`                  |
-| 戰鬥插件   | `src/combat/mod.rs`                         |
-| 傷害計算   | `src/combat/damage/` (calculation, death, effects, reactions) |
-| 射擊系統   | `src/combat/shooting/` (input, firing, effects) |
-| 爆炸物    | `src/combat/explosives/` (systems, explosion, effects) |
-| 掩體     | `src/combat/cover.rs`                       |
+| 系統     | 檔案                                                                 |
+|--------|--------------------------------------------------------------------|
+| 空間哈希   | `src/core/spatial_hash.rs`                                         |
+| 戰鬥插件   | `src/combat/mod.rs`                                                |
+| 傷害計算   | `src/combat/damage/` (calculation, death, effects, reactions)      |
+| 射擊系統   | `src/combat/shooting/` (input, firing, effects)                    |
+| 爆炸物    | `src/combat/explosives/` (systems, explosion, effects)             |
+| 掩體     | `src/combat/cover.rs`                                              |
 | 警用直升機  | `src/wanted/police_helicopter/` (components, spawning, ai, combat) |
-| 偷車     | `src/vehicle/theft.rs`                      |
-| 車輛改裝   | `src/vehicle/modifications/` (performance, visuals, systems) |
-| 車輛效果   | `src/vehicle/effects.rs`                    |
-| 行人生命週期 | `src/pedestrian/systems/lifecycle.rs`       |
-| 恐慌系統   | `src/pedestrian/panic.rs`                   |
-| 目擊者系統  | `src/pedestrian/systems/witnesses.rs`       |
-| 世界生成   | `src/world/setup.rs`                        |
-| 天氣效果   | `src/world/time_weather/weather_effects.rs` |
-| 可破壞物件  | `src/environment/systems.rs`                |
+| 偷車     | `src/vehicle/theft.rs`                                             |
+| 車輛改裝   | `src/vehicle/modifications/` (performance, visuals, systems)       |
+| 車輛效果   | `src/vehicle/effects.rs`                                           |
+| 行人生命週期 | `src/pedestrian/systems/lifecycle.rs`                              |
+| 恐慌系統   | `src/pedestrian/panic.rs`                                          |
+| 目擊者系統  | `src/pedestrian/systems/witnesses.rs`                              |
+| 世界生成   | `src/world/setup.rs`                                               |
+| 天氣效果   | `src/world/time_weather/weather_effects.rs`                        |
+| 可破壞物件  | `src/environment/systems.rs`                                       |
 
 ## 操作方式
 
@@ -593,11 +593,11 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ### 開發專用
 
-| 按鍵 | 功能 |
-|------|------|
-| F3 | 切換 AI Debug 可視化 |
+| 按鍵 | 功能                       |
+|----|--------------------------|
+| F3 | 切換 AI Debug 可視化          |
 | F4 | 切換通緝系統 Debug 可視化（Gizmos） |
-| F7 | 開啟 World Inspector |
+| F7 | 開啟 World Inspector       |
 
 ## 驗證
 

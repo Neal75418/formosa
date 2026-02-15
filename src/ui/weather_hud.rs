@@ -46,6 +46,7 @@ pub fn setup_weather_hud(mut commands: Commands, chinese_font: Res<ChineseFont>)
             BackgroundColor(WEATHER_HUD_BG),
             BorderColor::all(WEATHER_HUD_BORDER),
             BorderRadius::all(Val::Px(8.0)),
+            GlobalTransform::default(), // B0004: 後代有 Transform（太陽光芒旋轉）
             WeatherHudContainer,
         ))
         .with_children(|parent| {
@@ -59,6 +60,7 @@ pub fn setup_weather_hud(mut commands: Commands, chinese_font: Res<ChineseFont>)
                         align_items: AlignItems::Center,
                         ..default()
                     },
+                    GlobalTransform::default(), // B0004: 後代有 Transform（太陽光芒旋轉）
                     WeatherIconContainer,
                 ))
                 .with_children(|icon_parent| {
@@ -74,11 +76,14 @@ pub fn setup_weather_hud(mut commands: Commands, chinese_font: Res<ChineseFont>)
 
             // 天氣名稱和按鍵提示
             parent
-                .spawn((Node {
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(4.0),
-                    ..default()
-                },))
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(4.0),
+                        ..default()
+                    },
+                    GlobalTransform::default(), // B0004: Text 子實體可能需要
+                ))
                 .with_children(|col| {
                     // 天氣名稱
                     col.spawn((
@@ -181,6 +186,7 @@ fn spawn_weather_icon_container<'a>(
         } else {
             Visibility::Hidden
         },
+        GlobalTransform::default(), // B0004: 子實體需要 GlobalTransform
         WeatherIconElement { weather_type: ty },
     ))
 }

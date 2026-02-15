@@ -32,6 +32,20 @@ const COLLISION_DAMAGE_SPEED_THRESHOLD: f32 = 10.0;
 /// 傷害倍率：每超過門檻 1 m/s 造成此數值傷害
 const COLLISION_DAMAGE_MULTIPLIER: f32 = 5.0;
 
+/// 從一組位置中找出離目標點最近的索引與距離平方
+fn find_closest_position(positions: &[Vec3], target: Vec3) -> (usize, f32) {
+    let mut closest_idx = 0;
+    let mut closest_dist_sq = f32::MAX;
+    for (i, pos) in positions.iter().enumerate() {
+        let dist_sq = target.distance_squared(*pos);
+        if dist_sq < closest_dist_sq {
+            closest_dist_sq = dist_sq;
+            closest_idx = i;
+        }
+    }
+    (closest_idx, closest_dist_sq)
+}
+
 /// 車輛碰撞傷害系統
 /// 根據碰撞速度計算車輛傷害
 pub fn vehicle_collision_damage_system(
@@ -242,16 +256,7 @@ fn try_pop_tire_at_hit(
     let local_hit = inv_rotation * (hit_pos - vehicle_transform.translation);
 
     // 找最近的輪胎
-    let mut closest_idx = 0;
-    let mut closest_dist_sq = f32::MAX;
-
-    for (i, tire_pos) in tire_positions.iter().enumerate() {
-        let dist_sq = local_hit.distance_squared(*tire_pos);
-        if dist_sq < closest_dist_sq {
-            closest_dist_sq = dist_sq;
-            closest_idx = i;
-        }
-    }
+    let (closest_idx, closest_dist_sq) = find_closest_position(&tire_positions, local_hit);
 
     // 命中輪胎附近且該輪胎尚未爆破 → 機率爆胎
     if closest_dist_sq < TIRE_HIT_RADIUS_SQ
@@ -393,15 +398,7 @@ pub fn bullet_window_damage_system(
         let local_hit = inv_rotation * (hit_pos - transform.translation);
 
         // 找最近的車窗
-        let mut closest_idx = 0;
-        let mut closest_dist_sq = f32::MAX;
-        for (i, pos) in window_positions.iter().enumerate() {
-            let dist_sq = local_hit.distance_squared(*pos);
-            if dist_sq < closest_dist_sq {
-                closest_dist_sq = dist_sq;
-                closest_idx = i;
-            }
-        }
+        let (closest_idx, closest_dist_sq) = find_closest_position(&window_positions, local_hit);
 
         if closest_dist_sq < WINDOW_HIT_RADIUS_SQ
             && dw.windows[closest_idx] != WindowState::Broken

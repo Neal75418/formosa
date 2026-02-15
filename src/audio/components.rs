@@ -405,6 +405,16 @@ impl From<GroundSurface> for super::systems::FootstepSurface {
 // 車載電台系統 (GTA 5 風格)
 // ============================================================================
 
+/// 電台循環順序（含 Off，用於 next/prev 切換）
+const STATION_CYCLE: [RadioStation; 6] = [
+    RadioStation::IslandPop,
+    RadioStation::NightMarketFunk,
+    RadioStation::TaiwanReggae,
+    RadioStation::UndergroundHipHop,
+    RadioStation::ClassicFM,
+    RadioStation::Off,
+];
+
 /// 電台頻道
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RadioStation {
@@ -458,28 +468,19 @@ impl RadioStation {
         ]
     }
 
+    /// 在循環陣列中的索引
+    fn cycle_index(self) -> usize {
+        STATION_CYCLE.iter().position(|&s| s == self).unwrap_or(0)
+    }
+
     /// 下一個電台（循環切換，含 Off）
     pub fn next(self) -> RadioStation {
-        match self {
-            Self::IslandPop => Self::NightMarketFunk,
-            Self::NightMarketFunk => Self::TaiwanReggae,
-            Self::TaiwanReggae => Self::UndergroundHipHop,
-            Self::UndergroundHipHop => Self::ClassicFM,
-            Self::ClassicFM => Self::Off,
-            Self::Off => Self::IslandPop,
-        }
+        STATION_CYCLE[(self.cycle_index() + 1) % STATION_CYCLE.len()]
     }
 
     /// 上一個電台（反向循環）
     pub fn prev(self) -> RadioStation {
-        match self {
-            Self::IslandPop => Self::Off,
-            Self::NightMarketFunk => Self::IslandPop,
-            Self::TaiwanReggae => Self::NightMarketFunk,
-            Self::UndergroundHipHop => Self::TaiwanReggae,
-            Self::ClassicFM => Self::UndergroundHipHop,
-            Self::Off => Self::ClassicFM,
-        }
+        STATION_CYCLE[(self.cycle_index() + STATION_CYCLE.len() - 1) % STATION_CYCLE.len()]
     }
 }
 

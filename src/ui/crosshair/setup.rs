@@ -201,19 +201,23 @@ fn spawn_crosshair_center(commands: &mut Commands) {
                 align_items: AlignItems::Center,
                 ..default()
             },
+            GlobalTransform::default(), // B0004: 後代有 Transform（命中標記旋轉）
             Crosshair,
         ))
         .with_children(|parent| {
             // 準星容器（增加尺寸以容納外圈）
             parent
-                .spawn((Node {
-                    width: Val::Px(60.0),
-                    height: Val::Px(60.0),
-                    position_type: PositionType::Relative,
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },))
+                .spawn((
+                    Node {
+                        width: Val::Px(60.0),
+                        height: Val::Px(60.0),
+                        position_type: PositionType::Relative,
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    GlobalTransform::default(), // B0004: 後代有 Transform（命中標記旋轉）
+                ))
                 .with_children(|crosshair| {
                     // 外圈（動態擴散時使用）
                     crosshair.spawn((
@@ -272,6 +276,7 @@ fn spawn_crosshair_center(commands: &mut Commands) {
                                 ..default()
                             },
                             Visibility::Hidden,
+                            GlobalTransform::default(), // B0004: 子實體需要 GlobalTransform
                             CrosshairHitMarker,
                         ))
                         .with_children(|hit_marker| {

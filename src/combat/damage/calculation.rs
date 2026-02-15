@@ -5,12 +5,12 @@
 use bevy::prelude::*;
 
 use super::effects::spawn_floating_damage_number;
-use super::DamageSystemResources;
+use super::{DamageSystemQueries, DamageSystemResources};
 use crate::combat::components::*;
 use crate::combat::health::*;
 use crate::ai::{CoverPoint, CoverSeeker};
 use crate::audio::{play_hit_sound, AudioManager, WeaponSounds};
-use crate::player::{Player, Stamina};
+use crate::player::Player;
 use crate::ui::{
     trigger_damage_indicator, ChineseFont, DamageIndicatorState, FloatingDamageNumber,
     FloatingDamageTracker, NotificationQueue,
@@ -370,60 +370,48 @@ fn calculate_block_reduction(
 }
 
 /// 傷害處理系統
-#[allow(clippy::too_many_arguments)]
 pub fn damage_system(
     mut damage_events: MessageReader<DamageEvent>,
     mut death_events: MessageWriter<DeathEvent>,
     mut armor_break_events: MessageWriter<ArmorBreakEvent>,
     mut commands: Commands,
-    // 合併查詢：Health + Armor + CoverSeeker + HitReaction (同一實體)
-    mut health_query: Query<(
-        &mut Health,
-        Option<&mut Armor>,
-        Option<&CoverSeeker>,
-        Option<&mut HitReaction>,
-    )>,
-    cover_point_query: Query<&CoverPoint>,
-    player_query: Query<Entity, With<Player>>,
-    enemy_query: Query<Entity, With<Enemy>>,
-    transform_query: Query<&Transform>,
-    mut stamina_query: Query<&mut Stamina, With<Player>>,
-    // 資源參數包（解決 Bevy 16 參數限制）
+    mut queries: DamageSystemQueries,
     mut res: DamageSystemResources,
 ) {
     let current_time = res.time.elapsed_secs();
-    let player_entity = player_query.single().ok();
+    let player_entity = queries.players.single().ok();
 
     for event in damage_events.read() {
         let Ok((mut health, mut armor, cover_seeker, mut hit_reaction)) =
-            health_query.get_mut(event.target)
+            queries.health.get_mut(event.target)
         else {
             continue;
         };
 
         // 計算掩體傷害減免（含攻擊方向檢測）
-        let target_pos = transform_query
+        let target_pos = queries
+            .transforms
             .get(event.target)
             .map(|t| t.translation)
             .unwrap_or(Vec3::ZERO);
         let cover_reduction = calculate_cover_reduction(
             cover_seeker,
-            &cover_point_query,
+            &queries.cover_points,
             event.attacker,
             target_pos,
-            &transform_query,
+            &queries.transforms,
         );
         let mut actual_damage = event.amount * (1.0 - cover_reduction);
 
         // 格擋/精準格擋減免（僅玩家、僅近戰傷害）
-        let is_player_target = player_query.get(event.target).is_ok();
+        let is_player_target = queries.players.get(event.target).is_ok();
         if is_player_target {
             let (block_mult, is_parry) =
                 calculate_block_reduction(&res.block_state, event.source, current_time);
             if block_mult < 1.0 {
                 actual_damage *= block_mult;
                 // 扣除體力
-                if let Ok(mut stamina) = stamina_query.get_mut(event.target) {
+                if let Ok(mut stamina) = queries.stamina.get_mut(event.target) {
                     let cost = if is_parry {
                         PARRY_STAMINA_COST
                     } else {
@@ -446,7 +434,7 @@ pub fn damage_system(
             &armor_result,
             event.target,
             event.hit_position,
-            &transform_query,
+            &queries.transforms,
             &mut armor_break_events,
         );
 
@@ -461,7 +449,7 @@ pub fn damage_system(
             event.target,
             event.is_headshot,
             event.force_knockback,
-            &transform_query,
+            &queries.transforms,
         );
 
         // 玩家受傷通知（含方向指示器）
@@ -469,8 +457,8 @@ pub fn damage_system(
             event.target,
             damage_dealt,
             event.attacker,
-            &player_query,
-            &transform_query,
+            &queries.players,
+            &queries.transforms,
             &mut res.notifications,
             &mut res.damage_indicator,
         );
@@ -480,8 +468,8 @@ pub fn damage_system(
             event,
             damage_dealt,
             player_entity,
-            &enemy_query,
-            &transform_query,
+            &queries.enemies,
+            &queries.transforms,
             &mut res,
             &mut commands,
         );
@@ -489,7 +477,7 @@ pub fn damage_system(
         // 檢查死亡
         if health.is_dead() {
             let hit_direction =
-                calculate_death_hit_direction(event.attacker, event.target, &transform_query);
+                calculate_death_hit_direction(event.attacker, event.target, &queries.transforms);
             death_events.write(DeathEvent {
                 entity: event.target,
                 killer: event.attacker,

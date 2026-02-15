@@ -55,62 +55,55 @@ pub fn vehicle_acceleration_system(
     let effective_traction = weather_traction * modifiers.traction;
     let effective_max_speed = vehicle.max_speed * modifiers.speed;
 
-    apply_vehicle_motion_physics(
-        &mut vehicle,
+    let frame = VehiclePhysicsFrame {
         power_band,
-        braking,
-        drift,
-        &mut input,
+        config: &config.physics,
+        modifiers: &modifiers,
         dt,
-        &config.physics,
-        &modifiers,
         effective_traction,
         effective_max_speed,
-    );
+    };
+    apply_vehicle_motion_physics(&mut vehicle, braking, drift, &mut input, &frame);
 }
 
-#[allow(clippy::too_many_arguments)]
+/// 車輛物理幀上下文：整合每幀共用的物理參數
+pub(super) struct VehiclePhysicsFrame<'a> {
+    pub(super) power_band: &'a VehiclePowerBand,
+    pub(super) config: &'a crate::vehicle::config::VehiclePhysicsConfig,
+    pub(super) modifiers: &'a VehicleDynamicsModifiers,
+    pub(super) dt: f32,
+    pub(super) effective_traction: f32,
+    pub(super) effective_max_speed: f32,
+}
+
 pub(super) fn apply_vehicle_motion_physics(
     vehicle: &mut Vehicle,
-    power_band: &VehiclePowerBand,
     braking: &VehicleBraking,
     drift: &VehicleDrift,
     input: &mut VehicleInput,
-    dt: f32,
-    physics_config: &crate::vehicle::config::VehiclePhysicsConfig,
-    modifiers: &VehicleDynamicsModifiers,
-    effective_traction: f32,
-    effective_max_speed: f32,
+    frame: &VehiclePhysicsFrame,
 ) {
     if input.throttle_input > 0.0 {
-        handle_acceleration(
-            vehicle,
-            power_band,
-            input,
-            dt,
-            physics_config,
-            modifiers,
-            effective_traction,
-        );
+        handle_acceleration(vehicle, input, frame);
     } else if input.brake_input > 0.0 && !drift.is_handbraking {
-        handle_braking(vehicle, power_band, braking, input, dt, physics_config, modifiers, effective_traction);
+        handle_braking(vehicle, braking, input, frame);
     } else {
         handle_friction(
             vehicle,
             braking,
             drift,
-            physics_config,
-            effective_traction,
-            effective_max_speed,
+            frame.config,
+            frame.effective_traction,
+            frame.effective_max_speed,
         );
     }
 
     // Clamp Speed
     vehicle.current_speed = vehicle.current_speed.clamp(
-        -effective_max_speed * physics_config.reverse_speed_ratio,
-        effective_max_speed,
+        -frame.effective_max_speed * frame.config.reverse_speed_ratio,
+        frame.effective_max_speed,
     );
-    if vehicle.current_speed.abs() < physics_config.stop_speed_threshold
+    if vehicle.current_speed.abs() < frame.config.stop_speed_threshold
         && input.throttle_input == 0.0
     {
         vehicle.current_speed = 0.0;
@@ -166,67 +159,60 @@ impl VehicleDynamicsModifiers {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle_acceleration(
     vehicle: &mut Vehicle,
-    power_band: &VehiclePowerBand,
     input: &mut VehicleInput,
-    dt: f32,
-    physics_config: &crate::vehicle::config::VehiclePhysicsConfig,
-    modifiers: &VehicleDynamicsModifiers,
-    effective_traction: f32,
+    frame: &VehiclePhysicsFrame,
 ) {
-    let accel_mult = modifiers.nitro.max(1.0);
-    let accel_force = calculate_acceleration_force(vehicle, power_band, physics_config) * modifiers.accel;
-    let effective_accel = accel_force * accel_mult * input.throttle_input * effective_traction;
+    let accel_mult = frame.modifiers.nitro.max(1.0);
+    let accel_force =
+        calculate_acceleration_force(vehicle, frame.power_band, frame.config) * frame.modifiers.accel;
+    let effective_accel = accel_force * accel_mult * input.throttle_input * frame.effective_traction;
 
     // Wheel spin logic
-    let slip_threshold = if effective_traction < physics_config.normal_traction_threshold {
-        physics_config.slip_speed_low_traction
+    let slip_threshold = if frame.effective_traction < frame.config.normal_traction_threshold {
+        frame.config.slip_speed_low_traction
     } else {
-        physics_config.slip_speed_normal
+        frame.config.slip_speed_normal
     };
 
     if vehicle.current_speed < slip_threshold
-        && (accel_mult > 1.0 || effective_traction < physics_config.low_traction_threshold)
+        && (accel_mult > 1.0 || frame.effective_traction < frame.config.low_traction_threshold)
     {
-        let slip_factor = if effective_traction < physics_config.low_traction_threshold {
-            physics_config.slip_factor_low_traction
+        let slip_factor = if frame.effective_traction < frame.config.low_traction_threshold {
+            frame.config.slip_factor_low_traction
         } else {
-            physics_config.slip_factor_normal
+            frame.config.slip_factor_normal
         };
-        input.wheel_spin = (input.wheel_spin + dt * slip_factor).min(1.0);
+        input.wheel_spin = (input.wheel_spin + frame.dt * slip_factor).min(1.0);
         let grip =
-            effective_traction * (1.0 - input.wheel_spin * physics_config.slip_grip_penalty);
-        vehicle.current_speed += effective_accel * grip * dt;
+            frame.effective_traction * (1.0 - input.wheel_spin * frame.config.slip_grip_penalty);
+        vehicle.current_speed += effective_accel * grip * frame.dt;
     } else {
-        input.wheel_spin = (input.wheel_spin - dt * physics_config.slip_recovery_rate).max(0.0);
-        vehicle.current_speed += effective_accel * dt;
+        input.wheel_spin =
+            (input.wheel_spin - frame.dt * frame.config.slip_recovery_rate).max(0.0);
+        vehicle.current_speed += effective_accel * frame.dt;
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle_braking(
     vehicle: &mut Vehicle,
-    power_band: &VehiclePowerBand,
     braking: &VehicleBraking,
     input: &VehicleInput,
-    dt: f32,
-    physics_config: &crate::vehicle::config::VehiclePhysicsConfig,
-    modifiers: &VehicleDynamicsModifiers,
-    effective_traction: f32,
+    frame: &VehiclePhysicsFrame,
 ) {
     if vehicle.current_speed > 0.5 {
-        let brake_decel =
-            braking.brake_force * modifiers.brake * input.brake_input * effective_traction;
-        vehicle.current_speed -= brake_decel * dt;
+        let brake_decel = braking.brake_force * frame.modifiers.brake * input.brake_input
+            * frame.effective_traction;
+        vehicle.current_speed -= brake_decel * frame.dt;
         vehicle.current_speed = vehicle.current_speed.max(0.0);
     } else {
         // Reverse
-        let reverse_accel =
-            calculate_acceleration_force(vehicle, power_band, physics_config) * modifiers.accel
-                * physics_config.reverse_acceleration_multiplier * effective_traction;
-        vehicle.current_speed -= reverse_accel * dt;
+        let reverse_accel = calculate_acceleration_force(vehicle, frame.power_band, frame.config)
+            * frame.modifiers.accel
+            * frame.config.reverse_acceleration_multiplier
+            * frame.effective_traction;
+        vehicle.current_speed -= reverse_accel * frame.dt;
     }
 }
 

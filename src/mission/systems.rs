@@ -27,19 +27,24 @@ const VEHICLE_INTERACT_DIST_SQ: f32 = 9.0;    // 3.0 * 3.0
 const CHECKPOINT_INTERACT_DIST_SQ: f32 = 64.0; // 8.0 * 8.0
 const TAXI_INTERACT_DIST_SQ: f32 = 36.0;      // 6.0 * 6.0
 
+/// 任務渲染上下文：整合 Commands 與 Mesh/Material Assets
+struct MissionRenderCtx<'a, 'w, 's> {
+    commands: &'a mut Commands<'w, 's>,
+    meshes: &'a mut Assets<Mesh>,
+    materials: &'a mut Assets<StandardMaterial>,
+}
+
 /// 生成任務標記的輔助函數
 fn spawn_marker(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     position: Vec3,
     mission_id: u32,
     is_start: bool,
 ) {
     let color = if is_start { MARKER_COLOR_START } else { MARKER_COLOR_END };
-    commands.spawn((
-        Mesh3d(meshes.add(Cylinder::new(2.0, 0.5))),
-        MeshMaterial3d(materials.add(StandardMaterial {
+    ctx.commands.spawn((
+        Mesh3d(ctx.meshes.add(Cylinder::new(2.0, 0.5))),
+        MeshMaterial3d(ctx.materials.add(StandardMaterial {
             base_color: color,
             alpha_mode: AlphaMode::Blend,
             ..default()
@@ -57,15 +62,13 @@ pub fn spawn_mission_markers(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mission_manager: Res<MissionManager>,
 ) {
+    let mut ctx = MissionRenderCtx {
+        commands: &mut commands,
+        meshes: &mut meshes,
+        materials: &mut materials,
+    };
     for mission in &mission_manager.available_missions {
-        spawn_marker(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            mission.start_pos,
-            mission.id,
-            true,
-        );
+        spawn_marker(&mut ctx, mission.start_pos, mission.id, true);
     }
 }
 
@@ -92,16 +95,13 @@ enum MissionResult {
 }
 
 /// 更新進行中的任務狀態
-#[allow(clippy::too_many_arguments)]
 fn update_active_mission(
     active: &mut ActiveMission,
     player_pos: Vec3,
     player_in_vehicle: bool,
     interaction: &mut InteractionState,
     time_delta: f32,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     notifications: &mut NotificationQueue,
 ) -> MissionResult {
     active.time_elapsed += time_delta;
@@ -117,13 +117,13 @@ fn update_active_mission(
     // 根據任務類型分派處理
     match active.data.mission_type {
         MissionType::Delivery => {
-            update_delivery_mission(active, player_pos, interaction, commands, meshes, materials, notifications)
+            update_delivery_mission(active, player_pos, interaction, ctx, notifications)
         }
         MissionType::Race => {
-            update_race_mission(active, player_pos, player_in_vehicle, commands, meshes, materials, notifications)
+            update_race_mission(active, player_pos, player_in_vehicle, ctx, notifications)
         }
         MissionType::Taxi => {
-            update_taxi_mission(active, player_pos, player_in_vehicle, interaction, time_delta, commands, meshes, materials, notifications)
+            update_taxi_mission(active, player_pos, player_in_vehicle, interaction, time_delta, ctx, notifications)
         }
         MissionType::Explore
         | MissionType::Assassination
@@ -146,9 +146,7 @@ fn update_delivery_mission(
     active: &mut ActiveMission,
     player_pos: Vec3,
     interaction: &mut InteractionState,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     notifications: &mut NotificationQueue,
 ) -> MissionResult {
     if !active.picked_up {
@@ -159,7 +157,7 @@ fn update_delivery_mission(
             notifications.success("📦 已取餐！請送往目的地");
 
             // 生成終點標記
-            spawn_marker(commands, meshes, materials, active.data.end_pos, active.data.id, false);
+            spawn_marker(ctx, active.data.end_pos, active.data.id, false);
             interaction.consume();
         }
         return MissionResult::None;
@@ -191,14 +189,11 @@ fn calculate_delivery_rating(active: &ActiveMission) -> DeliveryRating {
 // ============================================================================
 
 /// 更新競速任務狀態
-#[allow(clippy::too_many_arguments)]
 fn update_race_mission(
     active: &mut ActiveMission,
     player_pos: Vec3,
     player_in_vehicle: bool,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     notifications: &mut NotificationQueue,
 ) -> MissionResult {
     // 競速任務需要在車上
@@ -230,7 +225,7 @@ fn update_race_mission(
 
             // 生成下一個檢查點標記
             if let Some(next_cp) = race_data.current_checkpoint_pos() {
-                spawn_checkpoint_marker(commands, meshes, materials, next_cp, active.data.id, race_data.current_checkpoint);
+                spawn_checkpoint_marker(ctx, next_cp, active.data.id, race_data.current_checkpoint);
             }
         } else {
             // 完成比賽！
@@ -244,18 +239,16 @@ fn update_race_mission(
 
 /// 生成檢查點標記
 fn spawn_checkpoint_marker(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     position: Vec3,
     mission_id: u32,
     checkpoint_index: usize,
 ) {
     // 使用橙色圓柱標記檢查點
     let color = Color::srgba(1.0, 0.6, 0.2, 0.8);
-    commands.spawn((
-        Mesh3d(meshes.add(Cylinder::new(3.0, 0.3))),
-        MeshMaterial3d(materials.add(StandardMaterial {
+    ctx.commands.spawn((
+        Mesh3d(ctx.meshes.add(Cylinder::new(3.0, 0.3))),
+        MeshMaterial3d(ctx.materials.add(StandardMaterial {
             base_color: color,
             alpha_mode: AlphaMode::Blend,
             emissive: LinearRgba::new(1.0, 0.4, 0.0, 1.0),
@@ -280,16 +273,13 @@ pub struct CheckpointMarker {
 // ============================================================================
 
 /// 更新計程車任務狀態
-#[allow(clippy::too_many_arguments)]
 fn update_taxi_mission(
     active: &mut ActiveMission,
     player_pos: Vec3,
     player_in_vehicle: bool,
     interaction: &mut InteractionState,
     time_delta: f32,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     notifications: &mut NotificationQueue,
 ) -> MissionResult {
     let Some(ref mut taxi_data) = active.data.taxi_data else {
@@ -317,7 +307,7 @@ fn update_taxi_mission(
                 taxi_data.passenger_name, taxi_data.destination_name));
 
             // 生成終點標記
-            spawn_marker(commands, meshes, materials, active.data.end_pos, active.data.id, false);
+            spawn_marker(ctx, active.data.end_pos, active.data.id, false);
             interaction.consume();
         }
         return MissionResult::None;
@@ -344,32 +334,27 @@ fn update_taxi_mission(
 fn reset_mission_markers(
     mission_id: Option<u32>,
     mission_manager: &MissionManager,
-    commands: &mut Commands,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     marker_query: &Query<(Entity, &MissionMarker)>,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
 ) {
     let Some(id) = mission_id else { return };
 
-    cleanup_mission_markers(commands, marker_query, id);
+    cleanup_mission_markers(ctx.commands, marker_query, id);
 
     if let Some(mission_data) = mission_manager.available_missions.iter().find(|m| m.id == id) {
         info!("🔄 任務重置：{}", mission_data.title);
-        spawn_marker(commands, meshes, materials, mission_data.start_pos, id, true);
+        spawn_marker(ctx, mission_data.start_pos, id, true);
     }
 }
 
 /// 處理任務完成
-#[allow(clippy::too_many_arguments)]
 fn handle_mission_completion(
     rating: DeliveryRating,
     mission_manager: &mut MissionManager,
     wallet: &mut PlayerWallet,
     notifications: &mut NotificationQueue,
-    commands: &mut Commands,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     marker_query: &Query<(Entity, &MissionMarker)>,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
     let mission_title = mission_manager.active_mission.as_ref()
@@ -408,7 +393,7 @@ fn handle_mission_completion(
         rating.stars(), final_reward, streak_msg
     ));
 
-    reset_mission_markers(mission_id, mission_manager, commands, marker_query, meshes, materials);
+    reset_mission_markers(mission_id, mission_manager, ctx, marker_query);
     mission_manager.active_mission = None;
 }
 
@@ -416,17 +401,15 @@ fn handle_mission_completion(
 fn handle_mission_failure(
     mission_manager: &mut MissionManager,
     notifications: &mut NotificationQueue,
-    commands: &mut Commands,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     marker_query: &Query<(Entity, &MissionMarker)>,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
 
     mission_manager.fail_delivery();
     notifications.warning("💔 任務失敗！");
 
-    reset_mission_markers(mission_id, mission_manager, commands, marker_query, meshes, materials);
+    reset_mission_markers(mission_id, mission_manager, ctx, marker_query);
     mission_manager.active_mission = None;
 }
 
@@ -437,7 +420,7 @@ fn handle_race_completion(
     mission_manager: &mut MissionManager,
     wallet: &mut PlayerWallet,
     notifications: &mut NotificationQueue,
-    commands: &mut Commands,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     marker_query: &Query<(Entity, &MissionMarker)>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
@@ -488,7 +471,7 @@ fn handle_race_completion(
 
     // 清除標記
     if let Some(id) = mission_id {
-        cleanup_mission_markers(commands, marker_query, id);
+        cleanup_mission_markers(ctx.commands, marker_query, id);
     }
     mission_manager.active_mission = None;
 }
@@ -499,7 +482,7 @@ fn handle_taxi_completion(
     mission_manager: &mut MissionManager,
     wallet: &mut PlayerWallet,
     notifications: &mut NotificationQueue,
-    commands: &mut Commands,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
     marker_query: &Query<(Entity, &MissionMarker)>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
@@ -548,7 +531,7 @@ fn handle_taxi_completion(
 
     // 清除標記
     if let Some(id) = mission_id {
-        cleanup_mission_markers(commands, marker_query, id);
+        cleanup_mission_markers(ctx.commands, marker_query, id);
     }
     mission_manager.active_mission = None;
 }
@@ -581,9 +564,7 @@ fn accept_mission(
     mission: MissionData,
     mission_manager: &mut MissionManager,
     notifications: &mut NotificationQueue,
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ctx: &mut MissionRenderCtx<'_, '_, '_>,
 ) {
     // 根據任務類型顯示不同資訊
     match mission.mission_type {
@@ -602,7 +583,7 @@ fn accept_mission(
                 ));
                 // 生成第一個檢查點標記
                 if let Some(first_cp) = race_data.checkpoints.get(1) {
-                    spawn_checkpoint_marker(commands, meshes, materials, *first_cp, mission.id, 1);
+                    spawn_checkpoint_marker(ctx, *first_cp, mission.id, 1);
                 }
             }
         }
@@ -631,7 +612,7 @@ fn accept_mission(
                 "{} {} | ${}{}",
                 icon, mission.title, mission.reward, time_msg
             ));
-            spawn_marker(commands, meshes, materials, mission.end_pos, mission.id, false);
+            spawn_marker(ctx, mission.end_pos, mission.id, false);
         }
     }
 
@@ -671,6 +652,12 @@ pub fn mission_system(
         vt.translation.distance_squared(player_pos) < VEHICLE_INTERACT_DIST_SQ
     });
 
+    let mut ctx = MissionRenderCtx {
+        commands: &mut commands,
+        meshes: &mut meshes,
+        materials: &mut materials,
+    };
+
     // 更新進行中的任務
     if let Some(ref mut active) = mission_manager.active_mission {
         let result = update_active_mission(
@@ -679,9 +666,7 @@ pub fn mission_system(
             player_in_vehicle,
             &mut interaction,
             time.delta_secs(),
-            &mut commands,
-            &mut meshes,
-            &mut materials,
+            &mut ctx,
             &mut notifications,
         );
 
@@ -692,10 +677,8 @@ pub fn mission_system(
                     &mut mission_manager,
                     &mut wallet,
                     &mut notifications,
-                    &mut commands,
+                    &mut ctx,
                     &marker_query,
-                    &mut meshes,
-                    &mut materials,
                 );
                 return;
             }
@@ -706,7 +689,7 @@ pub fn mission_system(
                     &mut mission_manager,
                     &mut wallet,
                     &mut notifications,
-                    &mut commands,
+                    &mut ctx,
                     &marker_query,
                 );
                 return;
@@ -717,7 +700,7 @@ pub fn mission_system(
                     &mut mission_manager,
                     &mut wallet,
                     &mut notifications,
-                    &mut commands,
+                    &mut ctx,
                     &marker_query,
                 );
                 return;
@@ -726,10 +709,8 @@ pub fn mission_system(
                 handle_mission_failure(
                     &mut mission_manager,
                     &mut notifications,
-                    &mut commands,
+                    &mut ctx,
                     &marker_query,
-                    &mut meshes,
-                    &mut materials,
                 );
                 return;
             }
@@ -745,9 +726,7 @@ pub fn mission_system(
                 mission,
                 &mut mission_manager,
                 &mut notifications,
-                &mut commands,
-                &mut meshes,
-                &mut materials,
+                &mut ctx,
             );
             interaction.consume();
         }

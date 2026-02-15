@@ -320,6 +320,14 @@ struct MapLandmark {
     color: Color,
 }
 
+/// 地圖繪製上下文：整合縮放、偏移、字型
+struct MapDrawCtx {
+    scale: f32,
+    off_x: f32,
+    off_y: f32,
+    font: Handle<Font>,
+}
+
 /// 統一生成地圖內容（道路 + 地標）
 pub fn spawn_map_layer(
     parent: &mut ChildSpawnerCommands,
@@ -336,131 +344,25 @@ pub fn spawn_map_layer(
         X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
     };
 
+    let ctx = MapDrawCtx { scale, off_x, off_y, font };
+
     // 1. 繪製道路 (Roads) - 完整西門町道路網格
     let v_len_main = 180.0;
     let h_center_x = -10.0; // 水平道路中心點
 
     // 南北向道路 (Vertical)
-    draw_road_rect(
-        parent,
-        X_ZHONGHUA,
-        -15.0,
-        W_ZHONGHUA * road_width_factor,
-        v_len_main,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "中華路",
-        font.clone(),
-    );
-    draw_road_rect(
-        parent,
-        X_XINING,
-        -15.0,
-        W_SECONDARY * road_width_factor,
-        v_len_main,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "西寧南路",
-        font.clone(),
-    );
-    draw_road_rect(
-        parent,
-        X_KANGDING,
-        -15.0,
-        W_MAIN * road_width_factor,
-        v_len_main,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "康定路",
-        font.clone(),
-    );
-    draw_road_rect(
-        parent,
-        X_HAN,
-        0.0,
-        W_PEDESTRIAN * road_width_factor,
-        100.0,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "漢中街",
-        font.clone(),
-    );
+    draw_road_rect(parent, X_ZHONGHUA, -15.0, W_ZHONGHUA * road_width_factor, v_len_main, &ctx, if is_fullmap { "中華路" } else { "" });
+    draw_road_rect(parent, X_XINING, -15.0, W_SECONDARY * road_width_factor, v_len_main, &ctx, if is_fullmap { "西寧南路" } else { "" });
+    draw_road_rect(parent, X_KANGDING, -15.0, W_MAIN * road_width_factor, v_len_main, &ctx, if is_fullmap { "康定路" } else { "" });
+    draw_road_rect(parent, X_HAN, 0.0, W_PEDESTRIAN * road_width_factor, 100.0, &ctx, if is_fullmap { "漢中街" } else { "" });
 
     // 東西向道路 (Horizontal)
     let h_len = 200.0;
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_HANKOU,
-        h_len,
-        W_SECONDARY * road_width_factor,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "漢口街",
-        font.clone(),
-    );
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_WUCHANG,
-        h_len,
-        W_PEDESTRIAN * road_width_factor,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "武昌街",
-        font.clone(),
-    );
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_KUNMING,
-        h_len,
-        W_ALLEY * road_width_factor,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "昆明街",
-        font.clone(),
-    );
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_EMEI,
-        h_len,
-        W_PEDESTRIAN * road_width_factor,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "峨嵋街",
-        font.clone(),
-    );
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_CHENGDU,
-        h_len,
-        W_MAIN * road_width_factor,
-        scale,
-        off_x,
-        off_y,
-        is_fullmap,
-        "成都路",
-        font.clone(),
-    );
+    draw_road_rect(parent, h_center_x, Z_HANKOU, h_len, W_SECONDARY * road_width_factor, &ctx, if is_fullmap { "漢口街" } else { "" });
+    draw_road_rect(parent, h_center_x, Z_WUCHANG, h_len, W_PEDESTRIAN * road_width_factor, &ctx, if is_fullmap { "武昌街" } else { "" });
+    draw_road_rect(parent, h_center_x, Z_KUNMING, h_len, W_ALLEY * road_width_factor, &ctx, if is_fullmap { "昆明街" } else { "" });
+    draw_road_rect(parent, h_center_x, Z_EMEI, h_len, W_PEDESTRIAN * road_width_factor, &ctx, if is_fullmap { "峨嵋街" } else { "" });
+    draw_road_rect(parent, h_center_x, Z_CHENGDU, h_len, W_MAIN * road_width_factor, &ctx, if is_fullmap { "成都路" } else { "" });
 
     // 2. 繪製地標 (Landmarks) - 根據新的建築位置更新
     let landmarks = [
@@ -580,58 +482,31 @@ pub fn spawn_map_layer(
             // Size mapping based on scale 1.2 adjusted:
             // 為了保持與之前手動調整的一致性 (UI Size ~= World Size * 1.2)
             // 這裡我們直接使用 (World Size * Scale)
-            draw_building_rect(
-                parent,
-                lm.world_x,
-                lm.world_z,
-                lm.w,
-                lm.d,
-                scale,
-                off_x,
-                off_y,
-                lm.color,
-                lm.name,
-                font.clone(),
-            );
+            draw_building_rect(parent, lm.world_x, lm.world_z, lm.w, lm.d, &ctx, lm.color, lm.name);
         } else {
             // 小地圖：顯示簡化點
-            draw_minimap_point(
-                parent,
-                lm.world_x,
-                lm.world_z,
-                scale,
-                off_x,
-                off_y,
-                lm.color,
-                lm.name,
-                font.clone(),
-            );
+            draw_minimap_point(parent, lm.world_x, lm.world_z, &ctx, lm.color, lm.name);
         }
     }
 }
 
 // --- 底層繪圖 Helpers ---
 
-#[allow(clippy::too_many_arguments)]
 fn draw_road_rect(
     parent: &mut ChildSpawnerCommands,
     x: f32,
     z: f32,
     width: f32,
     length: f32, // w=thickness, l=length
-    scale: f32,
-    off_x: f32,
-    off_y: f32,
-    show_name: bool,
-    name: &str,
-    font: Handle<Font>,
+    ctx: &MapDrawCtx,
+    label: &str,
 ) {
     // width = 世界 X 軸尺寸，length = 世界 Z 軸尺寸
     // 直接乘以縮放比例轉換為 UI 座標
-    let ui_w = width * scale;
-    let ui_h = length * scale;
-    let ui_x = x * scale + off_x;
-    let ui_y = -z * scale + off_y; // Z 軸翻轉
+    let ui_w = width * ctx.scale;
+    let ui_h = length * ctx.scale;
+    let ui_x = x * ctx.scale + ctx.off_x;
+    let ui_y = -z * ctx.scale + ctx.off_y; // Z 軸翻轉
 
     spawn_centered_rect(
         parent,
@@ -640,32 +515,28 @@ fn draw_road_rect(
         ui_w,
         ui_h,
         Color::srgba(0.5, 0.5, 0.55, 0.6),
-        if show_name { name } else { "" },
+        label,
         14.0,
-        font,
+        ctx.font.clone(),
     );
 }
 
-#[allow(clippy::too_many_arguments)]
 fn draw_building_rect(
     parent: &mut ChildSpawnerCommands,
     x: f32,
     z: f32,
     w: f32,
     d: f32, // World dims
-    scale: f32,
-    off_x: f32,
-    off_y: f32,
+    ctx: &MapDrawCtx,
     color: Color,
     name: &str,
-    font: Handle<Font>,
 ) {
-    let ui_w = w * scale;
-    let ui_h = d * scale;
-    let ui_x = x * scale + off_x;
-    let ui_y = -z * scale + off_y; // Z 軸翻轉
+    let ui_w = w * ctx.scale;
+    let ui_h = d * ctx.scale;
+    let ui_x = x * ctx.scale + ctx.off_x;
+    let ui_y = -z * ctx.scale + ctx.off_y; // Z 軸翻轉
 
-    spawn_centered_rect(parent, ui_x, ui_y, ui_w, ui_h, color, name, 10.0, font);
+    spawn_centered_rect(parent, ui_x, ui_y, ui_w, ui_h, color, name, 10.0, ctx.font.clone());
 }
 
 /// 生成置中矩形 (共用 helper)
@@ -710,20 +581,16 @@ fn spawn_centered_rect(
         });
 }
 
-#[allow(clippy::too_many_arguments)]
 fn draw_minimap_point(
     parent: &mut ChildSpawnerCommands,
     x: f32,
     z: f32,
-    scale: f32,
-    off_x: f32,
-    off_y: f32,
+    ctx: &MapDrawCtx,
     color: Color,
     name: &str,
-    font: Handle<Font>,
 ) {
-    let ui_x = x * scale + off_x;
-    let ui_y = -z * scale + off_y; // Z 軸翻轉
+    let ui_x = x * ctx.scale + ctx.off_x;
+    let ui_y = -z * ctx.scale + ctx.off_y; // Z 軸翻轉
     let size = 10.0; // Fixed point size for minimap
 
     // Point
@@ -744,7 +611,7 @@ fn draw_minimap_point(
         Text::new(name),
         TextFont {
             font_size: 8.0,
-            font,
+            font: ctx.font.clone(),
             ..default()
         },
         Node {

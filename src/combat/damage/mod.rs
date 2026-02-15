@@ -32,12 +32,14 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use super::components::*;
+use super::health::{Armor, Health};
 use super::killcam::KillCamState;
 use super::ragdoll::BodyPart;
 use super::visuals::*;
 use crate::audio::{AudioManager, WeaponSounds};
 use crate::pedestrian::Pedestrian;
-use crate::player::Player;
+use crate::ai::{CoverPoint, CoverSeeker};
+use crate::player::{Player, Stamina};
 use crate::ui::{ChineseFont, DamageIndicatorState, FloatingDamageTracker, NotificationQueue};
 use crate::wanted::PoliceOfficer;
 use crate::world::{PLAYER_RESPAWN_Y, PLAYER_SPAWN_X, PLAYER_SPAWN_Z};
@@ -54,6 +56,26 @@ pub struct DamageSystemResources<'w> {
     pub damage_tracker: ResMut<'w, FloatingDamageTracker>,
     pub font: Option<Res<'w, ChineseFont>>,
     pub block_state: ResMut<'w, BlockState>,
+}
+
+/// 傷害系統查詢參數包
+#[derive(SystemParam)]
+pub struct DamageSystemQueries<'w, 's> {
+    pub health: Query<
+        'w,
+        's,
+        (
+            &'static mut Health,
+            Option<&'static mut Armor>,
+            Option<&'static CoverSeeker>,
+            Option<&'static mut HitReaction>,
+        ),
+    >,
+    pub cover_points: Query<'w, 's, &'static CoverPoint>,
+    pub players: Query<'w, 's, Entity, With<Player>>,
+    pub enemies: Query<'w, 's, Entity, With<Enemy>>,
+    pub transforms: Query<'w, 's, &'static Transform>,
+    pub stamina: Query<'w, 's, &'static mut Stamina, With<Player>>,
 }
 
 /// 死亡處理系統資源參數包

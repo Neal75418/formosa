@@ -1,6 +1,6 @@
 //! NPC 車輛 AI 駕駛系統
 
-use super::vehicle_physics::{apply_vehicle_motion_physics, get_weather_factor, VehicleDynamicsModifiers};
+use super::vehicle_physics::{apply_vehicle_motion_physics, get_weather_factor, VehicleDynamicsModifiers, VehiclePhysicsFrame};
 use super::*;
 use crate::core::math::rapier_real_to_f32;
 use crate::core::{
@@ -416,18 +416,15 @@ pub fn npc_vehicle_motion_system(
         let effective_traction = weather_traction * modifiers.traction;
         let effective_max_speed = vehicle.max_speed * modifiers.speed;
 
-        apply_vehicle_motion_physics(
-            &mut vehicle,
+        let frame = VehiclePhysicsFrame {
             power_band,
-            braking,
-            drift,
-            &mut input,
+            config: &config.physics,
+            modifiers: &modifiers,
             dt,
-            &config.physics,
-            &modifiers,
             effective_traction,
             effective_max_speed,
-        );
+        };
+        apply_vehicle_motion_physics(&mut vehicle, braking, drift, &mut input, &frame);
 
         // Clamp Speed
         vehicle.current_speed = vehicle.current_speed.clamp(

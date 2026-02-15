@@ -29,10 +29,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Ensure Rust toolchain in PATH
-        run: |
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.rustup/shims" >> "$GITHUB_PATH"
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Override opt-level for CI
         run: |

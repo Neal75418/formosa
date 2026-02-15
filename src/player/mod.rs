@@ -8,6 +8,7 @@ mod components;
 mod config;
 pub mod skills;
 mod systems;
+mod vehicle_transition;
 
 #[allow(unused_imports)]
 pub use character_switch::*;
@@ -16,6 +17,7 @@ pub use components::*;
 pub use config::*;
 pub use skills::*;
 pub use systems::*;
+pub use vehicle_transition::*;
 
 use crate::core::{AppState, GameSet, InteractionSet};
 use bevy::prelude::*;

@@ -18,12 +18,14 @@ mod systems;
 mod cutscene;
 mod cutscene_systems;
 mod dialogue;
+mod dialogue_actions;
 mod dialogue_systems;
 mod dialogue_ui;
 mod economy;
 mod relationship;
 mod story_data;
 mod story_manager;
+mod story_manager_data;
 mod story_systems;
 mod trigger;
 #[allow(dead_code)]

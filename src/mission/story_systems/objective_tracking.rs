@@ -183,7 +183,7 @@ pub fn mission_phase_system(
         manager.create_checkpoint(player_pos, next_phase_index as u32);
 
         // 重新取得 active（create_checkpoint 借用了 manager）
-        let active = manager.current_mission.as_mut().unwrap();
+        let Some(active) = manager.current_mission.as_mut() else { return; };
         active.advance_phase(next_phase);
         mission_events.write(StoryMissionEvent::PhaseChanged {
             mission_id,

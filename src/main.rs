@@ -88,6 +88,9 @@ fn main() {
         .add_plugins(economy::EconomyPlugin)
         // === 存檔系統插件 ===
         .add_plugins(save::SavePlugin)
+        // === 攝影機/音效插件 ===
+        .add_plugins(camera::CameraPlugin)
+        .add_plugins(audio::AudioPlugin)
         // === 玩家/載具/世界/UI 插件 ===
         .add_plugins(player::PlayerPlugin)
         .add_plugins(vehicle::VehiclePlugin)
@@ -105,7 +108,6 @@ fn main() {
         .insert_resource(mission::MissionManager::default())
         .insert_resource(ui::UiState::default())
         .insert_resource(ui::NotificationQueue::default())
-        .insert_resource(audio::AudioManager::default())
         .init_resource::<world::WindowUpdateTimer>() // 窗戶更新計時器
         .init_resource::<core::RecoilState>() // 後座力狀態
         .init_resource::<core::CameraShake>() // 攝影機震動
@@ -117,10 +119,6 @@ fn main() {
         .init_resource::<ui::FloatingDamageTracker>() // 浮動傷害數字追蹤器
         .init_resource::<ui::WeaponWheelState>() // 武器輪盤狀態
         .init_resource::<ui::GpsNavigationState>() // GPS 導航狀態
-        .init_resource::<audio::FootstepTimer>() // 腳步音效計時器
-        .init_resource::<audio::AudioVehicleState>() // 車輛音效狀態追蹤
-        .init_resource::<audio::RadioManager>() // 電台管理器
-        .init_resource::<audio::PlayerGroundSurface>() // 玩家腳下材質
         .init_resource::<world::LightningState>() // 閃電狀態
         .init_resource::<core::InteractionState>() // 互動輸入狀態 (F)
         // 互動輸入更新（每幀）
@@ -150,73 +148,14 @@ fn main() {
         // === 啟動系統 ===
         .add_systems(
             Startup,
-            (
-                mission::spawn_mission_markers,
-                audio::setup_audio,
-                audio::setup_weapon_sounds,  // 武器音效初始化
-                audio::setup_vehicle_sounds, // 車輛音效初始化
-                audio::setup_player_sounds,  // 玩家音效初始化
-                audio::setup_ui_sounds,      // UI 音效初始化
-                audio::setup_police_radio,   // 警察無線電初始化
-                audio::setup_npc_dialogue,   // NPC 對話初始化
-                camera::setup_cinematic_letterbox, // 電影模式 Letterbox UI
-            ),
+            mission::spawn_mission_markers,
         )
         // === 更新系統 ===
         .add_systems(
             Update,
             (
-                camera::camera_input,
-                camera::camera_auto_follow
-                    .after(camera::camera_input)
-                    .after(player::player_movement),
-                camera::camera_follow
-                    .after(camera::camera_auto_follow)
-                    .after(vehicle::vehicle_physics_integration_system),
-                camera::dynamic_fov_system
-                    .after(camera::camera_input),
-                camera::recoil_and_shake_update_system,
-                camera::cinematic_camera_system,
-                camera::cinematic_letterbox_system
-                    .after(camera::cinematic_camera_system),
-                camera::cinematic_hud_toggle_system
-                    .after(camera::cinematic_letterbox_system),
                 mission::mission_system.in_set(core::InteractionSet::Mission),
                 mission::mission_marker_animation,
-            )
-                .run_if(in_state(core::AppState::InGame)),
-        )
-        // 音效系統 - 背景音樂不受暫停影響
-        .add_systems(Update, audio::update_background_music)
-        // 音效系統 - 引擎聲和環境音（暫停時跳過）
-        .add_systems(
-            Update,
-            (
-                audio::auto_attach_engine_sounds,
-                audio::update_engine_sounds
-                    .after(audio::auto_attach_engine_sounds),
-                audio::update_ambient_sounds,
-            )
-                .run_if(in_state(core::AppState::InGame)),
-        )
-        // 音效整合系統 — 事件驅動觸發音效
-        .add_systems(
-            Update,
-            (
-                audio::audio_wanted_level_system,
-                audio::audio_mission_event_system,
-                audio::audio_vehicle_enter_exit_system,
-                audio::detect_ground_surface_system,
-                audio::audio_footstep_system
-                    .after(audio::detect_ground_surface_system),
-                audio::radio_input_system,
-                audio::radio_playback_system
-                    .after(audio::radio_input_system),
-                audio::radio_station_name_timer,
-                audio::police_radio_chatter_system,
-                audio::npc_dialogue_cooldown_system,
-                audio::npc_dialogue_trigger_system
-                    .after(audio::npc_dialogue_cooldown_system),
             )
                 .run_if(in_state(core::AppState::InGame)),
         )

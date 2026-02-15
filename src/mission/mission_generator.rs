@@ -175,8 +175,9 @@ impl MissionManager {
         let id = self.next_mission_id;
         self.next_mission_id += 1;
 
-        let start_pos = *checkpoints.first().expect("Race must have at least one checkpoint");
-        let end_pos = *checkpoints.last().unwrap_or(&start_pos);
+        let default_pos = Vec3::ZERO;
+        let start_pos = checkpoints.first().copied().unwrap_or(default_pos);
+        let end_pos = checkpoints.last().copied().unwrap_or(start_pos);
 
         MissionData {
             id,

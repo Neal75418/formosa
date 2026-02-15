@@ -5,6 +5,7 @@ mod characters;
 mod components;
 mod constants;
 mod destructible;
+mod destruction_effects;
 mod interior;
 mod random_events;
 mod roads;

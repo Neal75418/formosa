@@ -11,6 +11,7 @@ mod spawning;
 mod systems;
 mod vehicle_physics;
 mod theft;
+mod theft_ui;
 mod traffic_lights;
 mod vehicle_damage;
 pub mod watercraft;
@@ -24,6 +25,7 @@ pub use spawning::*;
 pub use systems::*;
 pub use vehicle_physics::*;
 pub use theft::*;
+pub use theft_ui::*;
 pub use traffic_lights::*;
 pub use vehicle_damage::*;
 #[allow(unused_imports)]

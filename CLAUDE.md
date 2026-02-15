@@ -189,7 +189,7 @@ flowchart LR
 
 暫停控制：`.run_if(|ui: Res<UiState>| !ui.paused)`
 
-### 16 個 Bevy Plugins
+### 18 個 Bevy Plugins
 
 ```mermaid
 graph LR
@@ -214,12 +214,19 @@ graph LR
         StoryMissionPlugin
     end
 
+    subgraph Media["媒體"]
+        CameraPlugin
+        AudioPlugin
+    end
+
     subgraph Infra["基礎設施"]
         WorldPlugin
         UiPlugin
         SavePlugin
     end
 
+    style CameraPlugin fill:#0f3460,stroke:#533483,color:#fff
+    style AudioPlugin fill:#0f3460,stroke:#533483,color:#fff
     style PlayerPlugin fill:#16213e,stroke:#0f3460,color:#fff
     style VehiclePlugin fill:#16213e,stroke:#0f3460,color:#fff
     style CombatPlugin fill:#16213e,stroke:#0f3460,color:#fff
@@ -237,7 +244,7 @@ graph LR
     style SavePlugin fill:#1a1a2e,stroke:#533483,color:#fff
 ```
 
-> `audio` 和 `camera` 的系統直接註冊在 `main.rs`，未使用 Plugin 形式。
+> 全部 18 個模組皆使用 Plugin 形式，統一在 `main.rs` 中以 `.add_plugins()` 註冊。
 
 ### 關鍵模式
 

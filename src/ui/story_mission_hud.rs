@@ -284,3 +284,12 @@ pub fn update_story_mission_hud(
         }
     }
 }
+
+pub(super) struct StoryMissionHudPlugin;
+
+impl Plugin for StoryMissionHudPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_story_mission_hud.in_set(super::UiSetup))
+            .add_systems(Update, update_story_mission_hud.in_set(super::UiActive));
+    }
+}

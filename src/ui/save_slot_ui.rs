@@ -585,6 +585,24 @@ fn civil_from_days(days: u64) -> (u64, u64, u64) {
     (y, m, d)
 }
 
+pub(super) struct SaveSlotPlugin;
+
+impl Plugin for SaveSlotPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (
+                save_slot_input_system,
+                save_slot_tab_system,
+                save_slot_refresh_system,
+                save_slot_click_system,
+                save_slot_hover_system,
+            )
+                .in_set(super::UiActive),
+        );
+    }
+}
+
 // ============================================================================
 // 測試
 // ============================================================================

@@ -422,3 +422,21 @@ pub fn update_gps_turn_indicator(
         }
     }
 }
+
+pub(super) struct GpsNavigationPlugin;
+
+impl Plugin for GpsNavigationPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_gps_ui.in_set(super::UiSetup))
+            .add_systems(
+                Update,
+                (
+                    update_gps_navigation,
+                    update_minimap_gps_marker,
+                    gps_mission_integration,
+                    update_gps_turn_indicator.after(update_gps_navigation),
+                )
+                    .in_set(super::UiActive),
+            );
+    }
+}

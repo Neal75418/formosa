@@ -517,6 +517,24 @@ pub fn phone_content_system(
     }
 }
 
+pub(super) struct PhonePlugin;
+
+impl Plugin for PhonePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_phone_ui.in_set(super::UiSetup))
+            .add_systems(
+                Update,
+                (
+                    phone_input_system,
+                    phone_visibility_system.after(phone_input_system),
+                    phone_icon_highlight_system.after(phone_input_system),
+                    phone_content_system.after(phone_input_system),
+                )
+                    .in_set(super::UiActive),
+            );
+    }
+}
+
 // ============================================================================
 // 測試
 // ============================================================================

@@ -325,3 +325,20 @@ pub fn weapon_wheel_icon_update_system(
         }
     }
 }
+
+pub(super) struct WeaponWheelPlugin;
+
+impl Plugin for WeaponWheelPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_weapon_wheel.in_set(super::UiSetup))
+            .add_systems(
+                Update,
+                (
+                    weapon_wheel_input_system,
+                    weapon_wheel_update_system,
+                    weapon_wheel_icon_update_system,
+                )
+                    .in_set(super::UiActive),
+            );
+    }
+}

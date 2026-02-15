@@ -416,3 +416,12 @@ pub fn update_notifications(
         }
     }
 }
+
+pub(super) struct NotificationPlugin;
+
+impl Plugin for NotificationPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_notification_ui.in_set(super::UiSetup))
+            .add_systems(Update, update_notifications.in_set(super::UiActive));
+    }
+}

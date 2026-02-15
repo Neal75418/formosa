@@ -187,3 +187,21 @@ pub fn button_hover_effect(
 pub fn animate_button_scale() {
     // 動畫邏輯已整合到 button_hover_effect
 }
+
+pub(super) struct PauseMenuPlugin;
+
+impl Plugin for PauseMenuPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(OnEnter(crate::core::AppState::Paused), on_enter_pause)
+            .add_systems(OnExit(crate::core::AppState::Paused), on_exit_pause)
+            .add_systems(
+                Update,
+                (
+                    toggle_pause,
+                    button_hover_effect,
+                    animate_button_scale.after(button_hover_effect),
+                )
+                    .in_set(super::UiActive),
+            );
+    }
+}

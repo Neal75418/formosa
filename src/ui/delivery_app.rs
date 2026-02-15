@@ -705,3 +705,15 @@ fn spawn_order_info_row(
             });
     });
 }
+
+pub(super) struct DeliveryAppPlugin;
+
+impl Plugin for DeliveryAppPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_delivery_app.in_set(super::UiSetup))
+            .add_systems(
+                Update,
+                (toggle_delivery_app, update_delivery_app).in_set(super::UiActive),
+            );
+    }
+}

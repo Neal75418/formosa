@@ -447,3 +447,15 @@ pub fn update_hud_animations(
         *bg = BackgroundColor(Color::srgba(1.0, 1.0, 1.0, marker_glow_alpha));
     }
 }
+
+pub(super) struct HudPlugin;
+
+impl Plugin for HudPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (update_ui, update_hud, update_mission_ui, update_hud_animations)
+                .in_set(super::UiActive),
+        );
+    }
+}

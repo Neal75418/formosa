@@ -622,3 +622,23 @@ fn draw_minimap_point(
         },
     ));
 }
+
+pub(super) struct MinimapPlugin;
+
+impl Plugin for MinimapPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (
+                toggle_map,
+                update_minimap,
+                minimap_zoom_control,
+                update_fullmap,
+                setup_world_name_tags,
+                update_world_name_tags,
+                cleanup_orphaned_world_tags,
+            )
+                .in_set(super::UiActive),
+        );
+    }
+}

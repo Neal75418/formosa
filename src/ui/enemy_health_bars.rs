@@ -199,3 +199,15 @@ pub fn cleanup_enemy_health_bars(
         }
     }
 }
+
+pub(super) struct EnemyHealthBarPlugin;
+
+impl Plugin for EnemyHealthBarPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (setup_enemy_health_bars, update_enemy_health_bars, cleanup_enemy_health_bars)
+                .in_set(super::UiActive),
+        );
+    }
+}

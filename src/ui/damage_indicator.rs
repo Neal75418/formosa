@@ -192,3 +192,12 @@ pub fn trigger_damage_indicator(
         damage_state.damage_direction = direction;
     }
 }
+
+pub(super) struct DamageIndicatorPlugin;
+
+impl Plugin for DamageIndicatorPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_damage_indicator.in_set(super::UiSetup))
+            .add_systems(Update, update_damage_indicator.in_set(super::UiActive));
+    }
+}

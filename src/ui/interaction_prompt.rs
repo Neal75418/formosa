@@ -186,3 +186,16 @@ pub fn update_interaction_prompt_ui(
         }
     }
 }
+
+pub(super) struct InteractionPromptPlugin;
+
+impl Plugin for InteractionPromptPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_interaction_prompt.in_set(super::UiSetup))
+            .add_systems(
+                Update,
+                (update_interaction_prompt_state, update_interaction_prompt_ui)
+                    .in_set(super::UiActive),
+            );
+    }
+}

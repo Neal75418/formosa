@@ -385,3 +385,12 @@ pub fn update_weather_hud(
         }
     }
 }
+
+pub(super) struct WeatherHudPlugin;
+
+impl Plugin for WeatherHudPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_weather_hud.in_set(super::UiSetup))
+            .add_systems(Update, update_weather_hud.in_set(super::UiActive));
+    }
+}

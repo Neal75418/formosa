@@ -103,7 +103,6 @@ fn handle_player_death(
     entity: Entity,
     player_query: &Query<(Entity, &Transform), With<Player>>,
     respawn_state: &mut RespawnState,
-    notifications: &mut NotificationQueue,
 ) -> bool {
     let Ok((_, transform)) = player_query.get(entity) else {
         return false;
@@ -113,7 +112,7 @@ fn handle_player_death(
         return true;
     }
 
-    notifications.error("💀 你死了！3 秒後重生...");
+    // WASTED 全螢幕效果取代文字通知（由 ScreenEffectPlugin 處理）
     respawn_state.is_dead = true;
     respawn_state.respawn_timer = RESPAWN_TIMER_DURATION;
     respawn_state.death_position = transform.translation;
@@ -365,7 +364,6 @@ pub fn death_system(
             event.entity,
             &queries.player,
             &mut res.respawn_state,
-            &mut res.notifications,
         ) {
             continue;
         }
@@ -440,10 +438,16 @@ pub fn death_system(
 pub fn player_respawn_system(
     time: Res<Time>,
     mut respawn_state: ResMut<RespawnState>,
+    screen_effect: Res<crate::ui::ScreenEffectState>,
     mut player_query: Query<(&mut Transform, &mut Health, Option<&mut Armor>), With<Player>>,
     mut notifications: ResMut<NotificationQueue>,
 ) {
     if !respawn_state.is_dead {
+        return;
+    }
+
+    // WASTED/BUSTED 動畫期間凍結重生計時器
+    if screen_effect.respawn_timer_frozen {
         return;
     }
 

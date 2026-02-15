@@ -1,5 +1,6 @@
 //! 玩家系統
 
+use super::character_switch_animation::CharacterSwitchAnimation;
 use super::PlayerConfig;
 use super::{
     ClimbState, DodgeState, DoubleTapTracker, NoiseLevel, Player, PlayerSprintState, Stamina,
@@ -36,6 +37,7 @@ pub struct PlayerMovementState<'w> {
     pub combat_state: Res<'w, CombatState>,
     pub camera_settings: Res<'w, crate::core::CameraSettings>,
     pub config: Res<'w, PlayerConfig>,
+    pub switch_anim: Res<'w, CharacterSwitchAnimation>,
 }
 
 /// 玩家輸入處理（按住 Shift 衝刺）
@@ -43,8 +45,13 @@ pub fn player_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     game_state: Res<GameState>,
     respawn_state: Res<RespawnState>,
+    switch_anim: Res<CharacterSwitchAnimation>,
     mut query: Query<&mut Player>,
 ) {
+    // 角色切換動畫期間禁止玩家輸入
+    if switch_anim.is_active() {
+        return;
+    }
     // 死亡時不處理輸入
     if respawn_state.is_dead || game_state.player_in_vehicle {
         return;
@@ -188,7 +195,7 @@ pub fn player_movement(
         &mut PlayerSprintState,
     )>,
 ) {
-    if state.respawn_state.is_dead || state.game_state.player_in_vehicle {
+    if state.switch_anim.is_active() || state.respawn_state.is_dead || state.game_state.player_in_vehicle {
         return;
     }
 

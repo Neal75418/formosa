@@ -12,12 +12,14 @@ mod gps_navigation;
 mod hud;
 mod init;
 mod interaction_prompt;
+mod loading_screen;
 mod minimap;
 mod notification;
 mod pause_menu;
 mod phone;
 mod phone_apps;
 mod save_slot_ui;
+mod screen_effect;
 mod story_mission_hud;
 mod setup_hud;
 mod setup_map;
@@ -36,6 +38,7 @@ pub use components::*;
 pub use damage_indicator::*;
 pub use init::*;
 pub use notification::*;
+pub use screen_effect::ScreenEffectState;
 pub use systems::*;
 
 #[cfg(all(debug_assertions, feature = "dev_tools"))]
@@ -75,7 +78,7 @@ impl Plugin for UiPlugin {
             .add_systems(Startup, setup_ui.in_set(UiSetup))
             .add_systems(Update, update_ui_scale);
 
-        // 子 Plugin
+        // 子 Plugin（分兩組避免 Bevy 的 tuple 上限）
         app.add_plugins((
             hud::HudPlugin,
             weather_hud::WeatherHudPlugin,
@@ -85,6 +88,8 @@ impl Plugin for UiPlugin {
             enemy_health_bars::EnemyHealthBarPlugin,
             DamageIndicatorPlugin,
             weapon_wheel::WeaponWheelPlugin,
+        ));
+        app.add_plugins((
             delivery_app::DeliveryAppPlugin,
             gps_navigation::GpsNavigationPlugin,
             NotificationPlugin,
@@ -92,7 +97,9 @@ impl Plugin for UiPlugin {
             interaction_prompt::InteractionPromptPlugin,
             save_slot_ui::SaveSlotPlugin,
             phone::PhonePlugin,
+            screen_effect::ScreenEffectPlugin,
         ));
+        app.add_plugins(loading_screen::LoadingScreenPlugin);
 
         #[cfg(all(debug_assertions, feature = "dev_tools"))]
         {

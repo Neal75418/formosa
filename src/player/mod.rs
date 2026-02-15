@@ -3,6 +3,7 @@
 //! 注意：部分玩家屬性為將來擴展預留
 
 pub mod character_switch;
+mod character_switch_animation;
 mod climb;
 mod components;
 mod config;
@@ -12,6 +13,7 @@ mod vehicle_transition;
 
 #[allow(unused_imports)]
 pub use character_switch::*;
+pub use character_switch_animation::CharacterSwitchAnimation;
 pub use climb::*;
 pub use components::*;
 pub use config::*;
@@ -27,7 +29,8 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PlayerConfig>()
+        app.add_plugins(character_switch_animation::CharacterSwitchAnimationPlugin)
+            .init_resource::<PlayerConfig>()
             .init_resource::<DoubleTapTracker>()
             .init_resource::<VehicleTransitionState>()
             .init_resource::<StealthState>()

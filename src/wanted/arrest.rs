@@ -320,8 +320,14 @@ pub fn handle_arrest_event_system(
     mut player_query: Query<(&mut Transform, &mut PlayerSurrenderState, &mut WeaponInventory), With<Player>>,
     mut wallet: ResMut<PlayerWallet>,
     mut wanted: ResMut<WantedLevel>,
+    screen_effect: Res<crate::ui::ScreenEffectState>,
 ) {
     for event in arrest_events.read() {
+        // BUSTED 動畫期間跳過玩家逮捕（動畫結束後會重新發送事件）
+        if event.arrest_type == ArrestType::PlayerSurrender && screen_effect.is_active() {
+            continue;
+        }
+
         match event.arrest_type {
             ArrestType::PlayerSurrender => {
                 let Ok((mut transform, mut surrender_state, mut inventory)) = player_query.single_mut() else {

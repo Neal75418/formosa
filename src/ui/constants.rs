@@ -14,6 +14,19 @@ use bevy::prelude::*;
 /// 基準解析度高度（所有 UI 以 1080p 設計）
 pub const BASE_RESOLUTION_HEIGHT: f32 = 1080.0;
 
+// ============================================================================
+// WASTED / BUSTED 全螢幕效果
+// ============================================================================
+
+/// WASTED 文字色（紅色）
+pub const WASTED_TEXT_COLOR: Color = Color::srgb(0.8, 0.15, 0.1);
+/// BUSTED 文字色（藍白色）
+pub const BUSTED_TEXT_COLOR: Color = Color::srgb(0.3, 0.5, 0.9);
+/// 效果色調疊層最大透明度
+pub const SCREEN_EFFECT_TINT_ALPHA: f32 = 0.4;
+/// WASTED/BUSTED 文字基礎大小
+pub const SCREEN_EFFECT_TEXT_SIZE: f32 = 72.0;
+
 /// 按鈕基礎尺寸
 pub const BUTTON_BASE_WIDTH: f32 = 220.0;
 /// 按鈕基礎高度

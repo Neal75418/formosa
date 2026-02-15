@@ -6,10 +6,9 @@ use bevy::prelude::*;
 /// 遊戲執行狀態（用於暫停/選單控制）
 #[derive(States, Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub enum AppState {
-    /// 載入資源中（顯示載入畫面，未來可用於 asset 非同步載入）
-    #[allow(dead_code)]
-    Loading,
+    /// 載入資源中（顯示載入畫面）
     #[default]
+    Loading,
     InGame,
     Paused,
     #[allow(dead_code)]

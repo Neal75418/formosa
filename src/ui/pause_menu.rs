@@ -63,7 +63,13 @@ pub fn toggle_pause(
     resume_query: Query<&Interaction, (Changed<Interaction>, With<ResumeButton>)>,
     quit_query: Query<&Interaction, (Changed<Interaction>, With<QuitButton>)>,
     ui_state: Res<UiState>,
+    screen_effect: Res<super::ScreenEffectState>,
+    switch_anim: Res<crate::player::CharacterSwitchAnimation>,
 ) {
+    // WASTED/BUSTED 或角色切換動畫期間禁止暫停
+    if screen_effect.is_active() || switch_anim.is_active() {
+        return;
+    }
     // 存檔槽 UI 開啟時，ESC 由該系統處理，此處跳過
     if ui_state.show_save_slots {
         return;

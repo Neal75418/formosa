@@ -8,7 +8,7 @@ use crate::core::{
     GameState, CameraSettings, CameraViewMode, RecoilState, CameraShake, FOV_LERP_SPEED,
     CinematicState, LetterboxTop, LetterboxBottom, LETTERBOX_ANIM_SPEED, LETTERBOX_HEIGHT_RATIO,
 };
-use crate::player::{Player, PlayerSprintState};
+use crate::player::{CharacterSwitchAnimation, Player, PlayerSprintState};
 use crate::vehicle::{Vehicle, VehicleType};
 use crate::combat::{CombatState, Enemy, LockOnState, WeaponInventory, WeaponType};
 
@@ -91,7 +91,15 @@ pub fn camera_input(
     game_state: Res<GameState>,
     time: Res<Time>,
     player_query: Query<&WeaponInventory, With<Player>>,
+    switch_anim: Res<CharacterSwitchAnimation>,
 ) {
+    // 角色切換動畫期間禁止攝影機輸入
+    if switch_anim.is_active() {
+        mouse_motion.clear();
+        scroll.clear();
+        return;
+    }
+
     // 電影模式下跳過一般輸入（由 cinematic_camera_system 處理）
     if camera_settings.view_mode == CameraViewMode::Cinematic {
         mouse_motion.clear();
@@ -195,12 +203,18 @@ pub fn camera_follow(
     lock_on: Res<LockOnState>,
     recoil_state: Res<RecoilState>,
     camera_shake: Res<CameraShake>,
+    switch_anim: Res<CharacterSwitchAnimation>,
     player_query: Query<&Transform, (With<Player>, Without<GameCamera>, Without<Vehicle>)>,
     vehicle_query: Query<(&Transform, &Vehicle), (Without<GameCamera>, Without<Player>)>,
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
     enemy_query: Query<&Transform, (With<Enemy>, Without<GameCamera>, Without<Player>, Without<Vehicle>)>,
     time: Res<Time>,
 ) {
+    // 角色切換動畫期間由動畫系統控制攝影機
+    if switch_anim.is_active() {
+        return;
+    }
+
     let Ok(mut camera_transform) = camera_query.single_mut() else { return; };
 
     let target_pos = if game_state.player_in_vehicle {
@@ -410,7 +424,13 @@ pub fn camera_auto_follow(
     mut camera_settings: ResMut<CameraSettings>,
     player_query: Query<&Transform, With<Player>>,
     time: Res<Time>,
+    switch_anim: Res<CharacterSwitchAnimation>,
 ) {
+    // 角色切換動畫期間不自動跟隨
+    if switch_anim.is_active() {
+        return;
+    }
+
     // 不跟隨的情況：
     // 1. 在車上（車輛有自己的攝影機邏輯）
     // 2. 瞄準模式（需要自由控制攝影機）

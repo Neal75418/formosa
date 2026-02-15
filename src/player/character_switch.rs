@@ -1,9 +1,10 @@
 //! 角色切換系統
 //!
 //! 2-3 位可操作主角，各自有獨立技能、金錢、位置。
-//! 按 F5/F6/F7 切換角色。
+//! 按數字鍵 5/6/7 切換角色（搭配衛星動畫）。
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
+// 核心切換邏輯已由 character_switch_animation.rs 使用，
+// 但部分角色屬性方法（combat_multiplier 等）尚未完全整合
 #![allow(dead_code)]
 // Bevy 系統需要 Res<T> 按值傳遞
 #![allow(clippy::needless_pass_by_value)]

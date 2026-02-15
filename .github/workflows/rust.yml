@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          clean: false
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -44,13 +46,12 @@ jobs:
           [profile.dev.package."*"]
           opt-level = 0
           TOML
-          cat .cargo/config.toml
 
       - name: Cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Test
-        run: cargo test 2>&1
-
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test 2>&1

@@ -145,7 +145,6 @@ pub fn update_crosshair(
 }
 
 /// 更新命中標記（X 形回饋）
-#[allow(clippy::type_complexity)]
 pub fn update_hit_marker(
     time: Res<Time>,
     mut combat_state: ResMut<CombatState>,
@@ -387,7 +386,6 @@ fn is_low_ammo_state(current: usize, max: usize, is_reloading: bool) -> bool {
 }
 
 /// 更新彈藥視覺化網格（子彈圖示）
-#[allow(clippy::type_complexity)]
 pub fn update_ammo_visual_grid(
     time: Res<Time>,
     player_query: Query<&WeaponInventory, With<Player>>,

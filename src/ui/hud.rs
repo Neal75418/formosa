@@ -90,7 +90,6 @@ fn format_world_time(world_time: &WorldTime) -> String {
 // UI 更新系統
 // ============================================================================
 /// 更新 UI（時間、速度、狀態標籤）
-#[allow(clippy::type_complexity)]
 pub fn update_ui(
     game_state: Res<GameState>,
     world_time: Res<WorldTime>,
@@ -195,7 +194,6 @@ pub fn update_mission_ui(
 // 護甲區更新輔助函數
 // ============================================================================
 /// 更新護甲區顯示
-#[allow(clippy::type_complexity)]
 fn update_armor_section(
     armor_opt: Option<&Armor>,
     armor_section_query: &mut Query<&mut Visibility, With<ArmorSection>>,
@@ -392,7 +390,6 @@ fn calculate_low_health_glow_intensity(pulse_phase: f32, health_percent: f32) ->
 }
 
 /// 更新 HUD 動畫狀態（低血量脈衝、小地圖掃描）
-#[allow(clippy::type_complexity)]
 pub fn update_hud_animations(
     time: Res<Time>,
     mut anim_state: ResMut<HudAnimationState>,

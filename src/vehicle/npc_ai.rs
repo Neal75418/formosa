@@ -384,7 +384,6 @@ fn handle_waiting_at_light_state(
 }
 
 /// NPC 車輛運動整合（使用 NPC 輸入更新速度與位置）
-#[allow(clippy::type_complexity)]
 pub fn npc_vehicle_motion_system(
     time: Res<Time>,
     weather: Res<WeatherState>,

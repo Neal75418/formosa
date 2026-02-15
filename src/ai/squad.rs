@@ -496,7 +496,6 @@ fn handle_leader_role(
 
 /// 小隊協調系統
 /// 協調同一小隊的敵人進行包抄戰術
-#[allow(clippy::type_complexity)]
 pub fn squad_coordination_system(
     time: Res<Time>,
     config: Res<AiConfig>,

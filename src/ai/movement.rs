@@ -216,7 +216,6 @@ fn process_single_enemy_movement(
 }
 
 /// AI 移動系統：移動到目標位置
-#[allow(clippy::type_complexity)]
 pub fn ai_movement_system(
     time: Res<Time>,
     mut enemy_query: Query<

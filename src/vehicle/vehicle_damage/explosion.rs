@@ -110,7 +110,6 @@ fn trigger_explosion_camera_shake(
 /// 車輛爆炸系統
 /// 處理爆炸效果和範圍傷害
 /// 對範圍內的所有可傷害實體（玩家、敵人、行人、警察、其他車輛）造成傷害
-#[allow(clippy::type_complexity)]
 pub fn vehicle_explosion_system(
     mut commands: Commands,
     time: Res<Time>,

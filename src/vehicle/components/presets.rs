@@ -17,7 +17,6 @@ pub struct VehiclePreset {
 
 impl VehiclePreset {
     /// 轉換為元件 tuple（可直接用於 Bevy spawn）
-    #[allow(clippy::type_complexity)]
     pub fn into_components(
         self,
     ) -> (

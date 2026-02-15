@@ -186,7 +186,6 @@ fn visibility_from_bool(visible: bool) -> Visibility {
 }
 
 /// 更新劇情任務 HUD
-#[allow(clippy::type_complexity)]
 pub fn update_story_mission_hud(
     story_manager: Res<StoryMissionManager>,
     story_database: Res<StoryMissionDatabase>,

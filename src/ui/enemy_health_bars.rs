@@ -119,7 +119,6 @@ fn get_health_bar_color(percentage: f32) -> Color {
 }
 
 /// 更新敵人血條位置和填充 - GTA 風格（含變色）
-#[allow(clippy::type_complexity)]
 pub fn update_enemy_health_bars(
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::GameCamera>>,
     enemy_query: Query<(&GlobalTransform, &Health), With<Enemy>>,

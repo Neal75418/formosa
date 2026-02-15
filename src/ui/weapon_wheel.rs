@@ -242,7 +242,6 @@ pub fn weapon_wheel_input_system(
 }
 
 /// 武器輪盤更新系統
-#[allow(clippy::type_complexity)]
 pub fn weapon_wheel_update_system(
     time: Res<Time>,
     ui_state: Res<UiState>,

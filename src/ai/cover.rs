@@ -141,7 +141,6 @@ fn check_cover_arrival(
 
 /// AI 掩體尋找系統
 /// 當 AI 血量低時，尋找附近的掩體並移動過去
-#[allow(clippy::type_complexity)]
 pub fn ai_cover_system(
     time: Res<Time>,
     config: Res<AiConfig>,

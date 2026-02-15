@@ -47,7 +47,6 @@ pub fn toggle_map(
 }
 
 /// 更新小地圖（同步玩家真實位置和方向）
-#[allow(clippy::type_complexity)]
 pub fn update_minimap(
     time: Res<Time>,
     player_query: Query<&Transform, (With<Player>, Without<MinimapPlayerMarker>)>,
@@ -93,7 +92,6 @@ pub fn update_minimap(
 }
 
 /// 更新大地圖玩家標記位置和方向
-#[allow(clippy::type_complexity)]
 pub fn update_fullmap(
     time: Res<Time>,
     player_query: Query<&Transform, (With<Player>, Without<FullMapPlayerMarker>)>,

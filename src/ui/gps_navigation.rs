@@ -145,7 +145,6 @@ pub fn format_gps_distance(distance_xz: f32) -> String {
 }
 
 /// 更新 GPS 導航狀態
-#[allow(clippy::type_complexity)]
 pub fn update_gps_navigation(
     time: Res<Time>,
     mut gps: ResMut<GpsNavigationState>,
@@ -234,7 +233,6 @@ pub fn update_gps_navigation(
 
 /// 更新小地圖上的 GPS 目標標記
 /// 優化：只在目標變化時重建標記，避免每幀 despawn/spawn 造成抖動
-#[allow(clippy::type_complexity)]
 pub fn update_minimap_gps_marker(
     mut commands: Commands,
     gps: Res<GpsNavigationState>,

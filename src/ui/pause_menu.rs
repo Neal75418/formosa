@@ -133,7 +133,6 @@ fn update_single_button(
 }
 
 /// 按鈕懸停效果 - GTA 風格（顏色 + Node 尺寸動畫）
-#[allow(clippy::type_complexity)]
 pub fn button_hover_effect(
     time: Res<Time<Real>>, // 使用真實時間，不受 Virtual time 暫停影響
     mut resume_query: Query<

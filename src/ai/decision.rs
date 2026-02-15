@@ -220,7 +220,6 @@ pub(crate) fn handle_taking_cover_state(
 
 /// AI 決策系統：根據感知更新狀態
 /// 每幀執行，確保即時響應
-#[allow(clippy::type_complexity)]
 pub fn ai_decision_system(
     time: Res<Time>,
     config: Res<AiConfig>,

@@ -213,7 +213,6 @@ fn execute_ranged_attack(
 
 /// AI 攻擊系統：向玩家開火或近戰攻擊
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::type_complexity)]
 pub fn ai_attack_system(
     mut commands: Commands,
     time: Res<Time>,

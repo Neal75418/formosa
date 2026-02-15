@@ -18,7 +18,6 @@ use bevy_rapier3d::prelude::*;
 // ============================================================================
 
 /// 載具加速與煞車系統
-#[allow(clippy::type_complexity)]
 pub fn vehicle_acceleration_system(
     time: Res<Time>,
     game_state: Res<GameState>,

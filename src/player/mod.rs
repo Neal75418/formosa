@@ -11,7 +11,6 @@ pub mod skills;
 mod systems;
 mod vehicle_transition;
 
-#[allow(unused_imports)]
 pub use character_switch::*;
 pub use character_switch_animation::CharacterSwitchAnimation;
 pub use climb::*;
@@ -30,6 +29,7 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(character_switch_animation::CharacterSwitchAnimationPlugin)
+            .init_resource::<crate::core::PlayerStats>()
             .init_resource::<PlayerConfig>()
             .init_resource::<DoubleTapTracker>()
             .init_resource::<VehicleTransitionState>()

@@ -6,8 +6,7 @@
 //! - 體力：衝刺/攀爬時累積時間 → 增加體力上限、加快恢復
 //! - 潛行：潛行狀態移動時累積 → 降低偵測距離、靜默擊殺傷害加成
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
+// 部分技能效果尚未完全整合，個別標記 #[allow(dead_code)]
 
 use bevy::prelude::*;
 
@@ -30,6 +29,7 @@ pub enum SkillType {
 
 impl SkillType {
     /// 所有技能類型
+    #[allow(dead_code)]
     pub const ALL: [SkillType; 4] = [
         SkillType::Shooting,
         SkillType::Driving,
@@ -38,6 +38,7 @@ impl SkillType {
     ];
 
     /// 技能中文名稱
+    #[allow(dead_code)]
     pub fn label(&self) -> &'static str {
         match self {
             SkillType::Shooting => "射擊",
@@ -89,6 +90,7 @@ impl Skill {
     }
 
     /// 當前等級進度百分比 (0.0-1.0)
+    #[allow(dead_code)]
     pub fn progress(&self) -> f32 {
         if self.level >= MAX_SKILL_LEVEL {
             return 1.0;
@@ -121,6 +123,7 @@ impl Skill {
     }
 
     /// 等級效果倍率 (0.0 → 1.0 隨等級線性成長)
+    #[allow(dead_code)]
     pub fn effect_ratio(&self) -> f32 {
         self.level as f32 / MAX_SKILL_LEVEL as f32
     }
@@ -152,6 +155,7 @@ impl Default for PlayerSkills {
 
 impl PlayerSkills {
     /// 取得指定技能的引用
+    #[allow(dead_code)]
     pub fn get(&self, skill_type: SkillType) -> &Skill {
         match skill_type {
             SkillType::Shooting => &self.shooting,
@@ -162,6 +166,7 @@ impl PlayerSkills {
     }
 
     /// 取得指定技能的可變引用
+    #[allow(dead_code)]
     pub fn get_mut(&mut self, skill_type: SkillType) -> &mut Skill {
         match skill_type {
             SkillType::Shooting => &mut self.shooting,
@@ -176,41 +181,49 @@ impl PlayerSkills {
     // ========================================================================
 
     /// 射擊後座力倍率 (1.0 → 0.5 隨等級降低)
+    #[allow(dead_code)]
     pub fn recoil_multiplier(&self) -> f32 {
         1.0 - self.shooting.effect_ratio() * 0.5
     }
 
     /// 換彈速度倍率 (1.0 → 1.5 隨等級加快)
+    #[allow(dead_code)]
     pub fn reload_speed_multiplier(&self) -> f32 {
         1.0 + self.shooting.effect_ratio() * 0.5
     }
 
     /// 駕駛操控加成 (0.0 → 0.3 隨等級增加)
+    #[allow(dead_code)]
     pub fn driving_handling_bonus(&self) -> f32 {
         self.driving.effect_ratio() * 0.3
     }
 
     /// 碰撞傷害減免 (0% → 30%)
+    #[allow(dead_code)]
     pub fn collision_damage_reduction(&self) -> f32 {
         self.driving.effect_ratio() * 0.3
     }
 
     /// 體力上限加成 (100 → 150)
+    #[allow(dead_code)]
     pub fn stamina_max_bonus(&self) -> f32 {
         self.stamina.effect_ratio() * 50.0
     }
 
     /// 體力恢復速度倍率 (1.0 → 1.8)
+    #[allow(dead_code)]
     pub fn stamina_regen_multiplier(&self) -> f32 {
         1.0 + self.stamina.effect_ratio() * 0.8
     }
 
     /// 潛行偵測距離倍率 (1.0 → 0.5 隨等級降低)
+    #[allow(dead_code)]
     pub fn stealth_detection_multiplier(&self) -> f32 {
         1.0 - self.stealth.effect_ratio() * 0.5
     }
 
     /// 靜默擊殺傷害倍率 (2.0 → 4.0)
+    #[allow(dead_code)]
     pub fn stealth_kill_multiplier(&self) -> f32 {
         2.0 + self.stealth.effect_ratio() * 2.0
     }
@@ -224,12 +237,16 @@ use crate::core::GameState;
 use crate::vehicle::Vehicle;
 
 /// 技能 XP 獲取常數
+#[allow(dead_code)]
 const SHOOTING_XP_PER_HIT: f32 = 5.0;
+#[allow(dead_code)]
 const SHOOTING_XP_HEADSHOT_BONUS: f32 = 15.0;
 const DRIVING_XP_PER_SECOND: f32 = 1.0;
 const STAMINA_XP_PER_SPRINT_SECOND: f32 = 2.0;
+#[allow(dead_code)]
 const STAMINA_XP_PER_CLIMB: f32 = 10.0;
 const STEALTH_XP_PER_SECOND: f32 = 3.0;
+#[allow(dead_code)]
 const STEALTH_XP_PER_SILENT_KILL: f32 = 25.0;
 
 /// 駕駛技能累積系統
@@ -303,17 +320,20 @@ pub fn stealth_skill_system(
 }
 
 /// 射擊技能 XP 獎勵（由戰鬥系統呼叫）
+#[allow(dead_code)]
 pub fn award_shooting_xp(skills: &mut PlayerSkills, is_headshot: bool) {
     let xp = SHOOTING_XP_PER_HIT + if is_headshot { SHOOTING_XP_HEADSHOT_BONUS } else { 0.0 };
     skills.shooting.add_xp(xp);
 }
 
 /// 攀爬完成時的體力 XP 獎勵（由攀爬系統呼叫）
+#[allow(dead_code)]
 pub fn award_climb_xp(skills: &mut PlayerSkills) {
     skills.stamina.add_xp(STAMINA_XP_PER_CLIMB);
 }
 
 /// 靜默擊殺的潛行 XP 獎勵（由戰鬥系統呼叫）
+#[allow(dead_code)]
 pub fn award_stealth_kill_xp(skills: &mut PlayerSkills) {
     skills.stealth.add_xp(STEALTH_XP_PER_SILENT_KILL);
 }

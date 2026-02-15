@@ -2,13 +2,11 @@
 
 use bevy::prelude::*;
 use crate::core::CameraSettings;
-
-// 從 systems.rs 複製的常數（用於測試）
-const PITCH_MIN: f32 = -0.3;
-const PITCH_MAX_INPUT: f32 = 1.2;
-const PITCH_MAX_WITH_RECOIL: f32 = 1.5;
-const CAMERA_DISTANCE_MIN: f32 = 5.0;
-const CAMERA_DISTANCE_MAX: f32 = 80.0;
+use super::constants::{
+    PITCH_MIN, PITCH_MAX_INPUT, PITCH_MAX_WITH_RECOIL,
+    DISTANCE_MIN, DISTANCE_MAX,
+    DISTANCE_MOUSE_FACTOR, DISTANCE_SCROLL_STEP,
+};
 
 // ============================================================================
 // Pitch 角度限制測試
@@ -84,7 +82,7 @@ fn distance_clamping_within_range() {
         ..Default::default()
     };
 
-    settings.distance = settings.distance.clamp(CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
+    settings.distance = settings.distance.clamp(DISTANCE_MIN, DISTANCE_MAX);
     assert_eq!(settings.distance, 20.0);
 }
 
@@ -95,8 +93,8 @@ fn distance_clamped_to_min() {
         ..Default::default()
     };
 
-    settings.distance = settings.distance.clamp(CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
-    assert_eq!(settings.distance, CAMERA_DISTANCE_MIN);
+    settings.distance = settings.distance.clamp(DISTANCE_MIN, DISTANCE_MAX);
+    assert_eq!(settings.distance, DISTANCE_MIN);
 }
 
 #[test]
@@ -106,8 +104,8 @@ fn distance_clamped_to_max() {
         ..Default::default()
     };
 
-    settings.distance = settings.distance.clamp(CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
-    assert_eq!(settings.distance, CAMERA_DISTANCE_MAX);
+    settings.distance = settings.distance.clamp(DISTANCE_MIN, DISTANCE_MAX);
+    assert_eq!(settings.distance, DISTANCE_MAX);
 }
 
 #[test]
@@ -119,7 +117,7 @@ fn distance_scroll_adjustment() {
 
     // 模擬滾輪向上（y = 1.0），距離減少
     let scroll_y = 1.0;
-    settings.distance -= scroll_y * 0.4;
+    settings.distance -= scroll_y * DISTANCE_SCROLL_STEP;
 
     assert!((settings.distance - 29.6).abs() < 0.01);
 }
@@ -133,8 +131,8 @@ fn distance_mouse_y_adjustment_when_not_aiming() {
 
     // 非瞄準時：滑鼠 Y 軸移動 = 調整距離
     let delta_y = 5.0;
-    settings.distance += delta_y * 0.1;
-    settings.distance = settings.distance.clamp(CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
+    settings.distance += delta_y * DISTANCE_MOUSE_FACTOR;
+    settings.distance = settings.distance.clamp(DISTANCE_MIN, DISTANCE_MAX);
 
     assert!((settings.distance - 20.5).abs() < 0.01);
 }
@@ -175,7 +173,7 @@ fn mouse_y_adjusts_distance_when_not_aiming() {
 
     // 非瞄準時：Y 軸移動 = distance 調整
     if !is_aiming {
-        settings.distance += delta_y * 0.1;
+        settings.distance += delta_y * DISTANCE_MOUSE_FACTOR;
     }
 
     assert!((settings.distance - 40.0).abs() < 0.01);
@@ -255,7 +253,7 @@ fn camera_settings_default_values() {
 
     // 測試默認值是否合理
     assert!(settings.pitch >= PITCH_MIN && settings.pitch <= PITCH_MAX_INPUT);
-    assert!(settings.distance >= CAMERA_DISTANCE_MIN && settings.distance <= CAMERA_DISTANCE_MAX);
+    assert!(settings.distance >= DISTANCE_MIN && settings.distance <= DISTANCE_MAX);
     assert!(settings.sensitivity > 0.0);
     assert!(settings.aim_distance > 0.0 && settings.aim_distance < settings.distance);
 }

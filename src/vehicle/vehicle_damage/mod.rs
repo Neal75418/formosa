@@ -12,7 +12,7 @@ mod systems;
 mod visuals;
 
 // 重新導出公開項目
-#[allow(unused_imports)]
+#[allow(unused_imports)] // re-export: public API for vehicle damage state, body parts, and door/window types
 pub use health::{
     VehicleDamageState, VehicleHealth, TireDamage, DoorWindowState, DoorState, WindowState,
     BodyPartDamage, BodyPartState, BODY_PART_COUNT,

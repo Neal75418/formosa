@@ -2,8 +2,7 @@
 //!
 //! 所有 UI 系統共用的顏色、尺寸常數
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
+// 部分常數為將來 UI 擴展預留，個別標記 #[allow(dead_code)]
 
 use bevy::prelude::*;
 

@@ -1,7 +1,6 @@
 //! 遊戲核心資源（狀態、互動、碰撞群組、工具函數）
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
+// 部分資源欄位為將來擴展預留，個別標記 #[allow(dead_code)]
 
 use bevy::prelude::*;
 
@@ -31,7 +30,9 @@ impl Default for WorldTime {
 /// 玩家狀態（HUD 顯示用）
 #[derive(Resource)]
 pub struct PlayerStats {
+    #[allow(dead_code)]
     pub health: f32,
+    #[allow(dead_code)]
     pub max_health: f32,
     pub money: u32,
 }
@@ -113,6 +114,7 @@ pub const COLLISION_GROUP_VEHICLE: Group = Group::GROUP_2;
 pub const COLLISION_GROUP_STATIC: Group = Group::GROUP_3;
 
 /// 碰撞群組：子彈/投射物（預留）
+#[allow(dead_code)]
 pub const COLLISION_GROUP_PROJECTILE: Group = Group::GROUP_4;
 
 // ============================================================================

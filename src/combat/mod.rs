@@ -46,6 +46,7 @@ impl Plugin for CombatPlugin {
             .add_message::<ExplosionEvent>()
             .add_message::<ThrowExplosiveEvent>()
             // 資源
+            .init_resource::<crate::core::RecoilState>()
             .init_resource::<CombatState>()
             .init_resource::<ShootingInput>()
             .init_resource::<LockOnState>()

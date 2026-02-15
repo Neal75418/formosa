@@ -280,41 +280,17 @@ fn spawn_crosshair_center(commands: &mut Commands) {
                             CrosshairHitMarker,
                         ))
                         .with_children(|hit_marker| {
-                            // X 的四條線（斜向）- 使用四個小方塊模擬
-                            // X 的四條線（斜向）- 使用四個小方塊模擬
-                            let f_pi_4 = std::f32::consts::FRAC_PI_4;
-                            spawn_hit_marker_line(
-                                hit_marker,
-                                f_pi_4,
-                                Val::Px(0.0),
-                                Val::Auto,
-                                Val::Px(3.0),
-                                Val::Auto,
-                            ); // 左上
-                            spawn_hit_marker_line(
-                                hit_marker,
-                                -f_pi_4,
-                                Val::Px(0.0),
-                                Val::Auto,
-                                Val::Auto,
-                                Val::Px(3.0),
-                            ); // 右上
-                            spawn_hit_marker_line(
-                                hit_marker,
-                                -f_pi_4,
-                                Val::Auto,
-                                Val::Px(0.0),
-                                Val::Px(3.0),
-                                Val::Auto,
-                            ); // 左下
-                            spawn_hit_marker_line(
-                                hit_marker,
-                                f_pi_4,
-                                Val::Auto,
-                                Val::Px(0.0),
-                                Val::Auto,
-                                Val::Px(3.0),
-                            ); // 右下
+                            // X 的四條線（斜向）- 左上、右上、左下、右下
+                            let f = std::f32::consts::FRAC_PI_4;
+                            let lines = [
+                                ( f, Val::Px(0.0), Val::Auto,   Val::Px(3.0), Val::Auto),    // 左上
+                                (-f, Val::Px(0.0), Val::Auto,   Val::Auto,    Val::Px(3.0)), // 右上
+                                (-f, Val::Auto,    Val::Px(0.0), Val::Px(3.0), Val::Auto),   // 左下
+                                ( f, Val::Auto,    Val::Px(0.0), Val::Auto,    Val::Px(3.0)), // 右下
+                            ];
+                            for (rot, top, bottom, left, right) in lines {
+                                spawn_hit_marker_line(hit_marker, rot, top, bottom, left, right);
+                            }
                         });
                 });
         });

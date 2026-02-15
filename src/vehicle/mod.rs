@@ -28,7 +28,6 @@ pub use theft::*;
 pub use theft_ui::*;
 pub use traffic_lights::*;
 pub use vehicle_damage::*;
-#[allow(unused_imports)]
 pub use watercraft::*;
 
 use crate::core::{AppState, GameSet};

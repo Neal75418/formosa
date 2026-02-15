@@ -65,6 +65,7 @@ pub fn toggle_pause(
     ui_state: Res<UiState>,
     screen_effect: Res<super::ScreenEffectState>,
     switch_anim: Res<crate::player::CharacterSwitchAnimation>,
+    mut app_exit: MessageWriter<bevy::app::AppExit>,
 ) {
     // WASTED/BUSTED 或角色切換動畫期間禁止暫停
     if screen_effect.is_active() || switch_anim.is_active() {
@@ -84,7 +85,7 @@ pub fn toggle_pause(
     let quit_pressed = is_button_pressed(&quit_query)
         || (*state == AppState::Paused && keyboard.just_pressed(KeyCode::KeyQ));
     if quit_pressed {
-        std::process::exit(0);
+        app_exit.write(bevy::app::AppExit::Success);
     }
 
     // ESC 切換暫停
@@ -188,11 +189,6 @@ pub fn button_hover_effect(
     }
 }
 
-/// 按鈕縮放動畫（已整合到 button_hover_effect，保留空函數以避免修改 mod.rs）
-pub fn animate_button_scale() {
-    // 動畫邏輯已整合到 button_hover_effect
-}
-
 pub(super) struct PauseMenuPlugin;
 
 impl Plugin for PauseMenuPlugin {
@@ -201,12 +197,7 @@ impl Plugin for PauseMenuPlugin {
             .add_systems(OnExit(AppState::Paused), on_exit_pause)
             .add_systems(
                 Update,
-                (
-                    toggle_pause,
-                    button_hover_effect,
-                    animate_button_scale.after(button_hover_effect),
-                )
-                    .in_set(super::UiActive),
+                (toggle_pause, button_hover_effect).in_set(super::UiActive),
             );
     }
 }

@@ -82,6 +82,71 @@ fn spawn_vehicle_lights(
     spawn_vehicle_light(parent, meshes, taillight_mat, light_x, 0.1, tail_z);
 }
 
+/// 生成改裝配件（尾翼、底盤燈、側裙霓虹條）
+fn spawn_tuning_parts(
+    parent: &mut ChildSpawnerCommands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    shared_mats: &VehicleMaterials,
+    chassis_size: Vec3,
+    color: Color,
+) {
+    // 1. 尾翼 (Spoiler) - 支柱（左右）+ 翼板
+    let strut_h = 0.3;
+    let spoiler_z = chassis_size.z / 2.0 - 0.2;
+    let spoiler_y = chassis_size.y / 2.0 + strut_h / 2.0;
+
+    for x in [-0.6, 0.6] {
+        parent.spawn((
+            Mesh3d(meshes.add(Cuboid::new(0.1, strut_h, 0.1))),
+            MeshMaterial3d(shared_mats.black_plastic.clone()),
+            Transform::from_xyz(x, spoiler_y, spoiler_z),
+            GlobalTransform::default(),
+        ));
+    }
+    // 翼板
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.8, 0.05, 0.4))),
+        MeshMaterial3d(shared_mats.black_plastic.clone()),
+        Transform::from_xyz(0.0, chassis_size.y / 2.0 + strut_h, spoiler_z),
+        GlobalTransform::default(),
+    ));
+
+    // 2. 底盤燈 (Underglow) - 使用車身顏色
+    parent.spawn((
+        PointLight {
+            color,
+            intensity: 100_000.0,
+            range: 5.0,
+            radius: 2.0,
+            shadows_enabled: false,
+            ..default()
+        },
+        Transform::from_xyz(0.0, -0.5, 0.0),
+        GlobalTransform::default(),
+    ));
+
+    // 3. 側裙霓虹條 (Side Neon Strips)
+    let neon_mat = materials.add(StandardMaterial {
+        base_color: color,
+        emissive: LinearRgba::from(color) * 5.0,
+        ..default()
+    });
+    let neon_y = -chassis_size.y / 2.0 + 0.1;
+    for x_sign in [-1.0_f32, 1.0] {
+        parent.spawn((
+            Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 2.5))),
+            MeshMaterial3d(neon_mat.clone()),
+            Transform::from_xyz(
+                x_sign * (chassis_size.x / 2.0 + 0.02),
+                neon_y,
+                0.0,
+            ),
+            GlobalTransform::default(),
+        ));
+    }
+}
+
 /// 生成 NPC 車輛（使用共享材質）
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_npc_vehicle(
@@ -220,84 +285,7 @@ pub fn spawn_npc_vehicle(
 
                     // === E. 酷炫改裝配件 (Tuning Parts) ===
                     if vehicle_type == VehicleType::Car || vehicle_type == VehicleType::Taxi {
-                        // 1. 尾翼 (Spoiler) - 使用共享黑色塑膠材質
-                        let strut_h = 0.3;
-                        parent.spawn((
-                            Mesh3d(meshes.add(Cuboid::new(0.1, strut_h, 0.1))),
-                            MeshMaterial3d(shared_mats.black_plastic.clone()),
-                            Transform::from_xyz(
-                                -0.6,
-                                chassis_size.y / 2.0 + strut_h / 2.0,
-                                chassis_size.z / 2.0 - 0.2,
-                            ),
-                            GlobalTransform::default(),
-                        ));
-                        parent.spawn((
-                            Mesh3d(meshes.add(Cuboid::new(0.1, strut_h, 0.1))),
-                            MeshMaterial3d(shared_mats.black_plastic.clone()),
-                            Transform::from_xyz(
-                                0.6,
-                                chassis_size.y / 2.0 + strut_h / 2.0,
-                                chassis_size.z / 2.0 - 0.2,
-                            ),
-                            GlobalTransform::default(),
-                        ));
-                        // 翼板
-                        parent.spawn((
-                            Mesh3d(meshes.add(Cuboid::new(1.8, 0.05, 0.4))),
-                            MeshMaterial3d(shared_mats.black_plastic.clone()),
-                            Transform::from_xyz(
-                                0.0,
-                                chassis_size.y / 2.0 + strut_h,
-                                chassis_size.z / 2.0 - 0.2,
-                            ),
-                            GlobalTransform::default(),
-                        ));
-
-                        // 2. 底盤燈 (Underglow) - 照亮地板
-                        // 使用車身顏色作為光色
-                        let glow_color = color;
-                        parent.spawn((
-                            PointLight {
-                                color: glow_color,
-                                intensity: 100_000.0, // 強度要夠才看得到
-                                range: 5.0,
-                                radius: 2.0,
-                                shadows_enabled: false,
-                                ..default()
-                            },
-                            Transform::from_xyz(0.0, -0.5, 0.0),
-                            GlobalTransform::default(),
-                        ));
-
-                        // 3. 側裙霓虹條 (Side Neon Strips)
-                        let neon_mat = materials.add(StandardMaterial {
-                            base_color: glow_color,
-                            emissive: LinearRgba::from(glow_color) * 5.0, // 增強亮度
-                            ..default()
-                        });
-                        // 左側條
-                        parent.spawn((
-                            Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 2.5))),
-                            MeshMaterial3d(neon_mat.clone()),
-                            Transform::from_xyz(
-                                -chassis_size.x / 2.0 - 0.02,
-                                -chassis_size.y / 2.0 + 0.1,
-                                0.0,
-                            ),
-                            GlobalTransform::default(),
-                        ));
-                        // 右側條
-                        parent.spawn((
-                            Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 2.5))),
-                            MeshMaterial3d(neon_mat),
-                            Transform::from_xyz(
-                                chassis_size.x / 2.0 + 0.02,
-                                -chassis_size.y / 2.0 + 0.1,
-                                0.0,
-                            ),
-                            GlobalTransform::default(),
-                        ));
+                        spawn_tuning_parts(parent, meshes, materials, shared_mats, chassis_size, color);
                     }
                 });
         });

@@ -10,12 +10,11 @@ pub mod swimming;
 mod systems;
 
 pub use components::*;
-#[allow(unused_imports)]
+#[allow(unused_imports)] // re-export: public API for pedestrian A* pathfinding types
 pub use pathfinding::*;
-#[allow(unused_imports)]
+#[allow(unused_imports)] // re-export: public API for pedestrian daily behavior types
 pub use behavior::*;
 pub use panic::*;
-#[allow(unused_imports)]
 pub use swimming::*;
 pub use systems::*;
 

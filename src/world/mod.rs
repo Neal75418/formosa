@@ -17,19 +17,19 @@ mod time_weather;
 mod entity_naming;
 
 // 公開 API re-exports (允許外部使用 crate::world::* 存取)
-#[allow(unused_imports)]
+#[allow(unused_imports)] // re-export: public API for building spawning functions
 pub use buildings::*;
-#[allow(unused_imports)]
+#[allow(unused_imports)] // re-export: public API for character/cover-point spawning functions
 pub use characters::*;
 pub use components::*;
 pub use constants::*;
 pub use destructible::*;
 pub use interior::*;
 pub use random_events::*;
-#[allow(unused_imports)]
+#[allow(unused_imports)] // re-export: public API for road segment types and spawning
 pub use roads::*;
 pub use setup::*;
-#[allow(unused_imports)]
+#[allow(unused_imports)] // re-export: public API for street furniture spawning functions
 pub use street_furniture::*;
 pub use time_weather::*;
 
@@ -62,6 +62,10 @@ impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app
             // Resource
+            .insert_resource(crate::core::WorldTime::default())
+            .insert_resource(crate::core::WeatherState::default())
+            .init_resource::<WindowUpdateTimer>()
+            .init_resource::<LightningState>()
             .init_resource::<MapBounds>()
             // Message
             .add_message::<RandomEventTriggered>()

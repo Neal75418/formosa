@@ -3,9 +3,6 @@
 //! 2-3 位可操作主角，各自有獨立技能、金錢、位置。
 //! 按數字鍵 5/6/7 切換角色（搭配衛星動畫）。
 
-// 核心切換邏輯已由 character_switch_animation.rs 使用，
-// 但部分角色屬性方法（combat_multiplier 等）尚未完全整合
-#![allow(dead_code)]
 // Bevy 系統需要 Res<T> 按值傳遞
 #![allow(clippy::needless_pass_by_value)]
 
@@ -42,6 +39,7 @@ impl CharacterId {
     }
 
     /// 角色背景描述
+    #[allow(dead_code)] // UI 角色選擇畫面預留
     pub fn description(&self) -> &'static str {
         match self {
             CharacterId::ALong => "街頭混混出身，拳頭就是道理。近戰傷害 +30%",
@@ -81,6 +79,7 @@ impl CharacterId {
     }
 
     /// 特殊能力倍率
+    #[allow(dead_code)] // 戰鬥系統整合預留
     pub fn combat_multiplier(&self) -> f32 {
         match self {
             CharacterId::ALong => 1.3,   // 近戰 +30%
@@ -90,6 +89,7 @@ impl CharacterId {
     }
 
     /// 射擊經驗加成
+    #[allow(dead_code)] // 技能系統整合預留
     pub fn shooting_xp_multiplier(&self) -> f32 {
         match self {
             CharacterId::ALong => 1.0,
@@ -99,6 +99,7 @@ impl CharacterId {
     }
 
     /// 駕駛經驗加成
+    #[allow(dead_code)] // 技能系統整合預留
     pub fn driving_xp_multiplier(&self) -> f32 {
         match self {
             CharacterId::ALong => 1.0,
@@ -200,6 +201,7 @@ impl CharacterManager {
     }
 
     /// 取得當前角色快照
+    #[allow(dead_code)] // HUD 角色資訊顯示預留
     pub fn active_snapshot(&self) -> Option<&CharacterSnapshot> {
         self.get(self.active)
     }
@@ -216,6 +218,7 @@ impl CharacterManager {
     }
 
     /// 解鎖角色
+    #[allow(dead_code)] // 劇情解鎖系統預留
     pub fn unlock(&mut self, id: CharacterId) {
         if let Some(snapshot) = self.get_mut(id) {
             snapshot.unlocked = true;

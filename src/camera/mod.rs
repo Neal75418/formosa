@@ -1,5 +1,6 @@
 //! 攝影機系統模組
 
+pub(crate) mod constants;
 mod systems;
 
 #[cfg(test)]
@@ -16,6 +17,9 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app
+            .init_resource::<crate::core::CameraSettings>()
+            .init_resource::<crate::core::CameraShake>()
+            .init_resource::<crate::core::CinematicState>()
             .add_systems(Startup, setup_cinematic_letterbox)
             .add_systems(
                 Update,

@@ -98,28 +98,10 @@ fn main() {
         .add_plugins(ui::UiPlugin)
         // === 狀態 ===
         .init_state::<core::AppState>()
-        // === 資源 ===
+        // === 資源（僅保留全域性資源，其餘由各 Plugin 自行管理）===
         .insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.15)))
         .insert_resource(core::GameState::default())
-        .insert_resource(core::WorldTime::default())
-        .insert_resource(core::WeatherState::default()) // 天氣系統
-        .insert_resource(core::CameraSettings::default())
-        .insert_resource(core::PlayerStats::default())
         .insert_resource(mission::MissionManager::default())
-        .insert_resource(ui::UiState::default())
-        .insert_resource(ui::NotificationQueue::default())
-        .init_resource::<world::WindowUpdateTimer>() // 窗戶更新計時器
-        .init_resource::<core::RecoilState>() // 後座力狀態
-        .init_resource::<core::CameraShake>() // 攝影機震動
-        .init_resource::<core::CinematicState>() // 電影模式狀態
-        .init_resource::<ui::DamageIndicatorState>() // 受傷指示器狀態
-        .init_resource::<ui::HudAnimationState>() // HUD 動畫狀態
-        .init_resource::<ui::CrosshairDynamics>() // 準星動態狀態
-        .init_resource::<ui::WeaponSwitchAnimation>() // 武器切換動畫狀態
-        .init_resource::<ui::FloatingDamageTracker>() // 浮動傷害數字追蹤器
-        .init_resource::<ui::WeaponWheelState>() // 武器輪盤狀態
-        .init_resource::<ui::GpsNavigationState>() // GPS 導航狀態
-        .init_resource::<world::LightningState>() // 閃電狀態
         .init_resource::<core::InteractionState>() // 互動輸入狀態 (F)
         // 互動輸入更新（每幀）
         .add_systems(PreUpdate, core::update_interaction_state)

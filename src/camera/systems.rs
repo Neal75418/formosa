@@ -12,16 +12,7 @@ use crate::player::{CharacterSwitchAnimation, Player, PlayerSprintState};
 use crate::vehicle::{Vehicle, VehicleType};
 use crate::combat::{CombatState, Enemy, LockOnState, WeaponInventory, WeaponType};
 
-/// 攝影機自動跟隨速度（越大越快跟上玩家）
-const CAMERA_FOLLOW_SPEED: f32 = 3.0;
-
-/// 俯仰角最小值（約 -17°，微微仰望）
-const PITCH_MIN: f32 = -0.3;
-/// 俯仰角最大值 — 正常輸入範圍（約 69°）
-const PITCH_MAX_INPUT: f32 = 1.2;
-/// 俯仰角最大值 — 含後座力影響（約 86°）
-/// 比 PITCH_MAX_INPUT 寬，允許後座力暫時超過正常輸入上限
-const PITCH_MAX_WITH_RECOIL: f32 = 1.5;
+use super::constants::*;
 
 /// 遊戲攝影機標記
 #[derive(Component)]
@@ -56,8 +47,8 @@ fn handle_mouse_y_axis(camera_settings: &mut CameraSettings, delta_y: f32, is_ai
         camera_settings.pitch += delta_y * camera_settings.sensitivity;
     } else {
         // 非瞄準時：上下移動 = 調整距離
-        camera_settings.distance += delta_y * 0.1;
-        camera_settings.distance = camera_settings.distance.clamp(5.0, 80.0);
+        camera_settings.distance += delta_y * DISTANCE_MOUSE_FACTOR;
+        camera_settings.distance = camera_settings.distance.clamp(DISTANCE_MIN, DISTANCE_MAX);
     }
 }
 
@@ -160,7 +151,7 @@ pub fn camera_input(
         }
         // 限制車內視角範圍
         camera_settings.vehicle_interior_yaw = camera_settings.vehicle_interior_yaw.clamp(-yaw_limit, yaw_limit);
-        camera_settings.vehicle_interior_pitch = camera_settings.vehicle_interior_pitch.clamp(PITCH_MIN, 0.8);
+        camera_settings.vehicle_interior_pitch = camera_settings.vehicle_interior_pitch.clamp(PITCH_MIN, VEHICLE_INTERIOR_PITCH_MAX);
         scroll.clear();
     } else if is_fps {
         // FPS 模式：滑鼠直接控制 yaw + pitch
@@ -176,8 +167,8 @@ pub fn camera_input(
         }
         camera_settings.pitch = camera_settings.pitch.clamp(PITCH_MIN, PITCH_MAX_INPUT);
         for event in scroll.read() {
-            camera_settings.distance -= event.y * 0.4;
-            camera_settings.distance = camera_settings.distance.clamp(5.0, 80.0);
+            camera_settings.distance -= event.y * DISTANCE_SCROLL_STEP;
+            camera_settings.distance = camera_settings.distance.clamp(DISTANCE_MIN, DISTANCE_MAX);
         }
     }
 }
@@ -297,7 +288,7 @@ pub fn camera_follow(
             camera_settings.aim_shoulder_offset,
         )
     } else {
-        (camera_settings.distance, base_pitch + recoil_state.current_offset.y * 0.3, 0.0)
+        (camera_settings.distance, base_pitch + recoil_state.current_offset.y * TPS_RECOIL_FACTOR, 0.0)
     };
 
     // 限制後座力影響後的 pitch 範圍
@@ -320,7 +311,7 @@ pub fn camera_follow(
     let desired_pos = target_pos + offset + shoulder + shake_offset;
 
     // 瞄準時使用更快的插值（更緊跟）
-    let lerp_speed = if is_aiming { 15.0 } else { 8.0 };
+    let lerp_speed = if is_aiming { AIM_FOLLOW_LERP_SPEED } else { NORMAL_FOLLOW_LERP_SPEED };
     camera_transform.translation = camera_transform.translation.lerp(desired_pos, lerp_speed * time.delta_secs());
 
     // 瞄準時看向角色前方（考慮 pitch 俯仰角）
@@ -331,13 +322,13 @@ pub fn camera_follow(
             -pitch.sin(),
             -yaw.cos() * pitch.cos(),
         );
-        let mut look = target_pos + Vec3::Y * 1.5 + aim_forward * 10.0;
+        let mut look = target_pos + Vec3::Y * AIM_LOOK_TARGET_Y_OFFSET + aim_forward * 10.0;
 
-        // 鎖定目標時微調攝影機看向目標（30% 混合，自然追蹤感）
+        // 鎖定目標時微調攝影機看向目標（混合追蹤感）
         if let Some(locked_entity) = lock_on.locked_target {
             if let Ok(locked_transform) = enemy_query.get(locked_entity) {
-                let locked_center = locked_transform.translation + Vec3::Y * 1.0;
-                look = look.lerp(locked_center, 0.3);
+                let locked_center = locked_transform.translation + Vec3::Y * LOCK_ON_Y_OFFSET;
+                look = look.lerp(locked_center, LOCK_ON_LOOK_BLEND);
             }
         }
         look
@@ -533,7 +524,7 @@ pub fn cinematic_camera_system(
         camera_settings.yaw -= event.delta.x * sensitivity;
         camera_settings.pitch += event.delta.y * sensitivity;
     }
-    camera_settings.pitch = camera_settings.pitch.clamp(-1.4, 1.4); // 接近 ±80°
+    camera_settings.pitch = camera_settings.pitch.clamp(-CINEMATIC_PITCH_LIMIT, CINEMATIC_PITCH_LIMIT);
 
     // 滾輪調整飛行速度
     for event in scroll.read() {

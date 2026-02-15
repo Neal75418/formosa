@@ -1,7 +1,6 @@
 //! 玩家組件
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
+// 部分屬性為將來擴展預留，個別標記 #[allow(dead_code)]
 
 
 use bevy::prelude::*;
@@ -12,6 +11,7 @@ use crate::core::{ease_out_cubic, ease_in_cubic};
 #[derive(Component)]
 pub struct Player {
     pub speed: f32,
+    #[allow(dead_code)]
     pub rotation_speed: f32,
     pub sprint_speed: f32,
     pub crouch_speed: f32,
@@ -82,7 +82,7 @@ impl SprintState {
     const WALK_THRESHOLD: f32 = 0.6;
 
     /// 根據當前速度和目標速度更新狀態
-    pub fn update(&mut self, current_speed: f32, walk_speed: f32, sprint_speed: f32, dt: f32) {
+    pub fn update(&mut self, current_speed: f32, walk_speed: f32, sprint_speed: f32, _dt: f32) {
         let speed_ratio = current_speed / sprint_speed;
 
         match *self {
@@ -92,7 +92,7 @@ impl SprintState {
                     *self = SprintState::Accelerating { progress: speed_ratio / Self::SPRINT_THRESHOLD };
                 }
             }
-            SprintState::Accelerating { progress } => {
+            SprintState::Accelerating { .. } => {
                 let new_progress = (current_speed - walk_speed) / (sprint_speed * Self::SPRINT_THRESHOLD - walk_speed);
                 let clamped = new_progress.clamp(0.0, 1.0);
                 if clamped >= 1.0 {
@@ -102,7 +102,6 @@ impl SprintState {
                 } else {
                     *self = SprintState::Accelerating { progress: clamped };
                 }
-                let _ = (progress, dt); // 避免 unused warning
             }
             SprintState::Sprinting => {
                 // 開始減速
@@ -110,7 +109,7 @@ impl SprintState {
                     *self = SprintState::Decelerating { progress: speed_ratio / Self::SPRINT_THRESHOLD };
                 }
             }
-            SprintState::Decelerating { progress } => {
+            SprintState::Decelerating { .. } => {
                 let new_progress = speed_ratio / Self::SPRINT_THRESHOLD;
                 if new_progress >= Self::SPRINT_THRESHOLD {
                     *self = SprintState::Sprinting;
@@ -119,7 +118,6 @@ impl SprintState {
                 } else {
                     *self = SprintState::Decelerating { progress: new_progress };
                 }
-                let _ = (progress, dt); // 避免 unused warning
             }
         }
     }
@@ -201,6 +199,7 @@ impl Stamina {
     }
 
     /// 能否衝刺
+    #[allow(dead_code)]
     pub fn can_sprint(&self) -> bool {
         !self.exhausted && self.current > 0.0
     }
@@ -227,6 +226,7 @@ impl DodgeState {
     /// 閃避冷卻時間（秒）
     pub const DODGE_COOLDOWN: f32 = 0.5;
     /// 閃避期間無敵
+    #[allow(dead_code)]
     pub const DODGE_INVINCIBLE: bool = true;
 
     /// 開始閃避
@@ -338,6 +338,7 @@ pub struct VehicleTransitionState {
     /// 動畫目標位置（門旁/座位/下車點）
     pub target_position: Vec3,
     /// 門的位置（相對於車輛）
+    #[allow(dead_code)]
     pub door_offset: Vec3,
     /// 是否從右側上車
     pub from_right_side: bool,
@@ -454,6 +455,7 @@ impl VehicleTransitionState {
 
 /// 車門組件標記
 #[derive(Component)]
+#[allow(dead_code)]
 pub struct VehicleDoor {
     /// 所屬車輛
     pub vehicle_entity: Entity,

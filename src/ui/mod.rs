@@ -71,7 +71,16 @@ impl Plugin for UiPlugin {
             );
 
         // 共用基礎建設
-        app.init_resource::<SaveSlotUiState>()
+        app.insert_resource(UiState::default())
+            .insert_resource(NotificationQueue::default())
+            .init_resource::<DamageIndicatorState>()
+            .init_resource::<HudAnimationState>()
+            .init_resource::<CrosshairDynamics>()
+            .init_resource::<WeaponSwitchAnimation>()
+            .init_resource::<FloatingDamageTracker>()
+            .init_resource::<WeaponWheelState>()
+            .init_resource::<GpsNavigationState>()
+            .init_resource::<SaveSlotUiState>()
             .init_resource::<PhoneUiState>()
             .add_systems(Startup, setup_ui_scale)
             .add_systems(Startup, setup_chinese_font.after(setup_ui_scale))

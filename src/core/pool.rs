@@ -91,6 +91,6 @@ impl EntityPool {
 
     /// 檢查池是否還有空間
     pub fn has_capacity(&self) -> bool {
-        self.available.len() < self.max_size || !self.available.is_empty()
+        self.available.len() < self.max_size
     }
 }

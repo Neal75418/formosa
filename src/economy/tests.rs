@@ -2,9 +2,7 @@
 
 use super::components::*;
 
-// ============================================================================
-// 測試輔助函數
-// ============================================================================
+// --- 測試輔助函數 ---
 
 /// 建立測試用錢包（預設值：現金 1000，銀行 5000）
 fn create_test_wallet() -> PlayerWallet {
@@ -36,9 +34,7 @@ fn empty_wallet() -> PlayerWallet {
     }
 }
 
-// ============================================================================
-// PlayerWallet 基本測試
-// ============================================================================
+// --- PlayerWallet 基本測試 ---
 
 #[test]
 fn test_wallet_default() {
@@ -61,9 +57,7 @@ fn test_wallet_total_with_zero() {
     assert_eq!(wallet.total(), 0);
 }
 
-// ============================================================================
-// add_cash 測試
-// ============================================================================
+// --- add_cash 測試 ---
 
 #[test]
 fn test_wallet_add_cash() {
@@ -108,9 +102,7 @@ fn test_wallet_add_cash_large_amount() {
     assert_eq!(wallet.total_earned, i32::MAX / 2);
 }
 
-// ============================================================================
-// spend_cash 測試
-// ============================================================================
+// --- spend_cash 測試 ---
 
 #[test]
 fn test_wallet_spend_cash_success() {
@@ -164,9 +156,7 @@ fn test_wallet_spend_cash_negative_amount() {
     assert_eq!(wallet.total_spent, 0); // No spending recorded
 }
 
-// ============================================================================
-// spend_up_to 測試
-// ============================================================================
+// --- spend_up_to 測試 ---
 
 #[test]
 fn test_wallet_spend_up_to_full_amount() {
@@ -228,9 +218,7 @@ fn test_wallet_spend_up_to_negative_amount_large() {
     assert_eq!(wallet.cash, 1000);
 }
 
-// ============================================================================
-// deposit 測試
-// ============================================================================
+// --- deposit 測試 ---
 
 #[test]
 fn test_wallet_deposit_success() {
@@ -285,9 +273,7 @@ fn test_wallet_deposit_exact_amount() {
     assert_eq!(wallet.bank, 500);
 }
 
-// ============================================================================
-// withdraw 測試
-// ============================================================================
+// --- withdraw 測試 ---
 
 #[test]
 fn test_wallet_withdraw_success() {
@@ -340,9 +326,7 @@ fn test_wallet_withdraw_exact_amount() {
     assert_eq!(wallet.bank, 0);
 }
 
-// ============================================================================
-// 複合操作測試
-// ============================================================================
+// --- 複合操作測試 ---
 
 #[test]
 fn test_wallet_multiple_operations() {
@@ -385,9 +369,7 @@ fn test_wallet_fine_scenario() {
     assert_eq!(wallet.total_spent, 300);
 }
 
-// ============================================================================
-// Shop 測試
-// ============================================================================
+// --- Shop 測試 ---
 
 #[test]
 fn test_shop_is_open_regular_hours() {
@@ -462,9 +444,7 @@ fn test_shop_type_name() {
     assert_eq!(ShopType::ModShop.name(), "改裝廠");
 }
 
-// ============================================================================
-// ShopItem 測試
-// ============================================================================
+// --- ShopItem 測試 ---
 
 #[test]
 fn test_shop_item_builder() {
@@ -496,9 +476,7 @@ fn test_shop_item_zero_price() {
     assert_eq!(item.price, 0);
 }
 
-// ============================================================================
-// ShopInventory 測試
-// ============================================================================
+// --- ShopInventory 測試 ---
 
 #[test]
 fn test_shop_inventory_convenience_items() {
@@ -541,9 +519,7 @@ fn test_shop_inventory_all_items_have_valid_prices() {
     }
 }
 
-// ============================================================================
-// CashPickup 測試
-// ============================================================================
+// --- CashPickup 測試 ---
 
 #[test]
 fn test_cash_pickup_new() {
@@ -566,9 +542,7 @@ fn test_cash_pickup_large_amount() {
     assert_eq!(pickup.amount, 1_000_000);
 }
 
-// ============================================================================
-// Atm 測試
-// ============================================================================
+// --- Atm 測試 ---
 
 #[test]
 fn test_atm_default() {
@@ -579,9 +553,7 @@ fn test_atm_default() {
     assert_eq!(atm.max_withdrawal, 10000);
 }
 
-// ============================================================================
-// Interactable 測試
-// ============================================================================
+// --- Interactable 測試 ---
 
 #[test]
 fn test_interactable_default() {
@@ -592,9 +564,7 @@ fn test_interactable_default() {
     assert_eq!(interactable.interaction_type, InteractionType::Generic);
 }
 
-// ============================================================================
-// 溢位保護測試
-// ============================================================================
+// --- 溢位保護測試 ---
 
 #[test]
 fn test_wallet_add_cash_saturating_overflow() {
@@ -669,9 +639,7 @@ fn test_wallet_total_spent_saturating_overflow() {
     assert_eq!(wallet.total_spent, i32::MAX); // total_spent 飽和
 }
 
-// ============================================================================
-// PropertyOwnership 測試
-// ============================================================================
+// --- PropertyOwnership 測試 ---
 
 #[test]
 fn test_property_for_sale() {
@@ -753,9 +721,7 @@ fn test_property_constants() {
     assert!(RENTAL_INCOME_HOUR < 24.0);
 }
 
-// ============================================================================
-// RobberyState 測試
-// ============================================================================
+// --- RobberyState 測試 ---
 
 #[test]
 fn test_robbery_state_default() {

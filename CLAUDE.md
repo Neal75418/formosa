@@ -563,9 +563,9 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 | 射擊系統   | `src/combat/shooting/` (input, firing, effects) |
 | 爆炸物    | `src/combat/explosives/` (systems, explosion, effects) |
 | 掩體     | `src/combat/cover.rs`                       |
-| 警用直升機  | `src/wanted/police_helicopter.rs`           |
+| 警用直升機  | `src/wanted/police_helicopter/` (components, spawning, ai, combat) |
 | 偷車     | `src/vehicle/theft.rs`                      |
-| 車輛改裝   | `src/vehicle/modifications.rs`              |
+| 車輛改裝   | `src/vehicle/modifications/` (performance, visuals, systems) |
 | 車輛效果   | `src/vehicle/effects.rs`                    |
 | 行人生命週期 | `src/pedestrian/systems/lifecycle.rs`       |
 | 恐慌系統   | `src/pedestrian/panic.rs`                   |

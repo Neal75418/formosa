@@ -17,8 +17,9 @@ use super::{
 };
 use super::{
     AudioManager, AudioVehicleState, FootstepTimer, GroundSurface, NpcDialogueCooldown,
-    NpcDialogueManager, PlayerGroundSurface, PlayerSounds, PoliceRadioState, RadioManager,
-    RadioStation, UISounds, VehicleSounds, NPC_DIALOGUE_LINES,
+    NpcDialogueManager, PlayerGroundSurface, PlayerSounds, PoliceRadioState, RadioFadeState,
+    RadioManager, RadioPlaylists, RadioStation, UISounds, VehicleSounds, NPC_DIALOGUE_LINES,
+    RADIO_FADE_IN_DURATION, RADIO_FADE_OUT_DURATION,
 };
 use crate::core::GameState;
 use crate::mission::StoryMissionEvent;
@@ -195,7 +196,7 @@ pub fn audio_footstep_system(
 pub struct RadioPlayback;
 
 /// 電台輸入系統
-/// 駕駛中 Q/E 切換電台
+/// 駕駛中數字鍵 1-8 直接選台，9 關閉，Q/E 循環切換
 pub fn radio_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
     game_state: Res<GameState>,
@@ -206,29 +207,131 @@ pub fn radio_input_system(
         return;
     }
 
-    let mut changed = false;
+    let mut target: Option<RadioStation> = None;
 
-    if keyboard.just_pressed(KeyCode::KeyQ) {
-        radio.current_station = radio.current_station.prev();
-        changed = true;
-    } else if keyboard.just_pressed(KeyCode::KeyE) {
-        radio.current_station = radio.current_station.next();
-        changed = true;
+    // 數字鍵直接選台（1-8 電台，9 關閉）
+    let digit_map: &[(KeyCode, RadioStation)] = &[
+        (KeyCode::Digit1, RadioStation::IslandPop),
+        (KeyCode::Digit2, RadioStation::NightMarketFunk),
+        (KeyCode::Digit3, RadioStation::TaiwanReggae),
+        (KeyCode::Digit4, RadioStation::UndergroundHipHop),
+        (KeyCode::Digit5, RadioStation::ClassicFM),
+        (KeyCode::Digit6, RadioStation::TaiwaneseOldies),
+        (KeyCode::Digit7, RadioStation::IndigenousBeats),
+        (KeyCode::Digit8, RadioStation::ElectroTechno),
+        (KeyCode::Digit9, RadioStation::Off),
+    ];
+
+    for &(key, station) in digit_map {
+        if keyboard.just_pressed(key) {
+            target = Some(station);
+            break;
+        }
     }
 
-    if changed {
+    // Q/E 循環切換（保留原功能）
+    if target.is_none() {
+        if keyboard.just_pressed(KeyCode::KeyQ) {
+            target = Some(radio.current_station.prev());
+        } else if keyboard.just_pressed(KeyCode::KeyE) {
+            target = Some(radio.current_station.next());
+        }
+    }
+
+    // 觸發電台切換（透過淡入淡出）
+    if let Some(next_station) = target {
+        if next_station == radio.current_station {
+            return;
+        }
+
         radio.show_station_name = true;
-        radio.station_name_timer = 3.0; // 顯示 3 秒
+        radio.station_name_timer = 3.0;
+
+        // 從 Off 切換到電台 → 直接切換 + 淡入
+        if radio.current_station == RadioStation::Off {
+            radio.current_station = next_station;
+            radio.fade_volume = 0.0;
+            radio.fade_state = RadioFadeState::FadingIn {
+                elapsed: 0.0,
+                duration: RADIO_FADE_IN_DURATION,
+            };
+        }
+        // 從電台切換到其他/Off → 淡出後切換
+        else {
+            radio.fade_state = RadioFadeState::FadingOut {
+                elapsed: 0.0,
+                duration: RADIO_FADE_OUT_DURATION,
+                next_station,
+            };
+        }
+    }
+}
+
+/// 電台淡入淡出系統
+/// 處理切換電台時的音量漸變效果
+pub fn radio_fade_system(
+    time: Res<Time>,
+    audio_manager: Res<AudioManager>,
+    mut radio: ResMut<RadioManager>,
+    mut sink_query: Query<&mut AudioSink, With<RadioPlayback>>,
+) {
+    let dt = time.delta_secs();
+
+    match radio.fade_state {
+        RadioFadeState::FadingOut { elapsed, duration, next_station } => {
+            let new_elapsed = elapsed + dt;
+            if new_elapsed >= duration {
+                // 淡出完成 → 切換到新電台
+                radio.fade_volume = 0.0;
+                radio.current_station = next_station;
+                if next_station != RadioStation::Off {
+                    radio.fade_state = RadioFadeState::FadingIn {
+                        elapsed: 0.0,
+                        duration: RADIO_FADE_IN_DURATION,
+                    };
+                } else {
+                    radio.fade_state = RadioFadeState::Idle;
+                    radio.fade_volume = 1.0;
+                }
+            } else {
+                let t = new_elapsed / duration;
+                radio.fade_volume = 1.0 - t;
+                radio.fade_state = RadioFadeState::FadingOut { elapsed: new_elapsed, duration, next_station };
+            }
+        }
+        RadioFadeState::FadingIn { elapsed, duration } => {
+            let new_elapsed = elapsed + dt;
+            if new_elapsed >= duration {
+                radio.fade_volume = 1.0;
+                radio.fade_state = RadioFadeState::Idle;
+            } else {
+                let t = new_elapsed / duration;
+                radio.fade_volume = t;
+                radio.fade_state = RadioFadeState::FadingIn { elapsed: new_elapsed, duration };
+            }
+        }
+        RadioFadeState::Idle => {}
+    }
+
+    // 更新正在播放的電台音量
+    let final_volume = audio_manager.master_volume
+        * audio_manager.music_volume
+        * radio.radio_volume
+        * radio.fade_volume;
+
+    for mut sink in &mut sink_query {
+        sink.set_volume(bevy::audio::Volume::Linear(final_volume));
     }
 }
 
 /// 電台播放系統
-/// 根據當前選擇的電台播放/停止音樂
+/// 根據當前選擇的電台播放/停止音樂（支援播放列表）
 pub fn radio_playback_system(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     audio_manager: Res<AudioManager>,
     mut radio: ResMut<RadioManager>,
+    playlists: Res<RadioPlaylists>,
     game_state: Res<GameState>,
     radio_query: Query<Entity, With<RadioPlayback>>,
 ) {
@@ -252,11 +355,18 @@ pub fn radio_playback_system(
         radio.playing_entity = None;
     }
 
-    // 播放新電台
+    // 播放新電台（優先使用 playlist 曲目，fallback 到預設音檔）
     if should_play && radio.playing_entity.is_none() {
-        if let Some(path) = radio.current_station.audio_path() {
-            let sound = asset_server.load(path);
-            let volume = (audio_manager.master_volume * audio_manager.music_volume * radio.radio_volume).min(1.0);
+        let sound = playlists
+            .random_track(radio.current_station)
+            .cloned()
+            .or_else(|| radio.current_station.audio_path().map(|p| asset_server.load(p)));
+
+        if let Some(sound) = sound {
+            let volume = audio_manager.master_volume
+                * audio_manager.music_volume
+                * radio.radio_volume
+                * radio.fade_volume;
             let entity = commands
                 .spawn((
                     AudioPlayer::<AudioSource>(sound),

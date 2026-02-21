@@ -6,7 +6,8 @@ use super::components::{
     ArmorBarFill, ArmorLabel, ArmorLabelShadow, ArmorSection, ControlHintContainer,
     ControlKeyArea, ControlSpeedDisplay, ControlStatusTag, HealthBarBg, HealthBarFill,
     HealthBarGlow, HealthLabel, HealthLabelShadow, MissionInfo, MoneyDisplay,
-    PlayerStatusContainer, TimeDisplay, UiText,
+    PlayerStatusContainer, RadioDescription, RadioDisplayContainer, RadioFrequency, RadioIcon,
+    RadioStationName, RadioVolumeBarBg, RadioVolumeBarFill, TimeDisplay, UiText,
 };
 use super::constants::*;
 use super::systems::{spawn_status_bar_fill, spawn_status_bar_label, spawn_text_child};
@@ -416,4 +417,147 @@ pub(super) fn setup_control_hints(commands: &mut Commands, font: &Handle<Font>) 
         },
         UiText,
     ));
+}
+
+/// 設置右上角電台顯示（小地圖下方，GTA 5 風格）
+pub(super) fn setup_radio_display(commands: &mut Commands, font: &Handle<Font>) {
+    // 外發光層
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(480.0), // 天氣 HUD 下方（避免重疊）
+                right: Val::Px(6.0),
+                padding: UiRect::all(Val::Px(3.0)),
+                ..default()
+            },
+            BackgroundColor(HUD_GLOW_OUTER),
+            BorderRadius::all(Val::Px(10.0)),
+            Visibility::Hidden, // 預設隱藏，切換電台時顯示
+            RadioDisplayContainer,
+        ))
+        .with_children(|glow| {
+            // 主容器
+            glow.spawn((
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(8.0),
+                    padding: UiRect::all(Val::Px(10.0)),
+                    border: UiRect::all(Val::Px(1.5)),
+                    min_width: Val::Px(260.0),
+                    ..default()
+                },
+                BackgroundColor(HUD_BG),
+                BorderColor::all(HUD_BORDER_HIGHLIGHT),
+                BorderRadius::all(Val::Px(6.0)),
+            ))
+            .with_children(|container| {
+                // 電台圖示（🎵）
+                container.spawn((
+                    Node {
+                        width: Val::Px(24.0),
+                        height: Val::Px(24.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.9, 0.3, 0.4, 0.85)),
+                    BorderRadius::all(Val::Px(12.0)),
+                    RadioIcon,
+                ))
+                .with_children(|icon| {
+                    icon.spawn((
+                        Text::new("🎵"),
+                        TextFont {
+                            font_size: 14.0,
+                            font: font.clone(),
+                            ..default()
+                        },
+                    ));
+                });
+
+                // 文字資訊區域（垂直排列）
+                container
+                    .spawn((Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(2.0),
+                        flex_grow: 1.0,
+                        ..default()
+                    },))
+                    .with_children(|text_area| {
+                        // 電台名稱 + 頻率（同一行）
+                        text_area
+                            .spawn((Node {
+                                flex_direction: FlexDirection::Row,
+                                align_items: AlignItems::Center,
+                                column_gap: Val::Px(6.0),
+                                ..default()
+                            },))
+                            .with_children(|name_row| {
+                                // 電台名稱
+                                name_row.spawn((
+                                    Text::new("寶島流行樂"),
+                                    TextFont {
+                                        font_size: 16.0,
+                                        font: font.clone(),
+                                        ..default()
+                                    },
+                                    TextColor(Color::srgba(0.95, 0.95, 0.95, 1.0)),
+                                    RadioStationName,
+                                ));
+
+                                // 頻率標籤（小字、半透明）
+                                name_row.spawn((
+                                    Text::new("FM 102.7"),
+                                    TextFont {
+                                        font_size: 12.0,
+                                        font: font.clone(),
+                                        ..default()
+                                    },
+                                    TextColor(Color::srgba(0.7, 0.85, 0.9, 0.8)),
+                                    RadioFrequency,
+                                ));
+                            });
+
+                        // 電台描述
+                        text_area.spawn((
+                            Text::new("台灣本土流行音樂 - 經典華語金曲"),
+                            TextFont {
+                                font_size: 11.0,
+                                font: font.clone(),
+                                ..default()
+                            },
+                            TextColor(Color::srgba(0.75, 0.75, 0.75, 0.9)),
+                            RadioDescription,
+                        ));
+
+                        // 音量條（背景 + 填充）
+                        text_area
+                            .spawn((
+                                Node {
+                                    width: Val::Percent(100.0),
+                                    height: Val::Px(4.0),
+                                    margin: UiRect::top(Val::Px(2.0)),
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgba(0.2, 0.2, 0.25, 0.6)),
+                                BorderRadius::all(Val::Px(2.0)),
+                                RadioVolumeBarBg,
+                            ))
+                            .with_children(|vol_bg| {
+                                vol_bg.spawn((
+                                    Node {
+                                        width: Val::Percent(60.0), // 預設 60% 音量
+                                        height: Val::Percent(100.0),
+                                        ..default()
+                                    },
+                                    BackgroundColor(Color::srgba(0.4, 0.7, 0.9, 0.85)),
+                                    BorderRadius::all(Val::Px(2.0)),
+                                    RadioVolumeBarFill,
+                                ));
+                            });
+                    });
+            }); // 結束主容器
+        }); // 結束外發光層
 }

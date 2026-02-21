@@ -133,3 +133,35 @@ pub struct CurrentAmmoShadow;
 /// 後備彈藥陰影
 #[derive(Component)]
 pub struct ReserveAmmoShadow;
+
+// ============================================================================
+// GTA 風格電台 UI 組件（右上角）
+// ============================================================================
+
+/// 電台顯示容器（右上角，小地圖下方）
+#[derive(Component)]
+pub struct RadioDisplayContainer;
+
+/// 電台圖示
+#[derive(Component)]
+pub struct RadioIcon;
+
+/// 電台名稱文字
+#[derive(Component)]
+pub struct RadioStationName;
+
+/// 電台頻率標籤
+#[derive(Component)]
+pub struct RadioFrequency;
+
+/// 電台描述文字
+#[derive(Component)]
+pub struct RadioDescription;
+
+/// 音量條背景
+#[derive(Component)]
+pub struct RadioVolumeBarBg;
+
+/// 音量條填充
+#[derive(Component)]
+pub struct RadioVolumeBarFill;

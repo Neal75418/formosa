@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 use crate::camera::GameCamera;
 use crate::combat::{Health, RespawnState};
-use crate::core::{ease_in_quad, ease_out_quad, AppState, CameraSettings};
+use crate::core::{ease_in_quad, ease_out_quad, AppState, CameraSettings, GameState};
 use crate::economy::PlayerWallet;
 
 use super::{CharacterId, CharacterManager, Player, PlayerSkills, VehicleTransitionState};
@@ -110,10 +110,13 @@ pub fn character_switch_input_system(
     camera_settings: Res<CameraSettings>,
     player_query: Query<&Transform, With<Player>>,
     respawn_state: Res<RespawnState>,
+    game_state: Res<GameState>,
     screen_effect: Res<crate::ui::ScreenEffectState>,
 ) {
-    // 動畫進行中、死亡中、WASTED/BUSTED 期間不接受新輸入
-    if anim.is_active() || respawn_state.is_dead || screen_effect.is_active() {
+    // 動畫進行中、死亡中、WASTED/BUSTED 期間、車內不接受新輸入
+    if anim.is_active() || respawn_state.is_dead || screen_effect.is_active()
+        || game_state.player_in_vehicle
+    {
         return;
     }
 

@@ -24,6 +24,7 @@ impl Plugin for AudioPlugin {
             .init_resource::<FootstepTimer>()
             .init_resource::<AudioVehicleState>()
             .init_resource::<RadioManager>()
+            .init_resource::<RadioPlaylists>()
             .init_resource::<PlayerGroundSurface>()
             // 啟動系統
             .add_systems(
@@ -62,8 +63,10 @@ impl Plugin for AudioPlugin {
                     audio_footstep_system
                         .after(detect_ground_surface_system),
                     radio_input_system,
-                    radio_playback_system
+                    radio_fade_system
                         .after(radio_input_system),
+                    radio_playback_system
+                        .after(radio_fade_system),
                     radio_station_name_timer,
                     police_radio_chatter_system,
                     npc_dialogue_cooldown_system,

@@ -406,12 +406,15 @@ impl From<GroundSurface> for super::systems::FootstepSurface {
 // ============================================================================
 
 /// 電台循環順序（含 Off，用於 next/prev 切換）
-const STATION_CYCLE: [RadioStation; 6] = [
+const STATION_CYCLE: [RadioStation; 9] = [
     RadioStation::IslandPop,
     RadioStation::NightMarketFunk,
     RadioStation::TaiwanReggae,
     RadioStation::UndergroundHipHop,
     RadioStation::ClassicFM,
+    RadioStation::TaiwaneseOldies,
+    RadioStation::IndigenousBeats,
+    RadioStation::ElectroTechno,
     RadioStation::Off,
 ];
 
@@ -428,6 +431,12 @@ pub enum RadioStation {
     UndergroundHipHop,
     /// 古典 FM — Classical
     ClassicFM,
+    /// 台語老歌 — 懷舊金曲
+    TaiwaneseOldies,
+    /// 原住民音樂 — 部落 + 流行
+    IndigenousBeats,
+    /// 電子舞曲 — EDM / Techno
+    ElectroTechno,
     /// 關閉電台
     Off,
 }
@@ -441,6 +450,9 @@ impl RadioStation {
             Self::TaiwanReggae => "台灣雷鬼",
             Self::UndergroundHipHop => "地下嘻哈",
             Self::ClassicFM => "古典 FM",
+            Self::TaiwaneseOldies => "台語老歌",
+            Self::IndigenousBeats => "原住民音樂",
+            Self::ElectroTechno => "電子舞曲",
             Self::Off => "關閉電台",
         }
     }
@@ -453,7 +465,40 @@ impl RadioStation {
             Self::TaiwanReggae => Some("audio/radio_reggae.ogg"),
             Self::UndergroundHipHop => Some("audio/radio_hiphop.ogg"),
             Self::ClassicFM => Some("audio/radio_classical.ogg"),
+            Self::TaiwaneseOldies => Some("audio/radio_oldies.ogg"),
+            Self::IndigenousBeats => Some("audio/radio_indigenous.ogg"),
+            Self::ElectroTechno => Some("audio/radio_electro.ogg"),
             Self::Off => None,
+        }
+    }
+
+    /// FM 頻率顯示
+    pub fn frequency(self) -> &'static str {
+        match self {
+            Self::IslandPop => "FM 102.7",
+            Self::NightMarketFunk => "FM 95.3",
+            Self::TaiwanReggae => "FM 88.9",
+            Self::UndergroundHipHop => "FM 107.1",
+            Self::ClassicFM => "FM 91.5",
+            Self::TaiwaneseOldies => "FM 98.1",
+            Self::IndigenousBeats => "FM 103.9",
+            Self::ElectroTechno => "FM 106.5",
+            Self::Off => "",
+        }
+    }
+
+    /// 台灣本土化描述
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::IslandPop => "台灣本土流行音樂 - 經典華語金曲",
+            Self::NightMarketFunk => "夜市節奏放克 - 熱鬧歡樂氛圍",
+            Self::TaiwanReggae => "海島慢節奏 - 輕鬆舒適節拍",
+            Self::UndergroundHipHop => "本土 MC 發聲 - 街頭嘻哈文化",
+            Self::ClassicFM => "優雅古典音樂 - 沉靜心靈時光",
+            Self::TaiwaneseOldies => "台語懷舊金曲 - 阿公阿嬤的歌",
+            Self::IndigenousBeats => "原住民部落音樂 - 山海之聲",
+            Self::ElectroTechno => "電子舞曲派對 - 台北夜生活",
+            Self::Off => "電台已關閉",
         }
     }
 
@@ -465,6 +510,9 @@ impl RadioStation {
             RadioStation::TaiwanReggae,
             RadioStation::UndergroundHipHop,
             RadioStation::ClassicFM,
+            RadioStation::TaiwaneseOldies,
+            RadioStation::IndigenousBeats,
+            RadioStation::ElectroTechno,
         ]
     }
 
@@ -499,6 +547,10 @@ pub struct RadioManager {
     pub show_station_name: bool,
     /// 電台名稱顯示倒計時
     pub station_name_timer: f32,
+    /// 淡入淡出狀態
+    pub fade_state: RadioFadeState,
+    /// 淡入淡出音量乘數（0.0 ~ 1.0）
+    pub fade_volume: f32,
 }
 
 impl Default for RadioManager {
@@ -510,7 +562,52 @@ impl Default for RadioManager {
             radio_volume: 0.6,
             show_station_name: false,
             station_name_timer: 0.0,
+            fade_state: RadioFadeState::Idle,
+            fade_volume: 1.0,
         }
+    }
+}
+
+/// 電台淡入淡出狀態
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RadioFadeState {
+    /// 閒置（無淡入淡出動作）
+    Idle,
+    /// 淡出中（切換電台前降低音量）
+    FadingOut {
+        elapsed: f32,
+        duration: f32,
+        next_station: RadioStation,
+    },
+    /// 淡入中（新電台開始播放後提升音量）
+    FadingIn {
+        elapsed: f32,
+        duration: f32,
+    },
+}
+
+/// 淡出持續時間（秒）
+pub const RADIO_FADE_OUT_DURATION: f32 = 0.5;
+/// 淡入持續時間（秒）
+pub const RADIO_FADE_IN_DURATION: f32 = 0.8;
+
+/// 電台播放列表資源
+/// 每個電台可配置多首曲目，隨機選擇播放
+#[derive(Resource, Default)]
+pub struct RadioPlaylists {
+    /// 各電台的曲目列表
+    pub tracks: std::collections::HashMap<RadioStation, Vec<Handle<AudioSource>>>,
+}
+
+impl RadioPlaylists {
+    /// 取得電台的隨機曲目（如有多首）
+    pub fn random_track(&self, station: RadioStation) -> Option<&Handle<AudioSource>> {
+        let tracks = self.tracks.get(&station)?;
+        if tracks.is_empty() {
+            return None;
+        }
+        let idx = (rand::random::<f32>() * tracks.len() as f32) as usize;
+        tracks.get(idx.min(tracks.len() - 1))
     }
 }
 
@@ -624,13 +721,13 @@ mod tests {
     fn radio_station_next_cycles_through_all() {
         let mut station = RadioStation::IslandPop;
         let mut visited = vec![station];
-        for _ in 0..5 {
+        for _ in 0..8 {
             station = station.next();
             visited.push(station);
         }
-        // IslandPop → NightMarketFunk → TaiwanReggae → UndergroundHipHop → ClassicFM → Off
-        assert_eq!(visited.len(), 6);
-        assert_eq!(visited[5], RadioStation::Off);
+        // 8 個電台 + Off = 9 步循環
+        assert_eq!(visited.len(), 9);
+        assert_eq!(visited[8], RadioStation::Off);
         // Off.next() 回到 IslandPop
         assert_eq!(RadioStation::Off.next(), RadioStation::IslandPop);
     }
@@ -638,8 +735,8 @@ mod tests {
     #[test]
     fn radio_station_prev_cycles_backwards() {
         assert_eq!(RadioStation::IslandPop.prev(), RadioStation::Off);
-        assert_eq!(RadioStation::Off.prev(), RadioStation::ClassicFM);
-        assert_eq!(RadioStation::ClassicFM.prev(), RadioStation::UndergroundHipHop);
+        assert_eq!(RadioStation::Off.prev(), RadioStation::ElectroTechno);
+        assert_eq!(RadioStation::ElectroTechno.prev(), RadioStation::IndigenousBeats);
     }
 
     #[test]
@@ -654,7 +751,7 @@ mod tests {
 
     #[test]
     fn radio_all_stations_count() {
-        assert_eq!(RadioStation::all_stations().len(), 5);
+        assert_eq!(RadioStation::all_stations().len(), 8);
     }
 
     #[test]
@@ -675,6 +772,86 @@ mod tests {
             assert!(!station.label().is_empty());
         }
         assert!(!RadioStation::Off.label().is_empty());
+    }
+
+    #[test]
+    fn radio_station_frequencies_not_empty() {
+        for station in RadioStation::all_stations() {
+            assert!(!station.frequency().is_empty(), "{:?} should have frequency", station);
+        }
+        // Off 的頻率可以是空字串
+        assert_eq!(RadioStation::Off.frequency(), "");
+    }
+
+    #[test]
+    fn radio_station_frequencies_valid_format() {
+        // 所有可播放電台的頻率應該是 "FM XX.X" 格式
+        for station in RadioStation::all_stations() {
+            let freq = station.frequency();
+            assert!(freq.starts_with("FM "), "{:?} frequency should start with 'FM '", station);
+            assert!(freq.len() > 3, "{:?} frequency should have digits", station);
+        }
+    }
+
+    #[test]
+    fn radio_station_descriptions_not_empty() {
+        for station in RadioStation::all_stations() {
+            assert!(!station.description().is_empty(), "{:?} should have description", station);
+        }
+        assert!(!RadioStation::Off.description().is_empty());
+    }
+
+    #[test]
+    fn radio_station_descriptions_taiwanese_culture() {
+        // 驗證描述包含台灣本土化元素
+        assert!(RadioStation::IslandPop.description().contains("台灣"));
+        assert!(RadioStation::NightMarketFunk.description().contains("夜市"));
+    }
+
+    #[test]
+    fn radio_new_stations_have_culture_elements() {
+        // 新增電台也應有台灣文化元素
+        assert!(RadioStation::TaiwaneseOldies.description().contains("台語"));
+        assert!(RadioStation::IndigenousBeats.description().contains("原住民"));
+        assert!(RadioStation::ElectroTechno.description().contains("台北"));
+    }
+
+    #[test]
+    fn radio_fade_state_default_idle() {
+        let manager = RadioManager::default();
+        assert_eq!(manager.fade_state, RadioFadeState::Idle);
+        assert!((manager.fade_volume - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn radio_fade_constants_positive() {
+        let fade_out = RADIO_FADE_OUT_DURATION;
+        let fade_in = RADIO_FADE_IN_DURATION;
+        assert!(fade_out > 0.0);
+        assert!(fade_in > 0.0);
+        // 淡入比淡出慢（自然感覺）
+        assert!(fade_in > fade_out);
+    }
+
+    #[test]
+    fn radio_playlists_empty_returns_none() {
+        let playlists = RadioPlaylists::default();
+        assert!(playlists.random_track(RadioStation::IslandPop).is_none());
+        assert!(playlists.random_track(RadioStation::Off).is_none());
+    }
+
+    #[test]
+    fn radio_station_unique_frequencies() {
+        // 每個電台的頻率應該唯一
+        let stations = RadioStation::all_stations();
+        for (i, a) in stations.iter().enumerate() {
+            for b in stations.iter().skip(i + 1) {
+                assert_ne!(
+                    a.frequency(), b.frequency(),
+                    "{:?} and {:?} have same frequency", a, b
+                );
+            }
+        }
     }
 
     #[test]

@@ -218,6 +218,7 @@ pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
     super::setup_map::setup_minimap_hud(&mut commands, &font);
     super::setup_hud::setup_info_displays(&mut commands, &font);
     super::setup_hud::setup_control_hints(&mut commands, &font);
+    super::setup_hud::setup_radio_display(&mut commands, &font);
     super::setup_menu::setup_pause_menu(&mut commands, &font);
     super::setup_map::setup_full_map(&mut commands, &font);
     super::save_slot_ui::setup_save_slot_ui_panel(&mut commands, &font);

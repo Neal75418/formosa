@@ -7,13 +7,15 @@ use bevy::prelude::*;
 use super::components::{
     ArmorBarFill, ArmorLabel, ArmorLabelShadow, ArmorSection, ControlSpeedDisplay, ControlStatusTag,
     HealthBarFill, HealthBarGlow, HealthBarHighlight, HealthLabel, HealthLabelShadow,
-    HudAnimationState, MinimapPlayerGlow, MinimapScanLine, MissionInfo, MoneyDisplay, TimeDisplay,
-    UiText,
+    HudAnimationState, MinimapPlayerGlow, MinimapScanLine, MissionInfo, MoneyDisplay,
+    RadioDescription, RadioDisplayContainer, RadioFrequency, RadioStationName, RadioVolumeBarFill,
+    TimeDisplay, UiText,
 };
+use crate::audio::RadioManager;
 use crate::combat::{Armor, Health};
 use crate::core::{GameState, WorldTime};
-use crate::mission::MissionManager;
 use crate::economy::PlayerWallet;
+use crate::mission::MissionManager;
 use crate::player::Player;
 use crate::vehicle::{Vehicle, VehicleType};
 
@@ -445,13 +447,99 @@ pub fn update_hud_animations(
     }
 }
 
+// ============================================================================
+// 電台顯示系統
+// ============================================================================
+/// 更新電台 UI 顯示（GTA 5 風格）
+pub fn update_radio_display(
+    time: Res<Time>,
+    mut radio: ResMut<RadioManager>,
+    mut container_query: Query<&mut Visibility, With<RadioDisplayContainer>>,
+    mut station_name_query: Query<
+        &mut Text,
+        (
+            With<RadioStationName>,
+            Without<RadioFrequency>,
+            Without<RadioDescription>,
+        ),
+    >,
+    mut frequency_query: Query<
+        &mut Text,
+        (
+            With<RadioFrequency>,
+            Without<RadioStationName>,
+            Without<RadioDescription>,
+        ),
+    >,
+    mut description_query: Query<
+        &mut Text,
+        (
+            With<RadioDescription>,
+            Without<RadioStationName>,
+            Without<RadioFrequency>,
+        ),
+    >,
+    mut volume_query: Query<&mut Node, With<RadioVolumeBarFill>>,
+) {
+    let dt = time.delta_secs();
+
+    // 倒數計時器
+    if radio.show_station_name && radio.station_name_timer > 0.0 {
+        radio.station_name_timer -= dt;
+        if radio.station_name_timer <= 0.0 {
+            radio.show_station_name = false;
+        }
+    }
+
+    // 更新容器可見性
+    if let Ok(mut visibility) = container_query.single_mut() {
+        *visibility = if radio.show_station_name {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+
+    // 只在可見時更新內容（效能優化）
+    if !radio.show_station_name {
+        return;
+    }
+
+    // 更新電台名稱
+    if let Ok(mut text) = station_name_query.single_mut() {
+        **text = radio.current_station.label().to_string();
+    }
+
+    // 更新頻率標籤
+    if let Ok(mut text) = frequency_query.single_mut() {
+        **text = radio.current_station.frequency().to_string();
+    }
+
+    // 更新描述文字
+    if let Ok(mut text) = description_query.single_mut() {
+        **text = radio.current_station.description().to_string();
+    }
+
+    // 更新音量條寬度
+    if let Ok(mut node) = volume_query.single_mut() {
+        let volume_percent = (radio.radio_volume * 100.0).clamp(0.0, 100.0);
+        node.width = Val::Percent(volume_percent);
+    }
+}
+
 pub(super) struct HudPlugin;
 
 impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (update_ui, update_hud, update_mission_ui, update_hud_animations)
+            (
+                update_ui,
+                update_hud,
+                update_mission_ui,
+                update_hud_animations,
+                update_radio_display,
+            )
                 .in_set(super::UiActive),
         );
     }

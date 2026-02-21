@@ -846,14 +846,14 @@ mod tests {
 
     #[test]
     fn test_mission_performance_tracking() {
-        let mut performance = MissionPerformance::default();
-
-        // 模擬任務表現
-        performance.start_time = 0.0;
-        performance.completion_time = 120.0; // 2 分鐘
-        performance.player_deaths = 1;
-        performance.damage_taken = 50.0;
-        performance.enemies_killed = 5;
+        let performance = MissionPerformance {
+            start_time: 0.0,
+            completion_time: 120.0, // 2 分鐘
+            player_deaths: 1,
+            damage_taken: 50.0,
+            enemies_killed: 5,
+            ..Default::default()
+        };
 
         // 計算評分（目標時間 180 秒 = 3 分鐘）
         let rating = performance.calculate_rating(180.0);

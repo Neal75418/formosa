@@ -579,3 +579,247 @@ pub fn create_sample_dialogue() -> DialogueTree {
 
     tree.with_start_node(0)
 }
+
+// ============================================================================
+// 單元測試
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dialogue_tree_creation() {
+        let tree = DialogueTree::new(1, "測試對話");
+        assert_eq!(tree.id, 1);
+        assert_eq!(tree.name, "測試對話");
+        assert_eq!(tree.start_node, 0);
+        assert!(tree.nodes.is_empty());
+    }
+
+    #[test]
+    fn test_dialogue_node_add_and_get() {
+        let mut tree = DialogueTree::new(1, "測試");
+        let node = DialogueNode::new(0, DialogueSpeaker::Player, "你好");
+
+        tree.add_node(node.clone());
+
+        assert_eq!(tree.nodes.len(), 1);
+        let retrieved = tree.get_node(0).unwrap();
+        assert_eq!(retrieved.text, "你好");
+        assert_eq!(retrieved.speaker, DialogueSpeaker::Player);
+    }
+
+    #[test]
+    fn test_dialogue_tree_navigation() {
+        let mut tree = DialogueTree::new(1, "導航測試");
+
+        // 創建線性對話鏈：0 -> 1 -> 2
+        tree.add_node(DialogueNode::new(0, DialogueSpeaker::Narrator, "開始")
+            .then(1));
+        tree.add_node(DialogueNode::new(1, DialogueSpeaker::Npc(100), "中間")
+            .then(2));
+        tree.add_node(DialogueNode::new(2, DialogueSpeaker::Player, "結束"));
+
+        // 驗證導航路徑
+        let node0 = tree.get_node(0).unwrap();
+        assert_eq!(node0.next_node, Some(1));
+
+        let node1 = tree.get_node(1).unwrap();
+        assert_eq!(node1.next_node, Some(2));
+
+        let node2 = tree.get_node(2).unwrap();
+        assert_eq!(node2.next_node, None); // 結束節點
+    }
+
+    #[test]
+    fn test_dialogue_choice_consequences() {
+        let choice = DialogueChoice::simple("測試選項", 5)
+            .with_consequence(DialogueConsequence::ChangeRelationship {
+                npc_id: 100,
+                delta: 10
+            })
+            .with_consequence(DialogueConsequence::SetStoryFlag {
+                flag: "test_flag".to_string(),
+                value: true
+            });
+
+        assert_eq!(choice.text, "測試選項");
+        assert_eq!(choice.next_node, Some(5));
+        assert_eq!(choice.consequences.len(), 2);
+
+        // 驗證第一個後果
+        if let DialogueConsequence::ChangeRelationship { npc_id, delta } = &choice.consequences[0] {
+            assert_eq!(*npc_id, 100);
+            assert_eq!(*delta, 10);
+        } else {
+            panic!("Expected ChangeRelationship consequence");
+        }
+    }
+
+    #[test]
+    fn test_speaker_alternation() {
+        let mut tree = DialogueTree::new(1, "交替對話");
+
+        tree.add_node(DialogueNode::new(0, DialogueSpeaker::Npc(100), "NPC 說話").then(1));
+        tree.add_node(DialogueNode::new(1, DialogueSpeaker::Player, "玩家回應").then(2));
+        tree.add_node(DialogueNode::new(2, DialogueSpeaker::Npc(100), "NPC 再說話"));
+
+        let speakers: Vec<DialogueSpeaker> = vec![0, 1, 2]
+            .into_iter()
+            .filter_map(|id| tree.get_node(id).map(|n| n.speaker))
+            .collect();
+
+        assert_eq!(speakers[0], DialogueSpeaker::Npc(100));
+        assert_eq!(speakers[1], DialogueSpeaker::Player);
+        assert_eq!(speakers[2], DialogueSpeaker::Npc(100));
+    }
+
+    #[test]
+    fn test_emotion_states() {
+        let emotions = vec![
+            (SpeakerEmotion::Happy, "_happy"),
+            (SpeakerEmotion::Angry, "_angry"),
+            (SpeakerEmotion::Sad, "_sad"),
+            (SpeakerEmotion::Neutral, ""),
+        ];
+
+        for (emotion, expected_suffix) in emotions {
+            assert_eq!(emotion.portrait_suffix(), expected_suffix);
+        }
+    }
+
+    #[test]
+    fn test_dialogue_database_operations() {
+        let mut db = DialogueDatabase::default();
+        assert_eq!(db.dialogue_count(), 0);
+
+        // 註冊對話樹
+        let tree1 = DialogueTree::new(1, "對話1");
+        let tree2 = DialogueTree::new(2, "對話2");
+        db.register_dialogue(tree1);
+        db.register_dialogue(tree2);
+
+        assert_eq!(db.dialogue_count(), 2);
+        assert!(db.get_dialogue(1).is_some());
+        assert!(db.get_dialogue(2).is_some());
+        assert!(db.get_dialogue(999).is_none());
+
+        // 註冊 NPC
+        let npc = NpcDialogueData {
+            id: 100,
+            name: "測試NPC".to_string(),
+            portrait: "npc_100.png".to_string(),
+            voice_style: Some("deep".to_string()),
+        };
+        db.register_npc(npc);
+
+        let retrieved_npc = db.get_npc(100).unwrap();
+        assert_eq!(retrieved_npc.name, "測試NPC");
+    }
+
+    #[test]
+    fn test_active_dialogue_state() {
+        let mut active = ActiveDialogue::new(1, 0)
+            .with_participant("player_name", "阿龍");
+
+        assert_eq!(active.dialogue_id, 1);
+        assert_eq!(active.current_node, 0);
+        assert_eq!(active.typing_progress, 0.0);
+        assert!(!active.typing_complete);
+        assert!(active.can_skip);
+        assert_eq!(active.participants.get("player_name").unwrap(), "阿龍");
+
+        // 模擬打字完成
+        active.typing_progress = 1.0;
+        active.typing_complete = true;
+        assert!(active.typing_complete);
+    }
+
+    #[test]
+    fn test_dialogue_history() {
+        let mut state = DialogueState {
+            max_history: 3,
+            ..Default::default()
+        };
+
+        // 添加歷史記錄
+        for i in 0..5 {
+            state.history.push_back(DialogueHistoryEntry {
+                speaker_name: format!("說話者{}", i),
+                text: format!("文字{}", i),
+                timestamp: i as f32,
+            });
+
+            // 維持最大歷史數量
+            while state.history.len() > state.max_history {
+                state.history.pop_front();
+            }
+        }
+
+        // 應只保留最後 3 筆
+        assert_eq!(state.history.len(), 3);
+        assert_eq!(state.history[0].text, "文字2");
+        assert_eq!(state.history[2].text, "文字4");
+    }
+
+    #[test]
+    fn test_dialogue_choice_with_condition() {
+        let choice = DialogueChoice::simple("條件選項", 10)
+            .with_condition(DialogueCondition::RelationshipMin {
+                npc_id: 100,
+                min: 50,
+            });
+
+        assert!(choice.condition.is_some());
+        if let Some(DialogueCondition::RelationshipMin { npc_id, min }) = &choice.condition {
+            assert_eq!(*npc_id, 100);
+            assert_eq!(*min, 50);
+        } else {
+            panic!("Expected RelationshipMin condition");
+        }
+    }
+
+    #[test]
+    fn test_dialogue_end_choice() {
+        let end_choice = DialogueChoice::end("離開");
+
+        assert_eq!(end_choice.text, "離開");
+        assert!(end_choice.ends_dialogue);
+        assert_eq!(end_choice.next_node, None);
+    }
+
+    #[test]
+    fn test_sample_dialogue_structure() {
+        let tree = create_sample_dialogue();
+
+        assert_eq!(tree.id, 1);
+        assert_eq!(tree.name, "第一章：初遇");
+        assert_eq!(tree.start_node, 0);
+
+        // 驗證範例對話有 8 個節點
+        assert_eq!(tree.nodes.len(), 8);
+
+        // 驗證起始節點
+        let start_node = tree.get_node(0).unwrap();
+        assert_eq!(start_node.speaker, DialogueSpeaker::Narrator);
+        assert_eq!(start_node.next_node, Some(1));
+
+        // 驗證選擇分支（節點 2）
+        let choice_node = tree.get_node(2).unwrap();
+        assert_eq!(choice_node.choices.len(), 3);
+    }
+
+    #[test]
+    fn test_dialogue_settings_default() {
+        let settings = DialogueSettings::default();
+
+        assert_eq!(settings.default_typing_speed, 30.0);
+        assert!(settings.voice_enabled);
+        assert_eq!(settings.font_size, 24.0);
+        assert!((settings.box_opacity - 0.85).abs() < 0.001);
+        assert!(settings.show_speaker_name);
+        assert!(settings.show_portrait);
+        assert!(!settings.auto_advance);
+    }
+}

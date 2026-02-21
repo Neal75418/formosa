@@ -8,7 +8,7 @@
 
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/)
-[![Tests](https://img.shields.io/badge/Tests-329_passing-brightgreen?style=for-the-badge)](/)
+[![Tests](https://img.shields.io/badge/Tests-782_passing-brightgreen?style=for-the-badge)](/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 
 </div>
@@ -41,7 +41,7 @@
 | 物理 |          bevy_rapier3d 0.32          |
 | 風格 |             Low-poly 霓虹風             |
 
-**規模**：140 個 .rs 檔案 · ~62,800 行 · 329 個單元測試
+**規模**：140 個 .rs 檔案 · ~62,800 行 · 782 個單元測試
 
 ## 架構
 

@@ -1,6 +1,59 @@
 //! 群體恐慌傳播系統（GTA5 風格）
 //!
 //! 實現恐慌波傳播機制，包括恐慌波管理和行人恐慌狀態。
+//!
+//! # 核心算法
+//!
+//! ## 恐慌波傳播機制
+//!
+//! 當槍聲響起或爆炸發生時，系統會創建一個「恐慌波」，以波的形式向外傳播：
+//!
+//! 1. **波的產生**：
+//!    - 槍聲：產生半徑 30m、速度 15m/s 的恐慌波（強度 1.0）
+//!    - 尖叫：產生半徑 15m、速度 8m/s 的恐慌波（強度衰減 0.8）
+//!    - 爆炸：產生半徑 30m、速度 15m/s 的恐慌波（強度 1.0）
+//!
+//! 2. **波的擴散**：
+//!    ```
+//!    每幀更新：current_radius += propagation_speed * delta_time
+//!    波前範圍：[current_radius - 2.0, current_radius]（2m 寬的波前）
+//!    ```
+//!
+//! 3. **行人檢測**：
+//!    使用 `PedestrianSpatialHash` 進行 O(k) 時間複雜度的範圍查詢：
+//!    ```
+//!    for wave in active_waves:
+//!        nearby_peds = spatial_hash.query_radius(wave.origin, wave.current_radius)
+//!        for ped in nearby_peds:
+//!            if ped 在波前範圍內:
+//!                ped.trigger_panic(wave.intensity)
+//!    ```
+//!
+//! 4. **恐慌傳播**：
+//!    行人恐慌度達到 0.7 時可尖叫，產生新的次級恐慌波（3秒冷卻）
+//!
+//! ## 效能優化
+//!
+//! - **空間哈希加速**：避免 O(n²) 的全行人遍歷，改為 O(k) 範圍查詢
+//! - **波前寬度限制**：只檢測 2m 寬的波前，已通過的行人不再重複觸發
+//! - **波數量上限**：最多同時存在 32 個恐慌波，超過則淘汰最舊的
+//! - **自動清理**：波達到最大半徑後自動移除
+//!
+//! ## 狀態機
+//!
+//! ```
+//! 正常狀態
+//!    ↓ (恐慌波命中)
+//! panic_level += intensity
+//!    ↓ (panic_level > 0.3)
+//! 恐慌狀態（逃跑）
+//!    ↓ (panic_level >= 0.7 && 可尖叫)
+//! 發出尖叫 → 產生次級恐慌波
+//!    ↓ (時間經過)
+//! panic_level -= calm_rate * dt
+//!    ↓ (panic_level == 0.0)
+//! 回到正常狀態
+//! ```
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
@@ -464,5 +517,136 @@ mod tests {
     fn test_panic_wave_intensity_clamped() {
         let wave = PanicWave::new(Vec3::ZERO, 30.0, 10.0, 1.5, 0.0);
         assert_eq!(wave.intensity, 1.0); // 被 clamp 到 1.0
+    }
+
+    // === 新增的補充測試（擴展覆蓋率）===
+
+    #[test]
+    fn test_panic_wave_manager_multiple_waves_at_same_position() {
+        let mut manager = PanicWaveManager::default();
+        // 在同一位置添加兩個不同強度的波
+        manager.add_wave(Vec3::ZERO, 30.0, 10.0, 0.5, 0.0);
+        manager.add_wave(Vec3::ZERO, 25.0, 12.0, 0.9, 0.1);
+
+        manager.update(1.0);
+        // 波1：速度10m/s，1秒後在10m（前緣8-10m）
+        // 波2：速度12m/s，1秒後在12m（前緣10-12m）
+
+        // 檢查 11m 處（在波2前緣內，不在波1前緣內）
+        let result = manager.check_panic_at(Vec3::new(11.0, 0.0, 0.0));
+        assert!(result.is_some());
+        assert!((result.unwrap().intensity - 0.9).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_panic_wave_manager_wave_front_width_detection() {
+        let mut manager = PanicWaveManager::default();
+        manager.add_wave(Vec3::ZERO, 30.0, 10.0, 1.0, 0.0);
+        manager.update(1.0); // 波前在 8m-10m
+
+        // 測試波前內部（9m）- 應該檢測到
+        let at_front = manager.check_panic_at(Vec3::new(9.0, 0.0, 0.0));
+        assert!(at_front.is_some());
+
+        // 測試波前外部（11m）- 超出波前
+        let beyond_front = manager.check_panic_at(Vec3::new(11.0, 0.0, 0.0));
+        assert!(beyond_front.is_none());
+
+        // 測試波前內部（7.5m）- 已被波前通過
+        let behind_front = manager.check_panic_at(Vec3::new(7.5, 0.0, 0.0));
+        assert!(behind_front.is_none());
+    }
+
+    #[test]
+    fn test_panic_wave_propagation_speed_accuracy() {
+        let mut manager = PanicWaveManager::default();
+        manager.add_wave(Vec3::ZERO, 100.0, 5.0, 1.0, 0.0);
+
+        // 驗證每次 update 的半徑增長精確度
+        for i in 1..=10 {
+            manager.update(0.1); // 每次 0.1 秒
+            let expected_radius = 5.0 * 0.1 * i as f32;
+            assert!((manager.active_waves[0].current_radius - expected_radius).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn test_panic_state_update_cooldown_decay() {
+        let mut state = PanicState::default();
+        state.do_scream();
+        assert_eq!(state.scream_cooldown, PANIC_SCREAM_COOLDOWN);
+
+        // 更新 1 秒
+        state.update(1.0);
+        assert!((state.scream_cooldown - 2.0).abs() < 0.001);
+
+        // 再更新 2.5 秒，冷卻完畢
+        state.update(2.5);
+        assert!(state.scream_cooldown <= 0.0);
+    }
+
+    #[test]
+    fn test_panic_state_duration_tracking() {
+        let mut state = PanicState::default();
+        state.trigger_panic(0.8, Vec3::ZERO);
+
+        // 模擬 5 秒的恐慌狀態
+        for _ in 0..50 {
+            state.update(0.1);
+        }
+        assert!((state.panic_duration - 5.0).abs() < 0.1);
+
+        // 平息後持續時間歸零
+        state.calm_down(1.0, 10.0);
+        assert_eq!(state.panic_duration, 0.0);
+    }
+
+    #[test]
+    fn test_panic_state_is_panicked_threshold() {
+        let mut state = PanicState::default();
+
+        // 低於閾值（0.3）
+        state.trigger_panic(0.2, Vec3::ZERO);
+        assert!(!state.is_panicked());
+
+        // 剛好達到閾值（0.3，但 is_panicked 是 > 0.3，所以還不算）
+        state.trigger_panic(0.1, Vec3::ZERO);
+        assert!(!state.is_panicked()); // panic_level = 0.3，閾值是 > 0.3
+
+        // 略超閾值
+        state.trigger_panic(0.05, Vec3::ZERO);
+        assert!(state.is_panicked()); // panic_level = 0.35 > 0.3
+
+        // 遠超閾值
+        state.trigger_panic(0.5, Vec3::ZERO);
+        assert!(state.is_panicked());
+    }
+
+    #[test]
+    fn test_panic_wave_diagonal_propagation() {
+        let mut manager = PanicWaveManager::default();
+        manager.add_wave(Vec3::ZERO, 30.0, 10.0, 1.0, 0.0);
+        manager.update(1.0); // 波前在 8m-10m 半徑
+
+        // 測試對角線方向（x=7, z=7，距離 ~9.9m）
+        let diagonal_distance = (7.0_f32.powi(2) + 7.0_f32.powi(2)).sqrt();
+        assert!((diagonal_distance - 9.899).abs() < 0.01);
+
+        let result = manager.check_panic_at(Vec3::new(7.0, 0.0, 7.0));
+        assert!(result.is_some()); // 應該在波前範圍內
+    }
+
+    #[test]
+    fn test_panic_wave_zero_speed_edge_case() {
+        let wave = PanicWave::new(Vec3::ZERO, 10.0, 0.0, 1.0, 0.0);
+        let mut manager = PanicWaveManager::default();
+        manager.active_waves.push_back(wave);
+
+        // 速度為 0，半徑不應該增長
+        manager.update(5.0);
+        assert_eq!(manager.active_waves[0].current_radius, 0.0);
+
+        // 但不應該被移除（current_radius < max_radius）
+        assert_eq!(manager.active_waves.len(), 1);
     }
 }

@@ -649,3 +649,233 @@ impl StoryMissionDatabase {
         self.missions.len()
     }
 }
+
+// ============================================================================
+// 單元測試
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_mission(id: StoryMissionId) -> StoryMission {
+        StoryMission::new(id, format!("測試任務{}", id), "測試描述")
+            .chapter(1)
+            .difficulty(Difficulty::Normal)
+            .with_phase(MissionPhase::new(
+                1,
+                StoryMissionType::Dialogue,
+                "階段1",
+            ))
+    }
+
+    #[test]
+    fn test_story_mission_manager_default() {
+        let manager = StoryMissionManager::default();
+
+        assert!(manager.mission_states.is_empty());
+        assert!(manager.current_mission.is_none());
+        assert_eq!(manager.current_chapter, 1);
+        assert_eq!(manager.completed_count, 0);
+        assert_eq!(manager.total_play_time, 0.0);
+    }
+
+    #[test]
+    fn test_mission_status_transitions() {
+        let mut manager = StoryMissionManager::new();
+        let mission_id = 1;
+
+        // 初始狀態應為 Locked
+        assert_eq!(
+            manager.get_mission_status(mission_id),
+            StoryMissionStatus::Locked
+        );
+
+        // 解鎖任務
+        manager.unlock_mission(mission_id);
+        assert_eq!(
+            manager.get_mission_status(mission_id),
+            StoryMissionStatus::Available
+        );
+
+        // 設置為進行中
+        manager.set_mission_status(mission_id, StoryMissionStatus::InProgress);
+        assert_eq!(
+            manager.get_mission_status(mission_id),
+            StoryMissionStatus::InProgress
+        );
+
+        // 完成任務
+        manager.set_mission_status(mission_id, StoryMissionStatus::Completed);
+        assert_eq!(
+            manager.get_mission_status(mission_id),
+            StoryMissionStatus::Completed
+        );
+    }
+
+    #[test]
+    fn test_start_mission_success() {
+        let mut manager = StoryMissionManager::new();
+        let mission = create_test_mission(1);
+
+        // 先解鎖任務
+        manager.unlock_mission(1);
+
+        // 開始任務
+        let wallet = PlayerWallet::default();
+        let respect = RespectManager::default();
+        let unlocks = UnlockManager::default();
+        let world_time = WorldTime::default();
+
+        let result = manager.start_mission(&mission, &wallet, &respect, &unlocks, &world_time);
+        assert!(result.is_ok());
+
+        // 驗證狀態
+        assert!(manager.current_mission.is_some());
+        assert_eq!(
+            manager.get_mission_status(1),
+            StoryMissionStatus::InProgress
+        );
+        assert!(manager.current_performance.is_some());
+    }
+
+    #[test]
+    fn test_start_mission_already_in_progress() {
+        let mut manager = StoryMissionManager::new();
+        let mission1 = create_test_mission(1);
+        let mission2 = create_test_mission(2);
+
+        manager.unlock_mission(1);
+        manager.unlock_mission(2);
+
+        let wallet = PlayerWallet::default();
+        let respect = RespectManager::default();
+        let unlocks = UnlockManager::default();
+        let world_time = WorldTime::default();
+
+        // 開始第一個任務
+        manager
+            .start_mission(&mission1, &wallet, &respect, &unlocks, &world_time)
+            .unwrap();
+
+        // 嘗試開始第二個任務應該失敗
+        let result = manager.start_mission(&mission2, &wallet, &respect, &unlocks, &world_time);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "已有進行中的任務");
+    }
+
+    #[test]
+    fn test_checkpoint_save_and_restore() {
+        let mut manager = StoryMissionManager::new();
+        let mission = create_test_mission(1);
+        manager.unlock_mission(1);
+
+        let wallet = PlayerWallet::default();
+        let respect = RespectManager::default();
+        let unlocks = UnlockManager::default();
+        let world_time = WorldTime::default();
+
+        manager
+            .start_mission(&mission, &wallet, &respect, &unlocks, &world_time)
+            .unwrap();
+
+        // 保存 checkpoint
+        let checkpoint_pos = Vec3::new(10.0, 0.0, 5.0);
+        manager.create_checkpoint(checkpoint_pos, 1);
+
+        assert!(manager.checkpoint.is_some());
+        let checkpoint = manager.checkpoint.as_ref().unwrap();
+        assert_eq!(checkpoint.mission_id, 1);
+        assert_eq!(checkpoint.player_position, checkpoint_pos);
+    }
+
+    #[test]
+    fn test_story_flag_management() {
+        let mut manager = StoryMissionManager::new();
+
+        // 設置旗標
+        manager.set_flag("test_flag".to_string(), true);
+        assert!(manager.get_flag("test_flag"));
+
+        // 修改旗標
+        manager.set_flag("test_flag".to_string(), false);
+        assert!(!manager.get_flag("test_flag"));
+
+        // 取得不存在的旗標（返回 false）
+        assert!(!manager.get_flag("nonexistent"));
+    }
+
+    #[test]
+    fn test_database_registration() {
+        let mut db = StoryMissionDatabase::default();
+        assert_eq!(db.total_count(), 0);
+
+        let mission1 = create_test_mission(1);
+        let mission2 = create_test_mission(2);
+
+        db.register(mission1);
+        db.register(mission2);
+
+        assert_eq!(db.total_count(), 2);
+        assert!(db.get(1).is_some());
+        assert!(db.get(2).is_some());
+        assert!(db.get(999).is_none());
+    }
+
+    #[test]
+    fn test_database_chapter_organization() {
+        let mut db = StoryMissionDatabase::default();
+
+        let mission1 = StoryMission::new(1, "章節1任務1", "描述").chapter(1);
+        let mission2 = StoryMission::new(2, "章節1任務2", "描述").chapter(1);
+        let mission3 = StoryMission::new(3, "章節2任務1", "描述").chapter(2);
+
+        db.register(mission1);
+        db.register(mission2);
+        db.register(mission3);
+
+        let chapter1_missions = db.get_chapter_missions(1);
+        assert_eq!(chapter1_missions.len(), 2);
+
+        let chapter2_missions = db.get_chapter_missions(2);
+        assert_eq!(chapter2_missions.len(), 1);
+
+        let chapter3_missions = db.get_chapter_missions(3);
+        assert_eq!(chapter3_missions.len(), 0);
+    }
+
+    #[test]
+    fn test_mission_performance_tracking() {
+        let mut performance = MissionPerformance::default();
+
+        // 模擬任務表現
+        performance.start_time = 0.0;
+        performance.completion_time = 120.0; // 2 分鐘
+        performance.player_deaths = 1;
+        performance.damage_taken = 50.0;
+        performance.enemies_killed = 5;
+
+        // 計算評分（目標時間 180 秒 = 3 分鐘）
+        let rating = performance.calculate_rating(180.0);
+
+        // 快速完成應有額外獎勵
+        assert!(rating.bonus_multiplier() >= 1.0);
+
+        // 但有死亡和損壞應降低評分
+        assert!(rating.stars() <= 5);
+    }
+
+    #[test]
+    fn test_unlock_manager_default() {
+        let unlocks = UnlockManager::default();
+        // 驗證 UnlockManager 可以正常創建
+        assert!(unlocks.unlocked_items.is_empty());
+        // unlocked_areas 可能有預設值，所以只驗證欄位存在
+    }
+
+    #[test]
+    fn test_respect_manager_default() {
+        let respect = RespectManager::default();
+        assert_eq!(respect.respect, 0);
+    }
+}

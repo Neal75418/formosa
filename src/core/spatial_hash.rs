@@ -1,7 +1,49 @@
 //! 空間哈希網格系統
 //!
-//! 將 O(n²) 的鄰近查詢優化為 O(1)。
-//! 用於：行人/車輛碰撞、警察視野檢測、爆炸範圍檢測等。
+//! 將 O(n²) 的鄰近查詢優化為 O(k)，其中 k 為結果數量。
+//!
+//! # 用途
+//! - 行人/車輛碰撞檢測
+//! - 警察視野範圍查詢
+//! - 爆炸/恐慌波範圍檢測
+//! - AI 鄰近實體感知
+//!
+//! # 效能特性
+//! - **查詢時間**：O(k) where k = 結果數量（vs 樸素 O(n) 全遍歷）
+//! - **插入時間**：O(1)
+//! - **記憶體**：O(n) where n = 實體數量
+//!
+//! # 使用範例
+//!
+//! ```rust
+//! use bevy::prelude::*;
+//! use island_rampage::core::spatial_hash::SpatialHashGrid;
+//!
+//! // 1. 創建網格（網格大小應 >= 最大查詢半徑）
+//! let mut grid: SpatialHashGrid<Entity> = SpatialHashGrid::new(10.0);
+//!
+//! // 2. 每幀開始時清空
+//! grid.clear();
+//!
+//! // 3. 插入所有需要追蹤的實體
+//! let entity1 = Entity::from_raw(1);
+//! let entity2 = Entity::from_raw(2);
+//! grid.insert(entity1, Vec3::new(5.0, 0.0, 5.0));
+//! grid.insert(entity2, Vec3::new(15.0, 0.0, 5.0));
+//!
+//! // 4. 查詢半徑內的實體
+//! let center = Vec3::new(10.0, 0.0, 5.0);
+//! let nearby = grid.query_radius(center, 8.0);
+//!
+//! for (entity, position, distance_sq) in nearby {
+//!     println!("Found entity {:?} at distance {:.1}m", entity, distance_sq.sqrt());
+//! }
+//! ```
+//!
+//! # 注意事項
+//! - 每幀都需要 `clear()` + 重新 `insert()`（空間哈希不追蹤移動）
+//! - 網格大小影響效能：太小導致跨網格查詢開銷，太大降低過濾效果
+//! - 建議網格大小 = 常用查詢半徑的 1.5-2 倍
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]

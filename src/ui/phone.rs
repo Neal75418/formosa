@@ -6,11 +6,16 @@ use bevy::prelude::*;
 
 use super::components::{
     ChineseFont, MissionJournalTab, PhoneApp, PhoneAppIcon, PhoneContactList, PhoneContainer,
-    PhoneContentArea, PhoneMissionLogList, PhoneScreen, PhoneStatusBar, PhoneUiState,
+    PhoneContentArea, PhoneMissionLogList, PhoneScreen, PhoneStatusBar, PhoneStockMarketList,
+    PhoneUiState, StockMarketTab,
 };
 use super::UiState;
+use crate::economy::stock_market::{StockMarket, StockSymbol};
+use crate::economy::PlayerWallet;
 use crate::mission::MissionManager;
+use crate::ui::notification::NotificationQueue;
 use super::phone_apps::*;
+use super::phone_apps_stock::*;
 
 // ============================================================================
 // 常數
@@ -274,6 +279,38 @@ pub fn phone_input_system(
             phone_state.journal_tab = tabs[(current_idx + tabs.len() - 1) % tabs.len()];
         }
     }
+    // 股市分頁切換 + 選股
+    else if phone_state.current_app == PhoneApp::StockMarket {
+        let tabs = StockMarketTab::all();
+        let current_idx = tabs.iter().position(|t| *t == phone_state.stock_tab).unwrap_or(0);
+        if keyboard.just_pressed(KeyCode::ArrowRight) {
+            phone_state.stock_tab = tabs[(current_idx + 1) % tabs.len()];
+        }
+        if keyboard.just_pressed(KeyCode::ArrowLeft) {
+            phone_state.stock_tab = tabs[(current_idx + tabs.len() - 1) % tabs.len()];
+        }
+        // ArrowDown 循環選股
+        if keyboard.just_pressed(KeyCode::ArrowDown) {
+            phone_state.selected_stock_index =
+                (phone_state.selected_stock_index + 1) % StockSymbol::ALL.len();
+        }
+        // 行情頁 Enter → 選股並跳到交易頁（設置 cooldown 防止同幀誤觸買入）
+        if phone_state.stock_tab == StockMarketTab::StockList
+            && keyboard.just_pressed(KeyCode::Enter)
+        {
+            phone_state.stock_tab = StockMarketTab::Trade;
+            phone_state.trade_enter_cooldown = true;
+        }
+        // 交易頁 Q/E 調整數量
+        if phone_state.stock_tab == StockMarketTab::Trade {
+            if keyboard.just_pressed(KeyCode::KeyQ) {
+                phone_state.trade_quantity = phone_state.trade_quantity.saturating_sub(1).max(1);
+            }
+            if keyboard.just_pressed(KeyCode::KeyE) {
+                phone_state.trade_quantity = (phone_state.trade_quantity + 1).min(999);
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -324,15 +361,20 @@ pub fn phone_icon_highlight_system(
 pub fn phone_content_system(
     phone_state: Res<PhoneUiState>,
     mission_manager: Res<MissionManager>,
+    stock_market: Res<StockMarket>,
+    wallet: Res<PlayerWallet>,
     mut content_query: Query<(Entity, &mut Node), With<PhoneContentArea>>,
     icon_query: Query<Entity, With<PhoneAppIcon>>,
     contact_query: Query<Entity, With<PhoneContactList>>,
     log_query: Query<Entity, With<PhoneMissionLogList>>,
+    stock_query: Query<Entity, With<PhoneStockMarketList>>,
     mut commands: Commands,
     chinese_font: Res<ChineseFont>,
 ) {
-    // 只在狀態變化時重建（簡化版：每幀檢查）
-    if !phone_state.is_changed() {
+    // 股市頁面需要在價格更新時也重建 UI
+    let stock_changed =
+        phone_state.current_app == PhoneApp::StockMarket && stock_market.is_changed();
+    if !phone_state.is_changed() && !stock_changed {
         return;
     }
 
@@ -348,6 +390,9 @@ pub fn phone_content_system(
         commands.entity(entity).despawn();
     }
     for entity in log_query.iter() {
+        commands.entity(entity).despawn();
+    }
+    for entity in stock_query.iter() {
         commands.entity(entity).despawn();
     }
 
@@ -514,6 +559,128 @@ pub fn phone_content_system(
                 }
             });
         }
+        PhoneApp::StockMarket => {
+            content_node.flex_direction = FlexDirection::Column;
+            content_node.flex_wrap = FlexWrap::NoWrap;
+            content_node.justify_content = JustifyContent::Start;
+
+            commands.entity(content_entity).with_children(|content| {
+                spawn_section_title(content, &font, "股市");
+                spawn_stock_market_tabs(content, &font, phone_state.stock_tab);
+
+                content
+                    .spawn((
+                        PhoneStockMarketList,
+                        Node {
+                            width: Val::Percent(100.0),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(4.0),
+                            overflow: Overflow::clip(),
+                            flex_grow: 1.0,
+                            ..default()
+                        },
+                    ))
+                    .with_children(|list| {
+                        match phone_state.stock_tab {
+                            StockMarketTab::StockList => {
+                                spawn_stock_list(
+                                    list,
+                                    &font,
+                                    &stock_market,
+                                    phone_state.selected_stock_index,
+                                );
+                            }
+                            StockMarketTab::Portfolio => {
+                                spawn_stock_portfolio(list, &font, &stock_market);
+                            }
+                            StockMarketTab::Trade => {
+                                spawn_stock_trade(
+                                    list,
+                                    &font,
+                                    &stock_market,
+                                    &wallet,
+                                    phone_state.selected_stock_index,
+                                    phone_state.trade_quantity,
+                                );
+                            }
+                        }
+                    });
+
+                content.spawn((
+                    Text::new("[←/→] 分頁　[↓] 選股"),
+                    TextFont {
+                        font: font.clone(),
+                        font_size: 9.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgba(0.4, 0.4, 0.5, 0.7)),
+                ));
+            });
+        }
+    }
+}
+
+/// 股票交易輸入系統（Enter 買入、Space 賣出）
+pub fn stock_trade_input_system(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    ui_state: Res<UiState>,
+    mut phone_state: ResMut<PhoneUiState>,
+    mut market: ResMut<StockMarket>,
+    mut wallet: ResMut<PlayerWallet>,
+    mut notification: ResMut<NotificationQueue>,
+) {
+    if !ui_state.show_phone
+        || phone_state.current_app != PhoneApp::StockMarket
+        || phone_state.stock_tab != StockMarketTab::Trade
+    {
+        return;
+    }
+
+    // 從行情頁 Enter 切過來的同一幀，跳過交易以免誤觸
+    if phone_state.trade_enter_cooldown {
+        phone_state.trade_enter_cooldown = false;
+        return;
+    }
+
+    let symbol = StockSymbol::ALL[phone_state.selected_stock_index];
+    let quantity = phone_state.trade_quantity;
+
+    // Enter 買入
+    if keyboard.just_pressed(KeyCode::Enter) {
+        match market.buy(symbol, quantity, &mut wallet) {
+            Ok(price) => {
+                let total = (price * quantity as f32).ceil() as i32;
+                notification.success(format!(
+                    "買入 {} {} 股，花費 ${}",
+                    symbol.label(),
+                    quantity,
+                    total
+                ));
+                phone_state.stock_tab = StockMarketTab::Portfolio;
+            }
+            Err(msg) => {
+                notification.warning(format!("買入失敗：{}", msg));
+            }
+        }
+    }
+
+    // Space 賣出
+    if keyboard.just_pressed(KeyCode::Space) {
+        match market.sell(symbol, quantity, &mut wallet) {
+            Ok(price) => {
+                let total = (price * quantity as f32).floor() as i32;
+                notification.success(format!(
+                    "賣出 {} {} 股，獲得 ${}",
+                    symbol.label(),
+                    quantity,
+                    total
+                ));
+                phone_state.stock_tab = StockMarketTab::Portfolio;
+            }
+            Err(msg) => {
+                notification.warning(format!("賣出失敗：{}", msg));
+            }
+        }
     }
 }
 
@@ -526,6 +693,7 @@ impl Plugin for PhonePlugin {
                 Update,
                 (
                     phone_input_system,
+                    stock_trade_input_system.after(phone_input_system),
                     phone_visibility_system.after(phone_input_system),
                     phone_icon_highlight_system.after(phone_input_system),
                     phone_content_system.after(phone_input_system),
@@ -535,154 +703,3 @@ impl Plugin for PhonePlugin {
     }
 }
 
-// ============================================================================
-// 測試
-// ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn phone_app_labels() {
-        assert_eq!(PhoneApp::Home.label(), "主畫面");
-        assert_eq!(PhoneApp::Contacts.label(), "聯絡人");
-        assert_eq!(PhoneApp::MissionLog.label(), "任務日誌");
-        assert_eq!(PhoneApp::Map.label(), "地圖");
-        assert_eq!(PhoneApp::Settings.label(), "設定");
-    }
-
-    #[test]
-    fn phone_app_all_apps_count() {
-        assert_eq!(PhoneApp::all_apps().len(), 4);
-    }
-
-    #[test]
-    fn phone_app_all_apps_excludes_home() {
-        assert!(!PhoneApp::all_apps().contains(&PhoneApp::Home));
-    }
-
-    #[test]
-    fn phone_ui_state_defaults() {
-        let state = PhoneUiState::default();
-        assert_eq!(state.current_app, PhoneApp::Home);
-        assert_eq!(state.selected_index, 0);
-    }
-
-    #[test]
-    fn phone_app_icon_not_empty() {
-        for app in PhoneApp::all_apps() {
-            assert!(!app.icon().is_empty());
-            assert!(!app.label().is_empty());
-        }
-    }
-
-    #[test]
-    fn phone_navigation_wraps_right() {
-        let app_count = PhoneApp::all_apps().len();
-        let mut idx = app_count - 1; // 最後一個
-        idx = (idx + 1) % app_count;
-        assert_eq!(idx, 0); // 回到第一個
-    }
-
-    #[test]
-    fn phone_navigation_wraps_left() {
-        let app_count = PhoneApp::all_apps().len();
-        let mut idx: usize = 0;
-        idx = (idx + app_count - 1) % app_count;
-        assert_eq!(idx, app_count - 1); // 到最後一個
-    }
-
-    #[test]
-    fn phone_toggle_logic() {
-        let mut show_phone = false;
-
-        // 第一次按上：開啟
-        show_phone = !show_phone;
-        assert!(show_phone);
-
-        // 第二次按上：關閉
-        show_phone = !show_phone;
-        assert!(!show_phone);
-    }
-
-    // ========================================================================
-    // 任務日誌測試
-    // ========================================================================
-
-    #[test]
-    fn journal_tab_labels() {
-        assert_eq!(MissionJournalTab::Active.label(), "進行中");
-        assert_eq!(MissionJournalTab::Completed.label(), "已完成");
-        assert_eq!(MissionJournalTab::Stats.label(), "統計");
-    }
-
-    #[test]
-    fn journal_tab_all_count() {
-        assert_eq!(MissionJournalTab::all().len(), 3);
-    }
-
-    #[test]
-    fn journal_tab_default_is_active() {
-        let tab = MissionJournalTab::default();
-        assert_eq!(tab, MissionJournalTab::Active);
-    }
-
-    #[test]
-    fn journal_tab_cycle_right() {
-        let tabs = MissionJournalTab::all();
-        let mut idx = 0; // Active
-        idx = (idx + 1) % tabs.len(); // -> Completed
-        assert_eq!(tabs[idx], MissionJournalTab::Completed);
-        idx = (idx + 1) % tabs.len(); // -> Stats
-        assert_eq!(tabs[idx], MissionJournalTab::Stats);
-        idx = (idx + 1) % tabs.len(); // -> Active (wrap)
-        assert_eq!(tabs[idx], MissionJournalTab::Active);
-    }
-
-    #[test]
-    fn journal_tab_cycle_left() {
-        let tabs = MissionJournalTab::all();
-        let mut idx = 0; // Active
-        idx = (idx + tabs.len() - 1) % tabs.len(); // -> Stats (wrap)
-        assert_eq!(tabs[idx], MissionJournalTab::Stats);
-    }
-
-    #[test]
-    fn phone_state_includes_journal_tab() {
-        let state = PhoneUiState::default();
-        assert_eq!(state.journal_tab, MissionJournalTab::Active);
-    }
-
-    #[test]
-    fn completed_mission_record_stars_display() {
-        use crate::mission::{CompletedMissionRecord, MissionType};
-
-        let record = CompletedMissionRecord {
-            title: "測試任務".to_string(),
-            mission_type: MissionType::Delivery,
-            reward: 500,
-            stars: 3,
-            rating_label: "⭐⭐⭐".to_string(),
-        };
-        assert_eq!(record.stars_display(), "★★★");
-        assert_eq!(record.type_label(), "外送");
-    }
-
-    #[test]
-    fn completed_mission_record_type_labels() {
-        use crate::mission::{CompletedMissionRecord, MissionType};
-
-        let make = |mt| CompletedMissionRecord {
-            title: String::new(),
-            mission_type: mt,
-            reward: 0,
-            stars: 0,
-            rating_label: String::new(),
-        };
-        assert_eq!(make(MissionType::Delivery).type_label(), "外送");
-        assert_eq!(make(MissionType::Taxi).type_label(), "載客");
-        assert_eq!(make(MissionType::Race).type_label(), "競速");
-        assert_eq!(make(MissionType::Explore).type_label(), "探索");
-    }
-}

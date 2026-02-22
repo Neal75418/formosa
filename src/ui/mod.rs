@@ -18,6 +18,7 @@ mod notification;
 mod pause_menu;
 mod phone;
 mod phone_apps;
+mod phone_apps_stock;
 mod save_slot_ui;
 mod screen_effect;
 mod story_mission_hud;
@@ -31,6 +32,8 @@ mod weather_hud;
 #[cfg(all(debug_assertions, feature = "dev_tools"))]
 mod fps_counter;
 
+#[cfg(test)]
+mod phone_tests;
 #[cfg(test)]
 mod tests;
 

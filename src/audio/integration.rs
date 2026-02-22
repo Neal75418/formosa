@@ -200,10 +200,11 @@ pub struct RadioPlayback;
 pub fn radio_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
     game_state: Res<GameState>,
+    ui_state: Res<crate::ui::UiState>,
     mut radio: ResMut<RadioManager>,
 ) {
-    // 只有在車內才能操作電台
-    if !game_state.player_in_vehicle {
+    // 只有在車內才能操作電台；手機開啟時不攔截數字鍵
+    if !game_state.player_in_vehicle || ui_state.show_phone {
         return;
     }
 

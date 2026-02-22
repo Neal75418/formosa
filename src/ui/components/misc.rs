@@ -257,6 +257,8 @@ pub enum PhoneApp {
     Map,
     /// 設定
     Settings,
+    /// 股市
+    StockMarket,
 }
 
 impl PhoneApp {
@@ -268,6 +270,7 @@ impl PhoneApp {
             Self::MissionLog => "任務日誌",
             Self::Map => "地圖",
             Self::Settings => "設定",
+            Self::StockMarket => "股市",
         }
     }
 
@@ -279,6 +282,7 @@ impl PhoneApp {
             Self::MissionLog => "M",
             Self::Map => "G",
             Self::Settings => "S",
+            Self::StockMarket => "$",
         }
     }
 
@@ -289,6 +293,7 @@ impl PhoneApp {
             PhoneApp::MissionLog,
             PhoneApp::Map,
             PhoneApp::Settings,
+            PhoneApp::StockMarket,
         ]
     }
 }
@@ -321,6 +326,34 @@ impl MissionJournalTab {
     }
 }
 
+/// 股市分頁
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StockMarketTab {
+    /// 行情列表
+    #[default]
+    StockList,
+    /// 我的持倉
+    Portfolio,
+    /// 交易
+    Trade,
+}
+
+impl StockMarketTab {
+    /// 顯示名稱
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::StockList => "行情",
+            Self::Portfolio => "持倉",
+            Self::Trade => "交易",
+        }
+    }
+
+    /// 所有分頁
+    pub fn all() -> &'static [StockMarketTab] {
+        &[Self::StockList, Self::Portfolio, Self::Trade]
+    }
+}
+
 /// 手機 UI 狀態資源
 #[derive(Resource)]
 pub struct PhoneUiState {
@@ -330,6 +363,14 @@ pub struct PhoneUiState {
     pub selected_index: usize,
     /// 任務日誌當前分頁
     pub journal_tab: MissionJournalTab,
+    /// 股市當前分頁
+    pub stock_tab: StockMarketTab,
+    /// 選中的股票索引（0-5）
+    pub selected_stock_index: usize,
+    /// 交易數量
+    pub trade_quantity: u32,
+    /// 剛從行情頁切到交易頁（防止同幀誤觸買入）
+    pub trade_enter_cooldown: bool,
 }
 
 impl Default for PhoneUiState {
@@ -338,6 +379,10 @@ impl Default for PhoneUiState {
             current_app: PhoneApp::Home,
             selected_index: 0,
             journal_tab: MissionJournalTab::default(),
+            stock_tab: StockMarketTab::default(),
+            selected_stock_index: 0,
+            trade_quantity: 1,
+            trade_enter_cooldown: false,
         }
     }
 }
@@ -371,3 +416,7 @@ pub struct PhoneContactList;
 /// 手機任務日誌容器
 #[derive(Component)]
 pub struct PhoneMissionLogList;
+
+/// 手機股市列表容器
+#[derive(Component)]
+pub struct PhoneStockMarketList;

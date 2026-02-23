@@ -28,11 +28,11 @@
 | **通緝**   | 5 星等級、警車追逐 AI、警用直升機（探照燈）、路障、投降/逮捕      |
 | **開放世界** | 西門町場景、可破壞環境、行人 AI（恐慌波+目擊者報警）、交通系統、隨機事件 |
 | **天氣**   | 日夜循環、晴/陰/雨/霧/暴風雨/沙塵暴、動態光照、霓虹燈閃爍        |
-| **經濟**   | 金錢系統、商店、ATM、股票市場（6 支台股）、賭場（21 點/拉霸）   |
-| **任務**   | 劇情任務、對話系統、過場動畫、NPC 關係、支線任務              |
-| **音效**   | 車內廣播電台（8 頻道）、引擎聲、3D 音效                  |
-| **手機**   | 聯絡人、任務日誌、地圖、設定、股市 App                   |
-| **角色**   | 3 角色切換（阿龍/小美/阿財）、攀爬/跑酷、游泳               |
+| **經濟**   | 金錢系統、商店、ATM、股票市場（6 支台股）、賭場（21 點/拉霸）    |
+| **任務**   | 劇情任務、對話系統、過場動畫、NPC 關係、支線任務             |
+| **音效**   | 車內廣播電台（8 頻道）、引擎聲、3D 音效                 |
+| **手機**   | 聯絡人、任務日誌、地圖、設定、股市 App                  |
+| **角色**   | 3 角色切換（阿龍/小美/阿財）、攀爬/跑酷、游泳              |
 | **存檔**   | 非同步 IO、JSON 序列化                        |
 
 ## 技術棧
@@ -102,9 +102,9 @@ graph TD
     style Mission fill:#533483,stroke:#e94560,color:#fff
     style Economy fill:#533483,stroke:#e94560,color:#fff
     style Env fill:#533483,stroke:#e94560,color:#fff
-    style UI fill:#e94560,stroke:#fff,color:#fff
-    style Audio fill:#e94560,stroke:#fff,color:#fff
-    style Camera fill:#e94560,stroke:#fff,color:#fff
+    style UI fill:#e94560,stroke:#c23152,color:#fff
+    style Audio fill:#e94560,stroke:#c23152,color:#fff
+    style Camera fill:#e94560,stroke:#c23152,color:#fff
     style Save fill:#1a1a2e,stroke:#533483,color:#fff
 ```
 

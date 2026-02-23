@@ -145,9 +145,9 @@ graph TD
     style mission fill:#533483,stroke:#e94560,color:#fff
     style economy fill:#533483,stroke:#e94560,color:#fff
     style env fill:#533483,stroke:#e94560,color:#fff
-    style ui fill:#e94560,stroke:#fff,color:#fff
-    style audio fill:#e94560,stroke:#fff,color:#fff
-    style camera fill:#e94560,stroke:#fff,color:#fff
+    style ui fill:#e94560,stroke:#c23152,color:#fff
+    style audio fill:#e94560,stroke:#c23152,color:#fff
+    style camera fill:#e94560,stroke:#c23152,color:#fff
     style save fill:#1a1a2e,stroke:#533483,color:#fff
 ```
 
@@ -177,7 +177,7 @@ flowchart LR
     style GS1 fill:#16213e,stroke:#0f3460,color:#fff
     style GS2 fill:#16213e,stroke:#0f3460,color:#fff
     style GS3 fill:#0f3460,stroke:#533483,color:#fff
-    style GS4 fill:#e94560,stroke:#fff,color:#fff
+    style GS4 fill:#e94560,stroke:#c23152,color:#fff
     style IS1 fill:#16213e,stroke:#0f3460,color:#fff
     style IS2 fill:#533483,stroke:#e94560,color:#fff
     style IS3 fill:#533483,stroke:#e94560,color:#fff
@@ -240,7 +240,7 @@ graph LR
     style CutsceneSystemPlugin fill:#533483,stroke:#e94560,color:#fff
     style StoryMissionPlugin fill:#533483,stroke:#e94560,color:#fff
     style WorldPlugin fill:#0f3460,stroke:#533483,color:#fff
-    style UiPlugin fill:#e94560,stroke:#fff,color:#fff
+    style UiPlugin fill:#e94560,stroke:#c23152,color:#fff
     style SavePlugin fill:#1a1a2e,stroke:#533483,color:#fff
 ```
 
@@ -536,24 +536,24 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ### 測試覆蓋
 
-| 模組                 | 測試數     | 覆蓋範圍                       |
-|--------------------|---------|----------------------------|
-| combat             | 130     | 武器、傷害、護甲、布娃娃、出血、自動瞄準      |
-| economy            | 107     | 錢包、商店、ATM、股市、賭場、企業        |
-| vehicle            | 106     | 血量、輪胎、交通燈、改裝、爆炸、水上載具      |
-| ui                 | 73      | 通知、互動提示、手機、股市、存檔 UI       |
-| mission            | 69      | 任務目標、評分、對話、劇情、支線          |
-| pedestrian         | 67      | 恐慌波、尋路、目擊者、行為、游泳          |
-| camera             | 48      | pitch 限制、距離調整、角度正規化       |
-| audio              | 39      | 電台系統、音量、淡入淡出              |
-| ai                 | 32      | 狀態轉換、感知、逃跑                |
-| save               | 31      | 序列化、存檔路徑                   |
-| wanted             | 27      | 通緝等級、警察狀態、搜索區             |
-| player             | 38      | 攀爬、技能、角色切換                 |
-| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶         |
-| core/spatial_hash  | 12      | 插入、查詢、邊界                   |
-| environment        | 9       | 可破壞物件、碎片池                  |
-| **合計**             | **801** |                            |
+| 模組                 | 測試數     | 覆蓋範圍                 |
+|--------------------|---------|----------------------|
+| combat             | 130     | 武器、傷害、護甲、布娃娃、出血、自動瞄準 |
+| economy            | 107     | 錢包、商店、ATM、股市、賭場、企業   |
+| vehicle            | 106     | 血量、輪胎、交通燈、改裝、爆炸、水上載具 |
+| ui                 | 73      | 通知、互動提示、手機、股市、存檔 UI  |
+| mission            | 69      | 任務目標、評分、對話、劇情、支線     |
+| pedestrian         | 67      | 恐慌波、尋路、目擊者、行為、游泳     |
+| camera             | 48      | pitch 限制、距離調整、角度正規化  |
+| audio              | 39      | 電台系統、音量、淡入淡出         |
+| ai                 | 32      | 狀態轉換、感知、逃跑           |
+| save               | 31      | 序列化、存檔路徑             |
+| wanted             | 27      | 通緝等級、警察狀態、搜索區        |
+| player             | 38      | 攀爬、技能、角色切換           |
+| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶    |
+| core/spatial_hash  | 12      | 插入、查詢、邊界             |
+| environment        | 9       | 可破壞物件、碎片池            |
+| **合計**             | **801** |                      |
 
 ## 關鍵檔案速查
 
@@ -577,8 +577,8 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 | 可破壞物件  | `src/environment/systems.rs`                                       |
 | 股票市場   | `src/economy/stock_market.rs`                                      |
 | 賭場     | `src/economy/casino.rs`                                            |
-| 手機 UI  | `src/ui/phone.rs`, `phone_apps.rs`, `phone_apps_stock.rs`         |
-| 車內電台   | `src/audio/integration.rs`, `src/audio/components.rs`             |
+| 手機 UI  | `src/ui/phone.rs`, `phone_apps.rs`, `phone_apps_stock.rs`          |
+| 車內電台   | `src/audio/integration.rs`, `src/audio/components.rs`              |
 
 ## 操作方式
 

@@ -8,7 +8,7 @@
 
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/)
-[![Tests](https://img.shields.io/badge/Tests-782_passing-brightgreen?style=for-the-badge)](/)
+[![Tests](https://img.shields.io/badge/Tests-801_passing-brightgreen?style=for-the-badge)](/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 
 </div>
@@ -28,8 +28,11 @@
 | **通緝**   | 5 星等級、警車追逐 AI、警用直升機（探照燈）、路障、投降/逮捕      |
 | **開放世界** | 西門町場景、可破壞環境、行人 AI（恐慌波+目擊者報警）、交通系統、隨機事件 |
 | **天氣**   | 日夜循環、晴/陰/雨/霧/暴風雨/沙塵暴、動態光照、霓虹燈閃爍        |
-| **經濟**   | 金錢系統、商店、ATM                            |
-| **任務**   | 劇情任務、對話系統、過場動畫、NPC 關係                  |
+| **經濟**   | 金錢系統、商店、ATM、股票市場（6 支台股）、賭場（21 點/拉霸）   |
+| **任務**   | 劇情任務、對話系統、過場動畫、NPC 關係、支線任務              |
+| **音效**   | 車內廣播電台（8 頻道）、引擎聲、3D 音效                  |
+| **手機**   | 聯絡人、任務日誌、地圖、設定、股市 App                   |
+| **角色**   | 3 角色切換（阿龍/小美/阿菜）、攀爬/跑酷、游泳               |
 | **存檔**   | 非同步 IO、JSON 序列化                        |
 
 ## 技術棧
@@ -41,7 +44,7 @@
 | 物理 |          bevy_rapier3d 0.32          |
 | 風格 |             Low-poly 霓虹風             |
 
-**規模**：140 個 .rs 檔案 · ~62,800 行 · 782 個單元測試
+**規模**：250 個 .rs 檔案 · ~82,700 行 · 801 個單元測試
 
 ## 架構
 
@@ -56,7 +59,7 @@ graph TD
     subgraph "<b>Game Systems</b>"
         Wanted["🚔 Wanted<br><small>5 星通緝 · 警車 AI · 直升機</small>"]
         Mission["📋 Mission<br><small>劇情 · 對話 · 過場動畫</small>"]
-        Economy["💰 Economy<br><small>商店 · ATM</small>"]
+        Economy["💰 Economy<br><small>商店 · ATM · 股市 · 賭場</small>"]
         Env["💥 Environment<br><small>可破壞物件 · 碎片</small>"]
     end
 
@@ -134,13 +137,21 @@ cargo clippy             # 靜態分析
 - [x] **Phase 7** — 架構重構（God Module 拆分、元件分解、註解審查）
 - [x] **Phase 8** — 測試覆蓋（4 大核心模組新增 94 個單元測試）
 
+### 近期完成
+
+- [x] 手機系統（聯絡人、任務日誌、地圖、設定、股市）
+- [x] 車內廣播電台（8 頻道 + 快捷切換）
+- [x] 股票市場系統（6 支台灣主題股票 + 手機交易 UI）
+- [x] 攀爬 / 跑酷
+- [x] 多角色切換（3 角色 + 衛星動畫）
+- [x] 賭場系統（21 點 + 拉霸機）
+- [x] 游泳系統
+
 ### 未來規劃
 
-- [ ] 手機系統（任務接取、聯絡人、GPS）
-- [ ] 游泳 / 潛水
-- [ ] 車內廣播電台
-- [ ] 攀爬 / 跑酷
-- [ ] 多角色切換
+- [ ] 多人連線
+- [ ] 房屋購買 / 室內場景
+- [ ] 更多劇情任務章節
 
 ## 授權
 

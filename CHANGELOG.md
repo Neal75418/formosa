@@ -8,11 +8,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Commits: [Conventiona
 
 ## [Unreleased]
 
+### Added
+
+- **車內廣播電台系統**：8 個台灣主題頻道、Q/E 快捷切換、音量淡入淡出、手機開啟時自動靜音
+- **股票市場手機 App**：行情/持倉/交易三分頁、6 支台灣主題股票即時行情、買賣交易 UI
+- **測試覆蓋擴展**：從 386 增加到 801 個單元測試
+
 ### Changed
 
 - Unified markdown style with Mermaid architecture diagrams
 - Updated README.md, CLAUDE.md, LICENSE, .gitignore
 - Added CHANGELOG.md and PR template
+
+### Fixed
+
+- Clippy `field_reassign_with_default` 錯誤（story_manager.rs）
+- Clippy `assertions_on_constants` 錯誤（audio/components.rs）
+- 手機開啟時數字鍵同時觸發電台切換的輸入衝突
 
 ---
 

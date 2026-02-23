@@ -24,7 +24,7 @@ Claude Code 在此專案中的工作指引。
 | bevy_rapier3d    | 0.32         | 3D 物理引擎  |
 | serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：167 個 .rs 檔案、~63,340 行、386 個單元測試、0 clippy warnings
+**規模**：250 個 .rs 檔案、~82,700 行、801 個單元測試、0 clippy warnings
 
 ## 常用指令
 
@@ -33,7 +33,7 @@ cargo dev                    # 開發模式（含 dev_tools，見 .cargo/config.
 cargo run                    # 開發模式（不含 dev_tools）
 cargo run --release          # 發布模式（最佳效能，不含 dev_tools）
 cargo check                  # 編譯檢查
-cargo test                   # 執行 335 個單元測試
+cargo test                   # 執行 801 個單元測試
 cargo test economy::tests    # 特定模組測試
 cargo clippy                 # 靜態分析
 cargo fmt                    # 格式化
@@ -536,22 +536,24 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ### 測試覆蓋
 
-| 模組                 | 測試數     | 覆蓋範圍                 |
-|--------------------|---------|----------------------|
-| combat             | 88      | 武器、傷害、護甲、布娃娃、出血      |
-| economy            | 47      | 錢包、商店、ATM            |
-| pedestrian         | 43      | 恐慌波、尋路、目擊者、行為、動畫     |
-| vehicle            | 41      | 血量、輪胎、交通燈、改裝、爆炸      |
-| ai                 | 26      | 狀態轉換、感知、逃跑           |
-| wanted             | 22      | 通緝等級、警察狀態、搜索區        |
-| save               | 17      | 序列化、存檔路徑             |
-| mission            | 15      | 任務目標、評分、競速、計程車       |
-| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶    |
-| core/spatial_hash  | 12      | 插入、查詢、邊界             |
-| ui                 | 30      | 通知系統、互動提示、淡入淡出       |
-| camera             | 21      | pitch 限制、距離調整、角度正規化  |
-| player/climb       | 5       | 攀爬類型、緩動函數            |
-| **合計**             | **386** | *(+57 from Phase 3)* |
+| 模組                 | 測試數     | 覆蓋範圍                       |
+|--------------------|---------|----------------------------|
+| combat             | 130     | 武器、傷害、護甲、布娃娃、出血、自動瞄準      |
+| economy            | 96      | 錢包、商店、ATM、股市、賭場、企業        |
+| vehicle            | 105     | 血量、輪胎、交通燈、改裝、爆炸、水上載具      |
+| pedestrian         | 74      | 恐慌波、尋路、目擊者、行為、游泳          |
+| ui                 | 63      | 通知、互動提示、手機、股市、存檔 UI       |
+| camera             | 48      | pitch 限制、距離調整、角度正規化       |
+| mission            | 56      | 任務目標、評分、對話、劇情、支線          |
+| audio              | 39      | 電台系統、音量、淡入淡出              |
+| ai                 | 32      | 狀態轉換、感知、逃跑                |
+| save               | 31      | 序列化、存檔路徑                   |
+| wanted             | 27      | 通緝等級、警察狀態、搜索區             |
+| player             | 38      | 攀爬、技能、角色切換                 |
+| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶         |
+| core/spatial_hash  | 12      | 插入、查詢、邊界                   |
+| environment        | 9       | 可破壞物件、碎片池                  |
+| **合計**             | **801** |                            |
 
 ## 關鍵檔案速查
 
@@ -573,23 +575,38 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 | 世界生成   | `src/world/setup.rs`                                               |
 | 天氣效果   | `src/world/time_weather/weather_effects.rs`                        |
 | 可破壞物件  | `src/environment/systems.rs`                                       |
+| 股票市場   | `src/economy/stock_market.rs`                                      |
+| 賭場     | `src/economy/casino.rs`                                            |
+| 手機 UI  | `src/ui/phone.rs`, `phone_apps.rs`, `phone_apps_stock.rs`         |
+| 車內電台   | `src/audio/integration.rs`, `src/audio/components.rs`             |
 
 ## 操作方式
 
-| 按鍵    | 步行              | 駕駛    |
-|-------|-----------------|-------|
-| WASD  | 移動              | 轉向/加速 |
-| Space | 跳躍              | 煞車    |
-| Shift | 衝刺              | 氮氣    |
-| Q/E   | 斜向前進            | -     |
-| F     | 互動（上下車/任務/商店/門） | 下車    |
-| X     | 偷車              | -     |
-| R     | 換彈              | -     |
-| G     | 投擲爆炸物           | -     |
-| 1-4   | 切換武器            | -     |
-| Tab   | 武器輪盤            | -     |
-| M     | 地圖              | 地圖    |
-| Esc   | 暫停              | 暫停    |
+| 按鍵    | 步行              | 駕駛       |
+|-------|-----------------|----------|
+| WASD  | 移動              | 轉向/加速    |
+| Space | 跳躍              | 煞車       |
+| Shift | 衝刺              | 氮氣       |
+| Q/E   | 斜向前進            | 上/下一電台   |
+| F     | 互動（上下車/任務/商店/門） | 下車       |
+| X     | 偷車（按住）          | -        |
+| R     | 射擊              | 車上射擊     |
+| T     | 換彈              | -        |
+| G     | 投擲爆炸物           | -        |
+| H     | 引爆手榴彈           | -        |
+| 1-4   | 切換武器            | 選電台（1-8） |
+| 5-7   | 切換角色（龍/美/菜）     | -        |
+| 9     | -               | 關閉電台     |
+| Tab   | 武器輪盤            | -        |
+| V     | 切換視角            | 切換視角     |
+| C     | 電影鏡頭模式          | -        |
+| M     | 地圖              | 地圖       |
+| O     | 外送 App          | -        |
+| Y     | 投降（按住）          | -        |
+| B     | 賄賂目擊者           | -        |
+| ↑     | 開關手機            | 開關手機     |
+| F5/F9 | 快速存/讀檔          | 快速存/讀檔   |
+| Esc   | 暫停              | 暫停       |
 
 ### 開發專用
 
@@ -622,7 +639,6 @@ cargo check && cargo test && cargo clippy
 
 ### 測試
 
-- 386 個單元測試覆蓋核心系統（85% 覆蓋率）
+- 801 個單元測試覆蓋核心系統
 - 修改後必跑：`cargo test`（~0.01s）
 - 建置時間：37-84 秒（動態連結）
-- Phase 3 (2026-02) 新增 51 個 UI/Camera 測試

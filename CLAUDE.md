@@ -47,7 +47,7 @@ cargo fmt                    # 格式化
 
 | 工具              | 按鍵 | 位置        | 說明                     |
 |-----------------|----|-----------|------------------------|
-| World Inspector | F7 | 全螢幕       | 即時編輯實體/組件              |
+| World Inspector | -  | 全螢幕       | 即時編輯實體/組件（dev 模式常駐）    |
 | FPS Counter     | -  | 左上角       | 綠(>60)/黃(30-60)/紅(<30) |
 | AI Debug        | F3 | -         | AI 視野/聽覺範圍             |
 | Debug Viz       | F4 | -         | 警察視野/路徑/恐慌範圍           |
@@ -94,28 +94,28 @@ app.init_resource::<DebugState>()
 ```mermaid
 graph TD
     subgraph L5["<b>Presentation</b>"]
-        ui["ui — HUD · 小地圖 · 武器輪盤 · GPS<br><small>18 個檔案</small>"]
+        ui["ui — HUD · 小地圖 · 武器輪盤 · GPS<br><small>39 個檔案</small>"]
         audio["audio — BGM · 引擎聲 · 3D 音效"]
         camera["camera — 跟隨 · 震動 · 後座力"]
     end
 
     subgraph L4["<b>Game Systems</b>"]
-        wanted["wanted — 5 星通緝 · 警車 AI · 直升機 · 路障<br><small>11 個檔案</small>"]
-        mission["mission — 劇情 · 對話 · 過場動畫<br><small>15 個檔案</small>"]
-        economy["economy — 商店 · ATM · 金錢"]
+        wanted["wanted — 5 星通緝 · 警車 AI · 直升機 · 路障<br><small>20 個檔案</small>"]
+        mission["mission — 劇情 · 對話 · 過場動畫<br><small>32 個檔案</small>"]
+        economy["economy — 商店 · ATM · 股市 · 賭場"]
         env["environment — 可破壞物件 · 碎片池"]
     end
 
     subgraph L3["<b>Entities</b>"]
         player["player — 移動 · 跳躍 · 閃避 · 攀爬"]
-        vehicle["vehicle — 物理 · 偷車 · 改裝 · 效果<br><small>10 個檔案</small>"]
-        combat["combat — 射擊 · 爆炸 · 掩體 · 布娃娃<br><small>13 個檔案</small>"]
-        ai_mod["ai — 感知 · 決策 · 小隊 · 掩護<br><small>11 個檔案</small>"]
-        ped["pedestrian — 尋路 · 恐慌 · 目擊者<br><small>13 個檔案</small>"]
+        vehicle["vehicle — 物理 · 偷車 · 改裝 · 效果<br><small>28 個檔案</small>"]
+        combat["combat — 射擊 · 爆炸 · 掩體 · 布娃娃<br><small>29 個檔案</small>"]
+        ai_mod["ai — 感知 · 決策 · 小隊 · 掩護<br><small>16 個檔案</small>"]
+        ped["pedestrian — 尋路 · 恐慌 · 目擊者<br><small>20 個檔案</small>"]
     end
 
     subgraph L2["<b>World</b>"]
-        world["world — 西門町 · 建築 · 天氣 · 隨機事件<br><small>10 個檔案</small>"]
+        world["world — 西門町 · 建築 · 天氣 · 隨機事件<br><small>25 個檔案</small>"]
     end
 
     subgraph L1["<b>Core</b>"]
@@ -189,7 +189,7 @@ flowchart LR
 
 暫停控制：`.run_if(|ui: Res<UiState>| !ui.paused)`
 
-### 18 個 Bevy Plugins
+### 17 個 Bevy Plugins
 
 ```mermaid
 graph LR
@@ -244,7 +244,7 @@ graph LR
     style SavePlugin fill:#1a1a2e,stroke:#533483,color:#fff
 ```
 
-> 全部 18 個模組皆使用 Plugin 形式，統一在 `main.rs` 中以 `.add_plugins()` 註冊。
+> 全部 17 個模組皆使用 Plugin 形式，統一在 `main.rs` 中以 `.add_plugins()` 註冊。
 
 ### 關鍵模式
 
@@ -572,7 +572,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 | 行人生命週期 | `src/pedestrian/systems/lifecycle.rs`                              |
 | 恐慌系統   | `src/pedestrian/panic.rs`                                          |
 | 目擊者系統  | `src/pedestrian/systems/witnesses.rs`                              |
-| 世界生成   | `src/world/setup.rs`                                               |
+| 世界生成   | `src/world/setup/`                                                 |
 | 天氣效果   | `src/world/time_weather/weather_effects.rs`                        |
 | 可破壞物件  | `src/environment/systems.rs`                                       |
 | 股票市場   | `src/economy/stock_market.rs`                                      |
@@ -595,7 +595,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 | G     | 投擲爆炸物           | -        |
 | H     | 引爆手榴彈           | -        |
 | 1-4   | 切換武器            | 選電台（1-8） |
-| 5-7   | 切換角色（龍/美/菜）     | -        |
+| 5-7   | 切換角色（龍/美/財）     | 選電台（1-8） |
 | 9     | -               | 關閉電台     |
 | Tab   | 武器輪盤            | -        |
 | V     | 切換視角            | 切換視角     |
@@ -605,6 +605,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 | Y     | 投降（按住）          | -        |
 | B     | 賄賂目擊者           | -        |
 | ↑     | 開關手機            | 開關手機     |
+| F7    | 存檔選單            | 存檔選單     |
 | F5/F9 | 快速存/讀檔          | 快速存/讀檔   |
 | Esc   | 暫停              | 暫停       |
 
@@ -614,7 +615,6 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 |----|--------------------------|
 | F3 | 切換 AI Debug 可視化          |
 | F4 | 切換通緝系統 Debug 可視化（Gizmos） |
-| F7 | 開啟 World Inspector       |
 
 ## 驗證
 

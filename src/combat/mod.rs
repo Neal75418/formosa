@@ -87,16 +87,13 @@ impl Plugin for CombatPlugin {
                     )
                         .after(shooting_input_system)
                         .after(auto_aim_system),
-                    // 射擊系統在動畫觸發之後（推進 combo 狀態不影響當幀動畫）
-                    fire_weapon_system
-                        .after(shooting_input_system)
-                        .after(auto_aim_system)
-                        .after(punch_animation_trigger_system),
                     // 動畫更新依賴觸發
                     punch_animation_update_system.after(punch_animation_trigger_system),
                 )
                     .run_if(in_state(AppState::InGame)),
             )
+            // 射擊系統（參數過多，無法使用 run_if，需在系統內部檢查狀態）
+            .add_systems(Update, fire_weapon_system)
             // 更新系統 - 傷害處理（參數過多，無法使用 run_if，改在系統內部檢查暫停）
             .add_systems(Update, damage_system)
             .add_systems(Update, death_system)

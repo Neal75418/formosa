@@ -9,6 +9,7 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 use crate::core::{ease_out_cubic, ease_in_out_quad, rapier_real_to_f32};
+use super::{PlayerSkills, skills::award_climb_xp};
 
 // ============================================================================
 // 常數定義
@@ -507,6 +508,7 @@ pub fn climb_detection_system(
 /// 處理攀爬動畫的位置插值和階段切換
 pub fn climb_animation_system(
     time: Res<Time>,
+    mut skills: ResMut<PlayerSkills>,
     mut query: Query<(&mut Transform, &mut ClimbState, &mut super::Player)>,
 ) {
     let dt = time.delta_secs();
@@ -555,10 +557,15 @@ pub fn climb_animation_system(
 
         // 切換階段
         if should_advance {
+            let was_landing = climb_state.phase == ClimbPhase::Landing;
             climb_state.advance_phase();
 
             // 如果動畫結束
             if climb_state.phase == ClimbPhase::None {
+                // 攀爬完成，獎勵體力 XP
+                if was_landing {
+                    award_climb_xp(&mut skills);
+                }
                 player.is_grounded = true;
                 climb_state.reset();
             }

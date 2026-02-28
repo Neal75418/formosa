@@ -70,7 +70,7 @@ fn test_weapon_start_reload() {
     let mut weapon = Weapon::new(WeaponStats::pistol());
     weapon.current_ammo = 0;
 
-    assert!(weapon.start_reload());
+    assert!(weapon.start_reload(1.0));
     assert!(weapon.is_reloading);
     assert_eq!(weapon.reload_timer, 1.5);
 }
@@ -80,18 +80,18 @@ fn test_weapon_start_reload_fails() {
     let mut weapon = Weapon::new(WeaponStats::pistol());
 
     // 彈匣滿時無法換彈
-    assert!(!weapon.start_reload());
+    assert!(!weapon.start_reload(1.0));
 
     // 正在換彈時無法再次換彈
     weapon.current_ammo = 0;
-    weapon.start_reload();
-    assert!(!weapon.start_reload());
+    weapon.start_reload(1.0);
+    assert!(!weapon.start_reload(1.0));
 
     // 無後備彈藥時無法換彈
     let mut empty_weapon = Weapon::new(WeaponStats::pistol());
     empty_weapon.current_ammo = 0;
     empty_weapon.reserve_ammo = 0;
-    assert!(!empty_weapon.start_reload());
+    assert!(!empty_weapon.start_reload(1.0));
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn test_weapon_needs_reload() {
 fn test_weapon_cancel_reload() {
     let mut weapon = Weapon::new(WeaponStats::pistol());
     weapon.current_ammo = 0;
-    weapon.start_reload();
+    weapon.start_reload(1.0);
 
     weapon.cancel_reload();
     assert!(!weapon.is_reloading);
@@ -296,7 +296,7 @@ fn test_weapon_tick_cooldown_already_zero() {
 fn test_weapon_tick_reload() {
     let mut weapon = Weapon::new(WeaponStats::pistol());
     weapon.consume_ammo();
-    weapon.start_reload();
+    weapon.start_reload(1.0);
     assert!(weapon.is_reloading);
 
     let still_reloading = weapon.tick_reload(0.5);

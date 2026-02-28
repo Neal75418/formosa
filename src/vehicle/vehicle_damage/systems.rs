@@ -10,6 +10,7 @@ use super::explosion::VehicleExplosion;
 use super::visuals::VehicleDamageVisuals;
 use crate::audio::{AudioManager, VehicleSounds, play_collision_sound, play_explosion_sound};
 use crate::combat::{DamageEvent, DamageSource};
+use crate::player::PlayerSkills;
 
 /// 初始化車輛損壞視覺效果資源
 pub fn setup_vehicle_damage_effects(
@@ -54,6 +55,7 @@ pub fn vehicle_collision_damage_system(
     rapier_context: ReadRapierContext,
     audio_manager: Res<AudioManager>,
     vehicle_sounds: Res<VehicleSounds>,
+    skills: Res<PlayerSkills>,
     mut vehicle_query: Query<(
         Entity, &Transform, &Vehicle, &mut VehicleHealth, Option<&mut BodyPartDamage>,
     )>,
@@ -91,7 +93,9 @@ pub fn vehicle_collision_damage_system(
 
             // 傷害公式：(速度 - 門檻) * 倍率
             // 例如：30 m/s = (30-10) * 5 = 100 傷害
-            let damage = (speed - COLLISION_DAMAGE_SPEED_THRESHOLD) * COLLISION_DAMAGE_MULTIPLIER;
+            let mut damage = (speed - COLLISION_DAMAGE_SPEED_THRESHOLD) * COLLISION_DAMAGE_MULTIPLIER;
+            // 駕駛技能減免（等級 0→100 時減免 0→30%）
+            damage *= 1.0 - skills.collision_damage_reduction();
             health.take_damage(damage, current_time);
 
             // 播放碰撞音效（速度 > 門檻 2 倍 = 重碰撞）

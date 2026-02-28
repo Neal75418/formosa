@@ -181,13 +181,11 @@ impl PlayerSkills {
     // ========================================================================
 
     /// 射擊後座力倍率 (1.0 → 0.5 隨等級降低)
-    #[allow(dead_code)]
     pub fn recoil_multiplier(&self) -> f32 {
         1.0 - self.shooting.effect_ratio() * 0.5
     }
 
     /// 換彈速度倍率 (1.0 → 1.5 隨等級加快)
-    #[allow(dead_code)]
     pub fn reload_speed_multiplier(&self) -> f32 {
         1.0 + self.shooting.effect_ratio() * 0.5
     }
@@ -199,7 +197,6 @@ impl PlayerSkills {
     }
 
     /// 碰撞傷害減免 (0% → 30%)
-    #[allow(dead_code)]
     pub fn collision_damage_reduction(&self) -> f32 {
         self.driving.effect_ratio() * 0.3
     }
@@ -237,16 +234,12 @@ use crate::core::GameState;
 use crate::vehicle::Vehicle;
 
 /// 技能 XP 獲取常數
-#[allow(dead_code)]
 const SHOOTING_XP_PER_HIT: f32 = 5.0;
-#[allow(dead_code)]
 const SHOOTING_XP_HEADSHOT_BONUS: f32 = 15.0;
 const DRIVING_XP_PER_SECOND: f32 = 1.0;
 const STAMINA_XP_PER_SPRINT_SECOND: f32 = 2.0;
-#[allow(dead_code)]
 const STAMINA_XP_PER_CLIMB: f32 = 10.0;
 const STEALTH_XP_PER_SECOND: f32 = 3.0;
-#[allow(dead_code)]
 const STEALTH_XP_PER_SILENT_KILL: f32 = 25.0;
 
 /// 駕駛技能累積系統
@@ -320,20 +313,17 @@ pub fn stealth_skill_system(
 }
 
 /// 射擊技能 XP 獎勵（由戰鬥系統呼叫）
-#[allow(dead_code)]
 pub fn award_shooting_xp(skills: &mut PlayerSkills, is_headshot: bool) {
     let xp = SHOOTING_XP_PER_HIT + if is_headshot { SHOOTING_XP_HEADSHOT_BONUS } else { 0.0 };
     skills.shooting.add_xp(xp);
 }
 
 /// 攀爬完成時的體力 XP 獎勵（由攀爬系統呼叫）
-#[allow(dead_code)]
 pub fn award_climb_xp(skills: &mut PlayerSkills) {
     skills.stamina.add_xp(STAMINA_XP_PER_CLIMB);
 }
 
 /// 靜默擊殺的潛行 XP 獎勵（由戰鬥系統呼叫）
-#[allow(dead_code)]
 pub fn award_stealth_kill_xp(skills: &mut PlayerSkills) {
     skills.stealth.add_xp(STEALTH_XP_PER_SILENT_KILL);
 }

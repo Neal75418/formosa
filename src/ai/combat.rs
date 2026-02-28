@@ -166,7 +166,7 @@ fn execute_ranged_attack(
 ) -> bool {
     // 檢查是否需要換彈
     if weapon.needs_reload() {
-        weapon.start_reload();
+        weapon.start_reload(1.0); // AI 無技能加成
         return false;
     }
 

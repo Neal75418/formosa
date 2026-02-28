@@ -11,7 +11,7 @@ use crate::audio::{
     play_reload_sound, play_weapon_switch_sound, AudioManager, WeaponSounds,
 };
 use crate::core::GameState;
-use crate::player::Player;
+use crate::player::{Player, PlayerSkills};
 use crate::ui::NotificationQueue;
 
 /// 射擊輸入收集系統
@@ -173,13 +173,14 @@ fn update_reload_progress(weapon: &mut Weapon, dt: f32) -> bool {
 fn try_start_reload(
     weapon: &mut Weapon,
     is_reload_pressed: bool,
+    reload_speed_multiplier: f32,
     notifications: &mut NotificationQueue,
 ) -> bool {
-    if is_reload_pressed && weapon.start_reload() {
+    if is_reload_pressed && weapon.start_reload(reload_speed_multiplier) {
         notifications.info("換彈中...");
         return true;
     }
-    if weapon.needs_reload() && weapon.start_reload() {
+    if weapon.needs_reload() && weapon.start_reload(reload_speed_multiplier) {
         notifications.warning("彈匣空了！換彈中...");
         return true;
     }
@@ -219,6 +220,7 @@ pub fn reload_system(
     mut commands: Commands,
     weapon_sounds: Option<Res<WeaponSounds>>,
     audio_manager: Res<AudioManager>,
+    skills: Res<PlayerSkills>,
     mut player_query: Query<&mut WeaponInventory, With<Player>>,
     mut notifications: ResMut<NotificationQueue>,
 ) {
@@ -252,8 +254,8 @@ pub fn reload_system(
             continue;
         }
 
-        // 嘗試開始換彈
-        if try_start_reload(weapon, input.is_reload_pressed, &mut notifications) {
+        // 嘗試開始換彈（應用射擊技能加成）
+        if try_start_reload(weapon, input.is_reload_pressed, skills.reload_speed_multiplier(), &mut notifications) {
             play_reload_sound_if_available(&mut commands, &weapon_sounds, &audio_manager, false);
         }
     }

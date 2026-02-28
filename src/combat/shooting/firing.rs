@@ -18,7 +18,8 @@ use crate::combat::weapon::*;
 use crate::audio::{play_weapon_fire_sound, AudioManager, WeaponSounds};
 use crate::ai::AiBehavior;
 use crate::core::{rapier_real_to_f32, CameraSettings, CameraShake, RecoilState};
-use crate::player::{Player, StealthState, STEALTH_KILL_MULTIPLIER};
+use crate::player::{Player, PlayerSkills, StealthState, STEALTH_KILL_MULTIPLIER};
+use crate::player::skills::{award_shooting_xp, award_stealth_kill_xp};
 
 /// 武器音效資源（合併為 SystemParam 以減少系統參數數量）
 #[derive(SystemParam)]
@@ -27,13 +28,14 @@ pub(crate) struct FireWeaponAudio<'w> {
     audio_manager: Res<'w, AudioManager>,
 }
 
-/// 近戰戰鬥上下文（鎖定 + 連擊 + 格擋 + 潛行狀態，合併為 SystemParam）
+/// 近戰戰鬥上下文（鎖定 + 連擊 + 格擋 + 潛行狀態 + 技能，合併為 SystemParam）
 #[derive(SystemParam)]
 pub(crate) struct MeleeCombatContext<'w, 's> {
     pub lock_on: Res<'w, LockOnState>,
     pub combo: ResMut<'w, MeleeComboState>,
     pub block: ResMut<'w, BlockState>,
     pub stealth: Res<'w, StealthState>,
+    pub skills: ResMut<'w, PlayerSkills>,  // ResMut 以支持 XP 獎勵
     pub ai_query: Query<'w, 's, &'static AiBehavior>,
 }
 
@@ -207,13 +209,16 @@ fn get_camera_shake_intensity(weapon_type: WeaponType) -> f32 {
 fn apply_ranged_fire_effects(
     weapon: &Weapon,
     is_aiming: bool,
+    skill_recoil_multiplier: f32,
     recoil_state: &mut RecoilState,
     camera_shake: &mut CameraShake,
 ) {
-    let recoil_mult = if is_aiming { AIM_RECOIL_MULTIPLIER } else { 1.0 };
+    // 瞄準倍率與技能倍率疊加（相乘）
+    let aim_mult = if is_aiming { AIM_RECOIL_MULTIPLIER } else { 1.0 };
+    let final_recoil_mult = aim_mult * skill_recoil_multiplier;
     recoil_state.add_recoil(
-        weapon.stats.recoil_vertical * recoil_mult,
-        weapon.stats.recoil_horizontal * recoil_mult,
+        weapon.stats.recoil_vertical * final_recoil_mult,
+        weapon.stats.recoil_horizontal * final_recoil_mult,
     );
 
     let shake_intensity = get_camera_shake_intensity(weapon.stats.weapon_type);
@@ -284,6 +289,7 @@ fn fire_ranged_weapon(
     is_aiming: bool,
     rapier: &RapierContext,
     damage_events: &mut MessageWriter<DamageEvent>,
+    skills: &mut PlayerSkills,  // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -306,12 +312,12 @@ fn fire_ranged_weapon(
     if weapon.stats.weapon_type == WeaponType::Shotgun {
         let pattern = generate_shotgun_pattern(weapon.stats.pellet_count, spread);
         for offset in pattern {
-            fire_bullet_with_offset(commands, &ctx, offset, damage_events, damageable_query, transform_query);
+            fire_bullet_with_offset(commands, &ctx, offset, damage_events, skills, damageable_query, transform_query);
         }
     } else {
         // 其他武器使用隨機散佈
         for _ in 0..weapon.stats.pellet_count {
-            fire_bullet(commands, &ctx, spread, damage_events, damageable_query, transform_query);
+            fire_bullet(commands, &ctx, spread, damage_events, skills, damageable_query, transform_query);
         }
     }
 
@@ -439,9 +445,10 @@ pub fn fire_weapon_system(
             if hit {
                 let current_time = time.elapsed_secs();
                 melee_ctx.combo.register_hit(current_time);
-                // 靜默擊殺：強化攝影機震動
+                // 靜默擊殺：強化攝影機震動 + 潛行 XP 獎勵
                 if stealth_mult > 1.0 {
                     camera_shake.trigger(0.08, 0.25);
+                    award_stealth_kill_xp(&mut melee_ctx.skills);
                 }
                 // 反擊成功附加攝影機震動
                 if counter_mult > 1.0 {
@@ -463,12 +470,14 @@ pub fn fire_weapon_system(
                 combat_state.is_aiming,
                 &rapier,
                 &mut damage_events,
+                &mut melee_ctx.skills,
                 &damageable_query,
                 &transform_query,
             );
             apply_ranged_fire_effects(
                 weapon,
                 combat_state.is_aiming,
+                melee_ctx.skills.recoil_multiplier(), // 射擊技能減少後座力
                 &mut recoil_state,
                 &mut camera_shake,
             );
@@ -512,6 +521,7 @@ fn fire_bullet(
     ctx: &FireContext,
     spread_degrees: f32,
     damage_events: &mut MessageWriter<DamageEvent>,
+    skills: &mut PlayerSkills,  // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -524,6 +534,7 @@ fn fire_bullet(
         ctx,
         Vec2::new(spread_x, spread_y),
         damage_events,
+        skills,
         damageable_query,
         transform_query,
     );
@@ -535,6 +546,7 @@ fn fire_bullet_with_offset(
     ctx: &FireContext,
     spread_offset: Vec2,
     damage_events: &mut MessageWriter<DamageEvent>,
+    skills: &mut PlayerSkills,  // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -553,10 +565,10 @@ fn fire_bullet_with_offset(
 
     if penetration == 0 {
         // === 無穿透：使用原有的 cast_ray（效能最佳）===
-        fire_bullet_single_hit(commands, ctx, spread_dir, max_toi, filter, tracer_style, damage_events, damageable_query, transform_query);
+        fire_bullet_single_hit(commands, ctx, spread_dir, max_toi, filter, tracer_style, damage_events, skills, damageable_query, transform_query);
     } else {
         // === 有穿透：收集射線路徑上所有命中 ===
-        fire_bullet_penetrating(commands, ctx, spread_dir, max_toi, filter, tracer_style, penetration, damage_events, damageable_query, transform_query);
+        fire_bullet_penetrating(commands, ctx, spread_dir, max_toi, filter, tracer_style, penetration, damage_events, skills, damageable_query, transform_query);
     }
 }
 
@@ -569,6 +581,7 @@ fn fire_bullet_single_hit(
     filter: QueryFilter,
     tracer_style: TracerStyle,
     damage_events: &mut MessageWriter<DamageEvent>,
+    skills: &mut PlayerSkills,  // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -593,6 +606,9 @@ fn fire_bullet_single_hit(
                 .with_headshot(is_headshot),
         );
 
+        // 射擊 XP 獎勵
+        award_shooting_xp(skills, is_headshot);
+
         spawn_impact_effect(commands, ctx.visuals, hit_pos);
     } else {
         let end_pos = ctx.origin + spread_dir * ctx.weapon.stats.range;
@@ -610,6 +626,7 @@ fn fire_bullet_penetrating(
     tracer_style: TracerStyle,
     penetration: u8,
     damage_events: &mut MessageWriter<DamageEvent>,
+    skills: &mut PlayerSkills,  // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -657,6 +674,9 @@ fn fire_bullet_penetrating(
                 .with_position(hit_pos)
                 .with_headshot(is_headshot),
         );
+
+        // 射擊 XP 獎勵
+        award_shooting_xp(skills, is_headshot);
 
         spawn_impact_effect(commands, ctx.visuals, hit_pos);
     }

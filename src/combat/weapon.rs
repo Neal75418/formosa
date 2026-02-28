@@ -404,7 +404,8 @@ impl Weapon {
     }
 
     /// 開始換彈
-    pub fn start_reload(&mut self) -> bool {
+    /// `reload_speed_multiplier`: 換彈速度倍率（來自射擊技能，1.0 → 1.5）
+    pub fn start_reload(&mut self, reload_speed_multiplier: f32) -> bool {
         if self.is_reloading
             || self.reserve_ammo == 0
             || self.current_ammo == self.stats.magazine_size
@@ -412,7 +413,7 @@ impl Weapon {
             return false;
         }
         self.is_reloading = true;
-        self.reload_timer = self.stats.reload_time;
+        self.reload_timer = self.stats.reload_time / reload_speed_multiplier;
         true
     }
 

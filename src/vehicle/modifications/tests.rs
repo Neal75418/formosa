@@ -32,6 +32,30 @@ fn mod_level_upgrade_price() {
     assert_eq!(ModLevel::Level3.upgrade_price(), None);
 }
 
+// --- ModCategory ---
+
+#[test]
+fn mod_category_icon_returns_emoji() {
+    assert_eq!(ModCategory::Engine.icon(), "⚙️");
+    assert_eq!(ModCategory::Transmission.icon(), "🔧");
+    assert_eq!(ModCategory::Suspension.icon(), "🔩");
+    assert_eq!(ModCategory::Brakes.icon(), "🛑");
+    assert_eq!(ModCategory::Tires.icon(), "🛞");
+    assert_eq!(ModCategory::Armor.icon(), "🛡️");
+}
+
+#[test]
+fn mod_category_all_returns_six_categories() {
+    let all = ModCategory::all();
+    assert_eq!(all.len(), 6);
+    assert!(all.contains(&ModCategory::Engine));
+    assert!(all.contains(&ModCategory::Transmission));
+    assert!(all.contains(&ModCategory::Suspension));
+    assert!(all.contains(&ModCategory::Brakes));
+    assert!(all.contains(&ModCategory::Tires));
+    assert!(all.contains(&ModCategory::Armor));
+}
+
 // --- VehicleModifications ---
 
 #[test]

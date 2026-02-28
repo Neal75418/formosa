@@ -14,8 +14,11 @@ use crate::economy::stock_market::{StockMarket, StockSymbol};
 use crate::economy::PlayerWallet;
 use crate::mission::MissionManager;
 use crate::ui::notification::NotificationQueue;
+use crate::core::GameState;
 use super::phone_apps::*;
 use super::phone_apps_stock::*;
+use super::mod_shop::*;
+use crate::vehicle::VehicleModifications;
 
 // ============================================================================
 // 常數
@@ -363,11 +366,14 @@ pub fn phone_content_system(
     mission_manager: Res<MissionManager>,
     stock_market: Res<StockMarket>,
     wallet: Res<PlayerWallet>,
+    game_state: Res<GameState>,
+    vehicle_query: Query<&VehicleModifications>,
     mut content_query: Query<(Entity, &mut Node), With<PhoneContentArea>>,
     icon_query: Query<Entity, With<PhoneAppIcon>>,
     contact_query: Query<Entity, With<PhoneContactList>>,
     log_query: Query<Entity, With<PhoneMissionLogList>>,
     stock_query: Query<Entity, With<PhoneStockMarketList>>,
+    mod_shop_query: Query<Entity, With<ModShopContent>>,
     mut commands: Commands,
     chinese_font: Res<ChineseFont>,
 ) {
@@ -393,6 +399,9 @@ pub fn phone_content_system(
         commands.entity(entity).despawn();
     }
     for entity in stock_query.iter() {
+        commands.entity(entity).despawn();
+    }
+    for entity in mod_shop_query.iter() {
         commands.entity(entity).despawn();
     }
 
@@ -617,6 +626,15 @@ pub fn phone_content_system(
                 ));
             });
         }
+        PhoneApp::ModShop => {
+            content_node.flex_direction = FlexDirection::Column;
+            content_node.flex_wrap = FlexWrap::NoWrap;
+            content_node.justify_content = JustifyContent::Start;
+
+            commands.entity(content_entity).with_children(|content| {
+                render_mod_shop_content(content, &font, &game_state, &vehicle_query, &wallet);
+            });
+        }
     }
 }
 
@@ -694,6 +712,7 @@ impl Plugin for PhonePlugin {
                 (
                     phone_input_system,
                     stock_trade_input_system.after(phone_input_system),
+                    handle_mod_shop_buttons.after(phone_input_system),
                     phone_visibility_system.after(phone_input_system),
                     phone_icon_highlight_system.after(phone_input_system),
                     phone_content_system.after(phone_input_system),

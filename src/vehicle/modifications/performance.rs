@@ -55,6 +55,18 @@ impl ModCategory {
         }
     }
 
+    /// 取得類別圖標
+    pub fn icon(&self) -> &'static str {
+        match self {
+            ModCategory::Engine => "⚙️",
+            ModCategory::Transmission => "🔧",
+            ModCategory::Suspension => "🔩",
+            ModCategory::Brakes => "🛑",
+            ModCategory::Tires => "🛞",
+            ModCategory::Armor => "🛡️",
+        }
+    }
+
     /// 取得所有類別
     pub fn all() -> &'static [ModCategory] {
         &[

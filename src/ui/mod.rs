@@ -14,6 +14,7 @@ mod init;
 mod interaction_prompt;
 mod loading_screen;
 mod minimap;
+mod mod_shop;
 mod notification;
 mod pause_menu;
 mod phone;

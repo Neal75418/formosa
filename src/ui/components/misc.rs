@@ -259,6 +259,8 @@ pub enum PhoneApp {
     Settings,
     /// 股市
     StockMarket,
+    /// 改裝店
+    ModShop,
 }
 
 impl PhoneApp {
@@ -271,6 +273,7 @@ impl PhoneApp {
             Self::Map => "地圖",
             Self::Settings => "設定",
             Self::StockMarket => "股市",
+            Self::ModShop => "改裝店",
         }
     }
 
@@ -283,6 +286,7 @@ impl PhoneApp {
             Self::Map => "G",
             Self::Settings => "S",
             Self::StockMarket => "$",
+            Self::ModShop => "🔧",
         }
     }
 
@@ -294,6 +298,7 @@ impl PhoneApp {
             PhoneApp::Map,
             PhoneApp::Settings,
             PhoneApp::StockMarket,
+            PhoneApp::ModShop,
         ]
     }
 }

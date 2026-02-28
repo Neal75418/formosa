@@ -18,7 +18,7 @@ fn phone_app_labels() {
 
 #[test]
 fn phone_app_all_apps_count() {
-    assert_eq!(PhoneApp::all_apps().len(), 5);
+    assert_eq!(PhoneApp::all_apps().len(), 6);
 }
 
 #[test]

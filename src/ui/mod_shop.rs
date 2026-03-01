@@ -5,7 +5,7 @@
 use bevy::prelude::*;
 
 use super::phone_apps::spawn_section_title;
-use crate::vehicle::{ModCategory, VehicleModifications, PurchaseModificationEvent};
+use crate::vehicle::{ModCategory, VehicleModifications, PurchaseModificationEvent, ModificationCompleteEvent};
 use crate::economy::PlayerWallet;
 use crate::core::GameState;
 use crate::ui::notification::NotificationQueue;
@@ -187,7 +187,7 @@ fn spawn_mod_category_card(
 
             // 性能提升資訊或 MAX 標籤
             if let Some(next) = next_level {
-                let upgrade_price = current_level.upgrade_price().unwrap();
+                let upgrade_price = next.price();
                 let can_afford = wallet.cash >= upgrade_price;
 
                 // 性能對比
@@ -331,50 +331,30 @@ pub(super) fn handle_mod_shop_buttons(
         (&Interaction, &ModShopButton),
         (Changed<Interaction>, With<Button>),
     >,
-    vehicle_mods: Query<&VehicleModifications>,
-    wallet: Res<PlayerWallet>,
     mut purchase_events: MessageWriter<PurchaseModificationEvent>,
-    mut notifications: ResMut<NotificationQueue>,
 ) {
     for (interaction, button) in &interaction_query {
         if *interaction == Interaction::Pressed {
-            // 取得車輛改裝資料
-            let Ok(mods) = vehicle_mods.get(button.vehicle) else {
-                notifications.info("車輛不存在！".to_string());
-                continue;
-            };
-
-            let current_level = mods.get_level(button.category);
-
-            // 檢查是否可升級
-            let Some(next_level) = current_level.next() else {
-                notifications.info(format!("{}已達最高等級！", button.category.name()));
-                continue;
-            };
-
-            // 檢查資金（提供即時反饋）
-            let price = current_level.upgrade_price().unwrap();
-            if wallet.cash < price {
-                notifications.info(format!(
-                    "資金不足！需要 ${}, 目前 ${}",
-                    price, wallet.cash
-                ));
-                continue;
-            }
-
-            // 發送購買事件（系統會處理扣款和升級）
+            // 直接發送事件，讓系統層處理所有驗證
             purchase_events.write(PurchaseModificationEvent {
                 vehicle: button.vehicle,
                 category: button.category,
             });
-
-            // 成功通知
-            notifications.success(format!(
-                "{}升級至{}！（-${}）",
-                button.category.name(),
-                next_level.name(),
-                price
-            ));
         }
+    }
+}
+
+/// 監聽改裝完成事件並顯示通知
+pub(super) fn handle_modification_complete_notification(
+    mut events: MessageReader<ModificationCompleteEvent>,
+    mut notifications: ResMut<NotificationQueue>,
+) {
+    for event in events.read() {
+        notifications.success(format!(
+            "{}升級至{}！（-${}）",
+            event.category.name(),
+            event.new_level.name(),
+            event.new_level.price()
+        ));
     }
 }

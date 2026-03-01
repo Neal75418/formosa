@@ -2,6 +2,7 @@
 //!
 //! 上箭頭鍵開啟手機，包含聯絡人、任務日誌、地圖、設定等分頁。
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use super::components::{
@@ -42,6 +43,20 @@ const APP_ICON_SELECTED: Color = Color::srgba(0.2, 0.4, 0.7, 0.9);
 const STATUS_BAR_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);
 /// 內容區項目色
 const CONTENT_ITEM_BG: Color = Color::srgba(0.1, 0.12, 0.18, 0.8);
+
+// ============================================================================
+// System Parameters
+// ============================================================================
+
+/// 手機內容清理相關的查詢組合
+#[derive(SystemParam)]
+pub struct PhoneContentCleanupQueries<'w, 's> {
+    pub icon_query: Query<'w, 's, Entity, With<PhoneAppIcon>>,
+    pub contact_query: Query<'w, 's, Entity, With<PhoneContactList>>,
+    pub log_query: Query<'w, 's, Entity, With<PhoneMissionLogList>>,
+    pub stock_query: Query<'w, 's, Entity, With<PhoneStockMarketList>>,
+    pub mod_shop_query: Query<'w, 's, Entity, With<ModShopContent>>,
+}
 
 // ============================================================================
 // 設置系統
@@ -369,18 +384,19 @@ pub fn phone_content_system(
     game_state: Res<GameState>,
     vehicle_query: Query<&VehicleModifications>,
     mut content_query: Query<(Entity, &mut Node), With<PhoneContentArea>>,
-    icon_query: Query<Entity, With<PhoneAppIcon>>,
-    contact_query: Query<Entity, With<PhoneContactList>>,
-    log_query: Query<Entity, With<PhoneMissionLogList>>,
-    stock_query: Query<Entity, With<PhoneStockMarketList>>,
-    mod_shop_query: Query<Entity, With<ModShopContent>>,
+    cleanup_queries: PhoneContentCleanupQueries,
     mut commands: Commands,
     chinese_font: Res<ChineseFont>,
 ) {
     // 股市頁面需要在價格更新時也重建 UI
     let stock_changed =
         phone_state.current_app == PhoneApp::StockMarket && stock_market.is_changed();
-    if !phone_state.is_changed() && !stock_changed {
+
+    // ModShop 頁面需要在錢包變化時也重建 UI
+    let mod_shop_changed =
+        phone_state.current_app == PhoneApp::ModShop && wallet.is_changed();
+
+    if !phone_state.is_changed() && !stock_changed && !mod_shop_changed {
         return;
     }
 
@@ -389,19 +405,19 @@ pub fn phone_content_system(
     };
 
     // 清除舊內容（Bevy 0.17 的 despawn() 已自動清除子實體）
-    for entity in icon_query.iter() {
+    for entity in cleanup_queries.icon_query.iter() {
         commands.entity(entity).despawn();
     }
-    for entity in contact_query.iter() {
+    for entity in cleanup_queries.contact_query.iter() {
         commands.entity(entity).despawn();
     }
-    for entity in log_query.iter() {
+    for entity in cleanup_queries.log_query.iter() {
         commands.entity(entity).despawn();
     }
-    for entity in stock_query.iter() {
+    for entity in cleanup_queries.stock_query.iter() {
         commands.entity(entity).despawn();
     }
-    for entity in mod_shop_query.iter() {
+    for entity in cleanup_queries.mod_shop_query.iter() {
         commands.entity(entity).despawn();
     }
 
@@ -713,6 +729,7 @@ impl Plugin for PhonePlugin {
                     phone_input_system,
                     stock_trade_input_system.after(phone_input_system),
                     handle_mod_shop_buttons.after(phone_input_system),
+                    handle_modification_complete_notification.after(phone_input_system),
                     phone_visibility_system.after(phone_input_system),
                     phone_icon_highlight_system.after(phone_input_system),
                     phone_content_system.after(phone_input_system),

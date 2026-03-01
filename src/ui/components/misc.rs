@@ -286,7 +286,7 @@ impl PhoneApp {
             Self::Map => "G",
             Self::Settings => "S",
             Self::StockMarket => "$",
-            Self::ModShop => "🔧",
+            Self::ModShop => "W",
         }
     }
 

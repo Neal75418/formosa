@@ -14,6 +14,7 @@ fn phone_app_labels() {
     assert_eq!(PhoneApp::Map.label(), "地圖");
     assert_eq!(PhoneApp::Settings.label(), "設定");
     assert_eq!(PhoneApp::StockMarket.label(), "股市");
+    assert_eq!(PhoneApp::ModShop.label(), "改裝店");
 }
 
 #[test]
@@ -209,6 +210,11 @@ fn trade_quantity_clamp() {
 #[test]
 fn phone_app_stock_market_icon() {
     assert_eq!(PhoneApp::StockMarket.icon(), "$");
+}
+
+#[test]
+fn phone_app_mod_shop_icon() {
+    assert_eq!(PhoneApp::ModShop.icon(), "W");
 }
 
 #[test]

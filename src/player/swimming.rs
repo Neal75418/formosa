@@ -260,28 +260,28 @@ mod tests {
 
     #[test]
     fn test_swim_constants() {
-        assert!(SWIM_SPEED > 0.0);
-        assert!(FAST_SWIM_SPEED > SWIM_SPEED);
-        assert!(SWIM_STAMINA_DRAIN > 0.0);
-        assert!(FAST_SWIM_STAMINA_DRAIN > SWIM_STAMINA_DRAIN);
-        assert!(MAX_DIVE_DEPTH > 0.0);
-        assert!(MAX_BREATH > 0.0);
+        const { assert!(SWIM_SPEED > 0.0) };
+        const { assert!(FAST_SWIM_SPEED > SWIM_SPEED) };
+        const { assert!(SWIM_STAMINA_DRAIN > 0.0) };
+        const { assert!(FAST_SWIM_STAMINA_DRAIN > SWIM_STAMINA_DRAIN) };
+        const { assert!(MAX_DIVE_DEPTH > 0.0) };
+        const { assert!(MAX_BREATH > 0.0) };
     }
 
     #[test]
     fn test_water_thresholds() {
-        assert!(WATER_ENTER_THRESHOLD < WATER_EXIT_THRESHOLD);
-        assert!(SWIM_SURFACE_HEIGHT > 0.0);
+        const { assert!(WATER_ENTER_THRESHOLD < WATER_EXIT_THRESHOLD) };
+        const { assert!(SWIM_SURFACE_HEIGHT > 0.0) };
     }
 
     #[test]
     fn test_drown_damage_positive() {
-        assert!(DROWN_DAMAGE_PER_SEC > 0.0);
-        assert!(DROWNING_SINK_SPEED > 0.0);
+        const { assert!(DROWN_DAMAGE_PER_SEC > 0.0) };
+        const { assert!(DROWNING_SINK_SPEED > 0.0) };
     }
 
     #[test]
     fn test_vertical_swim_speed() {
-        assert!(VERTICAL_SWIM_SPEED > 0.0);
+        const { assert!(VERTICAL_SWIM_SPEED > 0.0) };
     }
 }

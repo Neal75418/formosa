@@ -514,9 +514,12 @@ mod deformation_tests {
 
     #[test]
     fn test_darken_color_constants() {
-        assert!(DAMAGE_DARKEN_COLOR.x >= 0.0 && DAMAGE_DARKEN_COLOR.x <= 1.0);
-        assert!(DAMAGE_DARKEN_COLOR.y >= 0.0 && DAMAGE_DARKEN_COLOR.y <= 1.0);
-        assert!(DAMAGE_DARKEN_COLOR.z >= 0.0 && DAMAGE_DARKEN_COLOR.z <= 1.0);
+        const { assert!(DAMAGE_DARKEN_COLOR.x >= 0.0) };
+        const { assert!(DAMAGE_DARKEN_COLOR.x <= 1.0) };
+        const { assert!(DAMAGE_DARKEN_COLOR.y >= 0.0) };
+        const { assert!(DAMAGE_DARKEN_COLOR.y <= 1.0) };
+        const { assert!(DAMAGE_DARKEN_COLOR.z >= 0.0) };
+        const { assert!(DAMAGE_DARKEN_COLOR.z <= 1.0) };
     }
 
     #[test]

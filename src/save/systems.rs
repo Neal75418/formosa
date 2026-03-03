@@ -492,6 +492,8 @@ pub(super) fn weapon_stats_from_type(weapon_type: WeaponType) -> WeaponStats {
         WeaponType::SMG => WeaponStats::smg(),
         WeaponType::Shotgun => WeaponStats::shotgun(),
         WeaponType::Rifle => WeaponStats::rifle(),
+        WeaponType::SniperRifle => WeaponStats::sniper_rifle(),
+        WeaponType::RPG => WeaponStats::rpg(),
     }
 }
 

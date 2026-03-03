@@ -108,6 +108,8 @@ impl Plugin for VehiclePlugin {
                     collision_window_damage_system,
                     bullet_window_damage_system,
                     body_part_visual_damage_system,
+                    vehicle_deformation_system
+                        .after(body_part_visual_damage_system),
                 )
                     .in_set(GameSet::Vehicle)
                     .run_if(in_state(AppState::InGame)),

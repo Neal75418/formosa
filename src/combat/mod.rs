@@ -55,6 +55,7 @@ impl Plugin for CombatPlugin {
             .init_resource::<RagdollTracker>()
             .init_resource::<KillCamState>()
             .init_resource::<BlockState>()
+            .init_resource::<StealthTakedownState>()
             // 設置系統
             .add_systems(Startup, setup_combat_visuals)
             .add_systems(Startup, setup_explosive_visuals)
@@ -94,6 +95,16 @@ impl Plugin for CombatPlugin {
             )
             // 射擊系統（參數過多，無法使用 run_if，需在系統內部檢查狀態）
             .add_systems(Update, fire_weapon_system)
+            // RPG 投射物更新（移動 + 碰撞偵測 + 爆炸）
+            .add_systems(
+                Update,
+                rpg_projectile_update_system.run_if(in_state(AppState::InGame)),
+            )
+            // 隱匿擊殺流程（Approaching → Executing → Completing）
+            .add_systems(
+                Update,
+                stealth_takedown_system.run_if(in_state(AppState::InGame)),
+            )
             // 更新系統 - 傷害處理（參數過多，無法使用 run_if，改在系統內部檢查暫停）
             .add_systems(Update, damage_system)
             .add_systems(Update, death_system)

@@ -33,4 +33,5 @@ pub use visuals::{
     vehicle_damage_effect_system,
     vehicle_damage_particle_update_system,
     body_part_visual_damage_system,
+    vehicle_deformation_system,
 };

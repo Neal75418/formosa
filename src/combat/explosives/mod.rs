@@ -75,6 +75,7 @@ pub enum ExplosiveType {
     Grenade, // 手榴彈
     Molotov,    // 燃燒瓶
     StickyBomb, // 黏性炸彈
+    Rocket,     // 火箭彈（RPG）
 }
 
 struct ExplosiveStats {
@@ -104,6 +105,12 @@ impl ExplosiveType {
                 throw_force: STICKY_THROW_FORCE,
                 explosion_radius: STICKY_EXPLOSION_RADIUS,
                 damage: STICKY_DAMAGE,
+            },
+            ExplosiveType::Rocket => ExplosiveStats {
+                name: "火箭彈",
+                throw_force: 0.0, // 投射物系統控制
+                explosion_radius: 10.0,
+                damage: 200.0,
             },
         }
     }
@@ -356,7 +363,7 @@ impl ExplosiveInventory {
             Some(ExplosiveType::Grenade) => self.grenades > 0,
             Some(ExplosiveType::Molotov) => self.molotovs > 0,
             Some(ExplosiveType::StickyBomb) => self.sticky_bombs > 0,
-            None => false,
+            Some(ExplosiveType::Rocket) | None => false, // 火箭不是庫存爆炸物
         }
     }
 
@@ -392,7 +399,7 @@ impl ExplosiveInventory {
             .map(|s| match s {
                 ExplosiveType::Grenade => 0,
                 ExplosiveType::Molotov => 1,
-                ExplosiveType::StickyBomb => 2,
+                ExplosiveType::StickyBomb | ExplosiveType::Rocket => 2,
             })
             .unwrap_or(0);
 

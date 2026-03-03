@@ -1,6 +1,7 @@
 //! 載具生成（NPC 車輛、機車、初始交通）
 
 use super::*;
+use super::vehicle_damage::BodyPartDamage;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use crate::core::math::look_rotation_y_flat;
@@ -207,6 +208,7 @@ pub fn spawn_npc_vehicle(
             Name::new(format!("NpcVehicle_{:?}", vehicle_type)),
         ))
         .insert(TireDamage::default()) // 輪胎損壞狀態（分離插入避免 tuple 大小限制）
+        .insert(BodyPartDamage::default()) // 車體部位損壞追蹤
         .with_children(|parent| {
             parent
                 .spawn((
@@ -220,14 +222,16 @@ pub fn spawn_npc_vehicle(
                 .with_children(|parent| {
                     // === 視覺模型構建 ===
 
-                    // A. 底盤 (Chassis) - 下半部
+                    // A. 底盤 (Chassis) - 下半部（附帶變形標記）
                     let body_mat = create_body_material(materials, color, 0.5);
-                    spawn_mesh_child(
-                        parent,
-                        meshes.add(Cuboid::from_size(chassis_size)),
-                        body_mat,
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::from_size(chassis_size))),
+                        MeshMaterial3d(body_mat),
                         Transform::from_xyz(0.0, 0.0, 0.0),
-                    );
+                        GlobalTransform::default(),
+                        VehicleChassisMesh,
+                        VehicleOriginalColor(color),
+                    ));
 
                     // B. 車艙 (Cabin) - 上半部 (玻璃) - 使用共享材質
                     let cabin_size = match vehicle_type {
@@ -240,12 +244,16 @@ pub fn spawn_npc_vehicle(
                         _ => -0.2, // 轎車車艙偏後
                     };
 
-                    spawn_mesh_child(
-                        parent,
-                        meshes.add(Cuboid::from_size(cabin_size)),
-                        shared_mats.glass.clone(),
+                    parent.spawn((
+                        Mesh3d(meshes.add(Cuboid::from_size(cabin_size))),
+                        MeshMaterial3d(shared_mats.glass.clone()),
                         Transform::from_xyz(0.0, cabin_y, cabin_z_offset),
-                    );
+                        GlobalTransform::default(),
+                        VehicleCabinMesh {
+                            base_y: cabin_y,
+                            base_z: cabin_z_offset,
+                        },
+                    ));
 
                     // C. 輪子 (Wheels) - 4個 - 使用共享材質
                     let wheel_mesh = meshes.add(Cylinder::new(0.35, 0.3));

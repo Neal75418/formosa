@@ -30,6 +30,9 @@ pub use presets::VehiclePreset;
 pub use npc::{NpcState, NpcVehicle};
 pub use visuals::{
     VehicleVisualRoot,
+    VehicleChassisMesh,
+    VehicleCabinMesh,
+    VehicleOriginalColor,
     TireTrack,
     DriftSmoke,
     NitroFlame,

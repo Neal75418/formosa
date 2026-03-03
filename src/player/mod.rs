@@ -8,6 +8,7 @@ mod climb;
 mod components;
 mod config;
 pub mod skills;
+mod swimming;
 mod systems;
 mod vehicle_transition;
 
@@ -17,6 +18,7 @@ pub use climb::*;
 pub use components::*;
 pub use config::*;
 pub use skills::*;
+pub use swimming::*;
 pub use systems::*;
 pub use vehicle_transition::*;
 
@@ -53,6 +55,10 @@ impl Plugin for PlayerPlugin {
                     enter_exit_vehicle.in_set(InteractionSet::Vehicle),
                     vehicle_transition_animation_system.after(enter_exit_vehicle),
                     stealth_noise_system.after(player_input),
+                    // 游泳系統
+                    player_water_detection_system,
+                    player_swim_movement_system.after(player_water_detection_system),
+                    player_swim_damage_system.after(player_swim_movement_system),
                     // 技能成長系統
                     driving_skill_system,
                     stamina_skill_system,

@@ -8,8 +8,8 @@
 
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/)
-[![Tests](https://img.shields.io/badge/Tests-804_passing-brightgreen?style=for-the-badge)](/)
-[![Lines](https://img.shields.io/badge/Code-83K+_lines-blue?style=for-the-badge)](/)
+[![Tests](https://img.shields.io/badge/Tests-817_passing-brightgreen?style=for-the-badge)](/)
+[![Lines](https://img.shields.io/badge/Code-84K+_lines-blue?style=for-the-badge)](/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 
 </div>
@@ -24,8 +24,8 @@
 
 | 系統          | 內容                                                  |
 |:------------|:----------------------------------------------------|
-| ⚔️ **戰鬥**   | 多種槍械、近戰連擊（4 段 combo）、爆炸物（手榴彈/汽油彈/C4）、掩體系統、車上射擊、自動瞄準 |
-| 🚗 **載具**   | 轎車/機車/巴士/計程車/水上載具、偷車動畫、6 項改裝、氮氣加速、碰撞損壞系統            |
+| ⚔️ **戰鬥**   | 多種槍械（含狙擊槍/RPG）、近戰連擊（4 段 combo）、爆炸物（手榴彈/汽油彈/C4/火箭彈）、掩體系統、車上射擊、自動瞄準、隱匿擊殺 |
+| 🚗 **載具**   | 轎車/機車/巴士/計程車/水上載具、偷車動畫、6 項改裝、氮氣加速、碰撞損壞 + 視覺變形系統            |
 | 🚔 **通緝**   | 5 星等級、警車追逐 AI、警用直升機（探照燈）、路障、投降/逮捕、目擊者報警             |
 | 🌆 **開放世界** | 西門町場景、可破壞環境、行人 AI（恐慌波傳播）、NPC 交通系統、隨機事件              |
 | ☁️ **天氣**   | 日夜循環、晴/陰/雨/霧/暴風雨/沙塵暴、動態光照、霓虹燈閃爍                     |
@@ -47,9 +47,9 @@
 
 **📊 專案規模**
 
-- 📁 251 個 `.rs` 檔案
-- 📝 83,149 行代碼
-- ✅ 804 個單元測試（100% 通過）
+- 📁 252 個 `.rs` 檔案
+- 📝 84,080 行代碼
+- ✅ 817 個單元測試（100% 通過）
 - 🔍 0 clippy warnings
 
 ## 🏗️ 架構
@@ -127,7 +127,7 @@ graph TD
 cargo dev                # 開發模式（含 World Inspector）
 cargo run                # 開發模式
 cargo run --release      # 發布模式（最佳效能）
-cargo test               # 執行 804 個單元測試
+cargo test               # 執行 817 個單元測試
 cargo clippy             # 靜態分析
 ```
 
@@ -146,13 +146,16 @@ cargo clippy             # 靜態分析
 
 ### 🆕 近期完成
 
+- [x] 狙擊槍 + RPG 武器（狙擊鏡 FOV、投射物飛行 + 碰撞爆炸）
+- [x] 隱匿擊殺系統（三階段動畫、背後判定、10 倍傷害）
+- [x] 玩家游泳系統（水中移動、潛水、憋氣、溺水）
+- [x] 載具視覺變形（6 部位碰撞變形 + 材質暗化）
 - [x] 手機系統（聯絡人、任務日誌、地圖、設定、股市）
 - [x] 車內廣播電台（8 頻道 + 快捷切換）
 - [x] 股票市場系統（6 支台灣主題股票 + 手機交易 UI）
 - [x] 攀爬 / 跑酷
 - [x] 多角色切換（3 角色 + 衛星動畫）
 - [x] 賭場系統（21 點 + 拉霸機）
-- [x] 游泳系統
 - [x] 車輛改裝商店手機 App（6 項改裝類別 UI）
 
 ### 🔮 未來規劃

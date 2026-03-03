@@ -706,6 +706,8 @@ impl WeaponVisuals {
             WeaponType::SMG => Some(&self.smg),
             WeaponType::Shotgun => Some(&self.shotgun),
             WeaponType::Rifle => Some(&self.rifle),
+            WeaponType::SniperRifle => Some(&self.rifle), // 暫用步槍模型
+            WeaponType::RPG => Some(&self.rifle),         // 暫用步槍模型
         }
     }
 }

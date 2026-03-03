@@ -370,16 +370,27 @@ pub fn dynamic_fov_system(
     combat_state: Res<CombatState>,
     cinematic: Res<CinematicState>,
     sprint_query: Query<&PlayerSprintState, With<Player>>,
+    weapon_query: Query<&WeaponInventory, With<Player>>,
     mut camera_query: Query<&mut Projection, With<GameCamera>>,
     time: Res<Time>,
 ) {
-    // 決定目標 FOV：電影 > 車內 > FPS > 瞄準 > 衝刺 > 預設
+    // 檢查當前武器是否為狙擊槍（瞄準時使用 scope FOV）
+    let is_scoped = combat_state.is_aiming
+        && weapon_query
+            .single()
+            .ok()
+            .and_then(|inv| inv.current_weapon())
+            .is_some_and(|w| w.stats.weapon_type == WeaponType::SniperRifle);
+
+    // 決定目標 FOV：電影 > 車內 > FPS > 狙擊鏡 > 瞄準 > 衝刺 > 預設
     let target_fov = if camera_settings.view_mode == CameraViewMode::Cinematic {
         cinematic.fov
     } else if camera_settings.view_mode == CameraViewMode::VehicleInterior {
         camera_settings.vehicle_interior_fov
     } else if camera_settings.view_mode == CameraViewMode::FirstPerson {
         camera_settings.fps_fov
+    } else if is_scoped {
+        camera_settings.scope_fov
     } else if combat_state.is_aiming {
         camera_settings.aim_fov
     } else if sprint_query.single().ok().is_some_and(|s| s.state.is_sprint_related()) {

@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 // 完整武器系統定義，包含所有武器類型和配置。
-// 部分武器類型和屬性預留供未來關卡使用（如：RPG, 火焰噴射器）。
 
 /// 彈道視覺風格
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -33,8 +32,10 @@ pub enum WeaponType {
     Knife,   // 刀（近戰）
     Pistol,  // 手槍
     SMG,     // 衝鋒槍
-    Shotgun, // 霰彈槍
-    Rifle,   // 步槍
+    Shotgun,     // 霰彈槍
+    Rifle,       // 步槍
+    SniperRifle, // 狙擊槍
+    RPG,         // 火箭筒
 }
 
 impl WeaponType {
@@ -48,6 +49,8 @@ impl WeaponType {
             WeaponType::SMG => "衝鋒槍",
             WeaponType::Shotgun => "霰彈槍",
             WeaponType::Rifle => "步槍",
+            WeaponType::SniperRifle => "狙擊槍",
+            WeaponType::RPG => "火箭筒",
         }
     }
 
@@ -61,6 +64,8 @@ impl WeaponType {
             WeaponType::SMG => "🔫",
             WeaponType::Shotgun => "🎯",
             WeaponType::Rifle => "🎯",
+            WeaponType::SniperRifle => "🔭",
+            WeaponType::RPG => "💥",
         }
     }
 
@@ -74,6 +79,8 @@ impl WeaponType {
             WeaponType::SMG => TracerStyle::SMG,
             WeaponType::Shotgun => TracerStyle::Shotgun,
             WeaponType::Rifle => TracerStyle::Rifle,
+            WeaponType::SniperRifle => TracerStyle::Rifle,
+            WeaponType::RPG => TracerStyle::Rifle,
         }
     }
 
@@ -95,6 +102,8 @@ impl WeaponType {
             WeaponType::SMG => "SMG",
             WeaponType::Shotgun => "Shotgun",
             WeaponType::Rifle => "Rifle",
+            WeaponType::SniperRifle => "SniperRifle",
+            WeaponType::RPG => "RPG",
         }
     }
 }
@@ -337,6 +346,60 @@ impl WeaponStats {
         }
     }
 
+    /// 狙擊槍預設數據 — 極高傷害、長射程、低射速、開鏡瞄準
+    pub fn sniper_rifle() -> Self {
+        Self {
+            weapon_type: WeaponType::SniperRifle,
+            damage: 85.0,
+            fire_rate: 1.2,
+            magazine_size: 5,
+            max_ammo: 30,
+            range: 200.0,
+            reload_time: 3.0,
+            spread: 0.1,
+            pellet_count: 1,
+            bullet_speed: 2000.0,
+            is_automatic: false,
+            // 狙擊槍：極遠距離才衰減
+            falloff_start: 120.0,
+            falloff_end: 200.0,
+            // 狙擊槍：強烈垂直後座力
+            recoil_vertical: 0.08,
+            recoil_horizontal: 0.01,
+            recoil_recovery: 4.0,
+            // 狙擊槍：高穿透（可穿 3 人），高速動能充足
+            penetration: 3,
+            penetration_falloff: 0.8,
+        }
+    }
+
+    /// 火箭筒預設數據 — 投射物武器，碰撞時觸發爆炸
+    pub fn rpg() -> Self {
+        Self {
+            weapon_type: WeaponType::RPG,
+            damage: 50.0,       // 直擊傷害
+            fire_rate: 2.0,     // 極慢射速
+            magazine_size: 1,   // 單發裝填
+            max_ammo: 10,       // 稀有彈藥
+            range: 150.0,
+            reload_time: 3.5,
+            spread: 0.5,
+            pellet_count: 1,
+            bullet_speed: 80.0, // 慢速可見彈道
+            is_automatic: false,
+            // RPG：不做距離衰減（爆炸範圍傷害另算）
+            falloff_start: 0.0,
+            falloff_end: 0.0,
+            // RPG：發射時強烈後座力
+            recoil_vertical: 0.1,
+            recoil_horizontal: 0.02,
+            recoil_recovery: 3.0,
+            // RPG：不穿透（爆炸範圍取代）
+            penetration: 0,
+            penetration_falloff: 0.0,
+        }
+    }
+
     /// 計算距離傷害衰減
     /// 返回實際傷害倍率 (0.25 - 1.0)
     pub fn calculate_damage_falloff(&self, distance: f32) -> f32 {
@@ -498,7 +561,7 @@ impl Default for WeaponInventory {
         Self {
             weapons: vec![Weapon::new(WeaponStats::fist())],
             current_index: 0,
-            max_weapons: 6, // 拳頭 + 5 種武器
+            max_weapons: 8, // 拳頭 + 7 種武器
         }
     }
 }

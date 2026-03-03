@@ -143,6 +143,7 @@ pub fn handle_throw_event_system(
                 visuals.sticky_material.clone(),
                 Explosive::sticky_bomb(event.thrower),
             ),
+            ExplosiveType::Rocket => continue, // 火箭由 RPG 系統直接生成，不走投擲流程
         };
 
         // 生成爆炸物實體
@@ -286,6 +287,7 @@ pub fn explosive_update_system(
                         .remove::<ExternalImpulse>();
                 }
             }
+            ExplosiveType::Rocket => {} // 火箭由 rpg_projectile_update_system 處理
         }
     }
 }

@@ -5,8 +5,11 @@
 
 use bevy::prelude::*;
 use rand::Rng;
-use super::super::{Vehicle, VehicleType};
-use super::health::{BodyPartDamage, VehicleDamageState, VehicleHealth};
+use super::super::{Vehicle, VehicleType, VehicleChassisMesh, VehicleCabinMesh, VehicleOriginalColor, VehicleVisualRoot};
+use super::health::{
+    BodyPartDamage, BodyPartState, VehicleDamageState, VehicleHealth,
+    BODY_HOOD, BODY_FRONT_BUMPER, BODY_REAR_BUMPER, BODY_LEFT_PANEL, BODY_RIGHT_PANEL, BODY_ROOF,
+};
 use crate::core::lifetime_linear_alpha;
 
 /// 車輛損壞視覺效果資源
@@ -307,25 +310,234 @@ const DAMAGE_DARKEN_COLOR: Vec3 = Vec3::new(0.08, 0.06, 0.04);
 /// - Dented: 明顯暗化（30%）
 /// - Crushed: 嚴重暗化（55%），偏向焦黑色
 ///
-/// 此系統修改車輛子實體的 `MeshMaterial3d` 顏色。
+/// 每台車輛已有獨立材質（`create_body_material` 產生），可安全修改。
 pub fn body_part_visual_damage_system(
-    vehicle_query: Query<(&BodyPartDamage, &Vehicle), Changed<BodyPartDamage>>,
+    vehicle_query: Query<(Entity, &BodyPartDamage), Changed<BodyPartDamage>>,
+    children_query: Query<&Children>,
+    visual_root_query: Query<&Children, With<VehicleVisualRoot>>,
+    chassis_query: Query<(&MeshMaterial3d<StandardMaterial>, &VehicleOriginalColor), With<VehicleChassisMesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (_body_parts, _vehicle) in &vehicle_query {
-        // 材質變色邏輯：
-        // 由於 Bevy 中修改共享材質會影響所有使用該材質的實體，
-        // 實際的材質修改需要在車輛有獨立材質實例時才能安全進行。
-        // 目前此系統作為偵測觸發點，當車體部位狀態改變時觸發。
-        //
-        // 完整實作需要：
-        // 1. 每台車輛有獨立材質 Handle（spawn 時 clone）
-        // 2. 用 BodyPartDamage::average_darken_factor() 計算暗化程度
-        // 3. 將 base_color 混合 DAMAGE_DARKEN_COLOR
-        //
-        // 暗化公式：
-        // final_color = lerp(original_color, DAMAGE_DARKEN_COLOR, average_darken_factor)
-        let _darken = _body_parts.average_darken_factor();
-        let _target_color = DAMAGE_DARKEN_COLOR;
-        // 後續 Phase 實作材質實例化時會完善此系統
+    for (entity, body_parts) in &vehicle_query {
+        let darken = body_parts.average_darken_factor();
+        if darken <= 0.0 {
+            continue;
+        }
+
+        // 遍歷 Root → VehicleVisualRoot → 子 mesh
+        let Ok(root_children) = children_query.get(entity) else {
+            continue;
+        };
+        for child in root_children.iter() {
+            let Ok(visual_children) = visual_root_query.get(child) else {
+                continue;
+            };
+            for mesh_child in visual_children.iter() {
+                let Ok((mat_handle, original_color)) = chassis_query.get(mesh_child) else {
+                    continue;
+                };
+                let Some(material) = materials.get_mut(mat_handle) else {
+                    continue;
+                };
+                // lerp(original_color, DAMAGE_DARKEN_COLOR, darken)
+                let orig = original_color.0.to_srgba();
+                let r = orig.red * (1.0 - darken) + DAMAGE_DARKEN_COLOR.x * darken;
+                let g = orig.green * (1.0 - darken) + DAMAGE_DARKEN_COLOR.y * darken;
+                let b = orig.blue * (1.0 - darken) + DAMAGE_DARKEN_COLOR.z * darken;
+                material.base_color = Color::srgb(r, g, b);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// 車體部位損壞變形系統
+// ============================================================================
+
+/// 根據 `BodyPartState` 計算底盤變形（縮放 + 偏移）
+fn compute_chassis_deformation(body_parts: &BodyPartDamage) -> (Vec3, Vec3) {
+    let mut scale = Vec3::ONE;
+    let mut offset = Vec3::ZERO;
+
+    // HOOD — Y 軸壓縮（引擎蓋下陷）
+    match body_parts.states[BODY_HOOD] {
+        BodyPartState::Scratched => { scale.y *= 0.95; }
+        BodyPartState::Dented => { scale.y *= 0.88; offset.y -= 0.03; }
+        BodyPartState::Crushed => { scale.y *= 0.75; offset.y -= 0.08; }
+        _ => {}
+    }
+
+    // FRONT_BUMPER — Z 軸向後壓縮（前部撞凹）
+    match body_parts.states[BODY_FRONT_BUMPER] {
+        BodyPartState::Scratched => { offset.z -= 0.02; }
+        BodyPartState::Dented => { offset.z -= 0.05; scale.z *= 0.92; }
+        BodyPartState::Crushed => { offset.z -= 0.1; scale.z *= 0.8; }
+        _ => {}
+    }
+
+    // REAR_BUMPER — Z 軸向前壓縮（後部撞凹）
+    match body_parts.states[BODY_REAR_BUMPER] {
+        BodyPartState::Scratched => { offset.z += 0.02; }
+        BodyPartState::Dented => { offset.z += 0.05; scale.z *= 0.92; }
+        BodyPartState::Crushed => { offset.z += 0.1; scale.z *= 0.8; }
+        _ => {}
+    }
+
+    // LEFT_PANEL — X 軸向內壓縮
+    match body_parts.states[BODY_LEFT_PANEL] {
+        BodyPartState::Scratched => { offset.x += 0.02; }
+        BodyPartState::Dented => { offset.x += 0.05; scale.x *= 0.95; }
+        BodyPartState::Crushed => { offset.x += 0.08; scale.x *= 0.88; }
+        _ => {}
+    }
+
+    // RIGHT_PANEL — X 軸向內壓縮
+    match body_parts.states[BODY_RIGHT_PANEL] {
+        BodyPartState::Scratched => { offset.x -= 0.02; }
+        BodyPartState::Dented => { offset.x -= 0.05; scale.x *= 0.95; }
+        BodyPartState::Crushed => { offset.x -= 0.08; scale.x *= 0.88; }
+        _ => {}
+    }
+
+    (scale, offset)
+}
+
+/// 車體部位損壞變形系統
+///
+/// 根據各部位的 `BodyPartState` 修改底盤和車艙 mesh 的 Transform：
+/// - 底盤：引擎蓋、保險桿、側板的壓縮和位移
+/// - 車艙：車頂壓塌
+pub fn vehicle_deformation_system(
+    vehicle_query: Query<(Entity, &BodyPartDamage), Changed<BodyPartDamage>>,
+    children_query: Query<&Children>,
+    visual_root_query: Query<&Children, With<VehicleVisualRoot>>,
+    mut chassis_query: Query<&mut Transform, (With<VehicleChassisMesh>, Without<VehicleCabinMesh>)>,
+    mut cabin_query: Query<(&mut Transform, &VehicleCabinMesh), Without<VehicleChassisMesh>>,
+) {
+    for (entity, body_parts) in &vehicle_query {
+        let Ok(root_children) = children_query.get(entity) else {
+            continue;
+        };
+        for child in root_children.iter() {
+            let Ok(visual_children) = visual_root_query.get(child) else {
+                continue;
+            };
+            for mesh_child in visual_children.iter() {
+                // 底盤變形
+                if let Ok(mut transform) = chassis_query.get_mut(mesh_child) {
+                    let (scale, offset) = compute_chassis_deformation(body_parts);
+                    transform.scale = scale;
+                    transform.translation = offset;
+                }
+
+                // 車艙變形（車頂壓塌）
+                if let Ok((mut transform, cabin)) = cabin_query.get_mut(mesh_child) {
+                    let mut scale = Vec3::ONE;
+                    let mut y_offset = 0.0;
+
+                    match body_parts.states[BODY_ROOF] {
+                        BodyPartState::Dented => { scale.y = 0.92; }
+                        BodyPartState::Crushed => { scale.y = 0.8; y_offset = -0.05; }
+                        _ => {}
+                    }
+
+                    transform.scale = scale;
+                    transform.translation = Vec3::new(0.0, cabin.base_y + y_offset, cabin.base_z);
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// 測試
+// ============================================================================
+
+#[cfg(test)]
+mod deformation_tests {
+    use super::*;
+
+    #[test]
+    fn test_chassis_no_damage_is_identity() {
+        let bp = BodyPartDamage::default();
+        let (scale, offset) = compute_chassis_deformation(&bp);
+        assert_eq!(scale, Vec3::ONE);
+        assert_eq!(offset, Vec3::ZERO);
+    }
+
+    #[test]
+    fn test_chassis_hood_crushed() {
+        let mut bp = BodyPartDamage::default();
+        bp.states[BODY_HOOD] = BodyPartState::Crushed;
+        let (scale, offset) = compute_chassis_deformation(&bp);
+        assert!((scale.y - 0.75).abs() < 0.001);
+        assert!(offset.y < 0.0);
+        // X 和 Z 不受影響
+        assert!((scale.x - 1.0).abs() < 0.001);
+        assert!((scale.z - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_chassis_front_bumper_dented() {
+        let mut bp = BodyPartDamage::default();
+        bp.states[BODY_FRONT_BUMPER] = BodyPartState::Dented;
+        let (scale, offset) = compute_chassis_deformation(&bp);
+        assert!((scale.z - 0.92).abs() < 0.001);
+        assert!(offset.z < 0.0); // 向後壓縮
+    }
+
+    #[test]
+    fn test_chassis_both_panels_crushed() {
+        let mut bp = BodyPartDamage::default();
+        bp.states[BODY_LEFT_PANEL] = BodyPartState::Crushed;
+        bp.states[BODY_RIGHT_PANEL] = BodyPartState::Crushed;
+        let (scale, offset) = compute_chassis_deformation(&bp);
+        // 左右面板壓縮同時作用：0.88 * 0.88
+        assert!((scale.x - 0.88 * 0.88).abs() < 0.001);
+        // 左右偏移互相抵消
+        assert!(offset.x.abs() < 0.001);
+    }
+
+    #[test]
+    fn test_chassis_combined_damage() {
+        let mut bp = BodyPartDamage::default();
+        bp.states[BODY_HOOD] = BodyPartState::Scratched;
+        bp.states[BODY_FRONT_BUMPER] = BodyPartState::Crushed;
+        bp.states[BODY_LEFT_PANEL] = BodyPartState::Dented;
+        let (scale, offset) = compute_chassis_deformation(&bp);
+        assert!((scale.y - 0.95).abs() < 0.001);
+        assert!((scale.z - 0.8).abs() < 0.001);
+        assert!((scale.x - 0.95).abs() < 0.001);
+        assert!(offset.z < 0.0); // 前方撞凹
+        assert!(offset.x > 0.0); // 左側面板向內
+    }
+
+    #[test]
+    fn test_darken_color_constants() {
+        assert!(DAMAGE_DARKEN_COLOR.x >= 0.0 && DAMAGE_DARKEN_COLOR.x <= 1.0);
+        assert!(DAMAGE_DARKEN_COLOR.y >= 0.0 && DAMAGE_DARKEN_COLOR.y <= 1.0);
+        assert!(DAMAGE_DARKEN_COLOR.z >= 0.0 && DAMAGE_DARKEN_COLOR.z <= 1.0);
+    }
+
+    #[test]
+    fn test_rear_bumper_offset_positive_z() {
+        let mut bp = BodyPartDamage::default();
+        bp.states[BODY_REAR_BUMPER] = BodyPartState::Scratched;
+        let (_scale, offset) = compute_chassis_deformation(&bp);
+        assert!(offset.z > 0.0); // 後保險桿向前位移
+    }
+
+    #[test]
+    fn test_deformation_severity_ordering() {
+        // 更嚴重的損壞應該產生更大的偏移
+        let mut bp1 = BodyPartDamage::default();
+        bp1.states[BODY_HOOD] = BodyPartState::Scratched;
+        let (scale1, _) = compute_chassis_deformation(&bp1);
+
+        let mut bp2 = BodyPartDamage::default();
+        bp2.states[BODY_HOOD] = BodyPartState::Crushed;
+        let (scale2, _) = compute_chassis_deformation(&bp2);
+
+        assert!(scale1.y > scale2.y); // Crushed 比 Scratched 壓縮更多
     }
 }

@@ -2,6 +2,7 @@
 
 use super::character_switch_animation::CharacterSwitchAnimation;
 use super::PlayerConfig;
+use super::swimming::PlayerSwimming;
 use super::{
     ClimbState, DodgeState, DoubleTapTracker, NoiseLevel, Player, PlayerSprintState, Stamina,
     StealthState, VehicleTransitionState,
@@ -194,8 +195,14 @@ pub fn player_movement(
         &mut KinematicCharacterController,
         &mut PlayerSprintState,
     )>,
+    swimming_check: Query<(), (With<Player>, With<PlayerSwimming>)>,
 ) {
     if state.switch_anim.is_active() || state.respawn_state.is_dead || state.game_state.player_in_vehicle {
+        return;
+    }
+
+    // 游泳時由 player_swim_movement_system 處理
+    if !swimming_check.is_empty() {
         return;
     }
 
@@ -205,7 +212,7 @@ pub fn player_movement(
         return;
     };
 
-    // 閃避或攀爬期間不處理普通移動
+    // 閃避、攀爬、游泳期間不處理普通移動
     if dodge.is_dodging || climb_state.is_climbing() {
         return;
     }
@@ -299,9 +306,10 @@ pub fn player_jump(
         &mut KinematicCharacterController,
         Option<&KinematicCharacterControllerOutput>,
     )>,
+    swimming_check: Query<(), (With<Player>, With<PlayerSwimming>)>,
 ) {
-    // 死亡時或在車上時不處理跳躍
-    if respawn_state.is_dead || game_state.player_in_vehicle {
+    // 死亡時、在車上、或游泳時不處理跳躍
+    if respawn_state.is_dead || game_state.player_in_vehicle || !swimming_check.is_empty() {
         return;
     }
 

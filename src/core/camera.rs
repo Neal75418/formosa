@@ -36,6 +36,7 @@ pub struct CameraSettings {
     pub base_fov: f32,    // 預設 FOV（度）
     pub sprint_fov: f32,  // 衝刺 FOV（度）
     pub aim_fov: f32,     // 瞄準 FOV（度）
+    pub scope_fov: f32,   // 狙擊鏡 FOV（度）
     pub current_fov: f32, // 當前 FOV（度，平滑插值中間值）
     // 視角模式
     pub view_mode: CameraViewMode,
@@ -72,6 +73,7 @@ impl Default for CameraSettings {
             base_fov: 70.0,
             sprint_fov: 85.0,
             aim_fov: 55.0,
+            scope_fov: 15.0,
             current_fov: 70.0,
             // 視角模式
             view_mode: CameraViewMode::ThirdPerson,

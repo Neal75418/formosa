@@ -331,7 +331,8 @@ pub fn play_weapon_fire_sound(
         WeaponType::Pistol => weapon_sounds.pistol_fire.clone(),
         WeaponType::SMG => weapon_sounds.smg_fire.clone(),
         WeaponType::Shotgun => weapon_sounds.shotgun_fire.clone(),
-        WeaponType::Rifle => weapon_sounds.rifle_fire.clone(),
+        WeaponType::Rifle | WeaponType::SniperRifle => weapon_sounds.rifle_fire.clone(),
+        WeaponType::RPG => weapon_sounds.shotgun_fire.clone(), // 暫用霰彈槍音效
         // 近戰武器使用揮擊音效
         WeaponType::Fist | WeaponType::Staff | WeaponType::Knife => weapon_sounds.punch_whoosh.clone(),
     };

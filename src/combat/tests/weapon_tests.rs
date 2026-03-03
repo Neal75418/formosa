@@ -153,7 +153,7 @@ fn test_weapon_inventory_default() {
     let inventory = WeaponInventory::default();
     assert_eq!(inventory.weapons.len(), 1);
     assert_eq!(inventory.current_index, 0);
-    assert_eq!(inventory.max_weapons, 6);
+    assert_eq!(inventory.max_weapons, 8);
     assert_eq!(
         inventory.current_weapon().unwrap().stats.weapon_type,
         WeaponType::Fist
@@ -256,18 +256,20 @@ fn test_weapon_inventory_has_weapon() {
 fn test_weapon_inventory_max_capacity() {
     let mut inventory = WeaponInventory::default();
 
-    // 添加 5 把武器（加上預設拳頭共 6 把）
+    // 添加 7 把武器（加上預設拳頭共 8 把）
     inventory.add_weapon(Weapon::new(WeaponStats::pistol()));
     inventory.add_weapon(Weapon::new(WeaponStats::smg()));
     inventory.add_weapon(Weapon::new(WeaponStats::shotgun()));
     inventory.add_weapon(Weapon::new(WeaponStats::rifle()));
     inventory.add_weapon(Weapon::new(WeaponStats::staff()));
+    inventory.add_weapon(Weapon::new(WeaponStats::sniper_rifle()));
+    inventory.add_weapon(Weapon::new(WeaponStats::rpg()));
 
-    assert_eq!(inventory.weapons.len(), 6);
+    assert_eq!(inventory.weapons.len(), 8);
 
     // 達到上限，無法添加新武器
     assert!(!inventory.add_weapon(Weapon::new(WeaponStats::knife())));
-    assert_eq!(inventory.weapons.len(), 6);
+    assert_eq!(inventory.weapons.len(), 8);
 }
 
 // ============================================================================

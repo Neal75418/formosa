@@ -10,6 +10,23 @@ use crate::core::{lifetime_fade_alpha, lifetime_linear_alpha};
 #[derive(Component)]
 pub struct VehicleVisualRoot;
 
+/// 標記車身底盤 mesh（用於損壞變形與材質暗化）
+#[derive(Component)]
+pub struct VehicleChassisMesh;
+
+/// 標記車艙 mesh（用於車頂損壞變形）
+#[derive(Component)]
+pub struct VehicleCabinMesh {
+    /// 原始 Y 位置（變形計算基準）
+    pub base_y: f32,
+    /// 原始 Z 偏移（車艙偏後的設定）
+    pub base_z: f32,
+}
+
+/// 儲存車輛 mesh 原始顏色（損壞暗化的還原基準）
+#[derive(Component)]
+pub struct VehicleOriginalColor(pub Color);
+
 /// 輪胎痕跡組件
 /// 漂移/急煞時在地面留下的胎痕
 #[derive(Component)]

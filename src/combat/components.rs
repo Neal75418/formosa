@@ -715,3 +715,50 @@ impl HitReaction {
         }
     }
 }
+
+// ============================================================================
+// 隱匿擊殺系統
+// ============================================================================
+
+/// 隱匿擊殺動畫階段
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StealthTakedownPhase {
+    #[default]
+    None,
+    /// 接近目標（0.2s）
+    Approaching,
+    /// 執行擊殺（0.5s）
+    Executing,
+    /// 完成收尾（0.3s）
+    Completing,
+}
+
+/// 隱匿擊殺階段時長常數
+pub const TAKEDOWN_APPROACH_DURATION: f32 = 0.2;
+pub const TAKEDOWN_EXECUTE_DURATION: f32 = 0.5;
+pub const TAKEDOWN_COMPLETE_DURATION: f32 = 0.3;
+
+/// 隱匿擊殺狀態（全域資源）
+///
+/// 蹲伏 + 背後 + 目標未察覺時，近戰攻擊觸發專屬擊殺流程：
+/// 自動接近 → 致命一擊（10x 傷害）→ 鏡頭特寫 → 收尾。
+/// 全程保持 Silent 噪音等級，不驚動周圍敵人。
+#[derive(Resource, Debug, Default)]
+pub struct StealthTakedownState {
+    /// 當前階段
+    pub phase: StealthTakedownPhase,
+    /// 階段進度計時器（0.0 → 階段時長）
+    pub progress: f32,
+    /// 鎖定的目標
+    pub target: Option<Entity>,
+    /// 擊殺開始時的玩家位置
+    pub start_position: Vec3,
+    /// 目標位置
+    pub target_position: Vec3,
+    /// 待施加的傷害量
+    pub pending_damage: f32,
+    /// 傷害是否已施加（確保只觸發一次）
+    pub damage_applied: bool,
+    /// XP 是否已獎勵（確保只觸發一次）
+    pub xp_awarded: bool,
+}

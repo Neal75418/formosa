@@ -22,7 +22,7 @@ pub use effects::{
     spawn_bullet_tracer, spawn_muzzle_flash, spawn_player_weapons, weapon_visibility_init_system,
     weapon_visibility_system,
 };
-pub use firing::fire_weapon_system;
+pub use firing::{fire_weapon_system, rpg_projectile_update_system, stealth_takedown_system};
 pub use input::{
     block_update_system, melee_combo_timeout_system, reload_system, shooting_input_system,
     weapon_cooldown_system,

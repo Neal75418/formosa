@@ -19,7 +19,7 @@
 
 ## Testing
 
-- [ ] `cargo test` — all 801 tests pass
+- [ ] `cargo test` — all 804 tests pass
 - [ ] `cargo clippy` — 0 warnings
 
 ## Checklist

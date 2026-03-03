@@ -24,7 +24,7 @@ Claude Code 在此專案中的工作指引。
 | bevy_rapier3d    | 0.32         | 3D 物理引擎  |
 | serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：250 個 .rs 檔案、~82,700 行、801 個單元測試、0 clippy warnings
+**規模**：251 個 .rs 檔案、83,149 行代碼、804 個單元測試、0 clippy warnings
 
 ## 常用指令
 
@@ -33,7 +33,7 @@ cargo dev                    # 開發模式（含 dev_tools，見 .cargo/config.
 cargo run                    # 開發模式（不含 dev_tools）
 cargo run --release          # 發布模式（最佳效能，不含 dev_tools）
 cargo check                  # 編譯檢查
-cargo test                   # 執行 801 個單元測試
+cargo test                   # 執行 804 個單元測試
 cargo test economy::tests    # 特定模組測試
 cargo clippy                 # 靜態分析
 cargo fmt                    # 格式化
@@ -536,49 +536,50 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ### 測試覆蓋
 
-| 模組                 | 測試數     | 覆蓋範圍                 |
-|--------------------|---------|----------------------|
-| combat             | 130     | 武器、傷害、護甲、布娃娃、出血、自動瞄準 |
-| economy            | 107     | 錢包、商店、ATM、股市、賭場、企業   |
-| vehicle            | 106     | 血量、輪胎、交通燈、改裝、爆炸、水上載具 |
-| ui                 | 73      | 通知、互動提示、手機、股市、存檔 UI  |
-| mission            | 69      | 任務目標、評分、對話、劇情、支線     |
-| pedestrian         | 67      | 恐慌波、尋路、目擊者、行為、游泳     |
-| camera             | 48      | pitch 限制、距離調整、角度正規化  |
-| audio              | 39      | 電台系統、音量、淡入淡出         |
-| ai                 | 32      | 狀態轉換、感知、逃跑           |
-| save               | 31      | 序列化、存檔路徑             |
-| wanted             | 27      | 通緝等級、警察狀態、搜索區        |
-| player             | 38      | 攀爬、技能、角色切換           |
-| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶    |
-| core/spatial_hash  | 12      | 插入、查詢、邊界             |
-| environment        | 9       | 可破壞物件、碎片池            |
-| **合計**             | **801** |                      |
+| 模組                 | 測試數     | 覆蓋範圍                     |
+|--------------------|---------|--------------------------|
+| combat             | 130     | 武器、傷害、護甲、布娃娃、出血、自動瞄準     |
+| vehicle            | 108     | 血量、輪胎、交通燈、改裝、爆炸、水上載具     |
+| economy            | 107     | 錢包、商店、ATM、股市、賭場、企業       |
+| ui                 | 74      | 通知、互動提示、手機、股市、改裝商店、存檔 UI |
+| mission            | 69      | 任務目標、評分、對話、劇情、支線         |
+| pedestrian         | 67      | 恐慌波、尋路、目擊者、行為、游泳         |
+| camera             | 48      | pitch 限制、距離調整、角度正規化      |
+| audio              | 39      | 電台系統、音量、淡入淡出             |
+| player             | 38      | 攀爬、技能、角色切換               |
+| ai                 | 32      | 狀態轉換、感知、逃跑               |
+| save               | 31      | 序列化、存檔路徑                 |
+| wanted             | 27      | 通緝等級、警察狀態、搜索區            |
+| world/time_weather | 13      | 日照、天氣光照、天體、霓虹燈、窗戶        |
+| core/spatial_hash  | 12      | 插入、查詢、邊界                 |
+| environment        | 9       | 可破壞物件、碎片池                |
+| **合計**             | **804** |                          |
 
 ## 關鍵檔案速查
 
-| 系統     | 檔案                                                                 |
-|--------|--------------------------------------------------------------------|
-| 空間哈希   | `src/core/spatial_hash.rs`                                         |
-| 戰鬥插件   | `src/combat/mod.rs`                                                |
-| 傷害計算   | `src/combat/damage/` (calculation, death, effects, reactions)      |
-| 射擊系統   | `src/combat/shooting/` (input, firing, effects)                    |
-| 爆炸物    | `src/combat/explosives/` (systems, explosion, effects)             |
-| 掩體     | `src/combat/cover.rs`                                              |
-| 警用直升機  | `src/wanted/police_helicopter/` (components, spawning, ai, combat) |
-| 偷車     | `src/vehicle/theft.rs`                                             |
-| 車輛改裝   | `src/vehicle/modifications/` (performance, visuals, systems)       |
-| 車輛效果   | `src/vehicle/effects.rs`                                           |
-| 行人生命週期 | `src/pedestrian/systems/lifecycle.rs`                              |
-| 恐慌系統   | `src/pedestrian/panic.rs`                                          |
-| 目擊者系統  | `src/pedestrian/systems/witnesses.rs`                              |
-| 世界生成   | `src/world/setup/`                                                 |
-| 天氣效果   | `src/world/time_weather/weather_effects.rs`                        |
-| 可破壞物件  | `src/environment/systems.rs`                                       |
-| 股票市場   | `src/economy/stock_market.rs`                                      |
-| 賭場     | `src/economy/casino.rs`                                            |
-| 手機 UI  | `src/ui/phone.rs`, `phone_apps.rs`, `phone_apps_stock.rs`          |
-| 車內電台   | `src/audio/integration.rs`, `src/audio/components.rs`              |
+| 系統      | 檔案                                                                 |
+|---------|--------------------------------------------------------------------|
+| 空間哈希    | `src/core/spatial_hash.rs`                                         |
+| 戰鬥插件    | `src/combat/mod.rs`                                                |
+| 傷害計算    | `src/combat/damage/` (calculation, death, effects, reactions)      |
+| 射擊系統    | `src/combat/shooting/` (input, firing, effects)                    |
+| 爆炸物     | `src/combat/explosives/` (systems, explosion, effects)             |
+| 掩體      | `src/combat/cover.rs`                                              |
+| 警用直升機   | `src/wanted/police_helicopter/` (components, spawning, ai, combat) |
+| 偷車      | `src/vehicle/theft.rs`                                             |
+| 車輛改裝    | `src/vehicle/modifications/` (performance, visuals, systems)       |
+| 車輛效果    | `src/vehicle/effects.rs`                                           |
+| 行人生命週期  | `src/pedestrian/systems/lifecycle.rs`                              |
+| 恐慌系統    | `src/pedestrian/panic.rs`                                          |
+| 目擊者系統   | `src/pedestrian/systems/witnesses.rs`                              |
+| 世界生成    | `src/world/setup/`                                                 |
+| 天氣效果    | `src/world/time_weather/weather_effects.rs`                        |
+| 可破壞物件   | `src/environment/systems.rs`                                       |
+| 股票市場    | `src/economy/stock_market.rs`                                      |
+| 賭場      | `src/economy/casino.rs`                                            |
+| 手機 UI   | `src/ui/phone.rs`, `phone_apps.rs`, `phone_apps_stock.rs`          |
+| 改裝商店 UI | `src/ui/mod_shop.rs`                                               |
+| 車內電台    | `src/audio/integration.rs`, `src/audio/components.rs`              |
 
 ## 操作方式
 
@@ -639,6 +640,6 @@ cargo check && cargo test && cargo clippy
 
 ### 測試
 
-- 801 個單元測試覆蓋核心系統
+- 804 個單元測試覆蓋核心系統
 - 修改後必跑：`cargo test`（~0.01s）
 - 建置時間：37-84 秒（動態連結）

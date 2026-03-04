@@ -37,6 +37,9 @@ const MINIMAP_SCAN_SPEED: f32 = 0.5;
 /// 玩家標記脈衝速度
 const PLAYER_MARKER_PULSE_SPEED: f32 = 3.0;
 
+/// m/s 轉 km/h 換算係數
+const KMH_CONVERSION_FACTOR: f32 = 3.6;
+
 // ============================================================================
 // 載具名稱輔助函數
 // ============================================================================
@@ -72,7 +75,7 @@ fn get_control_hint_text(
         return String::new();
     };
 
-    let speed_kmh = (vehicle.current_speed * 3.6).abs() as i32;
+    let speed_kmh = (vehicle.current_speed * KMH_CONVERSION_FACTOR).abs() as i32;
     format!(
         "[{}] {} km/h | WASD駕駛 | Space煞車 | Tab下車",
         get_vehicle_type_name(vehicle.vehicle_type),
@@ -159,7 +162,7 @@ pub fn update_ui(
         return;
     }
     if let Some(vehicle) = vehicle_query.iter().next() {
-        let speed_kmh = (vehicle.current_speed * 3.6).abs() as i32;
+        let speed_kmh = (vehicle.current_speed * KMH_CONVERSION_FACTOR).abs() as i32;
         **speed_text = format!("{} km/h", speed_kmh);
         *visibility = Visibility::Visible;
     }

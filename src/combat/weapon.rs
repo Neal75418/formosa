@@ -1,9 +1,5 @@
 //! 武器系統（類型、屬性、彈藥、冷卻）
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
-
-// 完整武器系統定義，包含所有武器類型和配置。
 
 /// 彈道視覺風格
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -109,6 +105,7 @@ impl WeaponType {
 }
 
 /// 近戰動畫類型
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum MeleeAnimationType {
     #[default]
@@ -120,6 +117,7 @@ pub enum MeleeAnimationType {
 
 impl MeleeAnimationType {
     /// 從武器類型推斷動畫類型
+    #[allow(dead_code)]
     pub fn from_weapon(weapon_type: WeaponType) -> Self {
         match weapon_type {
             WeaponType::Fist => MeleeAnimationType::Punch,
@@ -578,6 +576,7 @@ impl WeaponInventory {
     }
 
     /// 切換到下一把武器
+    #[allow(dead_code)]
     pub fn next_weapon(&mut self) {
         if !self.weapons.is_empty() {
             self.current_index = (self.current_index + 1) % self.weapons.len();
@@ -585,6 +584,7 @@ impl WeaponInventory {
     }
 
     /// 切換到上一把武器
+    #[allow(dead_code)]
     pub fn prev_weapon(&mut self) {
         if !self.weapons.is_empty() {
             self.current_index = if self.current_index == 0 {
@@ -623,6 +623,7 @@ impl WeaponInventory {
     }
 
     /// 檢查是否有指定類型武器
+    #[allow(dead_code)]
     pub fn has_weapon(&self, weapon_type: WeaponType) -> bool {
         self.weapons
             .iter()

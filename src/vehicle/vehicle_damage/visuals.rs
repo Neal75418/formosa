@@ -1,7 +1,5 @@
 //! 車輛損壞視覺效果（煙霧、火焰、粒子）
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 use rand::Rng;
@@ -76,6 +74,7 @@ pub struct VehicleDamageSmoke {
     /// 最大生命時間
     pub max_lifetime: f32,
     /// 是否為黑煙（嚴重損壞）
+    #[allow(dead_code)]
     pub is_heavy: bool,
 }
 
@@ -91,6 +90,7 @@ impl VehicleDamageSmoke {
     }
 
     /// 計算透明度
+    #[allow(dead_code)]
     pub fn alpha(&self) -> f32 {
         lifetime_linear_alpha(self.lifetime, self.max_lifetime)
     }

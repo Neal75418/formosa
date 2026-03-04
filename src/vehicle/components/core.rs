@@ -1,7 +1,5 @@
 //! 車輛核心類型、ID 和材質
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 use bevy::pbr::StandardMaterial;
@@ -28,6 +26,7 @@ impl VehicleId {
     }
 
     /// 從已知 ID 創建（用於讀檔）
+    #[allow(dead_code)]
     pub fn from_raw(id: u64) -> Self {
         // 確保計數器超過這個 ID，避免將來衝突
         loop {

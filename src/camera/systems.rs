@@ -4,6 +4,7 @@
 #![allow(clippy::needless_pass_by_value)]
 
 use bevy::prelude::*;
+use bevy::ecs::system::SystemParam;
 use crate::core::{
     GameState, CameraSettings, CameraViewMode, RecoilState, CameraShake, FOV_LERP_SPEED,
     CinematicState, LetterboxTop, LetterboxBottom, LETTERBOX_ANIM_SPEED, LETTERBOX_HEIGHT_RATIO,
@@ -17,6 +18,19 @@ use super::constants::*;
 /// 遊戲攝影機標記
 #[derive(Component)]
 pub struct GameCamera;
+
+/// 攝影機跟隨系統所需的資源參數包
+#[derive(SystemParam)]
+pub struct CameraFollowResources<'w> {
+    pub game_state: Res<'w, GameState>,
+    pub camera_settings: Res<'w, CameraSettings>,
+    pub combat_state: Res<'w, CombatState>,
+    pub lock_on: Res<'w, LockOnState>,
+    pub recoil_state: Res<'w, RecoilState>,
+    pub camera_shake: Res<'w, CameraShake>,
+    pub switch_anim: Res<'w, CharacterSwitchAnimation>,
+    pub time: Res<'w, Time>,
+}
 
 // ============================================================================
 // 攝影機輸入輔助函數
@@ -186,30 +200,23 @@ pub fn driver_eye_offset(vehicle_type: VehicleType) -> Vec3 {
 }
 
 /// 攝影機跟隨（支援過肩瞄準模式、後座力、震動、鎖定追蹤、車內視角）
-#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)]
 pub fn camera_follow(
-    game_state: Res<GameState>,
-    camera_settings: Res<CameraSettings>,
-    combat_state: Res<CombatState>,
-    lock_on: Res<LockOnState>,
-    recoil_state: Res<RecoilState>,
-    camera_shake: Res<CameraShake>,
-    switch_anim: Res<CharacterSwitchAnimation>,
+    res: CameraFollowResources,
     player_query: Query<&Transform, (With<Player>, Without<GameCamera>, Without<Vehicle>)>,
     vehicle_query: Query<(&Transform, &Vehicle), (Without<GameCamera>, Without<Player>)>,
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
     enemy_query: Query<&Transform, (With<Enemy>, Without<GameCamera>, Without<Player>, Without<Vehicle>)>,
-    time: Res<Time>,
 ) {
     // 角色切換動畫期間由動畫系統控制攝影機
-    if switch_anim.is_active() {
+    if res.switch_anim.is_active() {
         return;
     }
 
     let Ok(mut camera_transform) = camera_query.single_mut() else { return; };
 
-    let target_pos = if game_state.player_in_vehicle {
-        if let Some(vehicle_entity) = game_state.current_vehicle {
+    let target_pos = if res.game_state.player_in_vehicle {
+        if let Some(vehicle_entity) = res.game_state.current_vehicle {
             vehicle_query.get(vehicle_entity).map(|(t, _)| t.translation).unwrap_or(Vec3::ZERO)
         } else {
             return;
@@ -219,8 +226,8 @@ pub fn camera_follow(
     };
 
     // ===== 車內視角 =====
-    if camera_settings.view_mode == CameraViewMode::VehicleInterior {
-        if let Some(vehicle_entity) = game_state.current_vehicle {
+    if res.camera_settings.view_mode == CameraViewMode::VehicleInterior {
+        if let Some(vehicle_entity) = res.game_state.current_vehicle {
             if let Ok((vehicle_transform, vehicle)) = vehicle_query.get(vehicle_entity) {
                 let eye_offset = driver_eye_offset(vehicle.vehicle_type);
 
@@ -228,12 +235,12 @@ pub fn camera_follow(
                 let world_offset = vehicle_transform.rotation * eye_offset;
                 let eye_pos = vehicle_transform.translation + world_offset;
 
-                let shake_offset = camera_shake.get_offset(time.elapsed_secs());
+                let shake_offset = res.camera_shake.get_offset(res.time.elapsed_secs());
                 camera_transform.translation = eye_pos + shake_offset;
 
                 // 注視方向：車輛前方 + 玩家相對 yaw/pitch 偏移
-                let interior_yaw = camera_settings.vehicle_interior_yaw;
-                let interior_pitch = camera_settings.vehicle_interior_pitch;
+                let interior_yaw = res.camera_settings.vehicle_interior_yaw;
+                let interior_pitch = res.camera_settings.vehicle_interior_pitch;
 
                 // 以車輛前方為基準旋轉
                 let local_look = Vec3::new(
@@ -250,14 +257,14 @@ pub fn camera_follow(
     }
 
     // ===== FPS 模式 =====
-    if camera_settings.view_mode == CameraViewMode::FirstPerson {
-        let yaw = camera_settings.yaw + recoil_state.current_offset.x;
-        let pitch = (camera_settings.pitch + recoil_state.current_offset.y)
+    if res.camera_settings.view_mode == CameraViewMode::FirstPerson {
+        let yaw = res.camera_settings.yaw + res.recoil_state.current_offset.x;
+        let pitch = (res.camera_settings.pitch + res.recoil_state.current_offset.y)
             .clamp(PITCH_MIN, PITCH_MAX_WITH_RECOIL);
 
         // 攝影機位於角色眼睛位置
-        let eye_pos = target_pos + Vec3::Y * camera_settings.fps_eye_height;
-        let shake_offset = camera_shake.get_offset(time.elapsed_secs());
+        let eye_pos = target_pos + Vec3::Y * res.camera_settings.fps_eye_height;
+        let shake_offset = res.camera_shake.get_offset(res.time.elapsed_secs());
 
         camera_transform.translation = eye_pos + shake_offset;
 
@@ -275,20 +282,20 @@ pub fn camera_follow(
     // ===== TPS 模式（以下為原有邏輯）=====
 
     // 應用後座力偏移到 yaw 和 pitch
-    let yaw = camera_settings.yaw + recoil_state.current_offset.x;
-    let base_pitch = camera_settings.pitch;
+    let yaw = res.camera_settings.yaw + res.recoil_state.current_offset.x;
+    let base_pitch = res.camera_settings.pitch;
 
     // 瞄準模式：拉近攝影機、過肩偏移
     // 瞄準時 pitch 由玩家滑鼠控制，非瞄準時使用預設值
-    let is_aiming = combat_state.is_aiming && !game_state.player_in_vehicle;
+    let is_aiming = res.combat_state.is_aiming && !res.game_state.player_in_vehicle;
     let (distance, pitch, shoulder_offset) = if is_aiming {
         (
-            camera_settings.aim_distance,
-            base_pitch + recoil_state.current_offset.y, // 後座力向上偏移
-            camera_settings.aim_shoulder_offset,
+            res.camera_settings.aim_distance,
+            base_pitch + res.recoil_state.current_offset.y, // 後座力向上偏移
+            res.camera_settings.aim_shoulder_offset,
         )
     } else {
-        (camera_settings.distance, base_pitch + recoil_state.current_offset.y * TPS_RECOIL_FACTOR, 0.0)
+        (res.camera_settings.distance, base_pitch + res.recoil_state.current_offset.y * TPS_RECOIL_FACTOR, 0.0)
     };
 
     // 限制後座力影響後的 pitch 範圍
@@ -306,13 +313,13 @@ pub fn camera_follow(
     let shoulder = right * shoulder_offset;
 
     // 攝影機震動偏移
-    let shake_offset = camera_shake.get_offset(time.elapsed_secs());
+    let shake_offset = res.camera_shake.get_offset(res.time.elapsed_secs());
 
     let desired_pos = target_pos + offset + shoulder + shake_offset;
 
     // 瞄準時使用更快的插值（更緊跟）
     let lerp_speed = if is_aiming { AIM_FOLLOW_LERP_SPEED } else { NORMAL_FOLLOW_LERP_SPEED };
-    camera_transform.translation = camera_transform.translation.lerp(desired_pos, lerp_speed * time.delta_secs());
+    camera_transform.translation = camera_transform.translation.lerp(desired_pos, lerp_speed * res.time.delta_secs());
 
     // 瞄準時看向角色前方（考慮 pitch 俯仰角）
     let look_target = if is_aiming {
@@ -325,7 +332,7 @@ pub fn camera_follow(
         let mut look = target_pos + Vec3::Y * AIM_LOOK_TARGET_Y_OFFSET + aim_forward * 10.0;
 
         // 鎖定目標時微調攝影機看向目標（混合追蹤感）
-        if let Some(locked_entity) = lock_on.locked_target {
+        if let Some(locked_entity) = res.lock_on.locked_target {
             if let Ok(locked_transform) = enemy_query.get(locked_entity) {
                 let locked_center = locked_transform.translation + Vec3::Y * LOCK_ON_Y_OFFSET;
                 look = look.lerp(locked_center, LOCK_ON_LOOK_BLEND);

@@ -83,6 +83,202 @@ fn spawn_vehicle_lights(
     spawn_vehicle_light(parent, meshes, taillight_mat, light_x, 0.1, tail_z);
 }
 
+/// 生成底盤 + 車艙 mesh
+fn spawn_vehicle_body(
+    parent: &mut ChildSpawnerCommands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    shared_mats: &VehicleMaterials,
+    chassis_size: Vec3,
+    vehicle_type: VehicleType,
+    color: Color,
+) {
+    // 底盤 (Chassis) - 下半部（附帶變形標記）
+    let body_mat = create_body_material(materials, color, 0.5);
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::from_size(chassis_size))),
+        MeshMaterial3d(body_mat),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        GlobalTransform::default(),
+        VehicleChassisMesh,
+        VehicleOriginalColor(color),
+    ));
+
+    // 車艙 (Cabin) - 上半部 (玻璃)
+    let cabin_size = match vehicle_type {
+        VehicleType::Bus => Vec3::new(2.7, 1.0, 7.5),
+        _ => Vec3::new(1.8, 0.5, 2.0),
+    };
+    let cabin_y = chassis_size.y / 2.0 + cabin_size.y / 2.0;
+    let cabin_z_offset = match vehicle_type {
+        VehicleType::Bus => 0.0,
+        _ => -0.2,
+    };
+
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::from_size(cabin_size))),
+        MeshMaterial3d(shared_mats.glass.clone()),
+        Transform::from_xyz(0.0, cabin_y, cabin_z_offset),
+        GlobalTransform::default(),
+        VehicleCabinMesh {
+            base_y: cabin_y,
+            base_z: cabin_z_offset,
+        },
+    ));
+}
+
+/// 生成 4 輪 mesh
+fn spawn_vehicle_wheels(
+    parent: &mut ChildSpawnerCommands,
+    meshes: &mut Assets<Mesh>,
+    shared_mats: &VehicleMaterials,
+    chassis_size: Vec3,
+    wheel_offset_z: f32,
+) {
+    let wheel_mesh = meshes.add(Cylinder::new(0.35, 0.3));
+    let wheel_y = -chassis_size.y / 2.0;
+    let wheel_x = chassis_size.x / 2.0;
+
+    let wheel_positions = [
+        Vec3::new(-wheel_x, wheel_y, -wheel_offset_z), // 左前
+        Vec3::new(wheel_x, wheel_y, -wheel_offset_z),  // 右前
+        Vec3::new(-wheel_x, wheel_y, wheel_offset_z),  // 左後
+        Vec3::new(wheel_x, wheel_y, wheel_offset_z),   // 右後
+    ];
+
+    for pos in wheel_positions {
+        parent.spawn((
+            Mesh3d(wheel_mesh.clone()),
+            MeshMaterial3d(shared_mats.wheel.clone()),
+            Transform::from_translation(pos)
+                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+            GlobalTransform::default(),
+        ));
+    }
+}
+
+/// 生成機車車身零件（踏板、車頭、座墊、車尾箱、把手、後照鏡）
+fn spawn_scooter_body_parts(
+    parent: &mut ChildSpawnerCommands,
+    meshes: &mut Assets<Mesh>,
+    shared_mats: &VehicleMaterials,
+    body_mat: Handle<StandardMaterial>,
+    body_width: f32,
+    body_length: f32,
+    seat_height: f32,
+) {
+    let black_mat = shared_mats.black_plastic.clone();
+
+    // 1. 踏板區 (腳踏平台)
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::new(body_width, 0.08, body_length * 0.5))),
+        MeshMaterial3d(black_mat.clone()),
+        Transform::from_xyz(0.0, -0.1, 0.0),
+        GlobalTransform::default(),
+    ));
+
+    // 2. 車頭斜面
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::new(body_width * 0.8, 0.4, 0.4))),
+        MeshMaterial3d(body_mat.clone()),
+        Transform::from_xyz(0.0, 0.15, -body_length / 2.0 + 0.2)
+            .with_rotation(Quat::from_rotation_x(-0.3)),
+        GlobalTransform::default(),
+    ));
+
+    // 3. 座墊
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::new(body_width * 0.7, 0.12, body_length * 0.45))),
+        MeshMaterial3d(black_mat.clone()),
+        Transform::from_xyz(0.0, seat_height * 0.45, body_length * 0.1),
+        GlobalTransform::default(),
+    ));
+
+    // 4. 車尾箱
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::new(body_width * 0.6, 0.25, 0.3))),
+        MeshMaterial3d(body_mat),
+        Transform::from_xyz(0.0, seat_height * 0.5, body_length / 2.0 - 0.15),
+        GlobalTransform::default(),
+    ));
+
+    // 5. 把手區
+    parent.spawn((
+        Mesh3d(meshes.add(Cylinder::new(0.02, body_width + 0.3))),
+        MeshMaterial3d(black_mat),
+        Transform::from_xyz(0.0, seat_height * 0.8, -body_length / 2.0 + 0.1)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+        GlobalTransform::default(),
+    ));
+
+    // 6. 後照鏡（左右）
+    for x_sign in [-1.0_f32, 1.0] {
+        parent.spawn((
+            Mesh3d(meshes.add(Cuboid::new(0.08, 0.05, 0.02))),
+            MeshMaterial3d(shared_mats.mirror.clone()),
+            Transform::from_xyz(
+                x_sign * (body_width / 2.0 + 0.2),
+                seat_height * 0.85,
+                -body_length / 2.0 + 0.15,
+            ),
+            GlobalTransform::default(),
+        ));
+    }
+}
+
+/// 生成機車輪子、燈光、擋泥板
+fn spawn_scooter_wheels_and_lights(
+    parent: &mut ChildSpawnerCommands,
+    meshes: &mut Assets<Mesh>,
+    shared_mats: &VehicleMaterials,
+    body_mat: Handle<StandardMaterial>,
+    body_length: f32,
+    seat_height: f32,
+) {
+    // 前輪
+    parent.spawn((
+        Mesh3d(meshes.add(Cylinder::new(0.25, 0.12))),
+        MeshMaterial3d(shared_mats.wheel.clone()),
+        Transform::from_xyz(0.0, -0.15, -body_length / 2.0 - 0.1)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+        GlobalTransform::default(),
+    ));
+
+    // 後輪
+    parent.spawn((
+        Mesh3d(meshes.add(Cylinder::new(0.25, 0.15))),
+        MeshMaterial3d(shared_mats.wheel.clone()),
+        Transform::from_xyz(0.0, -0.15, body_length / 2.0 - 0.1)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+        GlobalTransform::default(),
+    ));
+
+    // 頭燈
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.15, 0.1, 0.05))),
+        MeshMaterial3d(shared_mats.headlight.clone()),
+        Transform::from_xyz(0.0, 0.25, -body_length / 2.0 - 0.05),
+        GlobalTransform::default(),
+    ));
+
+    // 尾燈
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.2, 0.06, 0.03))),
+        MeshMaterial3d(shared_mats.taillight.clone()),
+        Transform::from_xyz(0.0, seat_height * 0.4, body_length / 2.0 + 0.02),
+        GlobalTransform::default(),
+    ));
+
+    // 前擋泥板
+    parent.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.12, 0.02, 0.3))),
+        MeshMaterial3d(body_mat),
+        Transform::from_xyz(0.0, 0.05, -body_length / 2.0 - 0.1)
+            .with_rotation(Quat::from_rotation_x(0.2)),
+        GlobalTransform::default(),
+    ));
+}
+
 /// 生成改裝配件（尾翼、底盤燈、側裙霓虹條）
 fn spawn_tuning_parts(
     parent: &mut ChildSpawnerCommands,
@@ -220,78 +416,9 @@ pub fn spawn_npc_vehicle(
                     VehicleVisualRoot,
                 ))
                 .with_children(|parent| {
-                    // === 視覺模型構建 ===
-
-                    // A. 底盤 (Chassis) - 下半部（附帶變形標記）
-                    let body_mat = create_body_material(materials, color, 0.5);
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::from_size(chassis_size))),
-                        MeshMaterial3d(body_mat),
-                        Transform::from_xyz(0.0, 0.0, 0.0),
-                        GlobalTransform::default(),
-                        VehicleChassisMesh,
-                        VehicleOriginalColor(color),
-                    ));
-
-                    // B. 車艙 (Cabin) - 上半部 (玻璃) - 使用共享材質
-                    let cabin_size = match vehicle_type {
-                        VehicleType::Bus => Vec3::new(2.7, 1.0, 7.5),
-                        _ => Vec3::new(1.8, 0.5, 2.0),
-                    };
-                    let cabin_y = chassis_size.y / 2.0 + cabin_size.y / 2.0;
-                    let cabin_z_offset = match vehicle_type {
-                        VehicleType::Bus => 0.0,
-                        _ => -0.2, // 轎車車艙偏後
-                    };
-
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::from_size(cabin_size))),
-                        MeshMaterial3d(shared_mats.glass.clone()),
-                        Transform::from_xyz(0.0, cabin_y, cabin_z_offset),
-                        GlobalTransform::default(),
-                        VehicleCabinMesh {
-                            base_y: cabin_y,
-                            base_z: cabin_z_offset,
-                        },
-                    ));
-
-                    // C. 輪子 (Wheels) - 4個 - 使用共享材質
-                    let wheel_mesh = meshes.add(Cylinder::new(0.35, 0.3));
-
-                    // 輪子位置 (左前, 右前, 左後, 右後)
-                    // Root Y 是底盤中心。假設底盤離地 0.4。輪子半徑 0.35。
-                    // 輪子中心 Y 應該是 -0.3 左右?
-                    let wheel_y = -chassis_size.y / 2.0;
-                    let wheel_x = chassis_size.x / 2.0;
-
-                    let wheel_positions = [
-                        Vec3::new(-wheel_x, wheel_y, -wheel_offset_z), // 左前 (Forward = -Z)
-                        Vec3::new(wheel_x, wheel_y, -wheel_offset_z),  // 右前
-                        Vec3::new(-wheel_x, wheel_y, wheel_offset_z),  // 左後
-                        Vec3::new(wheel_x, wheel_y, wheel_offset_z),   // 右後
-                    ];
-
-                    for pos in wheel_positions {
-                        parent.spawn((
-                            Mesh3d(wheel_mesh.clone()),
-                            MeshMaterial3d(shared_mats.wheel.clone()),
-                            // 圓柱體默認直立 (Y軸)，需要旋轉 90度躺下變成輪子 (Z軸轉90度)
-                            Transform::from_translation(pos)
-                                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-                            GlobalTransform::default(),
-                        ));
-                    }
-
-                    // D. 車燈 (Lights) - 使用輔助函數生成
-                    spawn_vehicle_lights(
-                        parent,
-                        meshes,
-                        shared_mats.headlight.clone(),
-                        shared_mats.taillight.clone(),
-                        chassis_size,
-                    );
-
-                    // === E. 酷炫改裝配件 (Tuning Parts) ===
+                    spawn_vehicle_body(parent, meshes, materials, shared_mats, chassis_size, vehicle_type, color);
+                    spawn_vehicle_wheels(parent, meshes, shared_mats, chassis_size, wheel_offset_z);
+                    spawn_vehicle_lights(parent, meshes, shared_mats.headlight.clone(), shared_mats.taillight.clone(), chassis_size);
                     if vehicle_type == VehicleType::Car || vehicle_type == VehicleType::Taxi {
                         spawn_tuning_parts(parent, meshes, materials, shared_mats, chassis_size, color);
                     }
@@ -488,17 +615,10 @@ pub fn spawn_scooter(
     // 機車尺寸
     let body_length = 1.6;
     let body_width = 0.5;
-    let body_height = 0.4;
     let seat_height = 0.8;
 
     // 車身材質（唯一需要按顏色創建的材質）
     let body_mat = create_body_material(materials, color, 0.6);
-
-    // 使用共享材質
-    let black_mat = shared_mats.black_plastic.clone();
-    let wheel_mat = shared_mats.wheel.clone();
-    let headlight_mat = shared_mats.headlight.clone();
-    let taillight_mat = shared_mats.taillight.clone();
 
     commands
         .spawn((
@@ -534,120 +654,8 @@ pub fn spawn_scooter(
                     VehicleVisualRoot,
                 ))
                 .with_children(|parent| {
-                    // === 車身本體 ===
-
-                    // 1. 踏板區 (腳踏平台)
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(body_width, 0.08, body_length * 0.5))),
-                        MeshMaterial3d(black_mat.clone()),
-                        Transform::from_xyz(0.0, -0.1, 0.0),
-                        GlobalTransform::default(),
-                    ));
-
-                    // 2. 車頭斜面
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(body_width * 0.8, body_height, 0.4))),
-                        MeshMaterial3d(body_mat.clone()),
-                        Transform::from_xyz(0.0, 0.15, -body_length / 2.0 + 0.2)
-                            .with_rotation(Quat::from_rotation_x(-0.3)),
-                        GlobalTransform::default(),
-                    ));
-
-                    // 3. 座墊
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(body_width * 0.7, 0.12, body_length * 0.45))),
-                        MeshMaterial3d(black_mat.clone()),
-                        Transform::from_xyz(0.0, seat_height * 0.45, body_length * 0.1),
-                        GlobalTransform::default(),
-                    ));
-
-                    // 4. 車尾箱 (後行李箱)
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(body_width * 0.6, 0.25, 0.3))),
-                        MeshMaterial3d(body_mat.clone()),
-                        Transform::from_xyz(0.0, seat_height * 0.5, body_length / 2.0 - 0.15),
-                        GlobalTransform::default(),
-                    ));
-
-                    // 5. 把手區
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cylinder::new(0.02, body_width + 0.3))),
-                        MeshMaterial3d(black_mat.clone()),
-                        Transform::from_xyz(0.0, seat_height * 0.8, -body_length / 2.0 + 0.1)
-                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-                        GlobalTransform::default(),
-                    ));
-
-                    // 6. 後照鏡（左右）- 使用共享材質
-                    // 左鏡
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.08, 0.05, 0.02))),
-                        MeshMaterial3d(shared_mats.mirror.clone()),
-                        Transform::from_xyz(
-                            -body_width / 2.0 - 0.2,
-                            seat_height * 0.85,
-                            -body_length / 2.0 + 0.15,
-                        ),
-                        GlobalTransform::default(),
-                    ));
-                    // 右鏡
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.08, 0.05, 0.02))),
-                        MeshMaterial3d(shared_mats.mirror.clone()),
-                        Transform::from_xyz(
-                            body_width / 2.0 + 0.2,
-                            seat_height * 0.85,
-                            -body_length / 2.0 + 0.15,
-                        ),
-                        GlobalTransform::default(),
-                    ));
-
-                    // === 輪子 ===
-
-                    // 前輪
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cylinder::new(0.25, 0.12))),
-                        MeshMaterial3d(wheel_mat.clone()),
-                        Transform::from_xyz(0.0, -0.15, -body_length / 2.0 - 0.1)
-                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-                        GlobalTransform::default(),
-                    ));
-
-                    // 後輪
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cylinder::new(0.25, 0.15))),
-                        MeshMaterial3d(wheel_mat),
-                        Transform::from_xyz(0.0, -0.15, body_length / 2.0 - 0.1)
-                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-                        GlobalTransform::default(),
-                    ));
-
-                    // === 燈光 ===
-
-                    // 頭燈
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.15, 0.1, 0.05))),
-                        MeshMaterial3d(headlight_mat),
-                        Transform::from_xyz(0.0, 0.25, -body_length / 2.0 - 0.05),
-                        GlobalTransform::default(),
-                    ));
-
-                    // 尾燈
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.2, 0.06, 0.03))),
-                        MeshMaterial3d(taillight_mat),
-                        Transform::from_xyz(0.0, seat_height * 0.4, body_length / 2.0 + 0.02),
-                        GlobalTransform::default(),
-                    ));
-
-                    // === 前擋泥板 ===
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.12, 0.02, 0.3))),
-                        MeshMaterial3d(body_mat),
-                        Transform::from_xyz(0.0, 0.05, -body_length / 2.0 - 0.1)
-                            .with_rotation(Quat::from_rotation_x(0.2)),
-                        GlobalTransform::default(),
-                    ));
+                    spawn_scooter_body_parts(parent, meshes, shared_mats, body_mat.clone(), body_width, body_length, seat_height);
+                    spawn_scooter_wheels_and_lights(parent, meshes, shared_mats, body_mat, body_length, seat_height);
                 });
         });
 

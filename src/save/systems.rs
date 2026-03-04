@@ -210,6 +210,130 @@ async fn perform_save_async(json: String, path: PathBuf) -> Result<PathBuf, Save
     Ok(path)
 }
 
+/// 收集玩家位置、血量、護甲、車內狀態、錢包、武器
+fn collect_player_save_data(
+    save_data: &mut SaveData,
+    player_query: &Query<(&Transform, &Player, Option<&Health>, Option<&Armor>)>,
+    wallet: &PlayerWallet,
+    weapon_query: &Query<&WeaponInventory, With<Player>>,
+    respect: &RespectManager,
+    game_state: &GameState,
+    vehicle_mod_query: &Query<(Entity, &VehicleId, &VehicleModifications)>,
+) {
+    if let Ok((transform, _player, health, armor)) = player_query.single() {
+        let pos = transform.translation;
+        save_data.player.position = [pos.x, pos.y, pos.z];
+        save_data.player.rotation_y = transform.rotation.to_euler(EulerRot::YXZ).0;
+        if let Some(h) = health {
+            save_data.player.health = h.current;
+            save_data.player.max_health = h.max;
+        }
+        if let Some(a) = armor {
+            save_data.player.armor = a.current;
+        }
+    }
+
+    // 車內狀態
+    save_data.player.current_vehicle_id = game_state.current_vehicle.and_then(|entity| {
+        vehicle_mod_query
+            .iter()
+            .find(|(e, _, _)| *e == entity)
+            .map(|(_, vid, _)| vid.as_u64())
+    });
+    save_data.player.in_vehicle =
+        game_state.player_in_vehicle && save_data.player.current_vehicle_id.is_some();
+
+    // 錢包
+    save_data.player.cash = wallet.cash;
+    save_data.player.bank = wallet.bank;
+    save_data.player.respect = respect.respect;
+    save_data.stats.total_money_earned = wallet.total_earned;
+    save_data.stats.total_money_spent = wallet.total_spent;
+
+    // 武器
+    if let Ok(inventory) = weapon_query.single() {
+        save_data.player.weapons = inventory
+            .weapons
+            .iter()
+            .map(|w| WeaponSaveData {
+                weapon_type: w.stats.weapon_type,
+                current_ammo: w.current_ammo,
+                reserve_ammo: w.reserve_ammo,
+            })
+            .collect();
+        save_data.player.current_weapon_index = inventory.current_index;
+    }
+}
+
+/// 收集任務進度、解鎖、NPC 關係
+fn collect_mission_save_data(
+    save_data: &mut SaveData,
+    story_manager: &StoryMissionManager,
+    unlocks: &UnlockManager,
+    relationship: &RelationshipManager,
+) {
+    save_data.missions.completed_missions = story_manager
+        .get_completed_missions()
+        .iter()
+        .map(|id| format!("{:?}", id))
+        .collect();
+    save_data.missions.mission_states = story_manager.mission_states.clone();
+    save_data.missions.current_chapter = story_manager.current_chapter;
+    save_data.missions.best_ratings = story_manager.mission_ratings.clone();
+    save_data.play_time_secs = story_manager.total_play_time as f64;
+
+    save_data.missions.unlocked_items = unlocks.unlocked_items.iter().cloned().collect();
+    save_data.missions.unlocked_areas = unlocks
+        .unlocked_areas
+        .iter()
+        .map(|id| id.to_string())
+        .collect();
+    save_data.missions.npc_relationships = relationship
+        .relationships
+        .iter()
+        .map(|(k, v)| (format!("{}", k), *v))
+        .collect();
+    save_data.missions.flags = story_manager
+        .story_flags
+        .iter()
+        .map(|(k, v)| (k.clone(), *v))
+        .collect();
+}
+
+/// 收集世界時間、天氣、車輛改裝、破壞物件
+fn collect_world_save_data(
+    save_data: &mut SaveData,
+    world_time: &WorldTime,
+    weather_state: &WeatherState,
+    vehicle_mod_query: &Query<(Entity, &VehicleId, &VehicleModifications)>,
+    destroyed_tracker: &DestroyedObjectTracker,
+) {
+    save_data.world.world_hour = world_time.hour;
+    save_data.world.weather = weather_state.weather_type;
+    save_data.world.weather_intensity = weather_state.intensity;
+
+    #[allow(deprecated)]
+    {
+        save_data.world.vehicle_modifications = vehicle_mod_query
+            .iter()
+            .map(|(_entity, vehicle_id, mods)| VehicleModificationSaveData {
+                vehicle_id: vehicle_id.as_u64(),
+                vehicle_index: 0,
+                engine_level: mod_level_to_u8(mods.engine),
+                transmission_level: mod_level_to_u8(mods.transmission),
+                suspension_level: mod_level_to_u8(mods.suspension),
+                brakes_level: mod_level_to_u8(mods.brakes),
+                tires_level: mod_level_to_u8(mods.tires),
+                armor_level: mod_level_to_u8(mods.armor),
+                has_nitro: mods.has_nitro,
+                nitro_charge: mods.nitro_charge,
+            })
+            .collect();
+    }
+
+    save_data.world.destroyed_object_ids = destroyed_tracker.destroyed_list();
+}
+
 /// 收集存檔資料
 fn collect_save_data(
     player_query: &Query<(&Transform, &Player, Option<&Health>, Option<&Armor>)>,
@@ -234,110 +358,9 @@ fn collect_save_data(
         ..SaveData::default()
     };
 
-    // 玩家資料
-    if let Ok((transform, _player, health, armor)) = player_query.single() {
-        let pos = transform.translation;
-        save_data.player.position = [pos.x, pos.y, pos.z];
-        save_data.player.rotation_y = transform.rotation.to_euler(EulerRot::YXZ).0;
-
-        if let Some(h) = health {
-            save_data.player.health = h.current;
-            save_data.player.max_health = h.max;
-        }
-        if let Some(a) = armor {
-            save_data.player.armor = a.current;
-        }
-    }
-
-    // 車內狀態
-    save_data.player.current_vehicle_id = game_state.current_vehicle.and_then(|entity| {
-        vehicle_mod_query
-            .iter()
-            .find(|(e, _, _)| *e == entity)
-            .map(|(_, vid, _)| vid.as_u64())
-    });
-    // 確保 in_vehicle 和 current_vehicle_id 一致
-    save_data.player.in_vehicle =
-        game_state.player_in_vehicle && save_data.player.current_vehicle_id.is_some();
-
-    // 錢包資料
-    save_data.player.cash = wallet.cash;
-    save_data.player.bank = wallet.bank;
-    save_data.player.respect = respect.respect;
-    save_data.stats.total_money_earned = wallet.total_earned;
-    save_data.stats.total_money_spent = wallet.total_spent;
-
-    // 武器資料
-    if let Ok(inventory) = weapon_query.single() {
-        save_data.player.weapons = inventory
-            .weapons
-            .iter()
-            .map(|w| WeaponSaveData {
-                weapon_type: w.stats.weapon_type,
-                current_ammo: w.current_ammo,
-                reserve_ammo: w.reserve_ammo,
-            })
-            .collect();
-        save_data.player.current_weapon_index = inventory.current_index;
-    }
-
-    // 世界資料
-    save_data.world.world_hour = world_time.hour;
-    save_data.world.weather = weather_state.weather_type;
-    save_data.world.weather_intensity = weather_state.intensity;
-
-    // 任務資料
-    // v1 格式（向後相容）
-    save_data.missions.completed_missions = story_manager
-        .get_completed_missions()
-        .iter()
-        .map(|id| format!("{:?}", id))
-        .collect();
-    // v2 格式（完整 round-trip）
-    save_data.missions.mission_states = story_manager.mission_states.clone();
-    save_data.missions.current_chapter = story_manager.current_chapter;
-    save_data.missions.best_ratings = story_manager.mission_ratings.clone();
-    save_data.play_time_secs = story_manager.total_play_time as f64;
-
-    save_data.missions.unlocked_items = unlocks.unlocked_items.iter().cloned().collect();
-    save_data.missions.unlocked_areas = unlocks
-        .unlocked_areas
-        .iter()
-        .map(|id| id.to_string())
-        .collect();
-    save_data.missions.npc_relationships = relationship
-        .relationships
-        .iter()
-        .map(|(k, v)| (format!("{}", k), *v))
-        .collect();
-    save_data.missions.flags = story_manager
-        .story_flags
-        .iter()
-        .map(|(k, v)| (k.clone(), *v))
-        .collect();
-
-    // 車輛改裝資料（使用穩定 VehicleId）
-    #[allow(deprecated)] // vehicle_index 已棄用
-    {
-        save_data.world.vehicle_modifications = vehicle_mod_query
-            .iter()
-            .map(|(_entity, vehicle_id, mods)| VehicleModificationSaveData {
-                vehicle_id: vehicle_id.as_u64(),
-                vehicle_index: 0, // 已棄用，保留向後相容
-                engine_level: mod_level_to_u8(mods.engine),
-                transmission_level: mod_level_to_u8(mods.transmission),
-                suspension_level: mod_level_to_u8(mods.suspension),
-                brakes_level: mod_level_to_u8(mods.brakes),
-                tires_level: mod_level_to_u8(mods.tires),
-                armor_level: mod_level_to_u8(mods.armor),
-                has_nitro: mods.has_nitro,
-                nitro_charge: mods.nitro_charge,
-            })
-            .collect();
-    }
-
-    // 破壞持久化資料
-    save_data.world.destroyed_object_ids = destroyed_tracker.destroyed_list();
+    collect_player_save_data(&mut save_data, player_query, wallet, weapon_query, respect, game_state, vehicle_mod_query);
+    collect_mission_save_data(&mut save_data, story_manager, unlocks, relationship);
+    collect_world_save_data(&mut save_data, world_time, weather_state, vehicle_mod_query, destroyed_tracker);
 
     save_data
 }

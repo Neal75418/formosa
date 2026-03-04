@@ -10,7 +10,22 @@ use crate::combat::{Health, RespawnState};
 use crate::core::{ease_in_quad, ease_out_quad, AppState, CameraSettings, GameState};
 use crate::economy::PlayerWallet;
 
+use bevy::ecs::system::SystemParam;
+
 use super::{CharacterId, CharacterManager, Player, PlayerSkills, VehicleTransitionState};
+
+/// 角色切換動畫所需的資源參數包
+#[derive(SystemParam)]
+pub struct CharacterSwitchResources<'w> {
+    pub time: Res<'w, Time>,
+    pub anim: ResMut<'w, CharacterSwitchAnimation>,
+    pub manager: ResMut<'w, CharacterManager>,
+    pub camera_settings: ResMut<'w, CameraSettings>,
+    pub skills: ResMut<'w, PlayerSkills>,
+    pub wallet: ResMut<'w, PlayerWallet>,
+    pub respawn_state: Res<'w, RespawnState>,
+    pub vehicle_transition: Res<'w, VehicleTransitionState>,
+}
 
 // ============================================================================
 // 常數
@@ -162,68 +177,60 @@ pub fn character_switch_input_system(
 ///
 /// 動畫期間直接控制攝影機 Transform，覆蓋正常的 camera_follow。
 /// 在 Hold→ZoomIn 過渡時執行角色資料保存與傳送。
-#[allow(clippy::too_many_arguments)]
 pub fn character_switch_camera_system(
-    time: Res<Time>,
-    mut anim: ResMut<CharacterSwitchAnimation>,
-    mut manager: ResMut<CharacterManager>,
-    mut camera_settings: ResMut<CameraSettings>,
+    mut res: CharacterSwitchResources,
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
     mut player_query: Query<&mut Transform, (With<Player>, Without<GameCamera>)>,
     mut health_query: Query<&mut Health, With<Player>>,
-    mut skills: ResMut<PlayerSkills>,
-    mut wallet: ResMut<PlayerWallet>,
-    respawn_state: Res<RespawnState>,
-    vehicle_transition: Res<VehicleTransitionState>,
 ) {
-    if !anim.is_active() {
+    if !res.anim.is_active() {
         return;
     }
 
     // 緊急中斷：玩家死亡或載具動畫衝突
-    if respawn_state.is_dead || vehicle_transition.is_animating() {
+    if res.respawn_state.is_dead || res.vehicle_transition.is_animating() {
         warn!("🛰️ 角色切換動畫被中斷");
-        camera_settings.distance = anim.original_distance;
-        camera_settings.pitch = anim.original_pitch;
-        anim.reset();
+        res.camera_settings.distance = res.anim.original_distance;
+        res.camera_settings.pitch = res.anim.original_pitch;
+        res.anim.reset();
         return;
     }
 
-    let dt = time.delta_secs();
-    anim.elapsed += dt;
+    let dt = res.time.delta_secs();
+    res.anim.elapsed += dt;
 
     // 階段轉換
-    match anim.phase {
+    match res.anim.phase {
         SwitchPhase::ZoomOut => {
-            if anim.elapsed >= ZOOM_OUT_DURATION {
-                anim.phase = SwitchPhase::Hold;
+            if res.anim.elapsed >= ZOOM_OUT_DURATION {
+                res.anim.phase = SwitchPhase::Hold;
             }
         }
         SwitchPhase::Hold => {
-            if anim.elapsed >= ZOOM_IN_START {
-                anim.phase = SwitchPhase::ZoomIn;
+            if res.anim.elapsed >= ZOOM_IN_START {
+                res.anim.phase = SwitchPhase::ZoomIn;
             }
         }
         SwitchPhase::ZoomIn => {
             // 在 ZoomIn 開始時執行傳送（僅一次）
-            if !anim.teleported {
-                anim.teleported = true;
+            if !res.anim.teleported {
+                res.anim.teleported = true;
                 teleport_to_target(
-                    &mut anim,
-                    &mut manager,
+                    &mut res.anim,
+                    &mut res.manager,
                     &mut player_query,
                     &mut health_query,
-                    &mut skills,
-                    &mut wallet,
+                    &mut res.skills,
+                    &mut res.wallet,
                 );
             }
 
-            if anim.elapsed >= TOTAL_DURATION {
+            if res.anim.elapsed >= TOTAL_DURATION {
                 // 動畫結束，恢復攝影機參數
-                camera_settings.distance = anim.original_distance;
-                camera_settings.pitch = anim.original_pitch;
+                res.camera_settings.distance = res.anim.original_distance;
+                res.camera_settings.pitch = res.anim.original_pitch;
                 info!("🛰️ 角色切換動畫結束");
-                anim.reset();
+                res.anim.reset();
                 return;
             }
         }
@@ -231,32 +238,32 @@ pub fn character_switch_camera_system(
     }
 
     // 計算當前插值參數
-    let (current_distance, current_pitch, look_target) = match anim.phase {
+    let (current_distance, current_pitch, look_target) = match res.anim.phase {
         SwitchPhase::ZoomOut => {
-            let t = (anim.elapsed / ZOOM_OUT_DURATION).min(1.0);
+            let t = (res.anim.elapsed / ZOOM_OUT_DURATION).min(1.0);
             let eased = ease_out_quad(t);
-            let dist = anim.original_distance
-                + (SATELLITE_DISTANCE - anim.original_distance) * eased;
-            let pitch = anim.original_pitch
-                + (SATELLITE_PITCH - anim.original_pitch) * eased;
-            (dist, pitch, anim.origin_position)
+            let dist = res.anim.original_distance
+                + (SATELLITE_DISTANCE - res.anim.original_distance) * eased;
+            let pitch = res.anim.original_pitch
+                + (SATELLITE_PITCH - res.anim.original_pitch) * eased;
+            (dist, pitch, res.anim.origin_position)
         }
         SwitchPhase::Hold => {
             // 衛星視角，注視點從原位滑行至目標位置
-            let hold_elapsed = anim.elapsed - ZOOM_OUT_DURATION;
+            let hold_elapsed = res.anim.elapsed - ZOOM_OUT_DURATION;
             let t = (hold_elapsed / HOLD_DURATION).min(1.0);
-            let look = anim.origin_position.lerp(anim.target_position, t);
+            let look = res.anim.origin_position.lerp(res.anim.target_position, t);
             (SATELLITE_DISTANCE, SATELLITE_PITCH, look)
         }
         SwitchPhase::ZoomIn => {
-            let zoom_elapsed = anim.elapsed - ZOOM_IN_START;
+            let zoom_elapsed = res.anim.elapsed - ZOOM_IN_START;
             let t = (zoom_elapsed / ZOOM_IN_DURATION).min(1.0);
             let eased = ease_in_quad(t);
             let dist = SATELLITE_DISTANCE
-                + (anim.original_distance - SATELLITE_DISTANCE) * eased;
+                + (res.anim.original_distance - SATELLITE_DISTANCE) * eased;
             let pitch = SATELLITE_PITCH
-                + (anim.original_pitch - SATELLITE_PITCH) * eased;
-            (dist, pitch, anim.target_position)
+                + (res.anim.original_pitch - SATELLITE_PITCH) * eased;
+            (dist, pitch, res.anim.target_position)
         }
         SwitchPhase::Inactive => unreachable!(),
     };
@@ -266,7 +273,7 @@ pub fn character_switch_camera_system(
         return;
     };
 
-    let yaw = camera_settings.yaw;
+    let yaw = res.camera_settings.yaw;
     let offset = Vec3::new(
         current_distance * current_pitch.cos() * yaw.sin(),
         current_distance * current_pitch.sin(),

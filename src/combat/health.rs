@@ -1,7 +1,5 @@
 //! 生命值與護甲系統
 
-// 功能模組已實現但尚未完全整合到遊戲玩法中
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 
@@ -18,7 +16,9 @@ pub struct Damageable;
 pub struct Health {
     pub current: f32,
     pub max: f32,
+    #[allow(dead_code)]
     pub regeneration: f32,     // 每秒回復量
+    #[allow(dead_code)]
     pub regen_delay: f32,      // 受傷後多久開始回復
     pub last_damage_time: f32, // 上次受傷時間
 }
@@ -46,6 +46,7 @@ impl Health {
     }
 
     /// 設定自動回復
+    #[allow(dead_code)]
     pub fn with_regen(mut self, regen_per_sec: f32, delay: f32) -> Self {
         self.regeneration = regen_per_sec;
         self.regen_delay = delay;
@@ -58,6 +59,7 @@ impl Health {
     }
 
     /// 是否滿血
+    #[allow(dead_code)]
     pub fn is_full(&self) -> bool {
         self.current >= self.max
     }
@@ -104,6 +106,7 @@ impl Default for Armor {
 
 impl Armor {
     /// 建立新實例
+    #[allow(dead_code)]
     pub fn new(amount: f32) -> Self {
         Self {
             current: amount,
@@ -113,6 +116,7 @@ impl Armor {
     }
 
     /// 計算百分比
+    #[allow(dead_code)]
     pub fn percentage(&self) -> f32 {
         (self.current / self.max).clamp(0.0, 1.0)
     }
@@ -134,13 +138,16 @@ impl Armor {
     }
 
     /// 是否破碎
+    #[allow(dead_code)]
     pub fn is_broken(&self) -> bool {
         self.current <= 0.0
     }
 
+    #[allow(dead_code)]
     const SIGNIFICANT_HIT_THRESHOLD: f32 = 15.0;
 
     /// 是否受到重大打擊
+    #[allow(dead_code)]
     pub fn took_significant_hit(&self, damage: f32) -> bool {
         damage >= Self::SIGNIFICANT_HIT_THRESHOLD && self.current > 0.0
     }
@@ -165,6 +172,7 @@ pub enum DamageSource {
     Explosion,               // 爆炸
     Melee,                   // 近戰
     Vehicle,                 // 車輛撞擊
+    #[allow(dead_code)]
     Fall,                    // 墜落
     Fire,                    // 火焰
     Environment,             // 環境傷害
@@ -243,6 +251,7 @@ pub struct DeathEvent {
 /// 護甲破碎事件
 #[derive(Message, Clone, Debug)]
 pub struct ArmorBreakEvent {
+    #[allow(dead_code)]
     pub entity: Entity,
     /// 破碎位置
     pub position: Vec3,

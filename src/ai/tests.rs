@@ -1,7 +1,7 @@
 //! AI 系統單元測試
 
-use super::*;
 use super::decision::*;
+use super::*;
 use bevy::prelude::*;
 
 // ============================================================================
@@ -21,7 +21,10 @@ fn test_ai_behavior_default() {
 
 #[test]
 fn test_ai_behavior_set_state() {
-    let mut behavior = AiBehavior { state_timer: 5.0, ..AiBehavior::default() };
+    let mut behavior = AiBehavior {
+        state_timer: 5.0,
+        ..AiBehavior::default()
+    };
 
     behavior.set_state(AiState::Chase, 10.0);
     assert_eq!(behavior.state, AiState::Chase);
@@ -31,7 +34,10 @@ fn test_ai_behavior_set_state() {
 
 #[test]
 fn test_ai_behavior_set_state_same_state_no_reset() {
-    let mut behavior = AiBehavior { state_timer: 5.0, ..AiBehavior::default() };
+    let mut behavior = AiBehavior {
+        state_timer: 5.0,
+        ..AiBehavior::default()
+    };
 
     behavior.set_state(AiState::Idle, 10.0); // 同狀態
     assert_eq!(behavior.state_timer, 5.0); // 不重置
@@ -73,7 +79,10 @@ fn test_ai_behavior_see_target() {
 
 #[test]
 fn test_ai_behavior_lose_target() {
-    let mut behavior = AiBehavior { last_seen_time: 1.0, ..AiBehavior::default() };
+    let mut behavior = AiBehavior {
+        last_seen_time: 1.0,
+        ..AiBehavior::default()
+    };
 
     assert!(!behavior.lose_target(3.0, 5.0)); // 2s < 5s timeout
     assert!(behavior.lose_target(7.0, 5.0)); // 6s > 5s timeout
@@ -95,7 +104,14 @@ fn test_handle_idle_to_chase_on_sight() {
     let mut behavior = AiBehavior::default();
     let mut movement = AiMovement::default();
 
-    handle_idle_state(&config, &perception, &mut behavior, &mut movement, false, 1.0);
+    handle_idle_state(
+        &config,
+        &perception,
+        &mut behavior,
+        &mut movement,
+        false,
+        1.0,
+    );
 
     assert_eq!(behavior.state, AiState::Chase);
     assert!(movement.is_running);
@@ -114,7 +130,14 @@ fn test_handle_idle_to_alert_on_noise() {
     let mut behavior = AiBehavior::default();
     let mut movement = AiMovement::default();
 
-    handle_idle_state(&config, &perception, &mut behavior, &mut movement, false, 1.0);
+    handle_idle_state(
+        &config,
+        &perception,
+        &mut behavior,
+        &mut movement,
+        false,
+        1.0,
+    );
 
     assert_eq!(behavior.state, AiState::Alert);
     assert_eq!(movement.move_target, Some(noise_pos));
@@ -124,10 +147,20 @@ fn test_handle_idle_to_alert_on_noise() {
 fn test_handle_idle_to_patrol_after_threshold() {
     let config = AiConfig::default();
     let perception = AiPerception::default();
-    let mut behavior = AiBehavior { state_timer: config.patrol_idle_threshold + 1.0, ..AiBehavior::default() }; // 超過閾值
+    let mut behavior = AiBehavior {
+        state_timer: config.patrol_idle_threshold + 1.0,
+        ..AiBehavior::default()
+    }; // 超過閾值
     let mut movement = AiMovement::default();
 
-    handle_idle_state(&config, &perception, &mut behavior, &mut movement, true, 1.0);
+    handle_idle_state(
+        &config,
+        &perception,
+        &mut behavior,
+        &mut movement,
+        true,
+        1.0,
+    );
 
     assert_eq!(behavior.state, AiState::Patrol);
 }
@@ -136,10 +169,20 @@ fn test_handle_idle_to_patrol_after_threshold() {
 fn test_handle_idle_stays_idle_without_patrol() {
     let config = AiConfig::default();
     let perception = AiPerception::default();
-    let mut behavior = AiBehavior { state_timer: config.patrol_idle_threshold + 1.0, ..AiBehavior::default() };
+    let mut behavior = AiBehavior {
+        state_timer: config.patrol_idle_threshold + 1.0,
+        ..AiBehavior::default()
+    };
     let mut movement = AiMovement::default();
 
-    handle_idle_state(&config, &perception, &mut behavior, &mut movement, false, 1.0);
+    handle_idle_state(
+        &config,
+        &perception,
+        &mut behavior,
+        &mut movement,
+        false,
+        1.0,
+    );
 
     assert_eq!(behavior.state, AiState::Idle); // 沒有巡邏路徑，保持 Idle
 }
@@ -168,7 +211,14 @@ fn test_handle_alert_to_idle_on_timeout() {
     behavior.state_timer = config.alert_timeout + 1.0;
     let mut movement = AiMovement::default();
 
-    handle_alert_state(&config, &perception, &mut behavior, &mut movement, false, 10.0);
+    handle_alert_state(
+        &config,
+        &perception,
+        &mut behavior,
+        &mut movement,
+        false,
+        10.0,
+    );
 
     assert_eq!(behavior.state, AiState::Idle);
 }
@@ -182,7 +232,14 @@ fn test_handle_alert_to_patrol_on_timeout_with_patrol() {
     behavior.state_timer = config.alert_timeout + 1.0;
     let mut movement = AiMovement::default();
 
-    handle_alert_state(&config, &perception, &mut behavior, &mut movement, true, 10.0);
+    handle_alert_state(
+        &config,
+        &perception,
+        &mut behavior,
+        &mut movement,
+        true,
+        10.0,
+    );
 
     assert_eq!(behavior.state, AiState::Patrol);
 }
@@ -233,7 +290,11 @@ fn test_check_start_flee_ignores_above_threshold() {
 #[test]
 fn test_handle_fleeing_state_stops_when_far() {
     let config = AiConfig::default();
-    let mut behavior = AiBehavior { is_fleeing: true, last_known_target_pos: Some(Vec3::ZERO), ..AiBehavior::default() };
+    let mut behavior = AiBehavior {
+        is_fleeing: true,
+        last_known_target_pos: Some(Vec3::ZERO),
+        ..AiBehavior::default()
+    };
     let mut movement = AiMovement::default();
 
     // 遠離威脅超過 alert_distance (40m)
@@ -248,7 +309,11 @@ fn test_handle_fleeing_state_stops_when_far() {
 #[test]
 fn test_handle_fleeing_state_continues_when_close() {
     let config = AiConfig::default();
-    let mut behavior = AiBehavior { is_fleeing: true, last_known_target_pos: Some(Vec3::ZERO), ..AiBehavior::default() };
+    let mut behavior = AiBehavior {
+        is_fleeing: true,
+        last_known_target_pos: Some(Vec3::ZERO),
+        ..AiBehavior::default()
+    };
     let mut movement = AiMovement::default();
 
     // 離威脅還很近 (10m < 40m)
@@ -321,8 +386,13 @@ fn test_ai_combat_is_in_range() {
 #[test]
 fn test_ai_state_same_state_always_valid() {
     let states = [
-        AiState::Idle, AiState::Patrol, AiState::Alert,
-        AiState::Chase, AiState::Attack, AiState::Flee, AiState::TakingCover,
+        AiState::Idle,
+        AiState::Patrol,
+        AiState::Alert,
+        AiState::Chase,
+        AiState::Attack,
+        AiState::Flee,
+        AiState::TakingCover,
     ];
     for state in &states {
         assert!(state.can_transition_to(state));
@@ -377,7 +447,10 @@ fn test_is_unaware_idle() {
 
 #[test]
 fn test_is_unaware_patrol() {
-    let behavior = AiBehavior { state: AiState::Patrol, ..Default::default() };
+    let behavior = AiBehavior {
+        state: AiState::Patrol,
+        ..Default::default()
+    };
     assert!(behavior.is_unaware());
 }
 
@@ -390,7 +463,10 @@ fn test_is_not_unaware_when_alert_state() {
 
 #[test]
 fn test_is_not_unaware_when_high_awareness() {
-    let behavior = AiBehavior { awareness: AWARENESS_SUSPICIOUS + 0.1, ..Default::default() };
+    let behavior = AiBehavior {
+        awareness: AWARENESS_SUSPICIOUS + 0.1,
+        ..Default::default()
+    };
     assert!(!behavior.is_unaware());
 }
 

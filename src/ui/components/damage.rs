@@ -3,8 +3,8 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-use bevy::prelude::*;
 use crate::core::lifetime_fade_alpha;
+use bevy::prelude::*;
 
 // ============================================================================
 // 敵人 UI 組件
@@ -116,9 +116,9 @@ impl FloatingDamageNumber {
             damage,
             is_headshot,
             lifetime: 0.0,
-            max_lifetime: 1.2,  // 1.2 秒後消失
-            initial_scale: if is_headshot { 1.4 } else { 1.0 },  // 爆頭更大
-            float_speed: 2.0,  // 每秒上升 2 米
+            max_lifetime: 1.2,                                  // 1.2 秒後消失
+            initial_scale: if is_headshot { 1.4 } else { 1.0 }, // 爆頭更大
+            float_speed: 2.0,                                   // 每秒上升 2 米
             horizontal_offset: 0.0,
         }
     }
@@ -143,9 +143,9 @@ impl FloatingDamageNumber {
         };
         // 彈出效果：開始時放大，然後縮小
         if progress < 0.1 {
-            self.initial_scale * (1.0 + progress * 3.0)  // 快速放大
+            self.initial_scale * (1.0 + progress * 3.0) // 快速放大
         } else {
-            self.initial_scale * (1.3 - progress * 0.3)  // 緩慢縮小
+            self.initial_scale * (1.3 - progress * 0.3) // 緩慢縮小
         }
     }
 
@@ -171,7 +171,7 @@ impl FloatingDamageTracker {
     pub fn new() -> Self {
         Self {
             active_count: 0,
-            max_count: 15,  // 最多同時 15 個
+            max_count: 15, // 最多同時 15 個
             last_offset_direction: 1.0,
         }
     }
@@ -179,6 +179,6 @@ impl FloatingDamageTracker {
     /// 取得下一個偏移方向並切換
     pub fn next_offset(&mut self) -> f32 {
         self.last_offset_direction *= -1.0;
-        self.last_offset_direction * 0.3  // 左右偏移 0.3 米
+        self.last_offset_direction * 0.3 // 左右偏移 0.3 米
     }
 }

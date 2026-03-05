@@ -1,6 +1,5 @@
 //! 任務經濟獎勵系統
 
-
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 

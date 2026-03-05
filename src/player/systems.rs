@@ -1,8 +1,8 @@
 //! 玩家系統
 
 use super::character_switch_animation::CharacterSwitchAnimation;
-use super::PlayerConfig;
 use super::swimming::PlayerSwimming;
+use super::PlayerConfig;
 use super::{
     ClimbState, DodgeState, DoubleTapTracker, NoiseLevel, Player, PlayerSprintState, Stamina,
     StealthState, VehicleTransitionState,
@@ -60,7 +60,8 @@ pub fn player_input(
 
     if let Ok(mut player) = query.single_mut() {
         // Ctrl 切換蹲伏
-        if keyboard.just_pressed(KeyCode::ControlLeft) || keyboard.just_pressed(KeyCode::ControlRight)
+        if keyboard.just_pressed(KeyCode::ControlLeft)
+            || keyboard.just_pressed(KeyCode::ControlRight)
         {
             player.is_crouching = !player.is_crouching;
         }
@@ -75,10 +76,7 @@ pub fn player_input(
 }
 
 /// 體力系統（衝刺消耗、步行恢復、耗盡強制步行）
-pub fn stamina_system(
-    time: Res<Time>,
-    mut query: Query<(&mut Stamina, &mut Player)>,
-) {
+pub fn stamina_system(time: Res<Time>, mut query: Query<(&mut Stamina, &mut Player)>) {
     let dt = time.delta_secs();
     for (mut stamina, mut player) in &mut query {
         if player.is_sprinting && player.current_speed > player.speed * 0.5 {
@@ -197,7 +195,10 @@ pub fn player_movement(
     )>,
     swimming_check: Query<(), (With<Player>, With<PlayerSwimming>)>,
 ) {
-    if state.switch_anim.is_active() || state.respawn_state.is_dead || state.game_state.player_in_vehicle {
+    if state.switch_anim.is_active()
+        || state.respawn_state.is_dead
+        || state.game_state.player_in_vehicle
+    {
         return;
     }
 
@@ -206,8 +207,15 @@ pub fn player_movement(
         return;
     }
 
-    let Ok((mut transform, mut player, dodge, cover_state, climb_state, mut controller, mut sprint_state)) =
-        query.single_mut()
+    let Ok((
+        mut transform,
+        mut player,
+        dodge,
+        cover_state,
+        climb_state,
+        mut controller,
+        mut sprint_state,
+    )) = query.single_mut()
     else {
         return;
     };
@@ -277,7 +285,8 @@ pub fn player_movement(
     // === 動態轉向速度：高速時轉向較慢（更真實） ===
     let speed_ratio = (player.current_speed / player.sprint_speed).clamp(0.0, 1.0);
     let dynamic_rotation_speed = state.config.movement.turn_speed_walk
-        + (state.config.movement.turn_speed_sprint - state.config.movement.turn_speed_walk) * speed_ratio;
+        + (state.config.movement.turn_speed_sprint - state.config.movement.turn_speed_walk)
+            * speed_ratio;
 
     update_character_rotation(
         &mut transform,
@@ -290,7 +299,9 @@ pub fn player_movement(
     );
 
     // === 更新衝刺狀態機（用於動畫/音效系統） ===
-    sprint_state.state.update(player.current_speed, player.speed, player.sprint_speed, dt);
+    sprint_state
+        .state
+        .update(player.current_speed, player.speed, player.sprint_speed, dt);
 }
 
 /// 玩家跳躍
@@ -324,9 +335,7 @@ pub fn player_jump(
 
     let dt = time.delta_secs();
 
-    let output_grounded = controller_output
-        .map(|output| output.grounded)
-        .unwrap_or(player.is_grounded);
+    let output_grounded = controller_output.map_or(player.is_grounded, |output| output.grounded);
 
     if output_grounded && player.vertical_velocity <= 0.0 {
         player.is_grounded = true;
@@ -373,9 +382,23 @@ pub fn enter_exit_vehicle(
     };
 
     if game_state.player_in_vehicle {
-        try_exit_vehicle(&game_state, &mut transition, &mut interaction, &vehicle_query, &rapier_context, &config);
+        try_exit_vehicle(
+            &game_state,
+            &mut transition,
+            &mut interaction,
+            &vehicle_query,
+            &rapier_context,
+            &config,
+        );
     } else {
-        try_enter_vehicle(&mut transition, &mut interaction, player_transform, &vehicle_query, &rapier_context, &config);
+        try_enter_vehicle(
+            &mut transition,
+            &mut interaction,
+            player_transform,
+            &vehicle_query,
+            &rapier_context,
+            &config,
+        );
     }
 }
 
@@ -399,8 +422,8 @@ fn try_exit_vehicle(
 
     let right = vehicle_transform.right();
     let left = -right;
-    let origin = vehicle_transform.translation
-        + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
+    let origin =
+        vehicle_transform.translation + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
     let filter = QueryFilter::new().exclude_rigid_body(vehicle_entity);
 
     let (exit_dir, from_right) = if rapier_ctx
@@ -637,13 +660,12 @@ pub fn stealth_noise_system(
     let current_time = time.elapsed_secs();
 
     // 射擊產生最大噪音
-    let recently_fired =
-        (current_time - combat_state.last_shot_time) < super::NOISE_DECAY_TIME;
+    let recently_fired = (current_time - combat_state.last_shot_time) < super::NOISE_DECAY_TIME;
 
     if recently_fired {
         stealth.noise_level = NoiseLevel::Max;
-        stealth.noise_decay_timer = super::NOISE_DECAY_TIME
-            - (current_time - combat_state.last_shot_time);
+        stealth.noise_decay_timer =
+            super::NOISE_DECAY_TIME - (current_time - combat_state.last_shot_time);
         return;
     }
 
@@ -671,4 +693,3 @@ pub fn stealth_noise_system(
         NoiseLevel::Silent
     };
 }
-

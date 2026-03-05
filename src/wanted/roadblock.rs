@@ -8,16 +8,17 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::player::Player;
-use crate::core::GameState;
-use crate::combat::{DamageEvent, DamageSource, Health, HitReaction};
 use crate::ai::AiMovement;
+use crate::combat::{DamageEvent, DamageSource, Health, HitReaction};
+use crate::core::GameState;
+use crate::player::Player;
 
+#[allow(clippy::wildcard_imports)]
 use super::components::*;
+#[allow(clippy::wildcard_imports)]
 use super::config::*;
 
 // ============================================================================
@@ -269,12 +270,19 @@ pub fn spawn_roadblock_system(
 
     info!(
         "生成路障 at ({:.1}, {:.1}) - 當前: {}/{}",
-        spawn_pos.x, spawn_pos.z,
-        current_count + 1, MAX_ROADBLOCKS
+        spawn_pos.x,
+        spawn_pos.z,
+        current_count + 1,
+        MAX_ROADBLOCKS
     );
 }
 
 /// 生成單個路障
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 fn spawn_roadblock(
     commands: &mut Commands,
     position: Vec3,
@@ -341,12 +349,18 @@ fn spawn_roadblock(
     }
 
     // 生成警察（5 星路障增加額外軍人）
-    let police_count = ROADBLOCK_POLICE_COUNT + (wanted_stars as u32 - 3);
+    let police_count = ROADBLOCK_POLICE_COUNT + (u32::from(wanted_stars) - 3);
     for i in 0..police_count {
         let offset = direction * ((i as f32 - police_count as f32 / 2.0) * 3.0);
         let police_pos = position - direction.cross(Vec3::Y).normalize() * 5.0 + offset;
 
-        let police = spawn_roadblock_police(commands, police_pos, direction, police_visuals, wanted_stars);
+        let police = spawn_roadblock_police(
+            commands,
+            police_pos,
+            direction,
+            police_visuals,
+            wanted_stars,
+        );
         police_officers.push(police);
     }
 
@@ -372,13 +386,29 @@ fn spawn_roadblock_police(
 ) -> Entity {
     let rotation = Quat::from_rotation_y((-facing_direction.x).atan2(-facing_direction.z));
     let is_military = wanted_stars >= MILITARY_STAR_THRESHOLD;
-    let officer_type = if is_military { PoliceType::Military } else { PoliceType::Patrol };
-    let health = if is_military { MILITARY_HEALTH } else { POLICE_OFFICER_HEALTH };
-    let run_speed = if is_military { MILITARY_RUN_SPEED } else { OFFICER_RUN_SPEED };
+    let officer_type = if is_military {
+        PoliceType::Military
+    } else {
+        PoliceType::Patrol
+    };
+    let health = if is_military {
+        MILITARY_HEALTH
+    } else {
+        POLICE_OFFICER_HEALTH
+    };
+    let run_speed = if is_military {
+        MILITARY_RUN_SPEED
+    } else {
+        OFFICER_RUN_SPEED
+    };
 
     let police_entity = commands
         .spawn((
-            Name::new(if is_military { "RoadblockMilitary" } else { "RoadblockPolice" }),
+            Name::new(if is_military {
+                "RoadblockMilitary"
+            } else {
+                "RoadblockPolice"
+            }),
             Transform::from_translation(position + Vec3::Y * 0.9).with_rotation(rotation),
             GlobalTransform::default(),
             Visibility::default(),

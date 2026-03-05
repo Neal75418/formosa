@@ -1,5 +1,13 @@
 //! A* 尋路網格建構與路徑跟隨
 
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::similar_names
+)]
+
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -7,9 +15,8 @@ use crate::pedestrian::behavior::{DailyBehavior, PointsOfInterest};
 use crate::pedestrian::components::{PedState, Pedestrian, PedestrianConfig, PedestrianState};
 use crate::pedestrian::pathfinding::{AStarPath, PathfindingGrid};
 use crate::world::{
-    X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA,
-    Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
-    W_ALLEY, W_MAIN, W_PEDESTRIAN, W_SECONDARY, W_ZHONGHUA,
+    W_ALLEY, W_MAIN, W_PEDESTRIAN, W_SECONDARY, W_ZHONGHUA, X_HAN, X_KANGDING, X_XINING,
+    X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
 };
 
 // ============================================================================
@@ -19,9 +26,13 @@ use crate::world::{
 /// 將矩形世界座標區域標記為可通行
 fn mark_rect_walkable(grid: &mut PathfindingGrid, x_min: f32, x_max: f32, z_min: f32, z_max: f32) {
     let gx_start = ((x_min - grid.origin.x) / grid.cell_size).floor().max(0.0) as usize;
-    let gx_end = ((x_max - grid.origin.x) / grid.cell_size).ceil().min(grid.width as f32) as usize;
+    let gx_end = ((x_max - grid.origin.x) / grid.cell_size)
+        .ceil()
+        .min(grid.width as f32) as usize;
     let gz_start = ((z_min - grid.origin.z) / grid.cell_size).floor().max(0.0) as usize;
-    let gz_end = ((z_max - grid.origin.z) / grid.cell_size).ceil().min(grid.height as f32) as usize;
+    let gz_end = ((z_max - grid.origin.z) / grid.cell_size)
+        .ceil()
+        .min(grid.height as f32) as usize;
 
     for gx in gx_start..gx_end {
         for gz in gz_start..gz_end {
@@ -48,7 +59,7 @@ fn mark_ew_road(grid: &mut PathfindingGrid, center_z: f32, road_width: f32) {
     mark_rect_walkable(grid, x_min, x_max, z_min, z_max);
 }
 
-/// 初始化 A* 尋路網格 — 使用 world::constants 道路常數動態生成
+/// 初始化 A* 尋路網格 — 使用 `world::constants` 道路常數動態生成
 pub fn setup_pathfinding_grid(mut commands: Commands) {
     // 網格覆蓋完整西門町地圖區域：
     // X: -110 to +102 (康定路西側 → 中華路東側)
@@ -67,17 +78,17 @@ pub fn setup_pathfinding_grid(mut commands: Commands) {
     };
 
     // --- 南北向道路（固定 X，沿 Z 軸延伸）---
-    mark_ns_road(&mut grid, X_ZHONGHUA, W_ZHONGHUA);  // 中華路
-    mark_ns_road(&mut grid, X_HAN, W_PEDESTRIAN);     // 漢中街（徒步區）
-    mark_ns_road(&mut grid, X_XINING, W_SECONDARY);   // 西寧南路
-    mark_ns_road(&mut grid, X_KANGDING, W_MAIN);      // 康定路
+    mark_ns_road(&mut grid, X_ZHONGHUA, W_ZHONGHUA); // 中華路
+    mark_ns_road(&mut grid, X_HAN, W_PEDESTRIAN); // 漢中街（徒步區）
+    mark_ns_road(&mut grid, X_XINING, W_SECONDARY); // 西寧南路
+    mark_ns_road(&mut grid, X_KANGDING, W_MAIN); // 康定路
 
     // --- 東西向道路（固定 Z，沿 X 軸延伸）---
-    mark_ew_road(&mut grid, Z_HANKOU, W_SECONDARY);   // 漢口街
+    mark_ew_road(&mut grid, Z_HANKOU, W_SECONDARY); // 漢口街
     mark_ew_road(&mut grid, Z_WUCHANG, W_PEDESTRIAN); // 武昌街
-    mark_ew_road(&mut grid, Z_KUNMING, W_ALLEY);      // 昆明街
-    mark_ew_road(&mut grid, Z_EMEI, W_PEDESTRIAN);    // 峨嵋街
-    mark_ew_road(&mut grid, Z_CHENGDU, W_MAIN);       // 成都路
+    mark_ew_road(&mut grid, Z_KUNMING, W_ALLEY); // 昆明街
+    mark_ew_road(&mut grid, Z_EMEI, W_PEDESTRIAN); // 峨嵋街
+    mark_ew_road(&mut grid, Z_CHENGDU, W_MAIN); // 成都路
 
     commands.insert_resource(grid);
     commands.insert_resource(PointsOfInterest::setup_ximending());
@@ -91,7 +102,7 @@ pub fn astar_path_calculation_system(
 ) {
     let dt = time.delta_secs();
 
-    for (transform, mut path) in ped_query.iter_mut() {
+    for (transform, mut path) in &mut ped_query {
         // 更新冷卻時間
         if path.recalc_cooldown > 0.0 {
             path.recalc_cooldown -= dt;
@@ -142,7 +153,7 @@ pub fn astar_movement_system(
 ) {
     let dt = time.delta_secs();
 
-    for (state, behavior, mut transform, mut path, mut controller) in ped_query.iter_mut() {
+    for (state, behavior, mut transform, mut path, mut controller) in &mut ped_query {
         // 逃跑時不使用 A* 路徑，改用逃離方向
         // （恐慌逃跑由 panic_flee_direction_system 處理，此處處理非恐慌逃跑如目擊犯罪）
         if state.state == PedState::Fleeing {
@@ -200,10 +211,9 @@ pub fn astar_movement_system(
         // 檢查是否到達當前路徑點
         let flat_dist = Vec3::new(target.x - current_pos.x, 0.0, target.z - current_pos.z).length();
 
-        if flat_dist < 1.5
-            && !path.advance() {
-                // 到達終點，標記需要新路徑
-                path.needs_recalc = true;
-            }
+        if flat_dist < 1.5 && !path.advance() {
+            // 到達終點，標記需要新路徑
+            path.needs_recalc = true;
+        }
     }
 }

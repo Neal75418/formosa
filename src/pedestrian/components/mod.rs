@@ -12,22 +12,18 @@
 
 // 完整行人系統組件定義，部分組件預留供未來關卡使用。
 
-mod core;
-mod witness;
-mod appearance;
-mod resources;
 mod animation;
+mod appearance;
 mod collision;
+mod core;
+mod resources;
+mod witness;
 
 // 重新導出所有公開項目
-pub use self::core::{Pedestrian, PedestrianType, PedestrianState, PedState};
-pub use witness::{WitnessState, WitnessedCrime, BRIBE_COST, BRIBE_DISTANCE, BRIBE_HEAT_REDUCTION};
-pub use resources::{
-    PedestrianConfig,
-    PedestrianPaths,
-    SidewalkPath,
-    GunshotTracker,
-    PedestrianVisuals,
-};
-pub use animation::{PedestrianLeg, PedestrianArm, WalkingAnimation};
+pub use self::core::{PedState, Pedestrian, PedestrianState, PedestrianType};
+pub use animation::{PedestrianArm, PedestrianLeg, WalkingAnimation};
 pub use collision::HitByVehicle;
+pub use resources::{
+    GunshotTracker, PedestrianConfig, PedestrianPaths, PedestrianVisuals, SidewalkPath,
+};
+pub use witness::{WitnessState, WitnessedCrime, BRIBE_COST, BRIBE_DISTANCE, BRIBE_HEAT_REDUCTION};

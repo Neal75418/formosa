@@ -1,6 +1,5 @@
 //! 武器系統（類型、屬性、彈藥、冷卻）
 
-
 /// 彈道視覺風格
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[allow(clippy::upper_case_acronyms)]
@@ -19,15 +18,17 @@ use bevy::prelude::*;
 // ============================================================================
 
 /// 武器類型
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum WeaponType {
     #[default]
     Fist, // 拳頭（近戰）
-    Staff,   // 棍棒（近戰）
-    Knife,   // 刀（近戰）
-    Pistol,  // 手槍
-    SMG,     // 衝鋒槍
+    Staff,       // 棍棒（近戰）
+    Knife,       // 刀（近戰）
+    Pistol,      // 手槍
+    SMG,         // 衝鋒槍
     Shotgun,     // 霰彈槍
     Rifle,       // 步槍
     SniperRifle, // 狙擊槍
@@ -56,10 +57,8 @@ impl WeaponType {
             WeaponType::Fist => "👊",
             WeaponType::Staff => "🏏",
             WeaponType::Knife => "🔪",
-            WeaponType::Pistol => "🔫",
-            WeaponType::SMG => "🔫",
-            WeaponType::Shotgun => "🎯",
-            WeaponType::Rifle => "🎯",
+            WeaponType::Pistol | WeaponType::SMG => "🔫",
+            WeaponType::Shotgun | WeaponType::Rifle => "🎯",
             WeaponType::SniperRifle => "🔭",
             WeaponType::RPG => "💥",
         }
@@ -68,15 +67,11 @@ impl WeaponType {
     /// 取得彈道風格索引（對應 CombatVisuals 的材質陣列）
     pub fn tracer_style(&self) -> TracerStyle {
         match self {
-            WeaponType::Fist => TracerStyle::None,
-            WeaponType::Staff => TracerStyle::None,
-            WeaponType::Knife => TracerStyle::None,
+            WeaponType::Fist | WeaponType::Staff | WeaponType::Knife => TracerStyle::None,
             WeaponType::Pistol => TracerStyle::Pistol,
             WeaponType::SMG => TracerStyle::SMG,
             WeaponType::Shotgun => TracerStyle::Shotgun,
-            WeaponType::Rifle => TracerStyle::Rifle,
-            WeaponType::SniperRifle => TracerStyle::Rifle,
-            WeaponType::RPG => TracerStyle::Rifle,
+            WeaponType::Rifle | WeaponType::SniperRifle | WeaponType::RPG => TracerStyle::Rifle,
         }
     }
 
@@ -120,7 +115,6 @@ impl MeleeAnimationType {
     #[allow(dead_code)]
     pub fn from_weapon(weapon_type: WeaponType) -> Self {
         match weapon_type {
-            WeaponType::Fist => MeleeAnimationType::Punch,
             WeaponType::Staff => MeleeAnimationType::Swing,
             WeaponType::Knife => MeleeAnimationType::Slash,
             _ => MeleeAnimationType::Punch,
@@ -375,10 +369,10 @@ impl WeaponStats {
     pub fn rpg() -> Self {
         Self {
             weapon_type: WeaponType::RPG,
-            damage: 50.0,       // 直擊傷害
-            fire_rate: 2.0,     // 極慢射速
-            magazine_size: 1,   // 單發裝填
-            max_ammo: 10,       // 稀有彈藥
+            damage: 50.0,     // 直擊傷害
+            fire_rate: 2.0,   // 極慢射速
+            magazine_size: 1, // 單發裝填
+            max_ammo: 10,     // 稀有彈藥
             range: 150.0,
             reload_time: 3.5,
             spread: 0.5,

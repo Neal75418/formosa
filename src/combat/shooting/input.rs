@@ -4,12 +4,10 @@
 
 use bevy::prelude::*;
 
+use crate::audio::{play_reload_sound, play_weapon_switch_sound, AudioManager, WeaponSounds};
 use crate::combat::components::*;
 use crate::combat::weapon::*;
 use crate::combat::RespawnState;
-use crate::audio::{
-    play_reload_sound, play_weapon_switch_sound, AudioManager, WeaponSounds,
-};
 use crate::core::GameState;
 use crate::player::{Player, PlayerSkills};
 use crate::ui::NotificationQueue;
@@ -41,8 +39,7 @@ pub fn shooting_input_system(
         .single()
         .ok()
         .and_then(|inv| inv.current_weapon())
-        .map(|w| w.stats.weapon_type.is_melee())
-        .unwrap_or(false);
+        .is_some_and(|w| w.stats.weapon_type.is_melee());
 
     // 射擊：R 鍵（與 UI 提示一致）
     input.is_fire_pressed = keyboard.just_pressed(KeyCode::KeyR);
@@ -80,7 +77,7 @@ pub fn weapon_cooldown_system(
 ) {
     let dt = time.delta_secs();
 
-    for mut inventory in player_query.iter_mut() {
+    for mut inventory in &mut player_query {
         if let Some(weapon) = inventory.current_weapon_mut() {
             if weapon.fire_cooldown > 0.0 {
                 weapon.fire_cooldown = (weapon.fire_cooldown - dt).max(0.0);
@@ -189,6 +186,7 @@ fn try_start_reload(
 
 /// 播放換彈音效（如果可用）
 #[inline]
+#[allow(clippy::ref_option)]
 fn play_reload_sound_if_available(
     commands: &mut Commands,
     weapon_sounds: &Option<Res<WeaponSounds>>,
@@ -202,6 +200,7 @@ fn play_reload_sound_if_available(
 
 /// 播放武器切換音效（如果可用）
 #[inline]
+#[allow(clippy::ref_option)]
 fn play_switch_sound_if_available(
     commands: &mut Commands,
     weapon_sounds: &Option<Res<WeaponSounds>>,
@@ -226,7 +225,7 @@ pub fn reload_system(
 ) {
     let dt = time.delta_secs();
 
-    for mut inventory in player_query.iter_mut() {
+    for mut inventory in &mut player_query {
         // 切換武器前取消換彈
         if should_switch_weapon(&input) {
             if let Some(weapon) = inventory.current_weapon_mut() {
@@ -255,7 +254,12 @@ pub fn reload_system(
         }
 
         // 嘗試開始換彈（應用射擊技能加成）
-        if try_start_reload(weapon, input.is_reload_pressed, skills.reload_speed_multiplier(), &mut notifications) {
+        if try_start_reload(
+            weapon,
+            input.is_reload_pressed,
+            skills.reload_speed_multiplier(),
+            &mut notifications,
+        ) {
             play_reload_sound_if_available(&mut commands, &weapon_sounds, &audio_manager, false);
         }
     }

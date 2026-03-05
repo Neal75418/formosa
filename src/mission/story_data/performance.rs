@@ -2,10 +2,11 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
+#![allow(clippy::cast_precision_loss, clippy::trivially_copy_pass_by_ref)]
 
+use super::StoryMissionId;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use super::StoryMissionId;
 
 /// 劇情任務評分 (1-5 星)
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -247,8 +248,8 @@ pub struct MissionCompletionResult {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::{MissionObjective, MissionPhase, ObjectiveType, StoryMissionType};
+    use super::*;
 
     // --- MissionObjective ---
 
@@ -272,8 +273,7 @@ mod tests {
 
     #[test]
     fn objective_increment_capped_at_target() {
-        let mut obj =
-            MissionObjective::new(1, ObjectiveType::KillCount(2), "Kill 2").with_count(2);
+        let mut obj = MissionObjective::new(1, ObjectiveType::KillCount(2), "Kill 2").with_count(2);
         obj.increment();
         obj.increment();
         obj.increment(); // extra

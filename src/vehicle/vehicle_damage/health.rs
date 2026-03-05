@@ -1,8 +1,7 @@
 //! 車輛健康和損壞狀態組件
 
-
-use bevy::prelude::*;
 use super::super::VehicleType;
+use bevy::prelude::*;
 
 // ============================================================================
 // 車輛損壞類型定義
@@ -94,10 +93,10 @@ impl VehicleHealth {
     /// 根據車輛類型創建
     pub fn for_vehicle_type(vehicle_type: VehicleType) -> Self {
         let max_health = match vehicle_type {
-            VehicleType::Scooter => 500.0,   // 機車較脆弱
-            VehicleType::Car => 1000.0,      // 汽車標準
-            VehicleType::Taxi => 1200.0,     // 計程車較耐打
-            VehicleType::Bus => 2000.0,      // 公車最耐打
+            VehicleType::Scooter => 500.0, // 機車較脆弱
+            VehicleType::Car => 1000.0,    // 汽車標準
+            VehicleType::Taxi => 1200.0,   // 計程車較耐打
+            VehicleType::Bus => 2000.0,    // 公車最耐打
         };
         Self::new(max_health)
     }
@@ -118,7 +117,7 @@ impl VehicleHealth {
         // 瀕臨爆炸時開始著火
         if self.damage_state == VehicleDamageState::Critical && !self.is_on_fire {
             self.is_on_fire = true;
-            self.fire_timer = 5.0;  // 5 秒後爆炸
+            self.fire_timer = 5.0; // 5 秒後爆炸
         }
 
         actual_damage
@@ -148,7 +147,7 @@ impl VehicleHealth {
         let health_ratio = self.current / old_max;
 
         self.max = new_max;
-        self.current = new_max * health_ratio;  // 保持相同的血量比例
+        self.current = new_max * health_ratio; // 保持相同的血量比例
         self.damage_state = VehicleDamageState::from_health_percent(self.percentage());
     }
 
@@ -263,21 +262,21 @@ impl TireDamage {
     fn update_penalties(&mut self) {
         let flat_count = self.flat_count();
         // flat_count 只可能是 0-4（4 個輪胎）
-        debug_assert!(flat_count <= 4, "flat_count 超出範圍: {}", flat_count);
+        debug_assert!(flat_count <= 4, "flat_count 超出範圍: {flat_count}");
 
         self.handling_penalty = match flat_count {
             0 => 0.0,
-            1 => 0.15,  // 一個爆胎：輕微影響
-            2 => 0.30,  // 兩個爆胎：明顯影響
-            3 => 0.45,  // 三個爆胎：嚴重影響
-            _ => 0.60,  // 全部爆胎：困難但可操控
+            1 => 0.15, // 一個爆胎：輕微影響
+            2 => 0.30, // 兩個爆胎：明顯影響
+            3 => 0.45, // 三個爆胎：嚴重影響
+            _ => 0.60, // 全部爆胎：困難但可操控
         };
         self.speed_penalty = match flat_count {
             0 => 0.0,
-            1 => 0.10,  // 速度降低 10%
-            2 => 0.20,  // 速度降低 20%
-            3 => 0.35,  // 速度降低 35%
-            _ => 0.50,  // 速度降低 50%
+            1 => 0.10, // 速度降低 10%
+            2 => 0.20, // 速度降低 20%
+            3 => 0.35, // 速度降低 35%
+            _ => 0.50, // 速度降低 50%
         };
     }
 
@@ -334,15 +333,13 @@ pub enum DoorState {
 }
 
 impl DoorState {
-    /// 取得當前開啟角度（0.0 = 關閉，DOOR_MAX_ANGLE = 全開）
+    /// 取得當前開啟角度（0.0 = 關閉，`DOOR_MAX_ANGLE` = 全開）
     #[allow(dead_code)] // 車門視覺動畫預留
     pub fn angle(&self) -> f32 {
         match self {
-            DoorState::Closed => 0.0,
-            DoorState::Opening(p) => *p * DOOR_MAX_ANGLE,
+            DoorState::Closed | DoorState::Broken => 0.0,
+            DoorState::Opening(p) | DoorState::Closing(p) => *p * DOOR_MAX_ANGLE,
             DoorState::Open => DOOR_MAX_ANGLE,
-            DoorState::Closing(p) => *p * DOOR_MAX_ANGLE,
-            DoorState::Broken => 0.0,
         }
     }
 
@@ -372,7 +369,7 @@ pub enum WindowState {
 
 /// 車門與車窗狀態組件
 ///
-/// 追蹤 4 門 4 窗的獨立狀態，類似 TireDamage 的陣列模式。
+/// 追蹤 4 門 4 窗的獨立狀態，類似 `TireDamage` 的陣列模式。
 /// 機車無此組件（只有 Car/Taxi/Bus 會附加）。
 #[derive(Component, Debug)]
 pub struct DoorWindowState {
@@ -473,10 +470,13 @@ impl DoorWindowState {
     }
 
     /// 計算開門風阻
+    #[allow(clippy::cast_precision_loss)]
     fn update_drag_penalty(&mut self) {
-        let open_count = self.doors.iter().filter(|d| {
-            matches!(d, DoorState::Open | DoorState::Opening(_))
-        }).count();
+        let open_count = self
+            .doors
+            .iter()
+            .filter(|d| matches!(d, DoorState::Open | DoorState::Opening(_)))
+            .count();
         // 每扇開門增加 5% 風阻（最多 20%）
         self.drag_penalty = open_count as f32 * 0.05;
     }
@@ -484,19 +484,28 @@ impl DoorWindowState {
     /// 完好車窗數量
     #[allow(dead_code)] // UI 顯示預留
     pub fn intact_window_count(&self) -> usize {
-        self.windows.iter().filter(|w| **w == WindowState::Intact).count()
+        self.windows
+            .iter()
+            .filter(|w| **w == WindowState::Intact)
+            .count()
     }
 
     /// 破碎車窗數量
     #[allow(dead_code)] // UI 顯示預留
     pub fn broken_window_count(&self) -> usize {
-        self.windows.iter().filter(|w| **w == WindowState::Broken).count()
+        self.windows
+            .iter()
+            .filter(|w| **w == WindowState::Broken)
+            .count()
     }
 
     /// 脫落車門數量
     #[allow(dead_code)] // UI 顯示預留
     pub fn broken_door_count(&self) -> usize {
-        self.doors.iter().filter(|d| matches!(d, DoorState::Broken)).count()
+        self.doors
+            .iter()
+            .filter(|d| matches!(d, DoorState::Broken))
+            .count()
     }
 
     /// 修復所有車門車窗
@@ -513,12 +522,12 @@ impl DoorWindowState {
 // ============================================================================
 
 /// 車體部位索引
-pub const BODY_HOOD: usize = 0;         // 引擎蓋
+pub const BODY_HOOD: usize = 0; // 引擎蓋
 pub const BODY_FRONT_BUMPER: usize = 1; // 前保險桿
-pub const BODY_REAR_BUMPER: usize = 2;  // 後保險桿
-pub const BODY_LEFT_PANEL: usize = 3;   // 左側板
-pub const BODY_RIGHT_PANEL: usize = 4;  // 右側板
-pub const BODY_ROOF: usize = 5;         // 車頂
+pub const BODY_REAR_BUMPER: usize = 2; // 後保險桿
+pub const BODY_LEFT_PANEL: usize = 3; // 左側板
+pub const BODY_RIGHT_PANEL: usize = 4; // 右側板
+pub const BODY_ROOF: usize = 5; // 車頂
 
 /// 車體部位數量
 pub const BODY_PART_COUNT: usize = 6;
@@ -652,6 +661,7 @@ impl BodyPartDamage {
     }
 
     /// 所有部位的平均損壞因子（0.0-1.0，用於整體材質偏移）
+    #[allow(clippy::cast_precision_loss)]
     pub fn average_darken_factor(&self) -> f32 {
         let sum: f32 = self.states.iter().map(|s| s.color_darken_factor()).sum();
         sum / BODY_PART_COUNT as f32
@@ -667,10 +677,12 @@ impl BodyPartDamage {
     /// 損壞部位數量
     #[allow(dead_code)] // UI 顯示預留
     pub fn damaged_count(&self) -> usize {
-        self.states.iter().filter(|s| **s != BodyPartState::Intact).count()
+        self.states
+            .iter()
+            .filter(|s| **s != BodyPartState::Intact)
+            .count()
     }
 }
-
 
 #[cfg(test)]
 #[path = "health_tests.rs"]

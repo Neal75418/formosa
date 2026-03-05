@@ -34,24 +34,28 @@ fn spawn_content_row<'a>(
     ))
 }
 
-pub(super) fn spawn_section_title(parent: &mut ChildSpawnerCommands, font: &Handle<Font>, title: &str) {
-    parent.spawn((
-        Node {
+pub(super) fn spawn_section_title(
+    parent: &mut ChildSpawnerCommands,
+    font: &Handle<Font>,
+    title: &str,
+) {
+    parent
+        .spawn((Node {
             width: Val::Percent(100.0),
             padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(6.0), Val::Px(10.0)),
             ..default()
-        },
-    )).with_children(|row| {
-        row.spawn((
-            Text::new(title),
-            TextFont {
-                font: font.clone(),
-                font_size: 16.0,
-                ..default()
-            },
-            TextColor(Color::WHITE),
-        ));
-    });
+        },))
+        .with_children(|row| {
+            row.spawn((
+                Text::new(title),
+                TextFont {
+                    font: font.clone(),
+                    font_size: 16.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+            ));
+        });
 }
 
 pub(super) fn spawn_contact_item(
@@ -61,25 +65,25 @@ pub(super) fn spawn_contact_item(
     role: &str,
 ) {
     spawn_content_row(parent, CONTENT_ITEM_BG).with_children(|row| {
-            row.spawn((
-                Text::new(name),
-                TextFont {
-                    font: font.clone(),
-                    font_size: 13.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-            ));
-            row.spawn((
-                Text::new(role),
-                TextFont {
-                    font: font.clone(),
-                    font_size: 11.0,
-                    ..default()
-                },
-                TextColor(Color::srgba(0.5, 0.6, 0.7, 0.8)),
-            ));
-        });
+        row.spawn((
+            Text::new(name),
+            TextFont {
+                font: font.clone(),
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::WHITE),
+        ));
+        row.spawn((
+            Text::new(role),
+            TextFont {
+                font: font.clone(),
+                font_size: 11.0,
+                ..default()
+            },
+            TextColor(Color::srgba(0.5, 0.6, 0.7, 0.8)),
+        ));
+    });
 }
 
 /// 生成任務日誌分頁選擇列
@@ -111,7 +115,12 @@ pub(super) fn spawn_journal_tabs(
                 };
                 row.spawn((
                     Node {
-                        padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(3.0), Val::Px(3.0)),
+                        padding: UiRect::new(
+                            Val::Px(8.0),
+                            Val::Px(8.0),
+                            Val::Px(3.0),
+                            Val::Px(3.0),
+                        ),
                         ..default()
                     },
                     BackgroundColor(bg),
@@ -147,23 +156,23 @@ pub(super) fn spawn_journal_active(
         spawn_mission_item(parent, font, &current.data.title, "進行中", true);
 
         // 任務描述
-        parent.spawn((
-            Node {
+        parent
+            .spawn((Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::new(Val::Px(12.0), Val::Px(8.0), Val::Px(2.0), Val::Px(6.0)),
                 ..default()
-            },
-        )).with_children(|desc| {
-            desc.spawn((
-                Text::new(&current.data.description),
-                TextFont {
-                    font: font.clone(),
-                    font_size: 10.0,
-                    ..default()
-                },
-                TextColor(Color::srgba(0.6, 0.6, 0.7, 0.8)),
-            ));
-        });
+            },))
+            .with_children(|desc| {
+                desc.spawn((
+                    Text::new(&current.data.description),
+                    TextFont {
+                        font: font.clone(),
+                        font_size: 10.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgba(0.6, 0.6, 0.7, 0.8)),
+                ));
+            });
 
         // 任務類型和獎勵
         let type_label = match current.data.mission_type {
@@ -177,35 +186,31 @@ pub(super) fn spawn_journal_active(
             crate::mission::MissionType::Photography => "拍照",
         };
         spawn_mission_detail_row(parent, font, "類型", type_label);
-        spawn_mission_detail_row(parent, font, "獎勵", &format!("${}", current.data.reward));
+        let reward = current.data.reward;
+        spawn_mission_detail_row(parent, font, "獎勵", &format!("${reward}"));
 
         if let Some(time_limit) = current.data.time_limit {
-            spawn_mission_detail_row(
-                parent,
-                font,
-                "時限",
-                &format!("{:.0} 秒", time_limit),
-            );
+            spawn_mission_detail_row(parent, font, "時限", &format!("{time_limit:.0} 秒"));
         }
     } else {
         spawn_mission_item(parent, font, "目前沒有進行中的任務", "", false);
-        parent.spawn((
-            Node {
+        parent
+            .spawn((Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::all(Val::Px(8.0)),
                 ..default()
-            },
-        )).with_children(|hint| {
-            hint.spawn((
-                Text::new("前往任務標記點接取任務"),
-                TextFont {
-                    font: font.clone(),
-                    font_size: 10.0,
-                    ..default()
-                },
-                TextColor(Color::srgba(0.4, 0.5, 0.6, 0.7)),
-            ));
-        });
+            },))
+            .with_children(|hint| {
+                hint.spawn((
+                    Text::new("前往任務標記點接取任務"),
+                    TextFont {
+                        font: font.clone(),
+                        font_size: 10.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgba(0.4, 0.5, 0.6, 0.7)),
+                ));
+            });
     }
 }
 
@@ -237,97 +242,111 @@ pub(super) fn spawn_journal_completed(
             ))
             .with_children(|card| {
                 // 第一行：標題 + 類型
-                card.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        ..default()
-                    },
-                )).with_children(|row| {
-                    row.spawn((
-                        Text::new(&record.title),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 11.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                    row.spawn((
-                        Text::new(record.type_label()),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 9.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(0.5, 0.6, 0.7, 0.8)),
-                    ));
-                });
+                card.spawn((Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    ..default()
+                },))
+                    .with_children(|row| {
+                        row.spawn((
+                            Text::new(&record.title),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 11.0,
+                                ..default()
+                            },
+                            TextColor(Color::WHITE),
+                        ));
+                        row.spawn((
+                            Text::new(record.type_label()),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 9.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgba(0.5, 0.6, 0.7, 0.8)),
+                        ));
+                    });
 
                 // 第二行：星級 + 獎勵
-                card.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        margin: UiRect::top(Val::Px(2.0)),
-                        ..default()
-                    },
-                )).with_children(|row| {
-                    row.spawn((
-                        Text::new(record.stars_display()),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 10.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(1.0, 0.85, 0.0, 0.9)),
-                    ));
-                    row.spawn((
-                        Text::new(format!("${}", record.reward)),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 10.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(0.3, 0.8, 0.4, 0.9)),
-                    ));
-                });
+                card.spawn((Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    margin: UiRect::top(Val::Px(2.0)),
+                    ..default()
+                },))
+                    .with_children(|row| {
+                        row.spawn((
+                            Text::new(record.stars_display()),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 10.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgba(1.0, 0.85, 0.0, 0.9)),
+                        ));
+                        row.spawn((
+                            Text::new(format!("${}", record.reward)),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 10.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgba(0.3, 0.8, 0.4, 0.9)),
+                        ));
+                    });
             });
     }
 
     if missions.len() > show_count {
-        parent.spawn((
-            Node {
+        parent
+            .spawn((Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::all(Val::Px(4.0)),
                 justify_content: JustifyContent::Center,
                 ..default()
-            },
-        )).with_children(|more| {
-            more.spawn((
-                Text::new(format!("...還有 {} 個任務", missions.len() - show_count)),
-                TextFont {
-                    font: font.clone(),
-                    font_size: 9.0,
-                    ..default()
-                },
-                TextColor(Color::srgba(0.4, 0.4, 0.5, 0.7)),
-            ));
-        });
+            },))
+            .with_children(|more| {
+                more.spawn((
+                    Text::new(format!("...還有 {} 個任務", missions.len() - show_count)),
+                    TextFont {
+                        font: font.clone(),
+                        font_size: 9.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgba(0.4, 0.4, 0.5, 0.7)),
+                ));
+            });
     }
 }
 
 /// 生成「統計」分頁內容
+#[allow(clippy::cast_precision_loss)]
 pub(super) fn spawn_journal_stats(
     parent: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
     mission_manager: &MissionManager,
 ) {
-    spawn_stat_row(parent, font, "完成任務", &mission_manager.completed_count.to_string());
-    spawn_stat_row(parent, font, "總收入", &format!("${}", mission_manager.total_earnings));
-    spawn_stat_row(parent, font, "外送次數", &mission_manager.total_deliveries.to_string());
+    spawn_stat_row(
+        parent,
+        font,
+        "完成任務",
+        &mission_manager.completed_count.to_string(),
+    );
+    spawn_stat_row(
+        parent,
+        font,
+        "總收入",
+        &format!("${}", mission_manager.total_earnings),
+    );
+    spawn_stat_row(
+        parent,
+        font,
+        "外送次數",
+        &mission_manager.total_deliveries.to_string(),
+    );
 
     if mission_manager.total_deliveries > 0 {
         spawn_stat_row(
@@ -338,13 +357,27 @@ pub(super) fn spawn_journal_stats(
         );
     }
 
-    spawn_stat_row(parent, font, "目前連擊", &mission_manager.delivery_streak.to_string());
+    spawn_stat_row(
+        parent,
+        font,
+        "目前連擊",
+        &mission_manager.delivery_streak.to_string(),
+    );
 
     // 各類型統計
     let completed = &mission_manager.completed_missions;
-    let delivery_count = completed.iter().filter(|r| r.mission_type == crate::mission::MissionType::Delivery).count();
-    let taxi_count = completed.iter().filter(|r| r.mission_type == crate::mission::MissionType::Taxi).count();
-    let race_count = completed.iter().filter(|r| r.mission_type == crate::mission::MissionType::Race).count();
+    let delivery_count = completed
+        .iter()
+        .filter(|r| r.mission_type == crate::mission::MissionType::Delivery)
+        .count();
+    let taxi_count = completed
+        .iter()
+        .filter(|r| r.mission_type == crate::mission::MissionType::Taxi)
+        .count();
+    let race_count = completed
+        .iter()
+        .filter(|r| r.mission_type == crate::mission::MissionType::Race)
+        .count();
 
     if !completed.is_empty() {
         // 分隔線
@@ -363,9 +396,9 @@ pub(super) fn spawn_journal_stats(
         spawn_stat_row(parent, font, "競速任務", &race_count.to_string());
 
         // 平均星級
-        let total_stars: u32 = completed.iter().map(|r| r.stars as u32).sum();
+        let total_stars: u32 = completed.iter().map(|r| u32::from(r.stars)).sum();
         let avg_stars = total_stars as f32 / completed.len() as f32;
-        spawn_stat_row(parent, font, "平均星級", &format!("{:.1} ★", avg_stars));
+        spawn_stat_row(parent, font, "平均星級", &format!("{avg_stars:.1} ★"));
     }
 }
 
@@ -419,15 +452,13 @@ pub(super) fn spawn_mission_detail_row(
     value: &str,
 ) {
     parent
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::SpaceBetween,
-                padding: UiRect::new(Val::Px(12.0), Val::Px(8.0), Val::Px(2.0), Val::Px(2.0)),
-                ..default()
-            },
-        ))
+        .spawn((Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            padding: UiRect::new(Val::Px(12.0), Val::Px(8.0), Val::Px(2.0), Val::Px(2.0)),
+            ..default()
+        },))
         .with_children(|row| {
             row.spawn((
                 Text::new(label),
@@ -464,31 +495,30 @@ pub(super) fn spawn_mission_item(
     };
 
     spawn_content_row(parent, bg_color).with_children(|row| {
+        row.spawn((
+            Text::new(name),
+            TextFont {
+                font: font.clone(),
+                font_size: 12.0,
+                ..default()
+            },
+            TextColor(Color::WHITE),
+        ));
+        if !status.is_empty() {
+            let status_color = if is_active {
+                Color::srgba(0.3, 0.8, 0.4, 0.9)
+            } else {
+                Color::srgba(0.5, 0.5, 0.6, 0.8)
+            };
             row.spawn((
-                Text::new(name),
+                Text::new(status),
                 TextFont {
                     font: font.clone(),
-                    font_size: 12.0,
+                    font_size: 11.0,
                     ..default()
                 },
-                TextColor(Color::WHITE),
+                TextColor(status_color),
             ));
-            if !status.is_empty() {
-                let status_color = if is_active {
-                    Color::srgba(0.3, 0.8, 0.4, 0.9)
-                } else {
-                    Color::srgba(0.5, 0.5, 0.6, 0.8)
-                };
-                row.spawn((
-                    Text::new(status),
-                    TextFont {
-                        font: font.clone(),
-                        font_size: 11.0,
-                        ..default()
-                    },
-                    TextColor(status_color),
-                ));
-            }
-        });
+        }
+    });
 }
-

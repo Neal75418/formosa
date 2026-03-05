@@ -5,10 +5,12 @@
 use bevy::prelude::*;
 
 use super::phone_apps::spawn_section_title;
-use crate::vehicle::{ModCategory, VehicleModifications, PurchaseModificationEvent, ModificationCompleteEvent};
-use crate::economy::PlayerWallet;
 use crate::core::GameState;
+use crate::economy::PlayerWallet;
 use crate::ui::notification::NotificationQueue;
+use crate::vehicle::{
+    ModCategory, ModificationCompleteEvent, PurchaseModificationEvent, VehicleModifications,
+};
 
 /// 改裝卡片背景色
 const MOD_CARD_BG: Color = Color::srgba(0.1, 0.12, 0.18, 0.8);
@@ -23,14 +25,14 @@ const MAX_LEVEL_COLOR: Color = Color::srgba(0.8, 0.6, 0.0, 1.0);
 // Components
 // ============================================================================
 
-/// ModShop 改裝卡片按鈕標記
+/// `ModShop` 改裝卡片按鈕標記
 #[derive(Component)]
 pub struct ModShopButton {
     pub category: ModCategory,
     pub vehicle: Entity,
 }
 
-/// ModShop 內容容器標記
+/// `ModShop` 內容容器標記
 #[derive(Component)]
 pub struct ModShopContent;
 
@@ -38,7 +40,7 @@ pub struct ModShopContent;
 // UI 渲染
 // ============================================================================
 
-/// 渲染 ModShop UI 內容
+/// 渲染 `ModShop` UI 內容
 pub(super) fn render_mod_shop_content(
     parent: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -51,14 +53,12 @@ pub(super) fn render_mod_shop_content(
 
     // 錢包餘額
     parent
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(8.0)),
-                justify_content: JustifyContent::SpaceBetween,
-                ..default()
-            },
-        ))
+        .spawn((Node {
+            width: Val::Percent(100.0),
+            padding: UiRect::all(Val::Px(8.0)),
+            justify_content: JustifyContent::SpaceBetween,
+            ..default()
+        },))
         .with_children(|row| {
             row.spawn((
                 Text::new("可用餘額:"),
@@ -113,6 +113,8 @@ pub(super) fn render_mod_shop_content(
 }
 
 /// 生成單個改裝類別卡片
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 fn spawn_mod_category_card(
     parent: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -138,52 +140,48 @@ fn spawn_mod_category_card(
         ))
         .with_children(|card| {
             // 頭部：圖標 + 名稱
-            card.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(6.0),
-                    ..default()
-                },
-            ))
-            .with_children(|header| {
-                header.spawn((
-                    Text::new(category.icon()),
-                    TextFont {
-                        font: font.clone(),
-                        font_size: 16.0,
-                        ..default()
-                    },
-                ));
-                header.spawn((
-                    Text::new(category.name()),
-                    TextFont {
-                        font: font.clone(),
-                        font_size: 14.0,
-                        ..default()
-                    },
-                    TextColor(Color::WHITE),
-                ));
-            });
+            card.spawn((Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(6.0),
+                ..default()
+            },))
+                .with_children(|header| {
+                    header.spawn((
+                        Text::new(category.icon()),
+                        TextFont {
+                            font: font.clone(),
+                            font_size: 16.0,
+                            ..default()
+                        },
+                    ));
+                    header.spawn((
+                        Text::new(category.name()),
+                        TextFont {
+                            font: font.clone(),
+                            font_size: 14.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                });
 
             // 當前等級
-            card.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    ..default()
-                },
-            ))
-            .with_children(|row| {
-                row.spawn((
-                    Text::new(format!("當前: {}", current_level.name())),
-                    TextFont {
-                        font: font.clone(),
-                        font_size: 12.0,
-                        ..default()
-                    },
-                    TextColor(Color::srgba(0.7, 0.7, 0.8, 1.0)),
-                ));
-            });
+            card.spawn((Node {
+                width: Val::Percent(100.0),
+                ..default()
+            },))
+                .with_children(|row| {
+                    row.spawn((
+                        Text::new(format!("當前: {}", current_level.name())),
+                        TextFont {
+                            font: font.clone(),
+                            font_size: 12.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgba(0.7, 0.7, 0.8, 1.0)),
+                    ));
+                });
 
             // 性能提升資訊或 MAX 標籤
             if let Some(next) = next_level {
@@ -191,30 +189,25 @@ fn spawn_mod_category_card(
                 let can_afford = wallet.cash >= upgrade_price;
 
                 // 性能對比
-                card.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        ..default()
-                    },
-                ))
-                .with_children(|row| {
-                    let current_mult = (current_level.multiplier() * 100.0) as i32;
-                    let next_mult = (next.multiplier() * 100.0) as i32;
-                    let improvement = next_mult - current_mult;
+                card.spawn((Node {
+                    width: Val::Percent(100.0),
+                    ..default()
+                },))
+                    .with_children(|row| {
+                        let current_mult = (current_level.multiplier() * 100.0) as i32;
+                        let next_mult = (next.multiplier() * 100.0) as i32;
+                        let improvement = next_mult - current_mult;
 
-                    row.spawn((
-                        Text::new(format!(
-                            "{}% → {}% (+{}%)",
-                            current_mult, next_mult, improvement
-                        )),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 11.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(0.0, 0.8, 0.3, 1.0)),
-                    ));
-                });
+                        row.spawn((
+                            Text::new(format!("{current_mult}% → {next_mult}% (+{improvement}%)")),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 11.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgba(0.0, 0.8, 0.3, 1.0)),
+                        ));
+                    });
 
                 // 升級按鈕
                 let button_bg = if can_afford {
@@ -223,7 +216,7 @@ fn spawn_mod_category_card(
                     MOD_CARD_UNAVAILABLE
                 };
 
-                let button_text = format!("升級 - ${}", upgrade_price);
+                let button_text = format!("升級 - ${upgrade_price}");
 
                 card.spawn((
                     ModShopButton {
@@ -261,27 +254,25 @@ fn spawn_mod_category_card(
                 });
             } else {
                 // MAX 等級標籤
-                card.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        height: Val::Px(28.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        margin: UiRect::top(Val::Px(4.0)),
-                        ..default()
-                    },
-                ))
-                .with_children(|container| {
-                    container.spawn((
-                        Text::new("✓ 最高等級"),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 12.0,
-                            ..default()
-                        },
-                        TextColor(MAX_LEVEL_COLOR),
-                    ));
-                });
+                card.spawn((Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(28.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    margin: UiRect::top(Val::Px(4.0)),
+                    ..default()
+                },))
+                    .with_children(|container| {
+                        container.spawn((
+                            Text::new("✓ 最高等級"),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 12.0,
+                                ..default()
+                            },
+                            TextColor(MAX_LEVEL_COLOR),
+                        ));
+                    });
             }
 
             // 描述
@@ -304,14 +295,12 @@ fn spawn_mod_category_card(
 /// 顯示無車輛訊息
 fn show_no_vehicle_message(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
     parent
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(20.0)),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-        ))
+        .spawn((Node {
+            width: Val::Percent(100.0),
+            padding: UiRect::all(Val::Px(20.0)),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },))
         .with_children(|container| {
             container.spawn((
                 Text::new("⚠️ 無可用車輛"),
@@ -325,12 +314,9 @@ fn show_no_vehicle_message(parent: &mut ChildSpawnerCommands, font: &Handle<Font
         });
 }
 
-/// 處理 ModShop 按鈕點擊
+/// 處理 `ModShop` 按鈕點擊
 pub(super) fn handle_mod_shop_buttons(
-    interaction_query: Query<
-        (&Interaction, &ModShopButton),
-        (Changed<Interaction>, With<Button>),
-    >,
+    interaction_query: Query<(&Interaction, &ModShopButton), (Changed<Interaction>, With<Button>)>,
     mut purchase_events: MessageWriter<PurchaseModificationEvent>,
 ) {
     for (interaction, button) in &interaction_query {

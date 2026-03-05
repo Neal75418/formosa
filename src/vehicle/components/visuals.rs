@@ -3,8 +3,8 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-use bevy::prelude::*;
 use crate::core::{lifetime_fade_alpha, lifetime_linear_alpha};
+use bevy::prelude::*;
 
 /// Vehicle visual root for applying roll/pitch/lean without affecting physics.
 #[derive(Component)]
@@ -43,7 +43,7 @@ impl Default for TireTrack {
     fn default() -> Self {
         Self {
             lifetime: 0.0,
-            max_lifetime: 10.0,  // 10 秒後消失
+            max_lifetime: 10.0, // 10 秒後消失
             points: Vec::new(),
         }
     }
@@ -100,7 +100,7 @@ impl DriftSmoke {
         } else {
             1.0
         };
-        self.initial_scale * (1.0 + progress * 2.0)  // 最終是初始的 3 倍大
+        self.initial_scale * (1.0 + progress * 2.0) // 最終是初始的 3 倍大
     }
 }
 
@@ -123,7 +123,7 @@ impl NitroFlame {
         Self {
             velocity,
             lifetime: 0.0,
-            max_lifetime: 0.15,  // 火焰粒子生命較短
+            max_lifetime: 0.15, // 火焰粒子生命較短
             initial_scale: 0.2,
         }
     }
@@ -181,24 +181,24 @@ impl VehicleEffectVisuals {
         Self {
             smoke_mesh: meshes.add(Sphere::new(0.5)),
             smoke_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.8, 0.8, 0.8, 0.5),  // 灰白色半透明
+                base_color: Color::srgba(0.8, 0.8, 0.8, 0.5), // 灰白色半透明
                 alpha_mode: AlphaMode::Blend,
-                unlit: true,  // 不受光照影響
+                unlit: true, // 不受光照影響
                 ..default()
             }),
             tire_track_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.1, 0.1, 0.1, 0.8),  // 深色輪胎痕
+                base_color: Color::srgba(0.1, 0.1, 0.1, 0.8), // 深色輪胎痕
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
-                double_sided: true,  // 雙面可見
+                double_sided: true, // 雙面可見
                 ..default()
             }),
-            tire_track_mesh: meshes.add(Cuboid::new(0.3, 0.01, 0.5)),  // 薄平面
+            tire_track_mesh: meshes.add(Cuboid::new(0.3, 0.01, 0.5)), // 薄平面
             // 氮氣火焰：拉長的球體
             nitro_flame_mesh: meshes.add(Sphere::new(0.3)),
             nitro_flame_material: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.8, 0.9, 1.0, 0.9),  // 藍白色
-                emissive: LinearRgba::rgb(5.0, 6.0, 8.0),  // 強發光
+                base_color: Color::srgba(0.8, 0.9, 1.0, 0.9), // 藍白色
+                emissive: LinearRgba::rgb(5.0, 6.0, 8.0),     // 強發光
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 ..default()
@@ -237,9 +237,9 @@ impl VehicleEffectTracker {
             track_count: 0,
             max_track_count: 30,
             last_smoke_spawn: 0.0,
-            smoke_spawn_interval: 0.05,  // 每 0.05 秒生成一批煙霧
+            smoke_spawn_interval: 0.05, // 每 0.05 秒生成一批煙霧
             last_track_spawn: 0.0,
-            track_spawn_interval: 0.1,  // 每 0.1 秒生成一段痕跡
+            track_spawn_interval: 0.1, // 每 0.1 秒生成一段痕跡
         }
     }
 }

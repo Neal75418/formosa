@@ -138,12 +138,13 @@ pub fn setup_story_mission_hud(mut commands: Commands, font: Option<Res<ChineseF
 }
 
 /// 格式化任務計時器文字
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn format_mission_timer(time_remaining: Option<f32>) -> String {
     match time_remaining {
         Some(remaining) => {
             let mins = (remaining / 60.0).floor() as u32;
             let secs = (remaining % 60.0).floor() as u32;
-            format!("⏱ {:02}:{:02}", mins, secs)
+            format!("⏱ {mins:02}:{secs:02}")
         }
         None => String::new(),
     }
@@ -161,7 +162,7 @@ fn get_objective_check_state(is_completed: bool) -> (&'static str, Color) {
 /// 格式化目標文字
 fn format_objective_text(description: &str, current_count: u32, target_count: u32) -> String {
     if target_count > 1 {
-        format!("{} ({}/{})", description, current_count, target_count)
+        format!("{description} ({current_count}/{target_count})")
     } else {
         description.to_string()
     }

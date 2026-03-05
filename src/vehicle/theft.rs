@@ -12,11 +12,11 @@
 
 use bevy::prelude::*;
 
+use crate::combat::{Health, RespawnState};
+use crate::core::GameState;
+use crate::pedestrian::{PedState, Pedestrian, PedestrianState};
 use crate::player::Player;
 use crate::wanted::CrimeEvent;
-use crate::pedestrian::{Pedestrian, PedestrianState, PedState};
-use crate::core::GameState;
-use crate::combat::{RespawnState, Health};
 
 use super::components::{Vehicle, VehicleType};
 use super::theft_ui::spawn_glass_shards;
@@ -43,6 +43,7 @@ const DOOR_INTERACT_DISTANCE: f32 = 3.0;
 // ============================================================================
 
 /// 車輛所有權組件
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Component)]
 pub struct VehicleOwnership {
     /// 車主實體（None 表示無主車輛）
@@ -213,10 +214,7 @@ pub struct TheftVisuals {
 
 impl TheftVisuals {
     /// 建立新實例
-    pub fn new(
-        meshes: &mut Assets<Mesh>,
-        materials: &mut Assets<StandardMaterial>,
-    ) -> Self {
+    pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             glass_shard_mesh: meshes.add(Mesh::from(Cuboid::new(0.05, 0.08, 0.01))),
             glass_material: materials.add(StandardMaterial {
@@ -286,9 +284,13 @@ pub enum TheftEventType {
 /// 尋找最近的上鎖車輛
 fn find_nearest_locked_vehicle(
     player_pos: Vec3,
-    vehicle_query: &Query<(Entity, &Transform, &Vehicle, Option<&VehicleOwnership>), Without<Player>>,
+    vehicle_query: &Query<
+        (Entity, &Transform, &Vehicle, Option<&VehicleOwnership>),
+        Without<Player>,
+    >,
 ) -> Option<(Entity, VehicleType)> {
-    vehicle_query.iter()
+    vehicle_query
+        .iter()
         .filter_map(|(entity, transform, vehicle, ownership)| {
             // 跳過機車（通常不用破窗）
             if vehicle.vehicle_type == VehicleType::Scooter {
@@ -301,7 +303,9 @@ fn find_nearest_locked_vehicle(
             }
 
             // 檢查是否上鎖
-            ownership.filter(|o| o.is_locked).map(|_| (entity, distance, vehicle.vehicle_type))
+            ownership
+                .filter(|o| o.is_locked)
+                .map(|_| (entity, distance, vehicle.vehicle_type))
         })
         .min_by(|(_, a, _), (_, b, _)| a.total_cmp(b))
         .map(|(entity, _, vehicle_type)| (entity, vehicle_type))
@@ -347,11 +351,7 @@ pub fn random_rotation() -> Quat {
 }
 
 /// 設置行人恐慌狀態
-fn set_pedestrian_panic(
-    ped_state: &mut PedestrianState,
-    threat_pos: Vec3,
-    fear_level: f32,
-) {
+fn set_pedestrian_panic(ped_state: &mut PedestrianState, threat_pos: Vec3, fear_level: f32) {
     ped_state.state = PedState::Fleeing;
     ped_state.fear_level = fear_level;
     ped_state.last_threat_pos = Some(threat_pos);
@@ -505,7 +505,10 @@ pub fn theft_input_system(
     game_state: Res<GameState>,
     respawn_state: Res<RespawnState>,
     mut player_query: Query<(&Transform, &mut PlayerTheftState, Option<&Health>), With<Player>>,
-    vehicle_query: Query<(Entity, &Transform, &Vehicle, Option<&VehicleOwnership>), Without<Player>>,
+    vehicle_query: Query<
+        (Entity, &Transform, &Vehicle, Option<&VehicleOwnership>),
+        Without<Player>,
+    >,
 ) {
     // 如果已經在車上或玩家死亡，不處理偷車
     if game_state.player_in_vehicle || respawn_state.is_dead {
@@ -533,7 +536,9 @@ pub fn theft_input_system(
     }
 
     // 尋找最近的上鎖車輛
-    let Some((vehicle_entity, vehicle_type)) = find_nearest_locked_vehicle(player_pos, &vehicle_query) else {
+    let Some((vehicle_entity, vehicle_type)) =
+        find_nearest_locked_vehicle(player_pos, &vehicle_query)
+    else {
         return;
     };
 
@@ -549,7 +554,7 @@ pub fn theft_input_system(
     theft_state.next_stage(TheftState::BreakingWindow, WINDOW_BREAK_DURATION);
 
     // 記錄開始偷車時的血量（用於檢測被攻擊中斷）
-    theft_state.initial_health = player_health.map(|h| h.current).unwrap_or(100.0);
+    theft_state.initial_health = player_health.map_or(100.0, |h| h.current);
 
     info!("開始偷車");
 }
@@ -560,22 +565,39 @@ pub fn theft_progress_system(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
     respawn_state: Res<RespawnState>,
-    mut player_query: Query<(Entity, &Transform, &mut PlayerTheftState, Option<&Health>), With<Player>>,
-    mut vehicle_query: Query<(Entity, &Transform, &mut Vehicle, Option<&mut VehicleOwnership>)>,
+    mut player_query: Query<
+        (Entity, &Transform, &mut PlayerTheftState, Option<&Health>),
+        With<Player>,
+    >,
+    mut vehicle_query: Query<(
+        Entity,
+        &Transform,
+        &mut Vehicle,
+        Option<&mut VehicleOwnership>,
+    )>,
     visuals: Option<Res<TheftVisuals>>,
     mut theft_events: MessageWriter<TheftEvent>,
     mut crime_events: MessageWriter<CrimeEvent>,
 ) {
     let dt = time.delta_secs();
-    let Some(visuals) = visuals else { return; };
+    let Some(visuals) = visuals else {
+        return;
+    };
 
-    let Ok((player_entity, player_transform, mut theft_state, player_health)) = player_query.single_mut() else {
+    let Ok((player_entity, player_transform, mut theft_state, player_health)) =
+        player_query.single_mut()
+    else {
         return;
     };
 
     // 玩家死亡時重置偷車狀態
     if respawn_state.is_dead && theft_state.is_stealing() {
-        send_interrupt_and_reset(&mut theft_state, &mut theft_events, player_entity, "玩家死亡");
+        send_interrupt_and_reset(
+            &mut theft_state,
+            &mut theft_events,
+            player_entity,
+            "玩家死亡",
+        );
         return;
     }
 
@@ -618,14 +640,22 @@ pub fn theft_progress_system(
 
     match theft_state.state {
         TheftState::BreakingWindow => {
-            let Ok((_, vehicle_transform, _, mut ownership)) = vehicle_query.get_mut(vehicle_entity) else {
+            let Ok((_, vehicle_transform, _, mut ownership)) =
+                vehicle_query.get_mut(vehicle_entity)
+            else {
                 theft_state.reset();
                 return;
             };
             handle_window_break_complete(
-                &mut commands, &visuals, &mut theft_state, ownership.as_deref_mut(),
-                vehicle_transform, player_entity, vehicle_entity,
-                &mut theft_events, &mut crime_events,
+                &mut commands,
+                &visuals,
+                &mut theft_state,
+                ownership.as_deref_mut(),
+                vehicle_transform,
+                player_entity,
+                vehicle_entity,
+                &mut theft_events,
+                &mut crime_events,
             );
         }
         TheftState::Hotwiring => {
@@ -634,8 +664,11 @@ pub fn theft_progress_system(
                 return;
             };
             handle_hotwire_complete(
-                &mut theft_state, ownership.as_deref_mut(),
-                player_entity, vehicle_entity, &mut theft_events,
+                &mut theft_state,
+                ownership.as_deref_mut(),
+                player_entity,
+                vehicle_entity,
+                &mut theft_events,
             );
         }
         _ => {}
@@ -672,7 +705,10 @@ pub fn owner_reaction_system(
 ) {
     for event in theft_events.read() {
         // 只處理破窗和警報觸發事件
-        if !matches!(event.event_type, TheftEventType::WindowBroken | TheftEventType::AlarmTriggered) {
+        if !matches!(
+            event.event_type,
+            TheftEventType::WindowBroken | TheftEventType::AlarmTriggered
+        ) {
             continue;
         }
 
@@ -685,7 +721,12 @@ pub fn owner_reaction_system(
         // 處理車主反應
         if let Some(owner_entity) = ownership.owner {
             if pedestrian_query.get(owner_entity).is_ok() {
-                handle_owner_theft_reaction(&mut commands, owner_entity, vehicle_pos, &mut ped_state_query);
+                handle_owner_theft_reaction(
+                    &mut commands,
+                    owner_entity,
+                    vehicle_pos,
+                    &mut ped_state_query,
+                );
             }
         }
 

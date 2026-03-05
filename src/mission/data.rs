@@ -109,24 +109,23 @@ impl DeliveryRating {
     /// 根據剩餘時間比例計算評價
     pub fn from_time_ratio(remaining_ratio: f32) -> Self {
         if remaining_ratio < OVERTIME_THRESHOLD {
-            Self::OneStar      // 超時
+            Self::OneStar // 超時
         } else if remaining_ratio < ONE_STAR_TIME_THRESHOLD {
-            Self::TwoStars     // 剛好
+            Self::TwoStars // 剛好
         } else if remaining_ratio < TWO_STAR_TIME_THRESHOLD {
-            Self::ThreeStars   // 提前
+            Self::ThreeStars // 提前
         } else if remaining_ratio < THREE_STAR_TIME_THRESHOLD {
-            Self::FourStars    // 大幅提前
+            Self::FourStars // 大幅提前
         } else {
-            Self::FiveStars    // 神速
+            Self::FiveStars // 神速
         }
     }
 
     /// 取得獎勵加成倍率
     pub fn bonus_multiplier(&self) -> f32 {
         match self {
-            Self::None => TWO_STAR_REWARD_MULTIPLIER,
+            Self::None | Self::TwoStars => TWO_STAR_REWARD_MULTIPLIER,
             Self::OneStar => ONE_STAR_REWARD_MULTIPLIER,
-            Self::TwoStars => TWO_STAR_REWARD_MULTIPLIER,
             Self::ThreeStars => THREE_STAR_REWARD_MULTIPLIER,
             Self::FourStars => FOUR_STAR_REWARD_MULTIPLIER,
             Self::FiveStars => FIVE_STAR_REWARD_MULTIPLIER,
@@ -149,12 +148,12 @@ impl DeliveryRating {
 /// 外送訂單詳情
 #[derive(Clone, Debug)]
 pub struct DeliveryOrder {
-    pub restaurant_name: String,   // 餐廳名稱
-    pub customer_address: String,  // 顧客地址描述
-    pub food_item: String,         // 餐點名稱
-    pub base_pay: u32,             // 基本報酬
-    pub tip_range: (u32, u32),     // 小費範圍
-    pub distance: f32,             // 預估距離 (米)
+    pub restaurant_name: String,  // 餐廳名稱
+    pub customer_address: String, // 顧客地址描述
+    pub food_item: String,        // 餐點名稱
+    pub base_pay: u32,            // 基本報酬
+    pub tip_range: (u32, u32),    // 小費範圍
+    pub distance: f32,            // 預估距離 (米)
 }
 
 /// 餐廳資料（外送取餐點）
@@ -351,12 +350,12 @@ impl TaxiData {
 /// 計程車評價
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum TaxiRating {
-    Excellent,  // 非常滿意
+    Excellent, // 非常滿意
     #[default]
-    Good,       // 滿意
-    Average,    // 普通
-    Poor,       // 不滿意
-    Terrible,   // 非常不滿意
+    Good, // 滿意
+    Average,   // 普通
+    Poor,      // 不滿意
+    Terrible,  // 非常不滿意
 }
 
 impl TaxiRating {
@@ -423,14 +422,14 @@ pub struct MissionManager {
     pub total_earnings: u32,
     pub completed_missions: Vec<CompletedMissionRecord>, // 已完成任務歷史
     // 外送系統專用
-    pub delivery_orders: Vec<MissionData>,     // 可接的外送訂單
-    pub delivery_orders_changed: bool,          // 訂單列表是否變更（用於 UI 優化）
-    pub delivery_streak: u32,                   // 連續完成訂單數
-    pub average_rating: f32,                    // 平均評價
-    pub total_deliveries: u32,                  // 總配送數
-    pub restaurants: Vec<Restaurant>,           // 餐廳列表
+    pub delivery_orders: Vec<MissionData>, // 可接的外送訂單
+    pub delivery_orders_changed: bool,     // 訂單列表是否變更（用於 UI 優化）
+    pub delivery_streak: u32,              // 連續完成訂單數
+    pub average_rating: f32,               // 平均評價
+    pub total_deliveries: u32,             // 總配送數
+    pub restaurants: Vec<Restaurant>,      // 餐廳列表
     pub customer_locations: Vec<CustomerLocation>, // 顧客地點列表
-    pub(crate) next_mission_id: u32,              // 下一個任務 ID
+    pub(crate) next_mission_id: u32,       // 下一個任務 ID
 }
 
 /// 進行中的任務
@@ -439,7 +438,7 @@ pub struct ActiveMission {
     pub data: MissionData,
     pub status: MissionStatus,
     pub time_elapsed: f32,
-    pub picked_up: bool,  // 是否已取餐
+    pub picked_up: bool,             // 是否已取餐
     pub last_rating: DeliveryRating, // 最後評價
 }
 
@@ -458,11 +457,26 @@ mod tests {
 
     #[test]
     fn delivery_rating_from_time_ratio() {
-        assert_eq!(DeliveryRating::from_time_ratio(-0.1), DeliveryRating::OneStar);
-        assert_eq!(DeliveryRating::from_time_ratio(0.05), DeliveryRating::TwoStars);
-        assert_eq!(DeliveryRating::from_time_ratio(0.2), DeliveryRating::ThreeStars);
-        assert_eq!(DeliveryRating::from_time_ratio(0.4), DeliveryRating::FourStars);
-        assert_eq!(DeliveryRating::from_time_ratio(0.6), DeliveryRating::FiveStars);
+        assert_eq!(
+            DeliveryRating::from_time_ratio(-0.1),
+            DeliveryRating::OneStar
+        );
+        assert_eq!(
+            DeliveryRating::from_time_ratio(0.05),
+            DeliveryRating::TwoStars
+        );
+        assert_eq!(
+            DeliveryRating::from_time_ratio(0.2),
+            DeliveryRating::ThreeStars
+        );
+        assert_eq!(
+            DeliveryRating::from_time_ratio(0.4),
+            DeliveryRating::FourStars
+        );
+        assert_eq!(
+            DeliveryRating::from_time_ratio(0.6),
+            DeliveryRating::FiveStars
+        );
     }
 
     #[test]
@@ -478,7 +492,9 @@ mod tests {
     fn race_advance_checkpoint_and_finish() {
         let mut race = RaceData::new(
             vec![Vec3::ZERO, Vec3::X, Vec3::new(2.0, 0.0, 0.0)],
-            30.0, 40.0, 50.0,
+            30.0,
+            40.0,
+            50.0,
         );
         assert!(!race.is_finished());
         assert_eq!(race.current_checkpoint, 0);

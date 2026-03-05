@@ -1,5 +1,6 @@
 //! 載具視覺效果（漂移煙霧、氮氣火焰、輪胎痕跡）
 
+#[allow(clippy::wildcard_imports)]
 use super::*;
 use bevy::prelude::*;
 use rand::Rng;
@@ -105,7 +106,7 @@ pub fn drift_smoke_update_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut smoke, mut transform) in smoke_query.iter_mut() {
+    for (entity, mut smoke, mut transform) in &mut smoke_query {
         // 更新生命時間
         smoke.lifetime += dt;
 
@@ -196,7 +197,7 @@ pub fn nitro_flame_update_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut flame, mut transform) in flame_query.iter_mut() {
+    for (entity, mut flame, mut transform) in &mut flame_query {
         // 更新生命時間
         flame.lifetime += dt;
 
@@ -294,7 +295,7 @@ pub fn tire_track_update_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut track) in track_query.iter_mut() {
+    for (entity, mut track) in &mut track_query {
         // 更新生命時間
         track.lifetime += dt;
 

@@ -31,9 +31,9 @@ pub fn ai_perception_system(
     rapier_context: ReadRapierContext,
 ) {
     // 初始化本地計時器（只執行一次）
-    let timer = local_timer.0.get_or_insert_with(|| {
-        Timer::from_seconds(0.1, TimerMode::Repeating)
-    });
+    let timer = local_timer
+        .0
+        .get_or_insert_with(|| Timer::from_seconds(0.1, TimerMode::Repeating));
     timer.tick(time.delta());
     if !timer.just_finished() {
         return;
@@ -94,16 +94,14 @@ pub fn ai_perception_system(
         let effective_sight_range_sq = effective_sight_range * effective_sight_range;
         if distance_sq > effective_sight_range_sq {
             // 視線外 → 衰減警覺度
-            behavior.awareness =
-                (behavior.awareness - AWARENESS_DECAY_RATE * tick_dt).max(0.0);
+            behavior.awareness = (behavior.awareness - AWARENESS_DECAY_RATE * tick_dt).max(0.0);
             continue;
         }
 
         // 2. 檢查 FOV（60° 視野錐）
         if !perception.is_in_fov(my_pos, my_forward, player_pos) {
             // 不在視野內 → 衰減警覺度
-            behavior.awareness =
-                (behavior.awareness - AWARENESS_DECAY_RATE * tick_dt).max(0.0);
+            behavior.awareness = (behavior.awareness - AWARENESS_DECAY_RATE * tick_dt).max(0.0);
             continue;
         }
 
@@ -120,9 +118,13 @@ pub fn ai_perception_system(
                 COLLISION_GROUP_STATIC | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_CHARACTER,
             ));
 
-        let has_line_of_sight = if let Some((hit_entity, toi)) =
-            rapier.cast_ray(ray_origin, ray_dir, max_distance as RapierReal, true, filter)
-        {
+        let has_line_of_sight = if let Some((hit_entity, toi)) = rapier.cast_ray(
+            ray_origin,
+            ray_dir,
+            max_distance as RapierReal,
+            true,
+            filter,
+        ) {
             hit_entity == player_entity
                 || toi >= (max_distance * config.line_of_sight_tolerance) as RapierReal
         } else {
@@ -132,13 +134,11 @@ pub fn ai_perception_system(
         if has_line_of_sight {
             perception.can_see_target = true;
             // 視覺接觸 → 快速提升警覺度
-            behavior.awareness =
-                (behavior.awareness + AWARENESS_VISUAL_RATE * tick_dt).min(1.0);
+            behavior.awareness = (behavior.awareness + AWARENESS_VISUAL_RATE * tick_dt).min(1.0);
             behavior.see_target(player_entity, player_pos, current_time);
         } else {
             // 有遮擋 → 緩慢衰減
-            behavior.awareness =
-                (behavior.awareness - AWARENESS_DECAY_RATE * tick_dt).max(0.0);
+            behavior.awareness = (behavior.awareness - AWARENESS_DECAY_RATE * tick_dt).max(0.0);
         }
     }
 }

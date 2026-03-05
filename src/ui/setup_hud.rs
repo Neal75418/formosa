@@ -3,12 +3,13 @@
 use bevy::prelude::*;
 
 use super::components::{
-    ArmorBarFill, ArmorLabel, ArmorLabelShadow, ArmorSection, ControlHintContainer,
-    ControlKeyArea, ControlSpeedDisplay, ControlStatusTag, HealthBarBg, HealthBarFill,
-    HealthBarGlow, HealthLabel, HealthLabelShadow, MissionInfo, MoneyDisplay,
-    PlayerStatusContainer, RadioDescription, RadioDisplayContainer, RadioFrequency, RadioIcon,
-    RadioStationName, RadioVolumeBarBg, RadioVolumeBarFill, TimeDisplay, UiText,
+    ArmorBarFill, ArmorLabel, ArmorLabelShadow, ArmorSection, ControlHintContainer, ControlKeyArea,
+    ControlSpeedDisplay, ControlStatusTag, HealthBarBg, HealthBarFill, HealthBarGlow, HealthLabel,
+    HealthLabelShadow, MissionInfo, MoneyDisplay, PlayerStatusContainer, RadioDescription,
+    RadioDisplayContainer, RadioFrequency, RadioIcon, RadioStationName, RadioVolumeBarBg,
+    RadioVolumeBarFill, TimeDisplay, UiText,
 };
+#[allow(clippy::wildcard_imports)]
 use super::constants::*;
 use super::systems::{spawn_status_bar_fill, spawn_status_bar_label, spawn_text_child};
 
@@ -81,14 +82,7 @@ fn spawn_health_section(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) 
             });
 
             // 血量數值標籤（帶陰影）
-            spawn_status_bar_label(
-                row,
-                "100/100",
-                font,
-                14.0,
-                HealthLabelShadow,
-                HealthLabel,
-            );
+            spawn_status_bar_label(row, "100/100", font, 14.0, HealthLabelShadow, HealthLabel);
         });
 }
 
@@ -153,32 +147,15 @@ fn spawn_armor_section_ui(parent: &mut ChildSpawnerCommands, font: &Handle<Font>
             });
 
             // 護甲數值標籤（帶陰影）
-            spawn_status_bar_label(
-                row,
-                "50/100",
-                font,
-                14.0,
-                ArmorLabelShadow,
-                ArmorLabel,
-            );
+            spawn_status_bar_label(row, "50/100", font, 14.0, ArmorLabelShadow, ArmorLabel);
         });
 }
 
 /// 生成控制提示按鍵（按鍵框 + 動作說明）
-fn spawn_control_key(
-    keys: &mut ChildSpawnerCommands,
-    key: &str,
-    action: &str,
-    font: Handle<Font>,
-) {
+fn spawn_control_key(keys: &mut ChildSpawnerCommands, key: &str, action: &str, font: Handle<Font>) {
     keys.spawn((
         Node {
-            padding: UiRect::new(
-                Val::Px(6.0),
-                Val::Px(6.0),
-                Val::Px(3.0),
-                Val::Px(3.0),
-            ),
+            padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(3.0), Val::Px(3.0)),
             border: UiRect::all(Val::Px(1.0)),
             min_width: Val::Px(24.0),
             justify_content: JustifyContent::Center,
@@ -420,6 +397,7 @@ pub(super) fn setup_control_hints(commands: &mut Commands, font: &Handle<Font>) 
 }
 
 /// 設置右上角電台顯示（小地圖下方，GTA 5 風格）
+#[allow(clippy::too_many_lines)]
 pub(super) fn setup_radio_display(commands: &mut Commands, font: &Handle<Font>) {
     // 外發光層
     commands
@@ -454,28 +432,29 @@ pub(super) fn setup_radio_display(commands: &mut Commands, font: &Handle<Font>) 
             ))
             .with_children(|container| {
                 // 電台圖示（🎵）
-                container.spawn((
-                    Node {
-                        width: Val::Px(24.0),
-                        height: Val::Px(24.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.9, 0.3, 0.4, 0.85)),
-                    BorderRadius::all(Val::Px(12.0)),
-                    RadioIcon,
-                ))
-                .with_children(|icon| {
-                    icon.spawn((
-                        Text::new("🎵"),
-                        TextFont {
-                            font_size: 14.0,
-                            font: font.clone(),
+                container
+                    .spawn((
+                        Node {
+                            width: Val::Px(24.0),
+                            height: Val::Px(24.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
                             ..default()
                         },
-                    ));
-                });
+                        BackgroundColor(Color::srgba(0.9, 0.3, 0.4, 0.85)),
+                        BorderRadius::all(Val::Px(12.0)),
+                        RadioIcon,
+                    ))
+                    .with_children(|icon| {
+                        icon.spawn((
+                            Text::new("🎵"),
+                            TextFont {
+                                font_size: 14.0,
+                                font: font.clone(),
+                                ..default()
+                            },
+                        ));
+                    });
 
                 // 文字資訊區域（垂直排列）
                 container

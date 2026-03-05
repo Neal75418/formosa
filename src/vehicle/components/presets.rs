@@ -1,6 +1,7 @@
 //! 車輛預設配置（工廠方法）
 
 use super::core::{Vehicle, VehicleType};
+#[allow(clippy::wildcard_imports)]
 use super::physics::*;
 
 /// 車輛預設配置，用於生成車輛時一次設定所有子元件
@@ -53,10 +54,10 @@ impl VehiclePreset {
                 ..Default::default()
             },
             lean: VehicleLean {
-                max_lean_angle: 0.611,        // 35°
+                max_lean_angle: 0.611, // 35°
                 lean_response: 6.0,
                 lean_damping: 10.0,
-                crash_lean_threshold: 0.70,   // ~40°
+                crash_lean_threshold: 0.70, // ~40°
                 crash_recovery_duration: 2.0,
                 ..Default::default()
             },

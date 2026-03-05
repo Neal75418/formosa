@@ -79,7 +79,11 @@ pub(crate) fn handle_fleeing_state(
 
 /// 設置追逐狀態
 #[inline]
-pub(crate) fn enter_chase_state(behavior: &mut AiBehavior, movement: &mut AiMovement, current_time: f32) {
+pub(crate) fn enter_chase_state(
+    behavior: &mut AiBehavior,
+    movement: &mut AiMovement,
+    current_time: f32,
+) {
     behavior.set_state(AiState::Chase, current_time);
     movement.is_running = true;
     movement.move_target = behavior.last_known_target_pos;

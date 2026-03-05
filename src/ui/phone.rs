@@ -10,15 +10,18 @@ use super::components::{
     PhoneContentArea, PhoneMissionLogList, PhoneScreen, PhoneStatusBar, PhoneStockMarketList,
     PhoneUiState, StockMarketTab,
 };
+#[allow(clippy::wildcard_imports)]
+use super::mod_shop::*;
+#[allow(clippy::wildcard_imports)]
+use super::phone_apps::*;
+#[allow(clippy::wildcard_imports)]
+use super::phone_apps_stock::*;
 use super::UiState;
+use crate::core::GameState;
 use crate::economy::stock_market::{StockMarket, StockSymbol};
 use crate::economy::PlayerWallet;
 use crate::mission::MissionManager;
 use crate::ui::notification::NotificationQueue;
-use crate::core::GameState;
-use super::phone_apps::*;
-use super::phone_apps_stock::*;
-use super::mod_shop::*;
 use crate::vehicle::VehicleModifications;
 
 // ============================================================================
@@ -50,6 +53,7 @@ const CONTENT_ITEM_BG: Color = Color::srgba(0.1, 0.12, 0.18, 0.8);
 
 /// 手機內容清理相關的查詢組合
 #[derive(SystemParam)]
+#[allow(clippy::struct_field_names)]
 pub struct PhoneContentCleanupQueries<'w, 's> {
     pub icon_query: Query<'w, 's, Entity, With<PhoneAppIcon>>,
     pub contact_query: Query<'w, 's, Entity, With<PhoneContactList>>,
@@ -63,6 +67,7 @@ pub struct PhoneContentCleanupQueries<'w, 's> {
 // ============================================================================
 
 /// 設置手機 UI
+#[allow(clippy::too_many_lines)]
 pub fn setup_phone_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
     let font = chinese_font.font.clone();
 
@@ -258,10 +263,10 @@ pub fn phone_input_system(
 
     // Escape 關閉或返回
     if keyboard.just_pressed(KeyCode::Escape) {
-        if phone_state.current_app != PhoneApp::Home {
-            phone_state.current_app = PhoneApp::Home;
-        } else {
+        if phone_state.current_app == PhoneApp::Home {
             ui_state.show_phone = false;
+        } else {
+            phone_state.current_app = PhoneApp::Home;
         }
         return;
     }
@@ -285,11 +290,13 @@ pub fn phone_input_system(
             phone_state.current_app = PhoneApp::all_apps()[phone_state.selected_index];
         }
     }
-
     // 任務日誌分頁切換（左右鍵）
     else if phone_state.current_app == PhoneApp::MissionLog {
         let tabs = MissionJournalTab::all();
-        let current_idx = tabs.iter().position(|t| *t == phone_state.journal_tab).unwrap_or(0);
+        let current_idx = tabs
+            .iter()
+            .position(|t| *t == phone_state.journal_tab)
+            .unwrap_or(0);
         if keyboard.just_pressed(KeyCode::ArrowRight) {
             phone_state.journal_tab = tabs[(current_idx + 1) % tabs.len()];
         }
@@ -300,7 +307,10 @@ pub fn phone_input_system(
     // 股市分頁切換 + 選股
     else if phone_state.current_app == PhoneApp::StockMarket {
         let tabs = StockMarketTab::all();
-        let current_idx = tabs.iter().position(|t| *t == phone_state.stock_tab).unwrap_or(0);
+        let current_idx = tabs
+            .iter()
+            .position(|t| *t == phone_state.stock_tab)
+            .unwrap_or(0);
         if keyboard.just_pressed(KeyCode::ArrowRight) {
             phone_state.stock_tab = tabs[(current_idx + 1) % tabs.len()];
         }
@@ -376,6 +386,7 @@ pub fn phone_icon_highlight_system(
 }
 
 /// 手機內容更新系統（根據當前 App 切換顯示內容）
+#[allow(clippy::too_many_lines)]
 pub fn phone_content_system(
     phone_state: Res<PhoneUiState>,
     mission_manager: Res<MissionManager>,
@@ -393,8 +404,7 @@ pub fn phone_content_system(
         phone_state.current_app == PhoneApp::StockMarket && stock_market.is_changed();
 
     // ModShop 頁面需要在錢包變化時也重建 UI
-    let mod_shop_changed =
-        phone_state.current_app == PhoneApp::ModShop && wallet.is_changed();
+    let mod_shop_changed = phone_state.current_app == PhoneApp::ModShop && wallet.is_changed();
 
     if !phone_state.is_changed() && !stock_changed && !mod_shop_changed {
         return;
@@ -493,17 +503,15 @@ pub fn phone_content_system(
                             ..default()
                         },
                     ))
-                    .with_children(|list| {
-                        match phone_state.journal_tab {
-                            MissionJournalTab::Active => {
-                                spawn_journal_active(list, &font, &mission_manager);
-                            }
-                            MissionJournalTab::Completed => {
-                                spawn_journal_completed(list, &font, &mission_manager);
-                            }
-                            MissionJournalTab::Stats => {
-                                spawn_journal_stats(list, &font, &mission_manager);
-                            }
+                    .with_children(|list| match phone_state.journal_tab {
+                        MissionJournalTab::Active => {
+                            spawn_journal_active(list, &font, &mission_manager);
+                        }
+                        MissionJournalTab::Completed => {
+                            spawn_journal_completed(list, &font, &mission_manager);
+                        }
+                        MissionJournalTab::Stats => {
+                            spawn_journal_stats(list, &font, &mission_manager);
                         }
                     });
 
@@ -554,33 +562,30 @@ pub fn phone_content_system(
             commands.entity(content_entity).with_children(|content| {
                 spawn_section_title(content, &font, "設定");
 
-                let settings = [
-                    "音量: 80%",
-                    "畫質: 高",
-                    "操控: 鍵盤滑鼠",
-                    "語言: 繁體中文",
-                ];
+                let settings = ["音量: 80%", "畫質: 高", "操控: 鍵盤滑鼠", "語言: 繁體中文"];
                 for setting in settings {
-                    content.spawn((
-                        Node {
-                            width: Val::Percent(100.0),
-                            padding: UiRect::all(Val::Px(8.0)),
-                            margin: UiRect::bottom(Val::Px(2.0)),
-                            ..default()
-                        },
-                        BackgroundColor(CONTENT_ITEM_BG),
-                        BorderRadius::all(Val::Px(4.0)),
-                    )).with_children(|item| {
-                        item.spawn((
-                            Text::new(setting),
-                            TextFont {
-                                font: font.clone(),
-                                font_size: 12.0,
+                    content
+                        .spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                padding: UiRect::all(Val::Px(8.0)),
+                                margin: UiRect::bottom(Val::Px(2.0)),
                                 ..default()
                             },
-                            TextColor(Color::srgba(0.7, 0.7, 0.8, 0.9)),
-                        ));
-                    });
+                            BackgroundColor(CONTENT_ITEM_BG),
+                            BorderRadius::all(Val::Px(4.0)),
+                        ))
+                        .with_children(|item| {
+                            item.spawn((
+                                Text::new(setting),
+                                TextFont {
+                                    font: font.clone(),
+                                    font_size: 12.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgba(0.7, 0.7, 0.8, 0.9)),
+                            ));
+                        });
                 }
             });
         }
@@ -605,29 +610,27 @@ pub fn phone_content_system(
                             ..default()
                         },
                     ))
-                    .with_children(|list| {
-                        match phone_state.stock_tab {
-                            StockMarketTab::StockList => {
-                                spawn_stock_list(
-                                    list,
-                                    &font,
-                                    &stock_market,
-                                    phone_state.selected_stock_index,
-                                );
-                            }
-                            StockMarketTab::Portfolio => {
-                                spawn_stock_portfolio(list, &font, &stock_market);
-                            }
-                            StockMarketTab::Trade => {
-                                spawn_stock_trade(
-                                    list,
-                                    &font,
-                                    &stock_market,
-                                    &wallet,
-                                    phone_state.selected_stock_index,
-                                    phone_state.trade_quantity,
-                                );
-                            }
+                    .with_children(|list| match phone_state.stock_tab {
+                        StockMarketTab::StockList => {
+                            spawn_stock_list(
+                                list,
+                                &font,
+                                &stock_market,
+                                phone_state.selected_stock_index,
+                            );
+                        }
+                        StockMarketTab::Portfolio => {
+                            spawn_stock_portfolio(list, &font, &stock_market);
+                        }
+                        StockMarketTab::Trade => {
+                            spawn_stock_trade(
+                                list,
+                                &font,
+                                &stock_market,
+                                &wallet,
+                                phone_state.selected_stock_index,
+                                phone_state.trade_quantity,
+                            );
                         }
                     });
 
@@ -655,6 +658,11 @@ pub fn phone_content_system(
 }
 
 /// 股票交易輸入系統（Enter 買入、Space 賣出）
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
 pub fn stock_trade_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
     ui_state: Res<UiState>,
@@ -684,16 +692,12 @@ pub fn stock_trade_input_system(
         match market.buy(symbol, quantity, &mut wallet) {
             Ok(price) => {
                 let total = (price * quantity as f32).ceil() as i32;
-                notification.success(format!(
-                    "買入 {} {} 股，花費 ${}",
-                    symbol.label(),
-                    quantity,
-                    total
-                ));
+                let label = symbol.label();
+                notification.success(format!("買入 {label} {quantity} 股，花費 ${total}"));
                 phone_state.stock_tab = StockMarketTab::Portfolio;
             }
             Err(msg) => {
-                notification.warning(format!("買入失敗：{}", msg));
+                notification.warning(format!("買入失敗：{msg}"));
             }
         }
     }
@@ -703,16 +707,12 @@ pub fn stock_trade_input_system(
         match market.sell(symbol, quantity, &mut wallet) {
             Ok(price) => {
                 let total = (price * quantity as f32).floor() as i32;
-                notification.success(format!(
-                    "賣出 {} {} 股，獲得 ${}",
-                    symbol.label(),
-                    quantity,
-                    total
-                ));
+                let label = symbol.label();
+                notification.success(format!("賣出 {label} {quantity} 股，獲得 ${total}"));
                 phone_state.stock_tab = StockMarketTab::Portfolio;
             }
             Err(msg) => {
-                notification.warning(format!("賣出失敗：{}", msg));
+                notification.warning(format!("賣出失敗：{msg}"));
             }
         }
     }
@@ -738,4 +738,3 @@ impl Plugin for PhonePlugin {
             );
     }
 }
-

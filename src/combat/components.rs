@@ -72,10 +72,10 @@ impl Default for LockOnState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ComboStep {
     #[default]
-    Jab,       // 第 1 擊：直拳
-    Hook,      // 第 2 擊：鉤拳
-    Uppercut,  // 第 3 擊：上勾拳
-    Finisher,  // 第 4 擊：重拳（強制擊退）
+    Jab, // 第 1 擊：直拳
+    Hook,     // 第 2 擊：鉤拳
+    Uppercut, // 第 3 擊：上勾拳
+    Finisher, // 第 4 擊：重拳（強制擊退）
 }
 
 impl ComboStep {
@@ -265,11 +265,11 @@ impl BlockState {
 /// 射擊輸入緩衝
 #[derive(Resource, Default)]
 pub struct ShootingInput {
-    pub is_fire_pressed: bool,           // 射擊鍵按下
-    pub is_fire_held: bool,              // 射擊鍵持續按住
-    pub is_aim_pressed: bool,            // 瞄準鍵按住
-    pub is_block_pressed: bool,          // 格擋鍵按住（近戰右鍵）
-    pub is_reload_pressed: bool,         // 換彈鍵按下
+    pub is_fire_pressed: bool,        // 射擊鍵按下
+    pub is_fire_held: bool,           // 射擊鍵持續按住
+    pub is_aim_pressed: bool,         // 瞄準鍵按住
+    pub is_block_pressed: bool,       // 格擋鍵按住（近戰右鍵）
+    pub is_reload_pressed: bool,      // 換彈鍵按下
     pub weapon_switch: Option<usize>, // 切換武器 (1-4)
     pub mouse_wheel: f32,             // 滑鼠滾輪
 }
@@ -476,7 +476,7 @@ pub struct EnemyPunchAnimation {
     pub phase: PunchPhase,        // 當前階段
     pub target: Option<Entity>,   // 攻擊目標
     pub attacker: Option<Entity>, // 攻擊者
-    pub has_damage_dealt: bool,       // 是否已造成傷害
+    pub has_damage_dealt: bool,   // 是否已造成傷害
 }
 
 impl Default for EnemyPunchAnimation {

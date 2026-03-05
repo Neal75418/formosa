@@ -298,7 +298,7 @@ pub fn evaluate_flank_quality(target_pos: Vec3, ally_positions: &[Vec3]) -> f32 
 
     // 計算角度覆蓋範圍（理想情況是均勻分布在目標周圍）
     let mut sorted_angles = angles.clone();
-    sorted_angles.sort_by(|a, b| a.total_cmp(b));
+    sorted_angles.sort_by(f32::total_cmp);
 
     // 計算相鄰角度之間的差異
     let mut max_gap = 0.0_f32;
@@ -574,7 +574,7 @@ pub fn squad_coordination_system(
         match member.role {
             SquadRole::Rusher => handle_rusher_role(&member, &behavior, &mut movement),
             SquadRole::Suppressor => {
-                handle_suppressor_role(my_pos, &member, &behavior, &mut movement)
+                handle_suppressor_role(my_pos, &member, &behavior, &mut movement);
             }
             SquadRole::Leader => handle_leader_role(my_pos, &member, &behavior, &mut movement),
             SquadRole::Flanker => {

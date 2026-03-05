@@ -69,72 +69,67 @@ pub fn handle_explosion_event_system(
         }
 
         // 生成爆炸視覺效果
-        match event.explosive_type {
-            ExplosiveType::Molotov => {
-                // 燃燒瓶：生成火焰區域 + 煙霧發射器
-                commands.spawn((
-                    Mesh3d(visuals.fire_mesh.clone()),
-                    MeshMaterial3d(visuals.fire_material.clone()),
-                    Transform::from_translation(position).with_scale(Vec3::new(
-                        event.radius,
-                        1.0,
-                        event.radius,
-                    )),
-                    FireZone::default(),
-                    SmokeEmitter {
-                        particles_per_second: 8.0, // 火焰產生較多煙霧
-                        remaining_time: MOLOTOV_FIRE_DURATION,
-                        radius: event.radius * 0.8,
-                        ..default()
-                    },
-                ));
-
-                // 生成初始火焰粒子
-                spawn_fire_particles(
-                    &mut commands,
-                    &visuals,
-                    &mut materials,
-                    position,
+        if event.explosive_type == ExplosiveType::Molotov {
+            // 燃燒瓶：生成火焰區域 + 煙霧發射器
+            commands.spawn((
+                Mesh3d(visuals.fire_mesh.clone()),
+                MeshMaterial3d(visuals.fire_material.clone()),
+                Transform::from_translation(position).with_scale(Vec3::new(
                     event.radius,
-                    5,
-                );
-            }
-            _ => {
-                // 手榴彈/黏性炸彈：生成爆炸效果
-                commands.spawn((
-                    Mesh3d(visuals.explosion_mesh.clone()),
-                    MeshMaterial3d(visuals.explosion_material.clone()),
-                    Transform::from_translation(position),
-                    ExplosionEffect::new(event.radius, event.max_damage, 0.5),
-                ));
-
-                // 生成衝擊波效果（GTA5 風格的擴散環）
-                // 每個衝擊波需要獨立的材質實例，避免多個衝擊波共享材質導致視覺錯誤
-                let shockwave_material = {
-                    let base_mat = materials.get(&visuals.shockwave_material).cloned();
-                    base_mat
-                        .map(|m| materials.add(m))
-                        .unwrap_or_else(|| visuals.shockwave_material.clone())
-                };
-
-                commands.spawn((
-                    Mesh3d(visuals.shockwave_mesh.clone()),
-                    MeshMaterial3d(shockwave_material),
-                    Transform::from_translation(position + Vec3::Y * 0.1)  // 稍微抬高避免地面穿透
-                        .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),  // 水平放置
-                    ShockwaveEffect::new(event.radius * 1.5),  // 衝擊波比爆炸半徑大 50%
-                ));
-
-                // 生成爆炸煙霧粒子（GTA5 風格）
-                spawn_smoke_particles(
-                    &mut commands,
-                    &visuals,
-                    &mut materials,
-                    position,
+                    1.0,
                     event.radius,
-                    8,
-                );
-            }
+                )),
+                FireZone::default(),
+                SmokeEmitter {
+                    particles_per_second: 8.0, // 火焰產生較多煙霧
+                    remaining_time: MOLOTOV_FIRE_DURATION,
+                    radius: event.radius * 0.8,
+                    ..default()
+                },
+            ));
+
+            // 生成初始火焰粒子
+            spawn_fire_particles(
+                &mut commands,
+                &visuals,
+                &mut materials,
+                position,
+                event.radius,
+                5,
+            );
+        } else {
+            // 手榴彈/黏性炸彈：生成爆炸效果
+            commands.spawn((
+                Mesh3d(visuals.explosion_mesh.clone()),
+                MeshMaterial3d(visuals.explosion_material.clone()),
+                Transform::from_translation(position),
+                ExplosionEffect::new(event.radius, event.max_damage, 0.5),
+            ));
+
+            // 生成衝擊波效果（GTA5 風格的擴散環）
+            // 每個衝擊波需要獨立的材質實例，避免多個衝擊波共享材質導致視覺錯誤
+            let shockwave_material = {
+                let base_mat = materials.get(&visuals.shockwave_material).cloned();
+                base_mat.map_or_else(|| visuals.shockwave_material.clone(), |m| materials.add(m))
+            };
+
+            commands.spawn((
+                Mesh3d(visuals.shockwave_mesh.clone()),
+                MeshMaterial3d(shockwave_material),
+                Transform::from_translation(position + Vec3::Y * 0.1)  // 稍微抬高避免地面穿透
+                    .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),  // 水平放置
+                ShockwaveEffect::new(event.radius * 1.5),  // 衝擊波比爆炸半徑大 50%
+            ));
+
+            // 生成爆炸煙霧粒子（GTA5 風格）
+            spawn_smoke_particles(
+                &mut commands,
+                &visuals,
+                &mut materials,
+                position,
+                event.radius,
+                8,
+            );
         }
 
         info!("{} 爆炸於 {:?}", event.explosive_type.name(), position);

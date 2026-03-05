@@ -6,10 +6,10 @@ use bevy::prelude::*;
 
 use super::effects::spawn_floating_damage_number;
 use super::{DamageSystemQueries, DamageSystemResources};
-use crate::combat::components::*;
-use crate::combat::health::*;
 use crate::ai::{CoverPoint, CoverSeeker};
 use crate::audio::{play_hit_sound, AudioManager, WeaponSounds};
+use crate::combat::components::*;
+use crate::combat::health::*;
 use crate::player::Player;
 use crate::ui::{
     trigger_damage_indicator, ChineseFont, DamageIndicatorState, FloatingDamageNumber,
@@ -56,8 +56,8 @@ fn calculate_cover_reduction(
     if let Some(attacker_transform) = attacker.and_then(|e| transform_query.get(e).ok()) {
         let attack_dir = target_pos - attacker_transform.translation;
         let attack_dir_2d = Vec3::new(attack_dir.x, 0.0, attack_dir.z).normalize_or_zero();
-        let cover_dir_2d = Vec3::new(cover.cover_direction.x, 0.0, cover.cover_direction.z)
-            .normalize_or_zero();
+        let cover_dir_2d =
+            Vec3::new(cover.cover_direction.x, 0.0, cover.cover_direction.z).normalize_or_zero();
 
         // 如果攻擊從掩體背面來（夾角 > 90°），掩體無效
         if attack_dir_2d.dot(cover_dir_2d) < 0.0 {
@@ -152,16 +152,21 @@ fn trigger_hit_reaction(
     force_knockback: bool,
     transform_query: &Query<&Transform>,
 ) {
+    /// 連擊終結技的最低擊退傷害值（確保超過 Knockback 門檻 40.0）
+    const FINISHER_KNOCKBACK_FORCE: f32 = 50.0;
+
     let Some(ref mut reaction) = hit_reaction else {
         return;
     };
     let hit_direction = calculate_hit_direction(attacker, target, transform_query);
-    /// 連擊終結技的最低擊退傷害值（確保超過 Knockback 門檻 40.0）
-    const FINISHER_KNOCKBACK_FORCE: f32 = 50.0;
 
     if force_knockback {
         // 連擊終結技：取實際傷害與最低擊退力的較大值
-        reaction.trigger(damage_dealt.max(FINISHER_KNOCKBACK_FORCE), hit_direction, false);
+        reaction.trigger(
+            damage_dealt.max(FINISHER_KNOCKBACK_FORCE),
+            hit_direction,
+            false,
+        );
     } else {
         reaction.trigger(damage_dealt, hit_direction, is_headshot);
     }
@@ -181,7 +186,7 @@ fn handle_player_damage_notification(
     if player_query.get(target).is_err() {
         return;
     }
-    notifications.warning(format!("-{:.0} HP", damage_dealt));
+    notifications.warning(format!("-{damage_dealt:.0} HP"));
 
     // 計算傷害方向（從玩家指向攻擊者）
     let direction = calculate_damage_direction(target, attacker, transform_query);
@@ -196,6 +201,10 @@ fn calculate_damage_direction(
     attacker: Option<Entity>,
     transform_query: &Query<&Transform>,
 ) -> Option<Vec2> {
+    // 距離太近時無法判斷方向（避免除以零和不穩定的方向）
+    // 閾值 0.25 = 0.5m 距離的平方，近戰/爆炸時返回 None
+    const MIN_DIRECTION_DISTANCE_SQ: f32 = 0.25;
+
     let attacker_entity = attacker?;
     let target_transform = transform_query.get(target).ok()?;
     let attacker_transform = transform_query.get(attacker_entity).ok()?;
@@ -204,9 +213,6 @@ fn calculate_damage_direction(
     let world_dir = attacker_transform.translation - target_transform.translation;
     let world_dir_2d = Vec2::new(world_dir.x, world_dir.z);
 
-    // 距離太近時無法判斷方向（避免除以零和不穩定的方向）
-    // 閾值 0.25 = 0.5m 距離的平方，近戰/爆炸時返回 None
-    const MIN_DIRECTION_DISTANCE_SQ: f32 = 0.25;
     if world_dir_2d.length_squared() < MIN_DIRECTION_DISTANCE_SQ {
         return None;
     }
@@ -229,6 +235,7 @@ fn calculate_damage_direction(
 
 /// 處理命中標記和音效
 #[inline]
+#[allow(clippy::ref_option)]
 fn handle_hit_marker_and_sound(
     is_headshot: bool,
     combat_state: &mut CombatState,
@@ -262,6 +269,7 @@ fn get_floating_damage_position(
 
 /// 生成浮動傷害數字
 #[inline]
+#[allow(clippy::ref_option)]
 fn spawn_floating_damage_if_possible(
     commands: &mut Commands,
     damage_pos: Vec3,

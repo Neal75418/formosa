@@ -3,13 +3,15 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
 use std::f32::consts::TAU;
 
-use super::{Destructible, DestructibleMaterial, DestructibleVisuals, Debris, DestructionEvent, DebrisPool, DestructibleId, DestroyedObjectTracker};
+use super::{
+    Debris, DebrisPool, DestroyedObjectTracker, Destructible, DestructibleId, DestructibleMaterial,
+    DestructibleVisuals, DestructionEvent,
+};
 use crate::combat::{DamageEvent, Damageable};
 use crate::core::COLLISION_GROUP_STATIC;
 
@@ -42,9 +44,8 @@ fn process_destructible_damage(
     tracker: &mut DestroyedObjectTracker,
 ) {
     // 計算方向（從攻擊者到目標）
-    let impact_direction = hit_position.map(|pos| {
-        (transform.translation - pos).normalize_or_zero()
-    });
+    let impact_direction =
+        hit_position.map(|pos| (transform.translation - pos).normalize_or_zero());
 
     // 造成傷害
     let destroyed = destructible.take_damage(damage_amount, current_time);
@@ -85,13 +86,20 @@ pub fn destructible_damage_system(
     time: Res<Time>,
     mut damage_events: MessageReader<DamageEvent>,
     mut destruction_events: MessageWriter<DestructionEvent>,
-    mut destructible_query: Query<(Entity, &Transform, &mut Destructible, Option<&DestructibleId>)>,
+    mut destructible_query: Query<(
+        Entity,
+        &Transform,
+        &mut Destructible,
+        Option<&DestructibleId>,
+    )>,
     mut tracker: ResMut<DestroyedObjectTracker>,
 ) {
     let current_time = time.elapsed_secs();
 
     for event in damage_events.read() {
-        let Ok((entity, transform, mut destructible, dest_id)) = destructible_query.get_mut(event.target) else {
+        let Ok((entity, transform, mut destructible, dest_id)) =
+            destructible_query.get_mut(event.target)
+        else {
             continue;
         };
 
@@ -140,9 +148,9 @@ fn calculate_debris_params(
         rng.random_range(-event.size.z / 2.0..event.size.z / 2.0),
     );
 
-    let base_velocity = event.impact_direction
-        .map(|dir| dir * rng.random_range(3.0..8.0))
-        .unwrap_or(Vec3::ZERO);
+    let base_velocity = event
+        .impact_direction
+        .map_or(Vec3::ZERO, |dir| dir * rng.random_range(3.0..8.0));
 
     let scatter = Vec3::new(
         rng.random_range(-3.0..3.0),
@@ -199,15 +207,17 @@ fn spawn_new_debris(
     material: Handle<StandardMaterial>,
     params: &DebrisSpawnParams,
 ) -> Entity {
-    commands.spawn((
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        Transform::from_translation(params.position)
-            .with_rotation(params.rotation)
-            .with_scale(Vec3::splat(params.scale)),
-        Debris::new(params.material, params.velocity),
-        Visibility::Visible,
-    )).id()
+    commands
+        .spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(params.position)
+                .with_rotation(params.rotation)
+                .with_scale(Vec3::splat(params.scale)),
+            Debris::new(params.material, params.velocity),
+            Visibility::Visible,
+        ))
+        .id()
 }
 
 /// 嘗試從池中取得碎片實體
@@ -222,7 +232,8 @@ fn try_reuse_pooled_debris(
         return false;
     };
 
-    let Ok((mut debris, mut transform, mut visibility)) = debris_query.get_mut(pooled_entity) else {
+    let Ok((mut debris, mut transform, mut visibility)) = debris_query.get_mut(pooled_entity)
+    else {
         warn!("碎片池實體 {:?} 無效，已從池中移除", pooled_entity);
         return false;
     };
@@ -271,8 +282,15 @@ pub fn destruction_effect_system(
         for _ in 0..debris_count {
             let params = calculate_debris_params(&mut rng, event, min_scale, max_scale);
 
-            let success = try_reuse_pooled_debris(&mut rng, &mut debris_pool, &mut debris_query, &params)
-                || try_create_new_debris(&mut commands, &mut debris_pool, &mesh, &material, &params);
+            let success =
+                try_reuse_pooled_debris(&mut rng, &mut debris_pool, &mut debris_query, &params)
+                    || try_create_new_debris(
+                        &mut commands,
+                        &mut debris_pool,
+                        &mesh,
+                        &material,
+                        &params,
+                    );
 
             if success {
                 spawned += 1;
@@ -349,7 +367,7 @@ pub fn debris_update_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut debris, mut transform, mut visibility) in debris_query.iter_mut() {
+    for (entity, mut debris, mut transform, mut visibility) in &mut debris_query {
         if *visibility == Visibility::Hidden {
             continue;
         }
@@ -415,7 +433,7 @@ fn spawn_glass_window_cached(
     meshes: &mut Assets<Mesh>,
     material: Handle<StandardMaterial>,
     position: Vec3,
-    size: Vec2,  // (width, height)
+    size: Vec2, // (width, height)
     rotation: Quat,
     id: DestructibleId,
 ) {
@@ -427,10 +445,7 @@ fn spawn_glass_window_cached(
         Transform::from_translation(position).with_rotation(rotation),
         Collider::cuboid(size.x / 2.0, size.y / 2.0, thickness / 2.0),
         RigidBody::Fixed,
-        CollisionGroups::new(
-            COLLISION_GROUP_STATIC,
-            Group::ALL,
-        ),
+        CollisionGroups::new(COLLISION_GROUP_STATIC, Group::ALL),
         Destructible::glass_window(size.x, size.y),
         Damageable,
         id,
@@ -455,7 +470,15 @@ pub fn spawn_glass_window(
         perceptual_roughness: 0.1,
         ..default()
     });
-    spawn_glass_window_cached(commands, meshes, glass_material, position, size, rotation, id);
+    spawn_glass_window_cached(
+        commands,
+        meshes,
+        glass_material,
+        position,
+        size,
+        rotation,
+        id,
+    );
 }
 
 /// 生成木製障礙物（使用快取材質）
@@ -473,10 +496,7 @@ fn spawn_wooden_barrier_cached(
         Transform::from_translation(position),
         Collider::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0),
         RigidBody::Fixed,
-        CollisionGroups::new(
-            COLLISION_GROUP_STATIC,
-            Group::ALL,
-        ),
+        CollisionGroups::new(COLLISION_GROUP_STATIC, Group::ALL),
         Destructible::wooden_plank(size.x, size.y, size.z),
         Damageable,
         id,
@@ -521,18 +541,46 @@ pub fn setup_world_destructibles(
     // === 商店玻璃窗位置 ===
     let glass_windows = [
         // 便利商店 - 全家 (pos: -55, 5, -55)
-        (Vec3::new(-55.0, 3.0, -50.5), Vec2::new(6.0, 4.0), Quat::IDENTITY),
+        (
+            Vec3::new(-55.0, 3.0, -50.5),
+            Vec2::new(6.0, 4.0),
+            Quat::IDENTITY,
+        ),
         // 便利商店 - 7-11 (pos: 55, 5, -55)
-        (Vec3::new(55.0, 3.0, -50.5), Vec2::new(6.0, 4.0), Quat::IDENTITY),
+        (
+            Vec3::new(55.0, 3.0, -50.5),
+            Vec2::new(6.0, 4.0),
+            Quat::IDENTITY,
+        ),
         // 刺青店 (pos: -25, 4, -55)
-        (Vec3::new(-25.0, 2.5, -50.5), Vec2::new(4.0, 3.5), Quat::IDENTITY),
+        (
+            Vec3::new(-25.0, 2.5, -50.5),
+            Vec2::new(4.0, 3.5),
+            Quat::IDENTITY,
+        ),
         // 速食店窗戶 (假設在 pos: 25, 4, -55)
-        (Vec3::new(25.0, 2.5, -50.5), Vec2::new(5.0, 3.5), Quat::IDENTITY),
+        (
+            Vec3::new(25.0, 2.5, -50.5),
+            Vec2::new(5.0, 3.5),
+            Quat::IDENTITY,
+        ),
         // 咖啡店（假設在 pos: 0, 4.5, -55）
-        (Vec3::new(0.0, 2.8, -50.5), Vec2::new(4.5, 4.0), Quat::IDENTITY),
+        (
+            Vec3::new(0.0, 2.8, -50.5),
+            Vec2::new(4.5, 4.0),
+            Quat::IDENTITY,
+        ),
         // 側面玻璃窗
-        (Vec3::new(-50.5, 3.0, -25.0), Vec2::new(5.0, 4.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
-        (Vec3::new(50.5, 3.0, 25.0), Vec2::new(5.0, 4.0), Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
+        (
+            Vec3::new(-50.5, 3.0, -25.0),
+            Vec2::new(5.0, 4.0),
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+        ),
+        (
+            Vec3::new(50.5, 3.0, 25.0),
+            Vec2::new(5.0, 4.0),
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+        ),
     ];
 
     // 可破壞物件 ID 計數器（用於存檔持久化）
@@ -540,7 +588,15 @@ pub fn setup_world_destructibles(
 
     let window_count = glass_windows.len();
     for (position, size, rotation) in glass_windows {
-        spawn_glass_window_cached(&mut commands, &mut meshes, cache.glass.clone(), position, size, rotation, DestructibleId(next_id));
+        spawn_glass_window_cached(
+            &mut commands,
+            &mut meshes,
+            cache.glass.clone(),
+            position,
+            size,
+            rotation,
+            DestructibleId(next_id),
+        );
         next_id += 1;
     }
 
@@ -562,7 +618,14 @@ pub fn setup_world_destructibles(
 
     let barrier_count = wooden_barriers.len();
     for (position, size) in wooden_barriers {
-        spawn_wooden_barrier_cached(&mut commands, &mut meshes, cache.wood.clone(), position, size, DestructibleId(next_id));
+        spawn_wooden_barrier_cached(
+            &mut commands,
+            &mut meshes,
+            cache.wood.clone(),
+            position,
+            size,
+            DestructibleId(next_id),
+        );
         next_id += 1;
     }
 
@@ -577,7 +640,14 @@ pub fn setup_world_destructibles(
 
     let metal_count = metal_objects.len();
     for (position, size) in metal_objects {
-        spawn_metal_object_cached(&mut commands, &mut meshes, cache.metal.clone(), position, size, DestructibleId(next_id));
+        spawn_metal_object_cached(
+            &mut commands,
+            &mut meshes,
+            cache.metal.clone(),
+            position,
+            size,
+            DestructibleId(next_id),
+        );
         next_id += 1;
     }
 
@@ -605,10 +675,7 @@ fn spawn_metal_object_cached(
         Transform::from_translation(position),
         Collider::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0),
         RigidBody::Fixed,
-        CollisionGroups::new(
-            COLLISION_GROUP_STATIC,
-            Group::ALL,
-        ),
+        CollisionGroups::new(COLLISION_GROUP_STATIC, Group::ALL),
         Destructible {
             health: 80.0,
             max_health: 80.0,

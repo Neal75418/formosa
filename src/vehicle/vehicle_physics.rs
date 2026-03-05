@@ -14,12 +14,15 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 /// 計算高速轉向衰減因子
-pub(super) fn speed_turn_factor(speed_ratio: f32, low_threshold: f32, high_speed_turn_factor: f32) -> f32 {
+pub(super) fn speed_turn_factor(
+    speed_ratio: f32,
+    low_threshold: f32,
+    high_speed_turn_factor: f32,
+) -> f32 {
     if speed_ratio < low_threshold {
         1.0
     } else {
-        let high_speed_falloff =
-            (speed_ratio - low_threshold) / (1.0 - low_threshold).max(0.01);
+        let high_speed_falloff = (speed_ratio - low_threshold) / (1.0 - low_threshold).max(0.01);
         1.0 - high_speed_falloff * (1.0 - high_speed_turn_factor)
     }
 }
@@ -157,7 +160,7 @@ impl VehicleDynamicsModifiers {
         };
 
         // 輪胎爆胎懲罰
-        let speed_penalty = tire_damage.map(|td| td.speed_penalty).unwrap_or(0.0);
+        let speed_penalty = tire_damage.map_or(0.0, |td| td.speed_penalty);
 
         Self {
             accel,
@@ -175,9 +178,10 @@ fn handle_acceleration(
     frame: &VehiclePhysicsFrame,
 ) {
     let accel_mult = frame.modifiers.nitro.max(1.0);
-    let accel_force =
-        calculate_acceleration_force(vehicle, frame.power_band, frame.config) * frame.modifiers.accel;
-    let effective_accel = accel_force * accel_mult * input.throttle_input * frame.effective_traction;
+    let accel_force = calculate_acceleration_force(vehicle, frame.power_band, frame.config)
+        * frame.modifiers.accel;
+    let effective_accel =
+        accel_force * accel_mult * input.throttle_input * frame.effective_traction;
 
     // Wheel spin logic
     let slip_threshold = if frame.effective_traction < frame.config.normal_traction_threshold {
@@ -199,8 +203,7 @@ fn handle_acceleration(
             frame.effective_traction * (1.0 - input.wheel_spin * frame.config.slip_grip_penalty);
         vehicle.current_speed += effective_accel * grip * frame.dt;
     } else {
-        input.wheel_spin =
-            (input.wheel_spin - frame.dt * frame.config.slip_recovery_rate).max(0.0);
+        input.wheel_spin = (input.wheel_spin - frame.dt * frame.config.slip_recovery_rate).max(0.0);
         vehicle.current_speed += effective_accel * frame.dt;
     }
 }
@@ -212,7 +215,9 @@ fn handle_braking(
     frame: &VehiclePhysicsFrame,
 ) {
     if vehicle.current_speed > 0.5 {
-        let brake_decel = braking.brake_force * frame.modifiers.brake * input.brake_input
+        let brake_decel = braking.brake_force
+            * frame.modifiers.brake
+            * input.brake_input
             * frame.effective_traction;
         vehicle.current_speed -= brake_decel * frame.dt;
         vehicle.current_speed = vehicle.current_speed.max(0.0);
@@ -242,7 +247,9 @@ fn handle_friction(
         vehicle.current_speed *= 1.0 - handbrake_decel;
     } else {
         // Natural Deceleration
-        let drag = 1.0 + (vehicle.current_speed.abs() / effective_max_speed) * physics_config.friction_drag_coefficient;
+        let drag = 1.0
+            + (vehicle.current_speed.abs() / effective_max_speed)
+                * physics_config.friction_drag_coefficient;
         vehicle.current_speed *= 1.0 - physics_config.friction_base_decel * drag;
     }
 }
@@ -294,7 +301,7 @@ pub fn vehicle_steering_system(
         1.0
     };
     // 輪胎爆胎操控懲罰
-    let tire_handling = tire_damage.map(|td| 1.0 - td.handling_penalty).unwrap_or(1.0);
+    let tire_handling = tire_damage.map_or(1.0, |td| 1.0 - td.handling_penalty);
     let effective_handling = weather_handling * handling_mod * tire_handling;
 
     // Turning Logic
@@ -349,8 +356,7 @@ pub fn vehicle_drift_system(
     let Some(vehicle_entity) = game_state.current_vehicle else {
         return;
     };
-    let Ok((mut vehicle, steering, mut drift, input, mods)) =
-        vehicles.get_mut(vehicle_entity)
+    let Ok((mut vehicle, steering, mut drift, input, mods)) = vehicles.get_mut(vehicle_entity)
     else {
         return;
     };
@@ -524,7 +530,8 @@ pub fn vehicle_suspension_system(
         // 目標傾斜 = 轉向 × 最大角度 × 速度因子
         // 高速時傾斜更深（離心力效果）
         let centripetal_factor = 1.0 + speed_factor * 0.3;
-        let target_lean = input.steer_input * lean.max_lean_angle * speed_factor * centripetal_factor;
+        let target_lean =
+            input.steer_input * lean.max_lean_angle * speed_factor * centripetal_factor;
 
         // Spring-damper: F = -k*(x - target) - c*v
         let spring_force = lean.lean_response * (target_lean - lean.lean_angle);
@@ -558,11 +565,16 @@ pub fn vehicle_suspension_system(
     // Suspension
     let suspension_speed = body.suspension_stiffness * dt;
     body.body_roll += ((target_roll + drift_roll_bonus) - body.body_roll) * suspension_speed;
-    body.body_pitch +=
-        ((target_pitch + handbrake_pitch) - body.body_pitch) * suspension_speed;
+    body.body_pitch += ((target_pitch + handbrake_pitch) - body.body_pitch) * suspension_speed;
 
-    body.body_roll = body.body_roll.clamp(-config.physics.roll_angle_limit, config.physics.roll_angle_limit);
-    body.body_pitch = body.body_pitch.clamp(-config.physics.pitch_angle_limit, config.physics.pitch_angle_limit);
+    body.body_roll = body.body_roll.clamp(
+        -config.physics.roll_angle_limit,
+        config.physics.roll_angle_limit,
+    );
+    body.body_pitch = body.body_pitch.clamp(
+        -config.physics.pitch_angle_limit,
+        config.physics.pitch_angle_limit,
+    );
 }
 
 // ============================================================================
@@ -610,12 +622,12 @@ pub(super) fn get_weather_factor(
     match weather.weather_type {
         WeatherType::Clear => params.clear,
         WeatherType::Cloudy => params.cloudy,
-        WeatherType::Rainy => {
-            params.rainy_base + (1.0 - weather.intensity) * params.rainy_range
-        }
+        WeatherType::Rainy => params.rainy_base + (1.0 - weather.intensity) * params.rainy_range,
         WeatherType::Foggy => params.foggy,
         WeatherType::Stormy => params.stormy_base + (1.0 - weather.intensity) * params.stormy_range,
-        WeatherType::Sandstorm => params.sandstorm_base + (1.0 - weather.intensity) * params.sandstorm_range,
+        WeatherType::Sandstorm => {
+            params.sandstorm_base + (1.0 - weather.intensity) * params.sandstorm_range
+        }
     }
 }
 

@@ -11,6 +11,7 @@ use crate::core::{ease_in_quad, ease_out_quad, AppState};
 use crate::wanted::{handle_arrest_event_system, ArrestEvent, ArrestType};
 
 use super::components::ChineseFont;
+#[allow(clippy::wildcard_imports)]
 use super::constants::*;
 
 // ============================================================================
@@ -208,10 +209,7 @@ fn detect_busted_trigger(
 }
 
 /// 偵測玩家死亡 → 觸發 WASTED
-fn detect_wasted_trigger(
-    respawn_state: Res<RespawnState>,
-    mut state: ResMut<ScreenEffectState>,
-) {
+fn detect_wasted_trigger(respawn_state: Res<RespawnState>, mut state: ResMut<ScreenEffectState>) {
     let is_dead = respawn_state.is_dead;
 
     // 偵測 is_dead 從 false → true 的轉變
@@ -270,8 +268,7 @@ fn screen_effect_phase_machine(
                 state.phase = ScreenEffectPhase::Complete;
             }
             let t = ((state.elapsed - HOLD_END) / (FADE_END - HOLD_END)).min(1.0);
-            state.time_scale =
-                SLOW_MOTION_SCALE + (1.0 - SLOW_MOTION_SCALE) * ease_in_quad(t);
+            state.time_scale = SLOW_MOTION_SCALE + (1.0 - SLOW_MOTION_SCALE) * ease_in_quad(t);
         }
         ScreenEffectPhase::Complete => {
             match state.effect_type {
@@ -297,13 +294,13 @@ fn screen_effect_phase_machine(
     }
 
     // 設定全局時間縮放（使用真實 dt 乘以縮放比例）
-    if state.phase != ScreenEffectPhase::Inactive {
+    if state.phase == ScreenEffectPhase::Inactive {
+        *time_strategy = bevy::time::TimeUpdateStrategy::Automatic;
+    } else {
         let scaled_dt = (real_dt * state.time_scale).max(0.0001);
         *time_strategy = bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f32(scaled_dt),
         );
-    } else {
-        *time_strategy = bevy::time::TimeUpdateStrategy::Automatic;
     }
 }
 
@@ -312,10 +309,7 @@ fn screen_effect_visual_update(
     state: Res<ScreenEffectState>,
     mut root_query: Query<&mut Visibility, With<ScreenEffectRoot>>,
     mut tint_query: Query<&mut BackgroundColor, With<ScreenEffectTint>>,
-    mut text_query: Query<
-        (&mut TextColor, &mut TextFont, &mut Text),
-        With<ScreenEffectLabel>,
-    >,
+    mut text_query: Query<(&mut TextColor, &mut TextFont, &mut Text), With<ScreenEffectLabel>>,
     mut blackout_query: Query<
         &mut BackgroundColor,
         (With<ScreenEffectBlackout>, Without<ScreenEffectTint>),
@@ -340,9 +334,7 @@ fn screen_effect_visual_update(
                 let t = (state.elapsed / SLOWDOWN_DURATION).min(1.0);
                 ease_out_quad(t) * SCREEN_EFFECT_TINT_ALPHA
             }
-            ScreenEffectPhase::Hold | ScreenEffectPhase::FadeToBlack => {
-                SCREEN_EFFECT_TINT_ALPHA
-            }
+            ScreenEffectPhase::Hold | ScreenEffectPhase::FadeToBlack => SCREEN_EFFECT_TINT_ALPHA,
             _ => 0.0,
         };
         *bg = if is_wasted {
@@ -413,15 +405,11 @@ pub(super) struct ScreenEffectPlugin;
 impl Plugin for ScreenEffectPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ScreenEffectState>()
-            .add_systems(
-                Startup,
-                setup_screen_effect_ui.in_set(super::UiSetup),
-            )
+            .add_systems(Startup, setup_screen_effect_ui.in_set(super::UiSetup))
             .add_systems(
                 Update,
                 (
-                    detect_busted_trigger
-                        .before(handle_arrest_event_system),
+                    detect_busted_trigger.before(handle_arrest_event_system),
                     detect_wasted_trigger,
                     screen_effect_phase_machine
                         .after(detect_wasted_trigger)

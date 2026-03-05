@@ -2,10 +2,12 @@
 //!
 //! 處理過場動畫播放、攝影機控制、淡入淡出等
 
-
 use bevy::prelude::*;
 
-use super::cutscene::*;
+use super::cutscene::{
+    ActiveCutscene, CutsceneAction, CutsceneDatabase, CutsceneEvent, CutsceneState,
+    CutsceneSubtitle, FadeOverlay, FadeState, LetterboxBar, SkipPrompt,
+};
 use super::story_data::CutsceneId;
 
 /// 過場動畫系統 Plugin
@@ -254,10 +256,7 @@ fn cutscene_playback_system(
 }
 
 /// 過場動畫完成清理
-pub fn cutscene_cleanup_system(
-    mut cutscene_state: ResMut<CutsceneState>,
-    mut commands: Commands,
-) {
+pub fn cutscene_cleanup_system(mut cutscene_state: ResMut<CutsceneState>, mut commands: Commands) {
     let Some(active) = &cutscene_state.active_cutscene else {
         return;
     };
@@ -379,7 +378,7 @@ fn execute_cutscene_action(
     match action {
         CutsceneAction::ShowSubtitle { text, duration: _ } => {
             if let Ok((mut subtitle_text, mut vis)) = subtitle_query.single_mut() {
-                subtitle_text.0 = text.clone();
+                subtitle_text.0.clone_from(text);
                 *vis = Visibility::Visible;
             }
         }
@@ -534,10 +533,7 @@ fn cutscene_skip_system(
 
 /// 開始過場動畫
 #[allow(dead_code)]
-pub fn start_cutscene(
-    cutscene_id: CutsceneId,
-    events: &mut MessageWriter<CutsceneEvent>,
-) {
+pub fn start_cutscene(cutscene_id: CutsceneId, events: &mut MessageWriter<CutsceneEvent>) {
     events.write(CutsceneEvent::Start(cutscene_id));
 }
 

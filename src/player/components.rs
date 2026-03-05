@@ -2,9 +2,8 @@
 
 // 部分屬性為將來擴展預留，個別標記 #[allow(dead_code)]
 
-
+use crate::core::{ease_in_cubic, ease_out_cubic};
 use bevy::prelude::*;
-use crate::core::{ease_out_cubic, ease_in_cubic};
 
 /// 玩家標記與移動參數
 /// 注意：生命值使用獨立的 Health 組件，不在此結構中
@@ -33,23 +32,29 @@ pub struct Player {
 
 impl Default for Player {
     fn default() -> Self {
-        let acceleration_time = 0.3;  // 0.3 秒從靜止到全速
-        let deceleration_time = 0.4;  // 0.4 秒從全速到靜止
-        debug_assert!(acceleration_time > 0.0, "acceleration_time 必須 > 0，否則除零");
-        debug_assert!(deceleration_time > 0.0, "deceleration_time 必須 > 0，否則除零");
+        let acceleration_time = 0.3; // 0.3 秒從靜止到全速
+        let deceleration_time = 0.4; // 0.4 秒從全速到靜止
+        debug_assert!(
+            acceleration_time > 0.0,
+            "acceleration_time 必須 > 0，否則除零"
+        );
+        debug_assert!(
+            deceleration_time > 0.0,
+            "deceleration_time 必須 > 0，否則除零"
+        );
 
         Self {
-            speed: 10.0,           // 基礎走路速度
+            speed: 10.0, // 基礎走路速度
             rotation_speed: 3.0,
-            sprint_speed: 18.0,    // 衝刺速度
-            crouch_speed: 4.0,     // 蹲伏速度
+            sprint_speed: 18.0, // 衝刺速度
+            crouch_speed: 4.0,  // 蹲伏速度
             is_sprinting: false,
             is_crouching: false,
             jump_force: 12.0,
             vertical_velocity: 0.0,
             is_grounded: true,
             // 加速度系統
-            current_speed: 0.0,           // 初始靜止
+            current_speed: 0.0, // 初始靜止
             acceleration_time,
             deceleration_time,
             last_movement_direction: Vec3::Z, // 初始面向 +Z
@@ -89,11 +94,14 @@ impl SprintState {
             SprintState::Idle => {
                 // 開始加速
                 if speed_ratio > Self::WALK_THRESHOLD {
-                    *self = SprintState::Accelerating { progress: speed_ratio / Self::SPRINT_THRESHOLD };
+                    *self = SprintState::Accelerating {
+                        progress: speed_ratio / Self::SPRINT_THRESHOLD,
+                    };
                 }
             }
             SprintState::Accelerating { .. } => {
-                let new_progress = (current_speed - walk_speed) / (sprint_speed * Self::SPRINT_THRESHOLD - walk_speed);
+                let new_progress = (current_speed - walk_speed)
+                    / (sprint_speed * Self::SPRINT_THRESHOLD - walk_speed);
                 let clamped = new_progress.clamp(0.0, 1.0);
                 if clamped >= 1.0 {
                     *self = SprintState::Sprinting;
@@ -106,7 +114,9 @@ impl SprintState {
             SprintState::Sprinting => {
                 // 開始減速
                 if speed_ratio < Self::SPRINT_THRESHOLD {
-                    *self = SprintState::Decelerating { progress: speed_ratio / Self::SPRINT_THRESHOLD };
+                    *self = SprintState::Decelerating {
+                        progress: speed_ratio / Self::SPRINT_THRESHOLD,
+                    };
                 }
             }
             SprintState::Decelerating { .. } => {
@@ -116,7 +126,9 @@ impl SprintState {
                 } else if new_progress <= Self::WALK_THRESHOLD / Self::SPRINT_THRESHOLD {
                     *self = SprintState::Idle;
                 } else {
-                    *self = SprintState::Decelerating { progress: new_progress };
+                    *self = SprintState::Decelerating {
+                        progress: new_progress,
+                    };
                 }
             }
         }
@@ -131,9 +143,10 @@ impl SprintState {
     pub fn animation_blend(&self) -> f32 {
         match *self {
             SprintState::Idle => 0.0,
-            SprintState::Accelerating { progress } => progress,
+            SprintState::Accelerating { progress } | SprintState::Decelerating { progress } => {
+                progress
+            }
             SprintState::Sprinting => 1.0,
-            SprintState::Decelerating { progress } => progress,
         }
     }
 }
@@ -153,9 +166,9 @@ pub struct PlayerSprintState {
 pub struct Stamina {
     pub current: f32,
     pub max: f32,
-    pub drain_rate: f32,   // 衝刺時消耗速度（每秒）
-    pub regen_rate: f32,   // 非衝刺時恢復速度（每秒）
-    pub exhausted: bool,   // 是否耗盡（需恢復到門檻才能再衝刺）
+    pub drain_rate: f32, // 衝刺時消耗速度（每秒）
+    pub regen_rate: f32, // 非衝刺時恢復速度（每秒）
+    pub exhausted: bool, // 是否耗盡（需恢復到門檻才能再衝刺）
 }
 
 impl Default for Stamina {
@@ -367,7 +380,13 @@ impl VehicleTransitionState {
     }
 
     /// 開始上車動畫
-    pub fn start_enter(&mut self, player_pos: Vec3, vehicle: Entity, door_pos: Vec3, from_right: bool) {
+    pub fn start_enter(
+        &mut self,
+        player_pos: Vec3,
+        vehicle: Entity,
+        door_pos: Vec3,
+        from_right: bool,
+    ) {
         self.phase = VehicleTransitionPhase::WalkingToVehicle;
         self.progress = 0.0;
         self.target_vehicle = Some(vehicle);
@@ -378,7 +397,13 @@ impl VehicleTransitionState {
     }
 
     /// 開始下車動畫
-    pub fn start_exit(&mut self, seat_pos: Vec3, vehicle: Entity, exit_pos: Vec3, from_right: bool) {
+    pub fn start_exit(
+        &mut self,
+        seat_pos: Vec3,
+        vehicle: Entity,
+        exit_pos: Vec3,
+        from_right: bool,
+    ) {
         self.phase = VehicleTransitionPhase::OpeningDoorExit;
         self.progress = 0.0;
         self.target_vehicle = Some(vehicle);
@@ -393,12 +418,14 @@ impl VehicleTransitionState {
         match self.phase {
             VehicleTransitionPhase::None => 0.0,
             VehicleTransitionPhase::WalkingToVehicle => Self::WALK_TO_VEHICLE_DURATION,
-            VehicleTransitionPhase::OpeningDoor => Self::OPEN_DOOR_DURATION,
+            VehicleTransitionPhase::OpeningDoor | VehicleTransitionPhase::OpeningDoorExit => {
+                Self::OPEN_DOOR_DURATION
+            }
             VehicleTransitionPhase::EnteringVehicle => Self::ENTER_DURATION,
-            VehicleTransitionPhase::ClosingDoor => Self::CLOSE_DOOR_DURATION,
-            VehicleTransitionPhase::OpeningDoorExit => Self::OPEN_DOOR_DURATION,
+            VehicleTransitionPhase::ClosingDoor | VehicleTransitionPhase::ClosingDoorExit => {
+                Self::CLOSE_DOOR_DURATION
+            }
             VehicleTransitionPhase::ExitingVehicle => Self::EXIT_DURATION,
-            VehicleTransitionPhase::ClosingDoorExit => Self::CLOSE_DOOR_DURATION,
             VehicleTransitionPhase::WalkingAway => Self::WALK_AWAY_DURATION,
         }
     }
@@ -435,12 +462,12 @@ impl VehicleTransitionState {
             VehicleTransitionPhase::WalkingToVehicle => VehicleTransitionPhase::OpeningDoor,
             VehicleTransitionPhase::OpeningDoor => VehicleTransitionPhase::EnteringVehicle,
             VehicleTransitionPhase::EnteringVehicle => VehicleTransitionPhase::ClosingDoor,
-            VehicleTransitionPhase::ClosingDoor => VehicleTransitionPhase::None,
             VehicleTransitionPhase::OpeningDoorExit => VehicleTransitionPhase::ExitingVehicle,
             VehicleTransitionPhase::ExitingVehicle => VehicleTransitionPhase::ClosingDoorExit,
             VehicleTransitionPhase::ClosingDoorExit => VehicleTransitionPhase::WalkingAway,
-            VehicleTransitionPhase::WalkingAway => VehicleTransitionPhase::None,
-            VehicleTransitionPhase::None => VehicleTransitionPhase::None,
+            VehicleTransitionPhase::ClosingDoor
+            | VehicleTransitionPhase::WalkingAway
+            | VehicleTransitionPhase::None => VehicleTransitionPhase::None,
         };
     }
 
@@ -505,7 +532,10 @@ mod tests {
 
     #[test]
     fn stamina_regenerate() {
-        let mut s = Stamina { current: 50.0, ..Default::default() };
+        let mut s = Stamina {
+            current: 50.0,
+            ..Default::default()
+        };
         // 1 秒恢復 10
         s.regenerate(1.0);
         assert!((s.current - 60.0).abs() < f32::EPSILON);
@@ -513,7 +543,10 @@ mod tests {
 
     #[test]
     fn stamina_regenerate_capped_at_max() {
-        let mut s = Stamina { current: 95.0, ..Default::default() };
+        let mut s = Stamina {
+            current: 95.0,
+            ..Default::default()
+        };
         s.regenerate(2.0);
         assert_eq!(s.current, 100.0);
     }
@@ -540,7 +573,10 @@ mod tests {
 
     #[test]
     fn stamina_ratio() {
-        let s = Stamina { current: 75.0, ..Default::default() };
+        let s = Stamina {
+            current: 75.0,
+            ..Default::default()
+        };
         assert!((s.ratio() - 0.75).abs() < f32::EPSILON);
     }
 

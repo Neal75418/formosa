@@ -1,14 +1,18 @@
 //! 警察戰鬥與無線電通訊
 
+use crate::core::rapier_real_to_f32;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
-use crate::core::rapier_real_to_f32;
 
-use crate::player::Player;
-use crate::combat::{DamageEvent, DamageSource, CombatVisuals, spawn_bullet_tracer, spawn_muzzle_flash, TracerStyle};
+use crate::combat::{
+    spawn_bullet_tracer, spawn_muzzle_flash, CombatVisuals, DamageEvent, DamageSource, TracerStyle,
+};
 use crate::core::PoliceSpatialHash;
+use crate::player::Player;
 
+#[allow(clippy::wildcard_imports)]
 use super::super::components::*;
+#[allow(clippy::wildcard_imports)]
 use super::super::config::*;
 
 // ============================================================================
@@ -25,8 +29,16 @@ fn check_line_of_sight(
 ) -> bool {
     let filter = QueryFilter::default().exclude_rigid_body(exclude_entity);
 
-    match rapier.cast_ray(ray_origin, ray_direction, distance as RapierReal, true, filter) {
-        Some((hit_entity, toi)) => hit_entity == player_entity || rapier_real_to_f32(toi) >= distance - 1.0,
+    match rapier.cast_ray(
+        ray_origin,
+        ray_direction,
+        distance as RapierReal,
+        true,
+        filter,
+    ) {
+        Some((hit_entity, toi)) => {
+            hit_entity == player_entity || rapier_real_to_f32(toi) >= distance - 1.0
+        }
         None => true,
     }
 }
@@ -71,25 +83,42 @@ pub fn police_combat_system(
     rapier_context: ReadRapierContext,
     combat_visuals: Option<Res<CombatVisuals>>,
 ) {
-    let Ok((player_entity, player_transform)) = player_query.single() else { return; };
+    let Ok((player_entity, player_transform)) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
-    let Ok(rapier) = rapier_context.single() else { return; };
+    let Ok(rapier) = rapier_context.single() else {
+        return;
+    };
 
     for (police_entity, transform, mut officer) in &mut police_query {
-        if officer.state != PoliceState::Engaging { continue; }
+        if officer.state != PoliceState::Engaging {
+            continue;
+        }
 
         officer.attack_cooldown -= time.delta_secs();
-        if officer.attack_cooldown > 0.0 { continue; }
+        if officer.attack_cooldown > 0.0 {
+            continue;
+        }
 
         let police_pos = transform.translation;
         let to_player = player_pos - police_pos;
         let distance = to_player.length();
-        if distance > config.attack_range { continue; }
+        if distance > config.attack_range {
+            continue;
+        }
 
         let ray_origin = police_pos + Vec3::Y * MUZZLE_FLASH_HEIGHT;
         let ray_direction = to_player.normalize();
 
-        if !check_line_of_sight(&rapier, ray_origin, ray_direction, distance, police_entity, player_entity) {
+        if !check_line_of_sight(
+            &rapier,
+            ray_origin,
+            ray_direction,
+            distance,
+            police_entity,
+            player_entity,
+        ) {
             continue;
         }
 
@@ -101,12 +130,20 @@ pub fn police_combat_system(
 
         if let Some(ref visuals) = combat_visuals {
             spawn_muzzle_flash(&mut commands, visuals, muzzle_pos);
-            let tracer_style = if is_military { TracerStyle::Rifle } else { TracerStyle::Pistol };
+            let tracer_style = if is_military {
+                TracerStyle::Rifle
+            } else {
+                TracerStyle::Pistol
+            };
             spawn_bullet_tracer(&mut commands, visuals, muzzle_pos, tracer_end, tracer_style);
         }
 
         if is_hit {
-            let damage = if is_military { MILITARY_DAMAGE } else { config.damage };
+            let damage = if is_military {
+                MILITARY_DAMAGE
+            } else {
+                config.damage
+            };
             damage_events.write(DamageEvent {
                 target: player_entity,
                 amount: damage,
@@ -118,7 +155,11 @@ pub fn police_combat_system(
             });
         }
 
-        officer.attack_cooldown = if is_military { MILITARY_ATTACK_COOLDOWN } else { config.attack_cooldown };
+        officer.attack_cooldown = if is_military {
+            MILITARY_ATTACK_COOLDOWN
+        } else {
+            config.attack_cooldown
+        };
     }
 }
 
@@ -133,7 +174,10 @@ fn can_send_radio(officer: &PoliceOfficer) -> bool {
 }
 
 fn can_receive_radio(state: PoliceState) -> bool {
-    matches!(state, PoliceState::Patrolling | PoliceState::Alerted | PoliceState::Searching)
+    matches!(
+        state,
+        PoliceState::Patrolling | PoliceState::Alerted | PoliceState::Searching
+    )
 }
 
 fn collect_radio_senders(
@@ -150,16 +194,16 @@ fn collect_radio_senders(
         if can_send_radio(&officer) {
             senders.push((entity, transform.translation));
             officer.radio_cooldown = RADIO_CALL_COOLDOWN;
-            debug!("🔊 警察在 ({:.1}, {:.1}) 發送無線電呼叫", transform.translation.x, transform.translation.z);
+            debug!(
+                "🔊 警察在 ({:.1}, {:.1}) 發送無線電呼叫",
+                transform.translation.x, transform.translation.z
+            );
         }
     }
     senders
 }
 
-fn collect_receivers(
-    senders: &[(Entity, Vec3)],
-    police_hash: &PoliceSpatialHash,
-) -> Vec<Entity> {
+fn collect_receivers(senders: &[(Entity, Vec3)], police_hash: &PoliceSpatialHash) -> Vec<Entity> {
     let mut receivers = Vec::new();
 
     for (sender_entity, sender_pos) in senders {
@@ -200,13 +244,19 @@ pub fn police_radio_call_system(
     wanted: Res<WantedLevel>,
     time: Res<Time>,
 ) {
-    if wanted.stars == 0 { return; }
+    if wanted.stars == 0 {
+        return;
+    }
 
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     let senders = collect_radio_senders(&mut police_query, time.delta_secs());
-    if senders.is_empty() { return; }
+    if senders.is_empty() {
+        return;
+    }
 
     let receivers = collect_receivers(&senders, &police_hash);
     notify_receivers(&mut police_query, receivers, player_pos);

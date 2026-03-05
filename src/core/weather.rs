@@ -4,12 +4,12 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum WeatherType {
     #[default]
-    Clear,      // 晴天
-    Cloudy,     // 陰天
-    Rainy,      // 雨天
-    Foggy,      // 霧天
-    Stormy,     // 暴風雨（強風+大雨+閃電）
-    Sandstorm,  // 沙塵暴（能見度極低+沙粒效果）
+    Clear, // 晴天
+    Cloudy,    // 陰天
+    Rainy,     // 雨天
+    Foggy,     // 霧天
+    Stormy,    // 暴風雨（強風+大雨+閃電）
+    Sandstorm, // 沙塵暴（能見度極低+沙粒效果）
 }
 
 impl WeatherType {

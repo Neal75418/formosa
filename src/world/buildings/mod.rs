@@ -12,9 +12,9 @@ pub use entertainment::*;
 pub use generic::*;
 pub use services::*;
 
+use crate::world::{Building, BuildingType};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::Collider;
-use crate::world::{Building, BuildingType};
 
 /// 建築風格枚舉
 #[derive(Clone, Copy)]
@@ -92,7 +92,7 @@ pub fn match_building_type(name: &str) -> BuildingStyle {
 }
 
 /// 生成建築基礎結構（消除重複程式碼）
-/// 返回 EntityCommands 以供後續添加子實體
+/// 返回 `EntityCommands` 以供後續添加子實體
 pub fn spawn_building_base<'a>(
     cmd: &'a mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -134,46 +134,46 @@ pub fn spawn_rich_building(
 ) {
     match match_building_type(name) {
         BuildingStyle::Wannien => {
-            spawn_wannien(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_wannien(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::Donki => {
-            spawn_donki(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_donki(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::Eslite => {
-            spawn_eslite(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_eslite(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::ModernGrid => {
-            spawn_modern_grid(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_modern_grid(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::Cinema => {
-            spawn_cinema(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_cinema(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::Hotel => {
-            spawn_hotel(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_hotel(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::GameCenter => {
-            spawn_game_center(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_game_center(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::TattooShop => {
-            spawn_tattoo_shop(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_tattoo_shop(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::FastFood => {
-            spawn_fast_food(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_fast_food(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::ConvenienceStore => {
-            spawn_convenience_store(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_convenience_store(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::StreetWear => {
-            spawn_streetwear_shop(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_streetwear_shop(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::ClawMachine => {
-            spawn_claw_machine(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_claw_machine(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::Daiso => {
-            spawn_daiso(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_daiso(commands, meshes, materials, pos, width, height, depth, name);
         }
         BuildingStyle::Generic => {
-            spawn_generic_building(commands, meshes, materials, pos, width, height, depth, name)
+            spawn_generic_building(commands, meshes, materials, pos, width, height, depth, name);
         }
     }
 }

@@ -2,8 +2,8 @@
 //!
 //! 處理道路、人行道、車道標線等的生成
 
-use bevy::prelude::*;
 use bevy::mesh::VertexAttributeValues;
+use bevy::prelude::*;
 
 // ============================================================================
 // 道路系統輔助結構
@@ -39,8 +39,8 @@ impl RoadLayout {
     }
 }
 
-/// 建立帶有平鋪 UV 的平面 Mesh
-/// tile_size: 每個貼圖覆蓋的實際大小 (米)
+/// 建立帶有平鋪 UV 的平面 `Mesh`
+/// `tile_size`: 每個貼圖覆蓋的實際大小 (米)
 pub fn create_tiled_plane(width: f32, height: f32, tile_size: f32) -> Mesh {
     // 計算 UV 縮放倍數
     let u_scale = width / tile_size;
@@ -199,6 +199,7 @@ pub fn spawn_road_segment(
 }
 
 /// 生成斑馬線
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 pub fn spawn_zebra_crossing(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,

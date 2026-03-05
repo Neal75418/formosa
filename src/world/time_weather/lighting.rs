@@ -31,7 +31,7 @@ pub fn update_lighting(
     update_ambient_light_with_weather(&mut ambient, day_intensity, weather_light_factor);
 
     // 更新太陽光（考慮天氣）
-    for mut sun in sun_query.iter_mut() {
+    for mut sun in &mut sun_query {
         let base_illuminance = 2000.0 + 18000.0 * day_intensity;
         sun.illuminance = base_illuminance * weather_light_factor;
     }
@@ -137,12 +137,12 @@ pub fn sun_moon_rotation_system(
     let dt = time.delta_secs();
 
     // 1. 更新太陽
-    for mut transform in sun_query.iter_mut() {
+    for mut transform in &mut sun_query {
         *transform = Transform::from_rotation(calculate_sun_rotation(hour));
     }
 
     // 2. 更新月亮
-    for (mut moon_transform, mut moon) in moon_query.iter_mut() {
+    for (mut moon_transform, mut moon) in &mut moon_query {
         let (pos, elevation) = calculate_moon_position(hour);
         moon_transform.translation = pos;
         moon_transform.look_at(Vec3::ZERO, Vec3::Y);
@@ -237,7 +237,7 @@ fn update_moon_phase(moon: &mut Moon, dt: f32, time_scale: f32) {
 fn update_street_lights(street_lights: &mut Query<(&mut PointLight, &mut StreetLight)>, hour: f32) {
     let should_be_on = !(6.0..=18.0).contains(&hour);
 
-    for (mut light, mut street_light) in street_lights.iter_mut() {
+    for (mut light, mut street_light) in &mut *street_lights {
         if street_light.is_on != should_be_on {
             street_light.is_on = should_be_on;
             light.intensity = if should_be_on { 80000.0 } else { 0.0 };
@@ -324,7 +324,10 @@ mod tests {
         let night = calculate_sun_rotation(0.0);
         // 正午和夜晚的旋轉應該不同
         let diff = noon.dot(night).abs();
-        assert!(diff < 0.99, "noon and night rotations should differ, dot={diff}");
+        assert!(
+            diff < 0.99,
+            "noon and night rotations should differ, dot={diff}"
+        );
     }
 
     // --- calculate_moon_position ---
@@ -333,7 +336,11 @@ mod tests {
     fn moon_position_midnight_is_high() {
         let (pos, elevation) = calculate_moon_position(0.0);
         // 午夜月亮應在高處
-        assert!(pos.y > 100.0, "moon at midnight should be high, got {}", pos.y);
+        assert!(
+            pos.y > 100.0,
+            "moon at midnight should be high, got {}",
+            pos.y
+        );
         assert!(elevation > 0.0);
     }
 }

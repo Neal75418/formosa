@@ -94,11 +94,14 @@ pub fn update_neon_signs(
 /// 計算各時段窗戶點亮的基礎機率
 #[inline]
 fn calculate_base_lit_chance(hour: f32) -> f32 {
-    match () {
-        _ if (6.0..18.0).contains(&hour) => 0.1,  // 日間：10%
-        _ if (18.0..20.0).contains(&hour) => 0.6, // 傍晚：60%
-        _ if (0.0..2.0).contains(&hour) || (22.0..24.0).contains(&hour) => 0.2, // 深夜：20%
-        _ => 0.4,                                 // 一般夜晚：40%
+    if (6.0..18.0).contains(&hour) {
+        0.1 // 日間：10%
+    } else if (18.0..20.0).contains(&hour) {
+        0.6 // 傍晚：60%
+    } else if (0.0..2.0).contains(&hour) || (22.0..24.0).contains(&hour) {
+        0.2 // 深夜：20%
+    } else {
+        0.4 // 一般夜晚：40%
     }
 }
 
@@ -154,7 +157,7 @@ pub fn update_building_windows(
     let shop_closed = (0.0..6.0).contains(&hour);
     let mut rng = rand::rng();
 
-    for (mut window, material_handle) in window_query.iter_mut() {
+    for (mut window, material_handle) in &mut window_query {
         let should_be_lit = should_window_be_lit(&window, base_lit_chance, shop_closed, &mut rng);
 
         // 只在狀態改變時更新材質
@@ -201,7 +204,7 @@ pub fn spawn_neon_sign(
             Transform::from_translation(position),
             GlobalTransform::default(),
             Visibility::default(),
-            Name::new(format!("NeonSign_{}", text)),
+            Name::new(format!("NeonSign_{text}")),
             // 招牌碰撞體
             Collider::cuboid(size.x / 2.0 + 0.1, size.y / 2.0 + 0.05, size.z / 2.0 + 0.05),
             RigidBody::Fixed,

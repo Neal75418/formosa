@@ -13,22 +13,21 @@
 
 // 完整任務系統定義，部分組件預留供未來關卡使用。
 
-mod types;
-mod objectives;
 mod conditions;
+mod mission;
+mod objectives;
+mod performance;
 mod phases;
 mod rewards;
-mod mission;
-mod performance;
+mod types;
 
 // 重新導出所有公開項目
-pub use types::{
-    StoryMissionId, DialogueId, CutsceneId, NpcId, AreaId,
-    StoryMissionStatus, StoryMissionType
-};
-pub use objectives::{ObjectiveType, MissionObjective};
 pub use conditions::{FailCondition, UnlockCondition};
+pub use mission::{ActiveStoryMission, StoryMission};
+pub use objectives::{MissionObjective, ObjectiveType};
+pub use performance::{MissionCompletionResult, MissionPerformance, StoryMissionRating};
 pub use phases::MissionPhase;
 pub use rewards::{Difficulty, MissionRewards};
-pub use mission::{StoryMission, ActiveStoryMission};
-pub use performance::{StoryMissionRating, MissionPerformance, MissionCompletionResult};
+pub use types::{
+    AreaId, CutsceneId, DialogueId, NpcId, StoryMissionId, StoryMissionStatus, StoryMissionType,
+};

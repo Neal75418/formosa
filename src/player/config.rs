@@ -13,7 +13,6 @@ pub struct PlayerConfig {
     pub interaction: PlayerInteractionConfig,
 }
 
-
 /// 玩家移動相關配置
 #[derive(Clone, Reflect)]
 pub struct PlayerMovementConfig {

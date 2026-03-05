@@ -6,8 +6,8 @@ use bevy::prelude::*;
 
 use super::components::{
     ChineseFont, UiState, WeaponWheel, WeaponWheelAmmo, WeaponWheelBackground,
-    WeaponWheelCenterInfo, WeaponWheelIcon, WeaponWheelName, WeaponWheelSelector,
-    WeaponWheelSlot, WeaponWheelState,
+    WeaponWheelCenterInfo, WeaponWheelIcon, WeaponWheelName, WeaponWheelSelector, WeaponWheelSlot,
+    WeaponWheelState,
 };
 use super::constants::BUTTON_BORDER_GRAY_60;
 use crate::combat::WeaponInventory;
@@ -23,6 +23,7 @@ const WEAPON_WHEEL_TEXT: Color = Color::srgb(0.95, 0.95, 0.95);
 const WEAPON_WHEEL_AMMO: Color = Color::srgb(0.85, 0.85, 0.3);
 
 /// 設置武器輪盤 UI
+#[allow(clippy::too_many_lines)]
 pub fn setup_weapon_wheel(mut commands: Commands, font: Option<Res<ChineseFont>>) {
     let Some(font) = font else { return };
 
@@ -161,12 +162,10 @@ pub fn setup_weapon_wheel(mut commands: Commands, font: Option<Res<ChineseFont>>
 /// 取得武器槽位圖示
 fn weapon_slot_icon(slot: usize) -> &'static str {
     match slot {
-        0 => "👊", // 拳頭
-        1 => "🔫", // 手槍
-        2 => "🔫", // 衝鋒槍
-        3 => "🎯", // 霰彈槍
-        4 => "🎯", // 步槍
-        5 => "💣", // 空槽位
+        0 => "👊",     // 拳頭
+        1 | 2 => "🔫", // 手槍 / 衝鋒槍
+        3 | 4 => "🎯", // 霰彈槍 / 步槍
+        5 => "💣",     // 空槽位
         _ => "❓",
     }
 }
@@ -208,7 +207,7 @@ pub fn weapon_wheel_input_system(
         ui_state.show_weapon_wheel = true;
         wheel_state.is_animating = true;
         wheel_state.open_progress = 0.0;
-        for mut vis in wheel_query.iter_mut() {
+        for mut vis in &mut wheel_query {
             *vis = Visibility::Visible;
         }
     }
@@ -221,7 +220,7 @@ pub fn weapon_wheel_input_system(
             }
         }
         ui_state.show_weapon_wheel = false;
-        for mut vis in wheel_query.iter_mut() {
+        for mut vis in &mut wheel_query {
             *vis = Visibility::Hidden;
         }
     }
@@ -269,7 +268,7 @@ pub fn weapon_wheel_update_system(
     let selected = wheel_state.selected_index;
 
     // 更新槽位高亮
-    for (mut slot, mut bg, mut border) in slot_query.iter_mut() {
+    for (mut slot, mut bg, mut border) in &mut slot_query {
         slot.is_selected = slot.index == selected;
         if slot.is_selected {
             *bg = BackgroundColor(WEAPON_WHEEL_SLOT_SELECTED);
@@ -285,7 +284,7 @@ pub fn weapon_wheel_update_system(
     let radius = 140.0;
     let x = angle.cos() * radius;
     let y = angle.sin() * radius;
-    for mut node in selector_query.iter_mut() {
+    for mut node in &mut selector_query {
         node.left = Val::Px(200.0 + x - 40.0);
         node.top = Val::Px(200.0 + y - 40.0);
     }
@@ -313,7 +312,7 @@ pub fn weapon_wheel_icon_update_system(
     }
 
     if let Ok(inventory) = player_query.single() {
-        for (icon, mut text) in icon_query.iter_mut() {
+        for (icon, mut text) in &mut icon_query {
             let slot = icon.slot_index;
             if slot < inventory.weapons.len() {
                 let weapon_type = inventory.weapons[slot].stats.weapon_type;

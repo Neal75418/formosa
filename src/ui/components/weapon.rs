@@ -140,7 +140,7 @@ impl Default for WeaponWheelState {
             mouse_distance: 0.0,
             dead_zone: 40.0,
             radius: 180.0,
-            time_scale: 0.3,  // 武器輪盤時減慢到 30%
+            time_scale: 0.3, // 武器輪盤時減慢到 30%
             open_progress: 0.0,
             is_animating: false,
         }
@@ -151,6 +151,8 @@ impl WeaponWheelState {
     /// 根據角度計算選中的槽位
     /// 6 個槽位，每個佔 60 度 (π/3 弧度)
     /// 從正上方開始 (角度 = -π/2)
+    #[allow(clippy::unused_self)]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn angle_to_slot(&self, angle: f32) -> usize {
         // 調整角度使正上方為 0
         let adjusted = angle + std::f32::consts::FRAC_PI_2;
@@ -162,10 +164,11 @@ impl WeaponWheelState {
         };
         // 計算槽位
         let slot = (normalized / (std::f32::consts::TAU / 6.0)).floor() as usize;
-        slot.min(5)  // 確保不超過 5
+        slot.min(5) // 確保不超過 5
     }
 
     /// 取得槽位的中心角度
+    #[allow(clippy::cast_precision_loss)]
     pub fn slot_angle(index: usize) -> f32 {
         // 從正上方開始，順時針分佈
         -std::f32::consts::FRAC_PI_2 + (index as f32 * std::f32::consts::TAU / 6.0)

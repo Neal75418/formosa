@@ -45,18 +45,29 @@ fn ease_in_out_power(t: f32, power: i32) -> f32 {
 
 /// 指數緩動 in
 #[inline]
+#[allow(clippy::float_cmp)]
 fn ease_in_expo(t: f32) -> f32 {
-    if t == 0.0 { 0.0 } else { 2.0_f32.powf(10.0 * t - 10.0) }
+    if t == 0.0 {
+        0.0
+    } else {
+        2.0_f32.powf(10.0 * t - 10.0)
+    }
 }
 
 /// 指數緩動 out
 #[inline]
+#[allow(clippy::float_cmp)]
 fn ease_out_expo(t: f32) -> f32 {
-    if t == 1.0 { 1.0 } else { 1.0 - 2.0_f32.powf(-10.0 * t) }
+    if t == 1.0 {
+        1.0
+    } else {
+        1.0 - 2.0_f32.powf(-10.0 * t)
+    }
 }
 
 /// 指數緩動 in-out
 #[inline]
+#[allow(clippy::float_cmp)]
 fn ease_in_out_expo(t: f32) -> f32 {
     if t == 0.0 {
         0.0
@@ -157,11 +168,19 @@ pub enum CutsceneAction {
     /// 停止音樂
     StopMusic { fade_out: f32 },
     /// 生成 NPC
-    SpawnNpc { npc_id: NpcId, position: Vec3, rotation: f32 },
+    SpawnNpc {
+        npc_id: NpcId,
+        position: Vec3,
+        rotation: f32,
+    },
     /// 移除 NPC
     DespawnNpc { npc_id: NpcId },
     /// NPC 移動到位置
-    MoveNpc { npc_id: NpcId, target: Vec3, speed: f32 },
+    MoveNpc {
+        npc_id: NpcId,
+        target: Vec3,
+        speed: f32,
+    },
     /// NPC 播放動畫
     NpcAnimation { npc_id: NpcId, animation: String },
     /// NPC 面向目標
@@ -221,6 +240,7 @@ impl CutsceneTimelineEntry {
 
 /// 完整的過場動畫定義
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Cutscene {
     /// 過場動畫 ID
     pub id: CutsceneId,
@@ -281,7 +301,8 @@ impl Cutscene {
     pub fn add_keyframe(&mut self, keyframe: CameraKeyframe) {
         self.camera_keyframes.push(keyframe);
         // 保持按時間排序（使用 total_cmp 避免 NaN panic）
-        self.camera_keyframes.sort_by(|a, b| a.time.total_cmp(&b.time));
+        self.camera_keyframes
+            .sort_by(|a, b| a.time.total_cmp(&b.time));
     }
 
     /// 鏈式添加關鍵幀
@@ -534,58 +555,78 @@ pub fn create_sample_cutscene() -> Cutscene {
     Cutscene::new(1, "第一章開場")
         .with_duration(15.0)
         // 攝影機關鍵幀
-        .with_keyframe(CameraKeyframe::new(
-            0.0,
-            Vec3::new(100.0, 50.0, 100.0),
-            Vec3::new(0.0, 0.0, 0.0),
-        ).with_fov(45.0))
-        .with_keyframe(CameraKeyframe::new(
-            5.0,
-            Vec3::new(50.0, 20.0, 50.0),
-            Vec3::new(0.0, 5.0, 0.0),
-        ).with_fov(60.0).with_easing(EasingType::EaseInOut))
-        .with_keyframe(CameraKeyframe::new(
-            10.0,
-            Vec3::new(10.0, 5.0, 10.0),
-            Vec3::new(0.0, 2.0, 0.0),
-        ).with_fov(75.0).with_easing(EasingType::EaseOutCubic))
-        .with_keyframe(CameraKeyframe::new(
-            15.0,
-            Vec3::new(5.0, 3.0, 5.0),
-            Vec3::new(0.0, 1.5, 0.0),
-        ).with_fov(60.0).with_easing(EasingType::EaseInOutCubic))
+        .with_keyframe(
+            CameraKeyframe::new(0.0, Vec3::new(100.0, 50.0, 100.0), Vec3::new(0.0, 0.0, 0.0))
+                .with_fov(45.0),
+        )
+        .with_keyframe(
+            CameraKeyframe::new(5.0, Vec3::new(50.0, 20.0, 50.0), Vec3::new(0.0, 5.0, 0.0))
+                .with_fov(60.0)
+                .with_easing(EasingType::EaseInOut),
+        )
+        .with_keyframe(
+            CameraKeyframe::new(10.0, Vec3::new(10.0, 5.0, 10.0), Vec3::new(0.0, 2.0, 0.0))
+                .with_fov(75.0)
+                .with_easing(EasingType::EaseOutCubic),
+        )
+        .with_keyframe(
+            CameraKeyframe::new(15.0, Vec3::new(5.0, 3.0, 5.0), Vec3::new(0.0, 1.5, 0.0))
+                .with_fov(60.0)
+                .with_easing(EasingType::EaseInOutCubic),
+        )
         // 時間軸動作
-        .with_action(0.0, CutsceneAction::FadeIn {
-            duration: 2.0,
-            color: Color::BLACK,
-        })
-        .with_action(0.5, CutsceneAction::PlayMusic {
-            music: "bgm_intro.ogg".to_string(),
-            fade_in: 1.0,
-        })
-        .with_action(2.0, CutsceneAction::ShowSubtitle {
-            text: "熱帶島嶼「天堂灣」".to_string(),
-            duration: 3.0,
-        })
+        .with_action(
+            0.0,
+            CutsceneAction::FadeIn {
+                duration: 2.0,
+                color: Color::BLACK,
+            },
+        )
+        .with_action(
+            0.5,
+            CutsceneAction::PlayMusic {
+                music: "bgm_intro.ogg".to_string(),
+                fade_in: 1.0,
+            },
+        )
+        .with_action(
+            2.0,
+            CutsceneAction::ShowSubtitle {
+                text: "熱帶島嶼「天堂灣」".to_string(),
+                duration: 3.0,
+            },
+        )
         .with_action(5.0, CutsceneAction::HideSubtitle)
-        .with_action(6.0, CutsceneAction::SpawnNpc {
-            npc_id: 100,
-            position: Vec3::new(0.0, 0.0, 0.0),
-            rotation: 0.0,
-        })
-        .with_action(7.0, CutsceneAction::ShowSubtitle {
-            text: "這裡，機會與危險並存...".to_string(),
-            duration: 3.0,
-        })
+        .with_action(
+            6.0,
+            CutsceneAction::SpawnNpc {
+                npc_id: 100,
+                position: Vec3::new(0.0, 0.0, 0.0),
+                rotation: 0.0,
+            },
+        )
+        .with_action(
+            7.0,
+            CutsceneAction::ShowSubtitle {
+                text: "這裡，機會與危險並存...".to_string(),
+                duration: 3.0,
+            },
+        )
         .with_action(10.0, CutsceneAction::HideSubtitle)
-        .with_action(12.0, CutsceneAction::ShowSubtitle {
-            text: "而你，將改變一切".to_string(),
-            duration: 2.5,
-        })
-        .with_action(14.5, CutsceneAction::FadeOut {
-            duration: 0.5,
-            color: Color::BLACK,
-        })
+        .with_action(
+            12.0,
+            CutsceneAction::ShowSubtitle {
+                text: "而你，將改變一切".to_string(),
+                duration: 2.5,
+            },
+        )
+        .with_action(
+            14.5,
+            CutsceneAction::FadeOut {
+                duration: 0.5,
+                color: Color::BLACK,
+            },
+        )
         .with_skippable(true)
         .with_letterbox(true)
 }

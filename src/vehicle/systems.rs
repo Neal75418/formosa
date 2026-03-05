@@ -1,10 +1,8 @@
 //! 載具系統
 
-
 use super::{
-    Vehicle, VehicleBodyDynamics, VehicleConfig, VehicleDrift, VehicleHealth,
-    VehicleInput, VehicleLean, VehiclePhysicsMode, VehicleSteering, VehicleType,
-    VehicleVisualRoot,
+    Vehicle, VehicleBodyDynamics, VehicleConfig, VehicleDrift, VehicleHealth, VehicleInput,
+    VehicleLean, VehiclePhysicsMode, VehicleSteering, VehicleType, VehicleVisualRoot,
 };
 use crate::core::GameState;
 use bevy::prelude::*;
@@ -65,7 +63,12 @@ pub fn vehicle_input(
     mouse_button: Res<ButtonInput<MouseButton>>,
     time: Res<Time>,
     game_state: Res<GameState>,
-    mut vehicles: Query<(&Vehicle, &VehicleSteering, &mut VehicleDrift, &mut VehicleInput)>,
+    mut vehicles: Query<(
+        &Vehicle,
+        &VehicleSteering,
+        &mut VehicleDrift,
+        &mut VehicleInput,
+    )>,
     config: Res<VehicleConfig>,
 ) {
     if !game_state.player_in_vehicle {
@@ -172,18 +175,14 @@ const MOTORCYCLE_CRASH_MIN_SPEED: f32 = 8.0;
 
 /// 機車摔車偵測與恢復系統
 ///
-/// 當機車傾斜角度超過 crash_lean_threshold 且車速夠快時觸發摔車：
+/// 當機車傾斜角度超過 `crash_lean_threshold` 且車速夠快時觸發摔車：
 /// - 大幅降速
 /// - 車輛受傷
 /// - 進入恢復冷卻期
 pub fn motorcycle_crash_system(
     time: Res<Time>,
     game_state: Res<GameState>,
-    mut vehicles: Query<(
-        &mut Vehicle,
-        &mut VehicleLean,
-        Option<&mut VehicleHealth>,
-    )>,
+    mut vehicles: Query<(&mut Vehicle, &mut VehicleLean, Option<&mut VehicleHealth>)>,
 ) {
     if !game_state.player_in_vehicle {
         return;
@@ -304,7 +303,9 @@ mod tests {
         assert!(
             (lean.lean_angle - target).abs() < 0.1,
             "lean_angle={} target={} diff={}",
-            lean.lean_angle, target, (lean.lean_angle - target).abs()
+            lean.lean_angle,
+            target,
+            (lean.lean_angle - target).abs()
         );
     }
 
@@ -329,7 +330,9 @@ mod tests {
             lean.lean_velocity += accel * dt;
             lean.lean_angle += lean.lean_velocity * dt;
             // 系統中有 clamp 到 crash_lean_threshold
-            lean.lean_angle = lean.lean_angle.clamp(-lean.crash_lean_threshold, lean.crash_lean_threshold);
+            lean.lean_angle = lean
+                .lean_angle
+                .clamp(-lean.crash_lean_threshold, lean.crash_lean_threshold);
         }
 
         // 不應超過 crash threshold

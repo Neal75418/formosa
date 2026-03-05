@@ -5,8 +5,13 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
+// 遊戲數學常用 f32/i32/u32 互轉，允許精度與截斷轉型
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+// 小型 Copy 結構上的 &self 方法保留 Rust 慣用風格
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -76,17 +81,33 @@ pub enum Rank {
 
 impl Rank {
     pub const ALL: [Rank; 13] = [
-        Rank::Ace, Rank::Two, Rank::Three, Rank::Four, Rank::Five,
-        Rank::Six, Rank::Seven, Rank::Eight, Rank::Nine, Rank::Ten,
-        Rank::Jack, Rank::Queen, Rank::King,
+        Rank::Ace,
+        Rank::Two,
+        Rank::Three,
+        Rank::Four,
+        Rank::Five,
+        Rank::Six,
+        Rank::Seven,
+        Rank::Eight,
+        Rank::Nine,
+        Rank::Ten,
+        Rank::Jack,
+        Rank::Queen,
+        Rank::King,
     ];
 
     /// 牌面點數（Ace 先算 11，之後視情況降為 1）
     pub fn value(&self) -> u32 {
         match self {
-            Rank::Ace => 11, Rank::Two => 2, Rank::Three => 3,
-            Rank::Four => 4, Rank::Five => 5, Rank::Six => 6,
-            Rank::Seven => 7, Rank::Eight => 8, Rank::Nine => 9,
+            Rank::Ace => 11,
+            Rank::Two => 2,
+            Rank::Three => 3,
+            Rank::Four => 4,
+            Rank::Five => 5,
+            Rank::Six => 6,
+            Rank::Seven => 7,
+            Rank::Eight => 8,
+            Rank::Nine => 9,
             Rank::Ten | Rank::Jack | Rank::Queen | Rank::King => 10,
         }
     }
@@ -111,7 +132,7 @@ impl Card {
 
 /// 計算手牌總點數（自動處理 Ace 1/11 轉換）
 pub fn hand_value(cards: &[Card]) -> u32 {
-    let mut total: u32 = cards.iter().map(|c| c.value()).sum();
+    let mut total: u32 = cards.iter().map(Card::value).sum();
     let mut aces = cards.iter().filter(|c| c.rank == Rank::Ace).count();
 
     // Ace 從 11 降為 1 直到不爆牌
@@ -242,10 +263,18 @@ impl BlackjackGame {
         self.result = None;
 
         // 發兩張牌給玩家和莊家（交替發牌）
-        let Some(c1) = self.deck.draw() else { return; };
-        let Some(c2) = self.deck.draw() else { return; };
-        let Some(c3) = self.deck.draw() else { return; };
-        let Some(c4) = self.deck.draw() else { return; };
+        let Some(c1) = self.deck.draw() else {
+            return;
+        };
+        let Some(c2) = self.deck.draw() else {
+            return;
+        };
+        let Some(c3) = self.deck.draw() else {
+            return;
+        };
+        let Some(c4) = self.deck.draw() else {
+            return;
+        };
         self.player_hand.push(c1);
         self.dealer_hand.push(c2);
         self.player_hand.push(c3);
@@ -426,12 +455,12 @@ impl SlotMachine {
         // 三個一樣
         if a == b && b == c {
             let multiplier = match a {
-                SlotSymbol::Seven => 50,   // 777 大獎
-                SlotSymbol::Bar => 20,     // BAR BAR BAR
-                SlotSymbol::Bell => 15,    // 三鈴鐺
-                SlotSymbol::Orange => 10,  // 三橘子
-                SlotSymbol::Lemon => 5,    // 三檸檬
-                SlotSymbol::Cherry => 3,   // 三櫻桃
+                SlotSymbol::Seven => 50,  // 777 大獎
+                SlotSymbol::Bar => 20,    // BAR BAR BAR
+                SlotSymbol::Bell => 15,   // 三鈴鐺
+                SlotSymbol::Orange => 10, // 三橘子
+                SlotSymbol::Lemon => 5,   // 三檸檬
+                SlotSymbol::Cherry => 3,  // 三櫻桃
             };
             return self.bet * multiplier;
         }
@@ -656,9 +685,7 @@ mod tests {
         assert_eq!(game.player_hand.len(), 2);
         assert_eq!(game.dealer_hand.len(), 2);
         // phase 應為 PlayerTurn 或 Result（若 Blackjack）
-        assert!(
-            game.phase == BlackjackPhase::PlayerTurn || game.phase == BlackjackPhase::Result
-        );
+        assert!(game.phase == BlackjackPhase::PlayerTurn || game.phase == BlackjackPhase::Result);
     }
 
     #[test]
@@ -697,7 +724,10 @@ mod tests {
 
     #[test]
     fn blackjack_payout_values() {
-        let mut game = BlackjackGame { bet: 1000, ..Default::default() };
+        let mut game = BlackjackGame {
+            bet: 1000,
+            ..Default::default()
+        };
 
         game.result = Some(BlackjackResult::PlayerBlackjack);
         assert_eq!(game.payout(), 1500); // 1.5x
@@ -780,7 +810,11 @@ mod tests {
 
     #[test]
     fn slot_machine_net_payout() {
-        let mut slot = SlotMachine { bet: 100, last_win: 200, ..Default::default() };
+        let mut slot = SlotMachine {
+            bet: 100,
+            last_win: 200,
+            ..Default::default()
+        };
         assert_eq!(slot.net_payout(), 100); // 200 - 100
 
         slot.last_win = 0;

@@ -1,6 +1,10 @@
 //! NPC 車輛 AI 駕駛系統
 
-use super::vehicle_physics::{apply_vehicle_motion_physics, get_weather_factor, speed_turn_factor, VehicleDynamicsModifiers, VehiclePhysicsFrame};
+use super::vehicle_physics::{
+    apply_vehicle_motion_physics, get_weather_factor, speed_turn_factor, VehicleDynamicsModifiers,
+    VehiclePhysicsFrame,
+};
+#[allow(clippy::wildcard_imports)]
 use super::*;
 use crate::core::math::rapier_real_to_f32;
 use crate::core::{
@@ -37,8 +41,9 @@ fn check_obstacle(
     let rapier = rapier_context.single().ok()?;
     let vehicle_pos = vehicle_transform.translation;
     let vehicle_forward = vehicle_transform.forward().as_vec3();
-    let ray_origin =
-        vehicle_pos + Vec3::new(0.0, config.obstacle_check_height, 0.0) + vehicle_forward * config.ray_forward_offset;
+    let ray_origin = vehicle_pos
+        + Vec3::new(0.0, config.obstacle_check_height, 0.0)
+        + vehicle_forward * config.ray_forward_offset;
 
     // 主射線（前方）
     let max_toi = config.obstacle_max_distance;
@@ -50,9 +55,13 @@ fn check_obstacle(
         ))
         .exclude_collider(vehicle_entity);
 
-    if let Some((_entity, toi)) =
-        rapier.cast_ray(ray_origin, vehicle_forward, max_toi as RapierReal, solid, groups)
-    {
+    if let Some((_entity, toi)) = rapier.cast_ray(
+        ray_origin,
+        vehicle_forward,
+        max_toi as RapierReal,
+        solid,
+        groups,
+    ) {
         return Some(ObstacleHit {
             distance: rapier_real_to_f32(toi),
             kind: ObstacleHitKind::Front,
@@ -94,6 +103,7 @@ fn check_obstacle(
 }
 
 /// 根據障礙物更新 NPC 狀態
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 fn update_npc_state_from_obstacle(
     npc: &mut NpcVehicle,
     transform: &Transform,
@@ -120,7 +130,9 @@ fn update_npc_state_from_obstacle(
         }
 
         // === 避障轉向：遇到前方障礙物時嘗試繞行 ===
-        if matches!(hit.kind, ObstacleHitKind::Front) && hit.distance < config.obstacle_brake_distance {
+        if matches!(hit.kind, ObstacleHitKind::Front)
+            && hit.distance < config.obstacle_brake_distance
+        {
             // 基於車輛位置生成一致的轉向方向（避免來回抖動）
             let pos_hash = (transform.translation.x * 1000.0) as i32;
             let turn_direction = if pos_hash % 2 == 0 { 1.0 } else { -1.0 };
@@ -251,7 +263,7 @@ fn handle_reversing_state(
 ) {
     input.throttle_input = 0.0;
     input.brake_input = 1.0; // 倒車
-                               // 倒車時反向打輪
+                             // 倒車時反向打輪
     input.steer_input = -input.steer_input;
 
     if npc.stuck_timer > config.npc.reverse_timeout {
@@ -308,7 +320,7 @@ pub fn npc_vehicle_ai(
         return;
     };
 
-    for (entity, mut transform, vehicle, mut input, mut npc) in npc_query.iter_mut() {
+    for (entity, mut transform, vehicle, mut input, mut npc) in &mut npc_query {
         // 定期檢查前方障礙物和紅綠燈
         npc.check_timer.tick(time.delta());
         if npc.check_timer.just_finished() {
@@ -329,8 +341,12 @@ pub fn npc_vehicle_ai(
             if npc.state != NpcState::Reversing && npc.state != NpcState::WaitingAtLight {
                 let vehicle_pos = transform.translation;
                 let vehicle_forward = transform.forward().as_vec3();
-                if should_stop_for_traffic_light(vehicle_pos, vehicle_forward, &traffic_light_query, &config.npc)
-                {
+                if should_stop_for_traffic_light(
+                    vehicle_pos,
+                    vehicle_forward,
+                    &traffic_light_query,
+                    &config.npc,
+                ) {
                     npc.state = NpcState::WaitingAtLight;
                 }
             }
@@ -339,12 +355,12 @@ pub fn npc_vehicle_ai(
         // 根據狀態執行行為
         match npc.state {
             NpcState::Cruising => {
-                handle_cruising_state(&mut npc, &mut transform, &mut input, dt, &config.npc)
+                handle_cruising_state(&mut npc, &mut transform, &mut input, dt, &config.npc);
             }
             NpcState::Braking => handle_braking_state(&mut npc, &mut transform, &mut input, dt),
             NpcState::Stopped => handle_stopped_state(&mut npc, &mut input, dt),
             NpcState::Reversing => {
-                handle_reversing_state(&mut npc, &mut transform, &mut input, dt, &config)
+                handle_reversing_state(&mut npc, &mut transform, &mut input, dt, &config);
             }
             NpcState::WaitingAtLight => handle_waiting_at_light_state(
                 &mut npc,
@@ -376,8 +392,12 @@ fn handle_waiting_at_light_state(
     // 檢查燈是否變綠了或等太久 failsafe，恢復巡航
     let vehicle_pos = transform.translation;
     let vehicle_forward = transform.forward().as_vec3();
-    if !should_stop_for_traffic_light(vehicle_pos, vehicle_forward, traffic_light_query, npc_config)
-        || npc.stuck_timer > npc_config.traffic_light_wait_timeout
+    if !should_stop_for_traffic_light(
+        vehicle_pos,
+        vehicle_forward,
+        traffic_light_query,
+        npc_config,
+    ) || npc.stuck_timer > npc_config.traffic_light_wait_timeout
     {
         npc.state = NpcState::Cruising;
         npc.stuck_timer = 0.0;
@@ -407,8 +427,17 @@ pub fn npc_vehicle_motion_system(
 ) {
     let dt = time.delta_secs();
 
-    for (mut transform, mut vehicle, power_band, braking, steering, drift, mut input, mods, tire_damage) in
-        npc_query.iter_mut()
+    for (
+        mut transform,
+        mut vehicle,
+        power_band,
+        braking,
+        steering,
+        drift,
+        mut input,
+        mods,
+        tire_damage,
+    ) in &mut npc_query
     {
         let modifiers = VehicleDynamicsModifiers::new(mods, None, tire_damage);
 
@@ -458,10 +487,8 @@ pub fn npc_vehicle_motion_system(
         transform.translation += forward * vehicle.current_speed * dt;
 
         // 邊界夾持：防止 NPC 車輛駛出地圖
-        let (clamped_x, clamped_z) = map_bounds.clamp_position(
-            transform.translation.x,
-            transform.translation.z,
-        );
+        let (clamped_x, clamped_z) =
+            map_bounds.clamp_position(transform.translation.x, transform.translation.z);
         transform.translation.x = clamped_x;
         transform.translation.z = clamped_z;
     }

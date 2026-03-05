@@ -138,7 +138,7 @@ pub fn update_enemy_health_bars(
     // 收集每個敵人的血量百分比（敵人數量少，Vec 線性搜尋比 HashMap 更快且免分配）
     let mut enemy_health_map: Vec<(Entity, f32)> = Vec::new();
 
-    for (mut node, mut visibility, health_bar) in bar_query.iter_mut() {
+    for (mut node, mut visibility, health_bar) in &mut bar_query {
         // 取得對應敵人的位置和血量
         let Ok((enemy_transform, health)) = enemy_query.get(health_bar.enemy_entity) else {
             // 敵人已不存在，隱藏血條
@@ -177,8 +177,11 @@ pub fn update_enemy_health_bars(
     }
 
     // 更新所有填充條的寬度和顏色
-    for (mut fill_node, mut fill_bg, fill) in fill_query.iter_mut() {
-        if let Some(&(_, percentage)) = enemy_health_map.iter().find(|(e, _)| *e == fill.enemy_entity) {
+    for (mut fill_node, mut fill_bg, fill) in &mut fill_query {
+        if let Some(&(_, percentage)) = enemy_health_map
+            .iter()
+            .find(|(e, _)| *e == fill.enemy_entity)
+        {
             fill_node.width = Val::Percent(percentage * 100.0);
             *fill_bg = BackgroundColor(get_health_bar_color(percentage));
         }
@@ -205,7 +208,11 @@ impl Plugin for EnemyHealthBarPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (setup_enemy_health_bars, update_enemy_health_bars, cleanup_enemy_health_bars)
+            (
+                setup_enemy_health_bars,
+                update_enemy_health_bars,
+                cleanup_enemy_health_bars,
+            )
                 .in_set(super::UiActive),
         );
     }

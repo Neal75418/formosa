@@ -4,11 +4,9 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 use std::f32::consts::FRAC_PI_2;
 
-use super::super::story_data::*;
-use super::super::story_manager::*;
-use super::super::trigger::{
-    Trigger, TriggerAction, TriggerShape, TriggerType, TriggerVisual,
-};
+use super::super::story_data::StoryMissionId;
+use super::super::story_manager::{StoryMissionDatabase, StoryMissionEvent, StoryMissionManager};
+use super::super::trigger::{Trigger, TriggerAction, TriggerShape, TriggerType, TriggerVisual};
 
 // --- 常數 ---
 const TRIGGER_HEIGHT_OFFSET: f32 = 4.0;
@@ -40,7 +38,9 @@ pub struct MissionMarkerRing {
 
 impl Default for MissionMarkerRing {
     fn default() -> Self {
-        Self { rotation_speed: 1.0 }
+        Self {
+            rotation_speed: 1.0,
+        }
     }
 }
 
@@ -103,17 +103,33 @@ pub fn spawn_mission_triggers(
     let available_missions = manager.get_available_missions();
 
     for mission_id in available_missions {
-        let already_exists = existing_triggers.iter().any(|(_, t)| t.mission_id == mission_id);
-        if already_exists { continue; }
+        let already_exists = existing_triggers
+            .iter()
+            .any(|(_, t)| t.mission_id == mission_id);
+        if already_exists {
+            continue;
+        }
 
-        let Some(mission) = database.get(mission_id) else { continue; };
-        let Some(trigger_pos) = mission.trigger_location else { continue; };
+        let Some(mission) = database.get(mission_id) else {
+            continue;
+        };
+        let Some(trigger_pos) = mission.trigger_location else {
+            continue;
+        };
 
         spawn_mission_trigger_marker(
-            &mut commands, &visuals, mission_id, trigger_pos, mission.trigger_radius, &mission.title,
+            &mut commands,
+            &visuals,
+            mission_id,
+            trigger_pos,
+            mission.trigger_radius,
+            &mission.title,
         );
 
-        info!("生成任務觸發點: {} - {} 在 {:?}", mission_id, mission.title, trigger_pos);
+        info!(
+            "生成任務觸發點: {} - {} 在 {:?}",
+            mission_id, mission.title, trigger_pos
+        );
     }
 }
 
@@ -136,9 +152,9 @@ fn spawn_mission_trigger_marker(
             Trigger::new(TriggerAction::Mission(mission_id))
                 .with_shape(TriggerShape::Circle(radius))
                 .with_type(TriggerType::OnInteract)
-                .with_prompt(format!("按 F 開始任務: {}", title)),
+                .with_prompt(format!("按 F 開始任務: {title}")),
             TriggerVisual::default(),
-            Name::new(format!("MissionTrigger_{}", mission_id)),
+            Name::new(format!("MissionTrigger_{mission_id}")),
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -147,7 +163,7 @@ fn spawn_mission_trigger_marker(
                 Transform::from_translation(Vec3::Y * -TRIGGER_HEIGHT_OFFSET)
                     .with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
                 MissionMarkerRing::default(),
-                Name::new(format!("MissionTriggerRing_{}", mission_id)),
+                Name::new(format!("MissionTriggerRing_{mission_id}")),
             ));
         });
 }

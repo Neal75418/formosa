@@ -2,18 +2,15 @@
 //!
 //! 為場景中的重要實體加上有意義的名字，方便在 Inspector 中識別
 
-use bevy::prelude::*;
+use super::components::Building;
+use crate::pedestrian::Pedestrian;
 use crate::player::Player;
 use crate::vehicle::{NpcVehicle, Vehicle, VehicleType};
 use crate::wanted::PoliceOfficer;
-use crate::pedestrian::Pedestrian;
-use super::components::Building;
+use bevy::prelude::*;
 
 /// 更新實體命名計時器（每秒執行一次命名檢查即可）
-pub fn update_entity_naming_timer(
-    time: Res<Time>,
-    mut timer: ResMut<super::EntityNamingTimer>,
-) {
+pub fn update_entity_naming_timer(time: Res<Time>, mut timer: ResMut<super::EntityNamingTimer>) {
     timer.timer.tick(time.delta());
 }
 

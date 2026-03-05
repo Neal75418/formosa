@@ -12,12 +12,11 @@ use std::collections::{HashMap, VecDeque};
 use super::story_data::{DialogueId, NpcId, StoryMissionId};
 
 /// 對話說話者類型
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum DialogueSpeaker {
     /// 玩家角色
     Player,
-    /// 特定 NPC（用 NpcId 識別）
+    /// 特定 NPC（用 `NpcId` 識別）
     Npc(NpcId),
     /// 旁白（無頭像）
     #[default]
@@ -27,7 +26,6 @@ pub enum DialogueSpeaker {
     /// 系統訊息
     System,
 }
-
 
 /// 說話者情緒（影響頭像表情）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -190,7 +188,7 @@ pub struct DialogueNode {
     pub speaker: DialogueSpeaker,
     /// 說話者顯示名稱（覆蓋預設）
     pub speaker_name: Option<String>,
-    /// 對話文字（支援 {player_name} 等變數）
+    /// 對話文字（支援 {`player_name`} 等變數）
     pub text: String,
     /// 說話者情緒
     pub emotion: SpeakerEmotion,
@@ -332,7 +330,7 @@ impl DialogueTree {
 pub struct DialogueState {
     /// 當前進行中的對話樹
     pub active_dialogue: Option<ActiveDialogue>,
-    /// 對話歷史記錄（用於回顧）- 使用 VecDeque 以 O(1) 移除舊記錄
+    /// 對話歷史記錄（用於回顧）- 使用 `VecDeque` 以 O(1) 移除舊記錄
     pub history: VecDeque<DialogueHistoryEntry>,
     /// 最大歷史記錄數
     pub max_history: usize,
@@ -463,6 +461,7 @@ impl DialogueDatabase {
 
 /// 對話系統設定
 #[derive(Resource)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct DialogueSettings {
     /// 預設打字速度（每秒字數）
     pub default_typing_speed: f32,
@@ -507,67 +506,93 @@ pub fn create_sample_dialogue() -> DialogueTree {
 
     // 節點 0：旁白開場
     tree.add_node(
-        DialogueNode::new(0, DialogueSpeaker::Narrator, "你在酒吧裡注意到一個神秘的男人正看著你...")
-            .with_auto_advance(2.0)
-            .then(1),
+        DialogueNode::new(
+            0,
+            DialogueSpeaker::Narrator,
+            "你在酒吧裡注意到一個神秘的男人正看著你...",
+        )
+        .with_auto_advance(2.0)
+        .then(1),
     );
 
     // 節點 1：NPC 開口
     tree.add_node(
-        DialogueNode::new(1, DialogueSpeaker::Npc(100), "嘿，你看起來像是在找工作的人。")
-            .with_emotion(SpeakerEmotion::Smirk)
-            .then(2),
+        DialogueNode::new(
+            1,
+            DialogueSpeaker::Npc(100),
+            "嘿，你看起來像是在找工作的人。",
+        )
+        .with_emotion(SpeakerEmotion::Smirk)
+        .then(2),
     );
 
     // 節點 2：玩家選擇
     tree.add_node(
-        DialogueNode::new(2, DialogueSpeaker::Npc(100), "我這裡有個...機會。你有興趣嗎？")
-            .with_emotion(SpeakerEmotion::Serious)
-            .with_choice(DialogueChoice::simple("告訴我更多", 3))
-            .with_choice(DialogueChoice::simple("我不感興趣", 4))
-            .with_choice(
-                DialogueChoice::simple("你是誰？", 5)
-                    .with_condition(DialogueCondition::NotHasFlag("know_mysterious_man".to_string())),
-            ),
+        DialogueNode::new(
+            2,
+            DialogueSpeaker::Npc(100),
+            "我這裡有個...機會。你有興趣嗎？",
+        )
+        .with_emotion(SpeakerEmotion::Serious)
+        .with_choice(DialogueChoice::simple("告訴我更多", 3))
+        .with_choice(DialogueChoice::simple("我不感興趣", 4))
+        .with_choice(DialogueChoice::simple("你是誰？", 5).with_condition(
+            DialogueCondition::NotHasFlag("know_mysterious_man".to_string()),
+        )),
     );
 
     // 節點 3：接受任務
     tree.add_node(
-        DialogueNode::new(3, DialogueSpeaker::Npc(100), "很好。有個人欠了我錢，我需要有人去...提醒他一下。")
-            .with_emotion(SpeakerEmotion::Serious)
-            .with_choice(
-                DialogueChoice::simple("我接了", 6)
-                    .with_consequence(DialogueConsequence::UnlockMission(1)),
-            )
-            .with_choice(DialogueChoice::simple("讓我考慮一下", 7)),
+        DialogueNode::new(
+            3,
+            DialogueSpeaker::Npc(100),
+            "很好。有個人欠了我錢，我需要有人去...提醒他一下。",
+        )
+        .with_emotion(SpeakerEmotion::Serious)
+        .with_choice(
+            DialogueChoice::simple("我接了", 6)
+                .with_consequence(DialogueConsequence::UnlockMission(1)),
+        )
+        .with_choice(DialogueChoice::simple("讓我考慮一下", 7)),
     );
 
     // 節點 4：拒絕
     tree.add_node(
-        DialogueNode::new(4, DialogueSpeaker::Npc(100), "可惜了。如果你改變主意，你知道在哪找我。")
-            .with_emotion(SpeakerEmotion::Neutral)
-            .with_choice(DialogueChoice::end("離開")),
+        DialogueNode::new(
+            4,
+            DialogueSpeaker::Npc(100),
+            "可惜了。如果你改變主意，你知道在哪找我。",
+        )
+        .with_emotion(SpeakerEmotion::Neutral)
+        .with_choice(DialogueChoice::end("離開")),
     );
 
     // 節點 5：詢問身份
     tree.add_node(
-        DialogueNode::new(5, DialogueSpeaker::Npc(100), "叫我老王就行。這座島上，有些事情需要...特殊人才來處理。")
-            .with_emotion(SpeakerEmotion::Smirk)
-            .with_action(DialogueAction::PlaySound("reveal.ogg".to_string()))
-            .with_choice(
-                DialogueChoice::simple("繼續", 2)
-                    .with_consequence(DialogueConsequence::SetStoryFlag {
-                        flag: "know_mysterious_man".to_string(),
-                        value: true,
-                    }),
-            ),
+        DialogueNode::new(
+            5,
+            DialogueSpeaker::Npc(100),
+            "叫我老王就行。這座島上，有些事情需要...特殊人才來處理。",
+        )
+        .with_emotion(SpeakerEmotion::Smirk)
+        .with_action(DialogueAction::PlaySound("reveal.ogg".to_string()))
+        .with_choice(DialogueChoice::simple("繼續", 2).with_consequence(
+            DialogueConsequence::SetStoryFlag {
+                flag: "know_mysterious_man".to_string(),
+                value: true,
+            },
+        )),
     );
 
     // 節點 6：任務接受
     tree.add_node(
-        DialogueNode::new(6, DialogueSpeaker::Npc(100), "很好。地址我傳到你手機了。記住，要活的。")
-            .with_emotion(SpeakerEmotion::Serious)
-            .with_choice(DialogueChoice::end("離開")),
+        DialogueNode::new(
+            6,
+            DialogueSpeaker::Npc(100),
+            "很好。地址我傳到你手機了。記住，要活的。",
+        )
+        .with_emotion(SpeakerEmotion::Serious)
+        .with_choice(DialogueChoice::end("離開")),
     );
 
     // 節點 7：考慮
@@ -615,10 +640,8 @@ mod tests {
         let mut tree = DialogueTree::new(1, "導航測試");
 
         // 創建線性對話鏈：0 -> 1 -> 2
-        tree.add_node(DialogueNode::new(0, DialogueSpeaker::Narrator, "開始")
-            .then(1));
-        tree.add_node(DialogueNode::new(1, DialogueSpeaker::Npc(100), "中間")
-            .then(2));
+        tree.add_node(DialogueNode::new(0, DialogueSpeaker::Narrator, "開始").then(1));
+        tree.add_node(DialogueNode::new(1, DialogueSpeaker::Npc(100), "中間").then(2));
         tree.add_node(DialogueNode::new(2, DialogueSpeaker::Player, "結束"));
 
         // 驗證導航路徑
@@ -637,11 +660,11 @@ mod tests {
         let choice = DialogueChoice::simple("測試選項", 5)
             .with_consequence(DialogueConsequence::ChangeRelationship {
                 npc_id: 100,
-                delta: 10
+                delta: 10,
             })
             .with_consequence(DialogueConsequence::SetStoryFlag {
                 flag: "test_flag".to_string(),
-                value: true
+                value: true,
             });
 
         assert_eq!(choice.text, "測試選項");
@@ -663,7 +686,11 @@ mod tests {
 
         tree.add_node(DialogueNode::new(0, DialogueSpeaker::Npc(100), "NPC 說話").then(1));
         tree.add_node(DialogueNode::new(1, DialogueSpeaker::Player, "玩家回應").then(2));
-        tree.add_node(DialogueNode::new(2, DialogueSpeaker::Npc(100), "NPC 再說話"));
+        tree.add_node(DialogueNode::new(
+            2,
+            DialogueSpeaker::Npc(100),
+            "NPC 再說話",
+        ));
 
         let speakers: Vec<DialogueSpeaker> = vec![0, 1, 2]
             .into_iter()
@@ -720,8 +747,7 @@ mod tests {
 
     #[test]
     fn test_active_dialogue_state() {
-        let mut active = ActiveDialogue::new(1, 0)
-            .with_participant("player_name", "阿龍");
+        let mut active = ActiveDialogue::new(1, 0).with_participant("player_name", "阿龍");
 
         assert_eq!(active.dialogue_id, 1);
         assert_eq!(active.current_node, 0);
@@ -746,8 +772,8 @@ mod tests {
         // 添加歷史記錄
         for i in 0..5 {
             state.history.push_back(DialogueHistoryEntry {
-                speaker_name: format!("說話者{}", i),
-                text: format!("文字{}", i),
+                speaker_name: format!("說話者{i}"),
+                text: format!("文字{i}"),
                 timestamp: i as f32,
             });
 
@@ -765,11 +791,12 @@ mod tests {
 
     #[test]
     fn test_dialogue_choice_with_condition() {
-        let choice = DialogueChoice::simple("條件選項", 10)
-            .with_condition(DialogueCondition::RelationshipMin {
+        let choice = DialogueChoice::simple("條件選項", 10).with_condition(
+            DialogueCondition::RelationshipMin {
                 npc_id: 100,
                 min: 50,
-            });
+            },
+        );
 
         assert!(choice.condition.is_some());
         if let Some(DialogueCondition::RelationshipMin { npc_id, min }) = &choice.condition {

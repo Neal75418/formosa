@@ -25,7 +25,10 @@ fn test_save_manager_default() {
 
 #[test]
 fn test_save_manager_get_save_path() {
-    let manager = SaveManager { save_directory: PathBuf::from("/test/saves"), ..SaveManager::default() };
+    let manager = SaveManager {
+        save_directory: PathBuf::from("/test/saves"),
+        ..SaveManager::default()
+    };
 
     let path = manager.get_save_path(0);
     assert_eq!(path, PathBuf::from("/test/saves/save_00.json"));
@@ -39,7 +42,10 @@ fn test_save_manager_get_save_path() {
 
 #[test]
 fn test_save_manager_get_auto_save_path() {
-    let manager = SaveManager { save_directory: PathBuf::from("/test/saves"), ..SaveManager::default() };
+    let manager = SaveManager {
+        save_directory: PathBuf::from("/test/saves"),
+        ..SaveManager::default()
+    };
 
     let path = manager.get_auto_save_path();
     assert_eq!(path, PathBuf::from("/test/saves/autosave.json"));
@@ -47,7 +53,10 @@ fn test_save_manager_get_auto_save_path() {
 
 #[test]
 fn test_save_manager_get_quick_save_path() {
-    let manager = SaveManager { save_directory: PathBuf::from("/test/saves"), ..SaveManager::default() };
+    let manager = SaveManager {
+        save_directory: PathBuf::from("/test/saves"),
+        ..SaveManager::default()
+    };
 
     let path = manager.get_quick_save_path();
     assert_eq!(path, PathBuf::from("/test/saves/quicksave.json"));
@@ -70,7 +79,7 @@ fn test_save_data_default() {
 fn test_save_data_serialization() {
     let save_data = SaveData {
         version: SAVE_VERSION,
-        timestamp: 1234567890,
+        timestamp: 1_234_567_890,
         play_time_secs: 3600.0,
         player: PlayerSaveData {
             position: [100.0, 0.0, 200.0],
@@ -253,8 +262,8 @@ fn test_game_statistics_serialization() {
         distance_walked: 10000.0,
         missions_completed: 10,
         missions_failed: 2,
-        total_money_earned: 500000,
-        total_money_spent: 300000,
+        total_money_earned: 500_000,
+        total_money_spent: 300_000,
         max_wanted_level_reached: 4,
         police_killed: 15,
         vehicles_destroyed: 8,
@@ -364,7 +373,7 @@ fn test_auto_save_reason_debug() {
         AutoSaveReason::ImportantPurchase,
     ];
     for reason in &reasons {
-        let debug_str = format!("{:?}", reason);
+        let debug_str = format!("{reason:?}");
         assert!(!debug_str.is_empty());
     }
 }

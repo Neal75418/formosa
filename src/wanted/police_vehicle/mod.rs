@@ -5,12 +5,11 @@
 //! - 警車 AI 駕駛（追逐、攔截、PIT 機動）
 //! - 警車損壞與爆炸
 
-
-mod spawn;
 mod ai;
+mod spawn;
 
-pub use spawn::*;
 pub use ai::*;
+pub use spawn::*;
 
 use bevy::prelude::*;
 
@@ -25,9 +24,11 @@ pub const POLICE_CAR_SPAWN_DISTANCE_MAX: f32 = 80.0;
 /// 警車消失距離
 pub const POLICE_CAR_DESPAWN_DISTANCE: f32 = 120.0;
 /// 預計算距離平方（避免 sqrt）
-pub const POLICE_CAR_DESPAWN_DISTANCE_SQ: f32 = POLICE_CAR_DESPAWN_DISTANCE * POLICE_CAR_DESPAWN_DISTANCE;
+pub const POLICE_CAR_DESPAWN_DISTANCE_SQ: f32 =
+    POLICE_CAR_DESPAWN_DISTANCE * POLICE_CAR_DESPAWN_DISTANCE;
 /// 警車遠距離消失距離平方
-pub const POLICE_CAR_DESPAWN_FAR_DISTANCE_SQ: f32 = (POLICE_CAR_DESPAWN_DISTANCE * 1.5) * (POLICE_CAR_DESPAWN_DISTANCE * 1.5);
+pub const POLICE_CAR_DESPAWN_FAR_DISTANCE_SQ: f32 =
+    (POLICE_CAR_DESPAWN_DISTANCE * 1.5) * (POLICE_CAR_DESPAWN_DISTANCE * 1.5);
 /// 警車最大數量（依通緝等級）
 pub const MAX_POLICE_CARS_PER_STAR: u32 = 1;
 /// 警車生成間隔（秒）
@@ -57,7 +58,8 @@ pub const PIT_ABANDON_DISTANCE_SQ: f32 = PIT_ABANDON_DISTANCE * PIT_ABANDON_DIST
 /// 攔截放棄距離（50 公尺）
 pub const INTERCEPT_ABANDON_DISTANCE: f32 = 50.0;
 /// 攔截放棄距離平方
-pub const INTERCEPT_ABANDON_DISTANCE_SQ: f32 = INTERCEPT_ABANDON_DISTANCE * INTERCEPT_ABANDON_DISTANCE;
+pub const INTERCEPT_ABANDON_DISTANCE_SQ: f32 =
+    INTERCEPT_ABANDON_DISTANCE * INTERCEPT_ABANDON_DISTANCE;
 /// 前方檢測點積閾值（cos(45°) ≈ 0.7）
 pub const FRONT_DOT_THRESHOLD: f32 = 0.7;
 

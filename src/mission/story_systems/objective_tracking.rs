@@ -2,6 +2,11 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss
+)]
 
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -13,8 +18,10 @@ use super::super::cutscene_systems::is_cutscene_active;
 use super::super::dialogue::DialogueEvent;
 use super::super::dialogue_systems::is_dialogue_active;
 use super::super::economy::RespectManager;
-use super::super::story_data::*;
-use super::super::story_manager::*;
+use super::super::story_data::{
+    FailCondition, MissionObjective, MissionPhase, ObjectiveType, StoryMissionId,
+};
+use super::super::story_manager::{StoryMissionDatabase, StoryMissionEvent, StoryMissionManager};
 use super::super::trigger::MissionTargetEntity;
 use super::super::unlocks::UnlockManager;
 
@@ -88,17 +95,29 @@ pub fn mission_objective_tracking_system(
     target_query: Query<(&Transform, &MissionTargetEntity)>,
     mut events: MessageWriter<StoryMissionEvent>,
 ) {
-    let Some(active) = &mut manager.current_mission else { return; };
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Some(active) = &mut manager.current_mission else {
+        return;
+    };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
 
     let player_pos = player_transform.translation;
     let mission_id = active.mission_id;
     let phase_timer = active.phase_timer;
 
     for (index, objective) in active.objectives.iter_mut().enumerate() {
-        if objective.is_completed { continue; }
+        if objective.is_completed {
+            continue;
+        }
 
-        let completed = check_objective_complete(objective, player_pos, phase_timer, mission_id, &target_query);
+        let completed = check_objective_complete(
+            objective,
+            player_pos,
+            phase_timer,
+            mission_id,
+            &target_query,
+        );
 
         if completed {
             objective.is_completed = true;
@@ -154,17 +173,28 @@ pub fn mission_phase_system(
     mut mission_events: MessageWriter<StoryMissionEvent>,
     player_query: Query<&Transform, With<crate::player::Player>>,
 ) {
-    if is_dialogue_active(&dialogue_state) || is_cutscene_active(&cutscene_state) { return; }
+    if is_dialogue_active(&dialogue_state) || is_cutscene_active(&cutscene_state) {
+        return;
+    }
 
-    let Some(active) = &mut manager.current_mission else { return; };
+    let Some(active) = &mut manager.current_mission else {
+        return;
+    };
     active.tick(time.delta_secs());
-    if !active.is_phase_complete() { return; }
+    if !active.is_phase_complete() {
+        return;
+    }
 
     let mission_id = active.mission_id;
     let current_phase = active.current_phase;
-    let Some(mission) = database.get(mission_id) else { return; };
+    let Some(mission) = database.get(mission_id) else {
+        return;
+    };
 
-    if let Some(end_dialogue) = mission.get_phase(current_phase).and_then(|p| p.end_dialogue) {
+    if let Some(end_dialogue) = mission
+        .get_phase(current_phase)
+        .and_then(|p| p.end_dialogue)
+    {
         dialogue_events.write(DialogueEvent::Start {
             dialogue_id: end_dialogue,
             participants: HashMap::new(),
@@ -183,7 +213,9 @@ pub fn mission_phase_system(
         manager.create_checkpoint(player_pos, next_phase_index as u32);
 
         // 重新取得 active（create_checkpoint 借用了 manager）
-        let Some(active) = manager.current_mission.as_mut() else { return; };
+        let Some(active) = manager.current_mission.as_mut() else {
+            return;
+        };
         active.advance_phase(next_phase);
         mission_events.write(StoryMissionEvent::PhaseChanged {
             mission_id,
@@ -194,12 +226,16 @@ pub fn mission_phase_system(
             phase: next_phase_index as u32,
         });
         play_phase_start_events(next_phase, &mut dialogue_events, &mut cutscene_events);
-        info!("📋 任務 {} 進入階段 {} (檢查點已保存)", mission_id, next_phase_index);
+        info!(
+            "📋 任務 {} 進入階段 {} (檢查點已保存)",
+            mission_id, next_phase_index
+        );
     } else {
         let rewards = mission.rewards.clone();
         manager.grant_rewards(&rewards, &mut wallet, &mut respect, &mut unlocks);
 
-        if let Some((completed_id, spawned_entities)) = manager.complete_current_mission(&database) {
+        if let Some((completed_id, spawned_entities)) = manager.complete_current_mission(&database)
+        {
             cleanup_mission_entities(&mut commands, spawned_entities);
             mission_events.write(StoryMissionEvent::Completed {
                 mission_id: completed_id,
@@ -234,12 +270,18 @@ pub fn mission_fail_check_system(
     player_query: Query<&crate::combat::Health, With<crate::player::Player>>,
     mut events: MessageWriter<StoryMissionEvent>,
 ) {
-    let Some(active) = &manager.current_mission else { return; };
+    let Some(active) = &manager.current_mission else {
+        return;
+    };
 
     let mission_id = active.mission_id;
     let phase_timer = active.phase_timer;
-    let Some(mission) = database.get(mission_id) else { return; };
-    let Some(phase) = mission.get_phase(active.current_phase) else { return; };
+    let Some(mission) = database.get(mission_id) else {
+        return;
+    };
+    let Some(phase) = mission.get_phase(active.current_phase) else {
+        return;
+    };
 
     let player_health = player_query.single().ok();
 
@@ -269,11 +311,15 @@ pub fn update_kill_objective(
     target_id: &str,
     events: &mut MessageWriter<StoryMissionEvent>,
 ) {
-    let Some(active) = &mut manager.current_mission else { return; };
+    let Some(active) = &mut manager.current_mission else {
+        return;
+    };
     let mission_id = active.mission_id;
 
     for (index, objective) in active.objectives.iter_mut().enumerate() {
-        if objective.is_completed { continue; }
+        if objective.is_completed {
+            continue;
+        }
 
         let matches = match &objective.objective_type {
             ObjectiveType::KillTarget(id) => id == target_id,
@@ -305,11 +351,15 @@ pub fn update_talk_objective(
     npc_id: &str,
     events: &mut MessageWriter<StoryMissionEvent>,
 ) {
-    let Some(active) = &mut manager.current_mission else { return; };
+    let Some(active) = &mut manager.current_mission else {
+        return;
+    };
     let mission_id = active.mission_id;
 
     for (index, objective) in active.objectives.iter_mut().enumerate() {
-        if objective.is_completed { continue; }
+        if objective.is_completed {
+            continue;
+        }
 
         if let ObjectiveType::TalkToNpc(target_id) = &objective.objective_type {
             if target_id == npc_id {
@@ -338,7 +388,9 @@ pub fn get_current_mission_info(
         title: mission.title.clone(),
         phase_description: phase.description.clone(),
         objectives: active.objectives.clone(),
-        time_remaining: phase.time_limit.map(|limit| (limit - active.phase_timer).max(0.0)),
+        time_remaining: phase
+            .time_limit
+            .map(|limit| (limit - active.phase_timer).max(0.0)),
     })
 }
 
@@ -397,7 +449,7 @@ pub fn checkpoint_retry_system(
                 );
             }
             Err(e) => {
-                notifications.warning(format!("無法從檢查點重試: {}", e));
+                notifications.warning(format!("無法從檢查點重試: {e}"));
                 warn!("檢查點重試失敗: {}", e);
             }
         }

@@ -4,6 +4,7 @@
 
 // 部分商店/事件欄位與 enum 變體尚未在遊戲中使用，保留供後續整合
 #![allow(dead_code)]
+// 小型 Copy 結構上的 &self 方法保留 Rust 慣用風格
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -130,6 +131,7 @@ impl ShopType {
 
 /// 商店組件
 #[derive(Component)]
+#[allow(clippy::struct_field_names)]
 pub struct Shop {
     /// 商店類型
     pub shop_type: ShopType,
@@ -213,7 +215,12 @@ pub struct ShopItem {
 
 impl ShopItem {
     /// 建立新實例
-    pub fn new(id: impl Into<String>, name: impl Into<String>, category: ItemCategory, price: i32) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        category: ItemCategory,
+        price: i32,
+    ) -> Self {
         Self {
             id: id.into(),
             name: name.into(),
@@ -530,10 +537,10 @@ pub struct AtmMenuState {
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub enum AtmMode {
     #[default]
-    Main,      // 主選單
-    Deposit,   // 存款
-    Withdraw,  // 提款
-    Balance,   // 查詢餘額
+    Main, // 主選單
+    Deposit,  // 存款
+    Withdraw, // 提款
+    Balance,  // 查詢餘額
 }
 
 // ============================================================================

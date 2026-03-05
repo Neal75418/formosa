@@ -9,11 +9,11 @@ mod modifications;
 mod npc_ai;
 mod spawning;
 mod systems;
-mod vehicle_physics;
 mod theft;
 mod theft_ui;
 mod traffic_lights;
 mod vehicle_damage;
+mod vehicle_physics;
 pub mod watercraft;
 
 pub use components::*;
@@ -23,11 +23,11 @@ pub use modifications::*;
 pub use npc_ai::*;
 pub use spawning::*;
 pub use systems::*;
-pub use vehicle_physics::*;
 pub use theft::*;
 pub use theft_ui::*;
 pub use traffic_lights::*;
 pub use vehicle_damage::*;
+pub use vehicle_physics::*;
 pub use watercraft::*;
 
 use crate::core::{AppState, GameSet};
@@ -38,6 +38,7 @@ use bevy::prelude::*;
 pub struct VehiclePlugin;
 
 impl Plugin for VehiclePlugin {
+    #[allow(clippy::too_many_lines)]
     fn build(&self, app: &mut App) {
         app
             // Resources
@@ -108,8 +109,7 @@ impl Plugin for VehiclePlugin {
                     collision_window_damage_system,
                     bullet_window_damage_system,
                     body_part_visual_damage_system,
-                    vehicle_deformation_system
-                        .after(body_part_visual_damage_system),
+                    vehicle_deformation_system.after(body_part_visual_damage_system),
                 )
                     .in_set(GameSet::Vehicle)
                     .run_if(in_state(AppState::InGame)),
@@ -142,10 +142,7 @@ impl Plugin for VehiclePlugin {
             // 水上載具
             .add_systems(
                 Update,
-                (
-                    watercraft_buoyancy_system,
-                    watercraft_movement_system,
-                )
+                (watercraft_buoyancy_system, watercraft_movement_system)
                     .in_set(GameSet::Vehicle)
                     .run_if(in_state(AppState::InGame)),
             )

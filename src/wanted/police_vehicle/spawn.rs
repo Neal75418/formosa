@@ -3,16 +3,15 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::player::Player;
 use crate::core::GameState;
+use crate::player::Player;
 use crate::vehicle::{VehicleHealth, VehicleId, VehicleModifications, VehiclePreset};
 use crate::wanted::WantedLevel;
 
 use super::{
-    PoliceCar, PoliceCarConfig, PoliceCarVisuals, SirenLight,
-    POLICE_CAR_SPAWN_DISTANCE_MIN, POLICE_CAR_SPAWN_DISTANCE_MAX,
+    PoliceCar, PoliceCarConfig, PoliceCarVisuals, SirenLight, MAX_POLICE_CARS_PER_STAR,
     POLICE_CAR_DESPAWN_DISTANCE_SQ, POLICE_CAR_DESPAWN_FAR_DISTANCE_SQ,
-    MAX_POLICE_CARS_PER_STAR,
+    POLICE_CAR_SPAWN_DISTANCE_MAX, POLICE_CAR_SPAWN_DISTANCE_MIN,
 };
 
 // ============================================================================
@@ -34,6 +33,7 @@ pub fn setup_police_car_visuals(
 // ============================================================================
 
 /// 警車生成系統
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 pub fn spawn_police_car_system(
     mut commands: Commands,
     wanted: Res<WantedLevel>,
@@ -58,7 +58,7 @@ pub fn spawn_police_car_system(
     };
 
     let current_count = police_car_query.iter().count() as u32;
-    let max_count = (wanted.stars as u32 - 1) * MAX_POLICE_CARS_PER_STAR;
+    let max_count = (u32::from(wanted.stars) - 1) * MAX_POLICE_CARS_PER_STAR;
 
     // 檢查是否達到上限
     if current_count >= max_count {
@@ -91,12 +91,20 @@ pub fn spawn_police_car_system(
     );
 
     // 生成警車
-    spawn_police_car(&mut commands, spawn_pos, player_entity, player_pos, &visuals);
+    spawn_police_car(
+        &mut commands,
+        spawn_pos,
+        player_entity,
+        player_pos,
+        &visuals,
+    );
 
     info!(
         "生成警車 at ({:.1}, {:.1}) - 當前: {}/{}",
-        spawn_pos.x, spawn_pos.z,
-        current_count + 1, max_count
+        spawn_pos.x,
+        spawn_pos.z,
+        current_count + 1,
+        max_count
     );
 }
 
@@ -129,9 +137,9 @@ fn spawn_police_car(
                 ..default()
             },
             VehiclePreset::car().into_components(),
-            VehicleHealth::new(1500.0), // 警車較耐打
-            VehicleId::new(),  // 穩定識別碼（用於存檔）
-            VehicleModifications::default(),  // 改裝狀態（用於存檔）
+            VehicleHealth::new(1500.0),      // 警車較耐打
+            VehicleId::new(),                // 穩定識別碼（用於存檔）
+            VehicleModifications::default(), // 改裝狀態（用於存檔）
         ))
         .insert((
             // 物理組件
@@ -190,10 +198,10 @@ fn spawn_police_car(
 
         // 輪胎（四個）
         let wheel_positions = [
-            Vec3::new(-0.9, -0.1, 1.5),   // 左前
-            Vec3::new(0.9, -0.1, 1.5),    // 右前
-            Vec3::new(-0.9, -0.1, -1.5),  // 左後
-            Vec3::new(0.9, -0.1, -1.5),   // 右後
+            Vec3::new(-0.9, -0.1, 1.5),  // 左前
+            Vec3::new(0.9, -0.1, 1.5),   // 右前
+            Vec3::new(-0.9, -0.1, -1.5), // 左後
+            Vec3::new(0.9, -0.1, -1.5),  // 右後
         ];
 
         for pos in wheel_positions {

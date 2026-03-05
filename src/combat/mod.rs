@@ -36,6 +36,7 @@ use bevy::prelude::*;
 pub struct CombatPlugin;
 
 impl Plugin for CombatPlugin {
+    #[allow(clippy::too_many_lines)]
     fn build(&self, app: &mut App) {
         app
             // 事件 (Bevy 0.17: Message 類型)
@@ -69,16 +70,14 @@ impl Plugin for CombatPlugin {
                     spawn_player_weapons,
                     weapon_visibility_system,
                     weapon_visibility_init_system,
-                    weapon_cooldown_system,        // 純計時器更新，無依賴
-                    melee_combo_timeout_system,    // 連擊窗口超時重置
+                    weapon_cooldown_system,     // 純計時器更新，無依賴
+                    melee_combo_timeout_system, // 連擊窗口超時重置
                     // 輸入處理
                     shooting_input_system,
                     // 格擋狀態更新（依賴輸入）
-                    block_update_system
-                        .after(shooting_input_system),
+                    block_update_system.after(shooting_input_system),
                     // 自動瞄準（輸入後更新鎖定目標）
-                    auto_aim_system
-                        .after(shooting_input_system),
+                    auto_aim_system.after(shooting_input_system),
                     // 依賴輸入的系統
                     (
                         holding_pose_system,

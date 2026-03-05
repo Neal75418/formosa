@@ -23,13 +23,14 @@ use crate::mission::{
 use crate::player::Player;
 use crate::vehicle::{ModLevel, VehicleId, VehicleModifications};
 
+#[allow(clippy::wildcard_imports)]
 use super::components::*;
 
 // ============================================================================
 // 改裝等級轉換輔助函數
 // ============================================================================
 
-/// ModLevel 轉換為 u8
+/// `ModLevel` 轉換為 u8
 pub(super) fn mod_level_to_u8(level: ModLevel) -> u8 {
     match level {
         ModLevel::Stock => 0,
@@ -39,7 +40,7 @@ pub(super) fn mod_level_to_u8(level: ModLevel) -> u8 {
     }
 }
 
-/// u8 轉換為 ModLevel
+/// u8 轉換為 `ModLevel`
 pub(super) fn u8_to_mod_level(value: u8) -> ModLevel {
     match value {
         1 => ModLevel::Level1,
@@ -76,22 +77,19 @@ pub fn handle_save_input(
     mut load_events: MessageWriter<LoadGameEvent>,
 ) {
     // F5 = 快速存檔, F9 = 快速讀檔（互斥，同一幀最多觸發一個）
-    if keyboard.just_pressed(KeyCode::F5)
-        && !save_manager.is_busy {
-            save_events.write(SaveGameEvent {
-                save_type: SaveType::QuickSave,
-                slot: None,
-            });
-            info!("💾 快速存檔中...");
-        }
-    else if keyboard.just_pressed(KeyCode::F9)
-        && !save_manager.is_busy {
-            load_events.write(LoadGameEvent {
-                load_type: LoadType::QuickLoad,
-                slot: None,
-            });
-            info!("💾 快速讀檔中...");
-        }
+    if keyboard.just_pressed(KeyCode::F5) && !save_manager.is_busy {
+        save_events.write(SaveGameEvent {
+            save_type: SaveType::QuickSave,
+            slot: None,
+        });
+        info!("💾 快速存檔中...");
+    } else if keyboard.just_pressed(KeyCode::F9) && !save_manager.is_busy {
+        load_events.write(LoadGameEvent {
+            load_type: LoadType::QuickLoad,
+            slot: None,
+        });
+        info!("💾 快速讀檔中...");
+    }
 }
 
 // ============================================================================
@@ -203,6 +201,7 @@ pub fn poll_save_task(
 }
 
 /// 非同步執行存檔 IO
+#[allow(clippy::unused_async)]
 async fn perform_save_async(json: String, path: PathBuf) -> Result<PathBuf, SaveError> {
     // 使用 async-std 或直接在背景執行緒同步寫入
     // Bevy 的 AsyncComputeTaskPool 已經在背景執行緒運行
@@ -275,23 +274,29 @@ fn collect_mission_save_data(
     save_data.missions.completed_missions = story_manager
         .get_completed_missions()
         .iter()
-        .map(|id| format!("{:?}", id))
+        .map(|id| format!("{id:?}"))
         .collect();
-    save_data.missions.mission_states = story_manager.mission_states.clone();
+    save_data
+        .missions
+        .mission_states
+        .clone_from(&story_manager.mission_states);
     save_data.missions.current_chapter = story_manager.current_chapter;
-    save_data.missions.best_ratings = story_manager.mission_ratings.clone();
-    save_data.play_time_secs = story_manager.total_play_time as f64;
+    save_data
+        .missions
+        .best_ratings
+        .clone_from(&story_manager.mission_ratings);
+    save_data.play_time_secs = f64::from(story_manager.total_play_time);
 
     save_data.missions.unlocked_items = unlocks.unlocked_items.iter().cloned().collect();
     save_data.missions.unlocked_areas = unlocks
         .unlocked_areas
         .iter()
-        .map(|id| id.to_string())
+        .map(ToString::to_string)
         .collect();
     save_data.missions.npc_relationships = relationship
         .relationships
         .iter()
-        .map(|(k, v)| (format!("{}", k), *v))
+        .map(|(k, v)| (format!("{k}"), *v))
         .collect();
     save_data.missions.flags = story_manager
         .story_flags
@@ -358,9 +363,23 @@ fn collect_save_data(
         ..SaveData::default()
     };
 
-    collect_player_save_data(&mut save_data, player_query, wallet, weapon_query, respect, game_state, vehicle_mod_query);
+    collect_player_save_data(
+        &mut save_data,
+        player_query,
+        wallet,
+        weapon_query,
+        respect,
+        game_state,
+        vehicle_mod_query,
+    );
     collect_mission_save_data(&mut save_data, story_manager, unlocks, relationship);
-    collect_world_save_data(&mut save_data, world_time, weather_state, vehicle_mod_query, destroyed_tracker);
+    collect_world_save_data(
+        &mut save_data,
+        world_time,
+        weather_state,
+        vehicle_mod_query,
+        destroyed_tracker,
+    );
 
     save_data
 }
@@ -393,14 +412,15 @@ pub fn handle_auto_save(
         save_manager.time_since_auto_save += time.delta_secs();
 
         if save_manager.time_since_auto_save >= save_manager.auto_save_interval
-            && !save_manager.is_busy {
-                save_events.write(SaveGameEvent {
-                    save_type: SaveType::AutoSave,
-                    slot: None,
-                });
-                save_manager.time_since_auto_save = 0.0;
-                info!("💾 定時自動存檔");
-            }
+            && !save_manager.is_busy
+        {
+            save_events.write(SaveGameEvent {
+                save_type: SaveType::AutoSave,
+                slot: None,
+            });
+            save_manager.time_since_auto_save = 0.0;
+            info!("💾 定時自動存檔");
+        }
     }
 }
 
@@ -443,7 +463,7 @@ pub(super) fn validate_save_data(data: &SaveData) -> Result<(), SaveError> {
 
     validate_player_data(&data.player)?;
     validate_world_data(&data.world)?;
-    validate_vehicle_data(&data.world)?;
+    validate_vehicle_data(&data.world);
 
     // 武器類型已由 serde 反序列化時驗證，無需額外檢查
 
@@ -487,7 +507,7 @@ fn validate_world_data(world: &WorldSaveData) -> Result<(), SaveError> {
     Ok(())
 }
 
-fn validate_vehicle_data(world: &WorldSaveData) -> Result<(), SaveError> {
+fn validate_vehicle_data(world: &WorldSaveData) {
     for vehicle_mod in &world.vehicle_modifications {
         if vehicle_mod.engine_level > 3
             || vehicle_mod.transmission_level > 3
@@ -502,10 +522,9 @@ fn validate_vehicle_data(world: &WorldSaveData) -> Result<(), SaveError> {
             );
         }
     }
-    Ok(())
 }
 
-/// 根據武器類型取得 WeaponStats
+/// 根據武器類型取得 `WeaponStats`
 pub(super) fn weapon_stats_from_type(weapon_type: WeaponType) -> WeaponStats {
     match weapon_type {
         WeaponType::Fist => WeaponStats::fist(),

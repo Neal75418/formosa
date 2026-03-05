@@ -1,5 +1,13 @@
 //! 行人反應系統（槍聲反應、車輛碰撞、空間哈希）
 
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::similar_names
+)]
+
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -32,7 +40,7 @@ pub fn pedestrian_reaction_system(
     let current_time = time.elapsed_secs();
     let dt = time.delta_secs();
 
-    for (transform, mut state) in ped_query.iter_mut() {
+    for (transform, mut state) in &mut ped_query {
         let pos = transform.translation;
 
         // 檢查附近是否有槍聲
@@ -68,7 +76,7 @@ pub fn pedestrian_reaction_system(
 }
 
 /// 槍擊事件記錄系統
-/// 監聽 CombatState.last_shot_time 的變化來偵測槍聲
+/// 監聽 `CombatState.last_shot_time` 的變化來偵測槍聲
 /// 同時計算目擊者數量並發送犯罪事件
 pub fn gunshot_tracking_system(
     time: Res<Time>,
@@ -237,12 +245,12 @@ pub fn pedestrian_vehicle_collision_system(
     >,
     mut crime_events: MessageWriter<CrimeEvent>,
 ) {
-    let current_time = time.elapsed_secs();
-    let player_vehicle = game_state.current_vehicle;
     const QUERY_RADIUS: f32 = 3.0;
     const MIN_HIT_SPEED: f32 = 3.0;
+    let current_time = time.elapsed_secs();
+    let player_vehicle = game_state.current_vehicle;
 
-    for (ped_entity, ped_transform, mut state, health) in ped_query.iter_mut() {
+    for (ped_entity, ped_transform, mut state, health) in &mut ped_query {
         let ped_pos = ped_transform.translation;
 
         for (vehicle_entity, vehicle_pos, dist_sq) in
@@ -288,7 +296,7 @@ pub fn pedestrian_hit_response_system(
 ) {
     let current_time = time.elapsed_secs();
 
-    for (entity, mut transform, hit) in ped_query.iter_mut() {
+    for (entity, mut transform, hit) in &mut ped_query {
         let time_since_hit = current_time - hit.hit_time;
 
         // 被撞後的飛行效果（持續 1 秒）

@@ -38,7 +38,7 @@ impl Default for WitnessState {
             crime_type: None,
             crime_position: None,
             call_progress: 0.0,
-            call_duration: 3.0,  // 預設 3 秒完成報警
+            call_duration: 3.0, // 預設 3 秒完成報警
             report_cooldown: 0.0,
             has_reported: false,
             bribed: false,
@@ -131,9 +131,9 @@ impl WitnessedCrime {
     /// 獲取目擊範圍（視覺距離）
     pub fn witness_range(&self) -> f32 {
         match self {
-            WitnessedCrime::Gunshot => 30.0,   // 聽覺範圍較大
-            WitnessedCrime::Assault => 15.0,   // 視覺範圍
-            WitnessedCrime::Murder => 20.0,    // 視覺範圍（較遠也能看到）
+            WitnessedCrime::Gunshot => 30.0, // 聽覺範圍較大
+            WitnessedCrime::Assault => 15.0, // 視覺範圍
+            WitnessedCrime::Murder => 20.0,  // 視覺範圍（較遠也能看到）
             WitnessedCrime::VehicleTheft => 12.0,
             WitnessedCrime::VehicleHit => 25.0, // 撞擊聲音較大
         }
@@ -161,7 +161,10 @@ mod tests {
 
     #[test]
     fn witness_crime_ignored_on_cooldown() {
-        let mut ws = WitnessState { report_cooldown: 30.0, ..WitnessState::default() };
+        let mut ws = WitnessState {
+            report_cooldown: 30.0,
+            ..WitnessState::default()
+        };
         ws.witness_crime(WitnessedCrime::Assault, Vec3::ZERO);
         assert!(!ws.witnessed_crime);
     }

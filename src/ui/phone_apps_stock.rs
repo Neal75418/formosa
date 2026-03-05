@@ -1,6 +1,6 @@
 //! 股市 App 渲染函數
 //!
-//! 從 phone_apps.rs 拆分，降低單檔行數。
+//! 從 `phone_apps`.rs 拆分，降低單檔行數。
 
 use bevy::prelude::*;
 
@@ -12,7 +12,7 @@ use crate::ui::constants::{
     MARKET_CLOSED_COLOR, STOCK_DOWN_COLOR, STOCK_NEUTRAL_COLOR, STOCK_UP_COLOR,
 };
 
-/// 內容項目背景色（與 phone_apps.rs 同值）
+/// 內容項目背景色（與 `phone_apps`.rs 同值）
 const CONTENT_ITEM_BG: Color = Color::srgba(0.1, 0.12, 0.18, 0.8);
 
 // ============================================================================
@@ -79,6 +79,7 @@ pub(super) fn spawn_stock_market_tabs(
 }
 
 /// 生成「行情」分頁內容
+#[allow(clippy::too_many_lines)]
 pub(super) fn spawn_stock_list(
     parent: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -139,70 +140,67 @@ pub(super) fn spawn_stock_list(
                 BorderRadius::all(Val::Px(4.0)),
             ))
             .with_children(|card| {
-                card.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        ..default()
-                    },
-                ))
-                .with_children(|row| {
-                    row.spawn((
-                        Text::new(symbol.label()),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 12.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                    row.spawn((
-                        Text::new(format!("${:.1}", stock.price)),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 12.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(0.9, 0.9, 0.95, 1.0)),
-                    ));
-                });
-                card.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        margin: UiRect::top(Val::Px(2.0)),
-                        ..default()
-                    },
-                ))
-                .with_children(|row| {
-                    let sel_hint = if is_selected { " ▸" } else { "" };
-                    row.spawn((
-                        Text::new(format!("{}{}", symbol.ticker(), sel_hint)),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 9.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(0.6, 0.6, 0.7, 0.8)),
-                    ));
-                    let sign = if stock.is_up() { "+" } else { "" };
-                    row.spawn((
-                        Text::new(format!("{}{:.2}%", sign, change_pct)),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 9.0,
-                            ..default()
-                        },
-                        TextColor(change_color),
-                    ));
-                });
+                card.spawn((Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    ..default()
+                },))
+                    .with_children(|row| {
+                        row.spawn((
+                            Text::new(symbol.label()),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 12.0,
+                                ..default()
+                            },
+                            TextColor(Color::WHITE),
+                        ));
+                        row.spawn((
+                            Text::new(format!("${:.1}", stock.price)),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 12.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgba(0.9, 0.9, 0.95, 1.0)),
+                        ));
+                    });
+                card.spawn((Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    margin: UiRect::top(Val::Px(2.0)),
+                    ..default()
+                },))
+                    .with_children(|row| {
+                        let sel_hint = if is_selected { " ▸" } else { "" };
+                        row.spawn((
+                            Text::new(format!("{}{}", symbol.ticker(), sel_hint)),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 9.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgba(0.6, 0.6, 0.7, 0.8)),
+                        ));
+                        let sign = if stock.is_up() { "+" } else { "" };
+                        row.spawn((
+                            Text::new(format!("{sign}{change_pct:.2}%")),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 9.0,
+                                ..default()
+                            },
+                            TextColor(change_color),
+                        ));
+                    });
             });
     }
 }
 
 /// 生成「持倉」分頁內容
+#[allow(clippy::too_many_lines)]
 pub(super) fn spawn_stock_portfolio(
     parent: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -210,7 +208,7 @@ pub(super) fn spawn_stock_portfolio(
 ) {
     let portfolio = &market.portfolio;
     let total_value = portfolio.total_value(market);
-    spawn_stat_row(parent, font, "持倉總市值", &format!("${:.0}", total_value));
+    spawn_stat_row(parent, font, "持倉總市值", &format!("${total_value:.0}"));
 
     parent.spawn((
         Node {
@@ -238,9 +236,10 @@ pub(super) fn spawn_stock_portfolio(
             STOCK_DOWN_COLOR
         };
         let pl_text = if pl >= 0.0 {
-            format!("+${:.0}", pl)
+            format!("+${pl:.0}")
         } else {
-            format!("-${:.0}", -pl)
+            let neg_pl = -pl;
+            format!("-${neg_pl:.0}")
         };
 
         parent
@@ -255,63 +254,59 @@ pub(super) fn spawn_stock_portfolio(
                 BorderRadius::all(Val::Px(4.0)),
             ))
             .with_children(|card| {
-                card.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        ..default()
-                    },
-                ))
-                .with_children(|row| {
-                    row.spawn((
-                        Text::new(format!("{} ({})", symbol.label(), symbol.ticker())),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 11.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                    row.spawn((
-                        Text::new(format!("{} 股", shares)),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 10.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(0.6, 0.6, 0.7, 0.8)),
-                    ));
-                });
-                card.spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        margin: UiRect::top(Val::Px(2.0)),
-                        ..default()
-                    },
-                ))
-                .with_children(|row| {
-                    row.spawn((
-                        Text::new(format!("成本 ${:.1} → ${:.1}", avg_cost, stock.price)),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 9.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(0.5, 0.5, 0.6, 0.8)),
-                    ));
-                    row.spawn((
-                        Text::new(pl_text),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 10.0,
-                            ..default()
-                        },
-                        TextColor(pl_color),
-                    ));
-                });
+                card.spawn((Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    ..default()
+                },))
+                    .with_children(|row| {
+                        row.spawn((
+                            Text::new(format!("{} ({})", symbol.label(), symbol.ticker())),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 11.0,
+                                ..default()
+                            },
+                            TextColor(Color::WHITE),
+                        ));
+                        row.spawn((
+                            Text::new(format!("{shares} 股")),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 10.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgba(0.6, 0.6, 0.7, 0.8)),
+                        ));
+                    });
+                card.spawn((Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    margin: UiRect::top(Val::Px(2.0)),
+                    ..default()
+                },))
+                    .with_children(|row| {
+                        row.spawn((
+                            Text::new(format!("成本 ${:.1} → ${:.1}", avg_cost, stock.price)),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 9.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgba(0.5, 0.5, 0.6, 0.8)),
+                        ));
+                        row.spawn((
+                            Text::new(pl_text),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 10.0,
+                                ..default()
+                            },
+                            TextColor(pl_color),
+                        ));
+                    });
             });
     }
 
@@ -338,6 +333,8 @@ pub(super) fn spawn_stock_portfolio(
 }
 
 /// 生成「交易」分頁內容
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 pub(super) fn spawn_stock_trade(
     parent: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -399,7 +396,7 @@ pub(super) fn spawn_stock_trade(
         ))
         .with_children(|qty| {
             qty.spawn((
-                Text::new(format!("數量：{}　[Q-/E+]", trade_quantity)),
+                Text::new(format!("數量：{trade_quantity}　[Q-/E+]")),
                 TextFont {
                     font: font.clone(),
                     font_size: 12.0,
@@ -430,7 +427,7 @@ pub(super) fn spawn_stock_trade(
         ))
         .with_children(|panel| {
             panel.spawn((
-                Text::new(format!("[Enter] 買入 ${}", buy_cost)),
+                Text::new(format!("[Enter] 買入 ${buy_cost}")),
                 TextFont {
                     font: font.clone(),
                     font_size: 11.0,
@@ -473,7 +470,7 @@ pub(super) fn spawn_stock_trade(
         ))
         .with_children(|panel| {
             panel.spawn((
-                Text::new(format!("[Space] 賣出 ${}", sell_value)),
+                Text::new(format!("[Space] 賣出 ${sell_value}")),
                 TextFont {
                     font: font.clone(),
                     font_size: 11.0,
@@ -489,15 +486,13 @@ pub(super) fn spawn_stock_trade(
 
     if !market.is_open {
         parent
-            .spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    padding: UiRect::all(Val::Px(4.0)),
-                    justify_content: JustifyContent::Center,
-                    margin: UiRect::top(Val::Px(4.0)),
-                    ..default()
-                },
-            ))
+            .spawn((Node {
+                width: Val::Percent(100.0),
+                padding: UiRect::all(Val::Px(4.0)),
+                justify_content: JustifyContent::Center,
+                margin: UiRect::top(Val::Px(4.0)),
+                ..default()
+            },))
             .with_children(|warn| {
                 warn.spawn((
                     Text::new("市場已關閉，無法交易"),
@@ -512,14 +507,12 @@ pub(super) fn spawn_stock_trade(
     }
 
     parent
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                padding: UiRect::top(Val::Px(6.0)),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-        ))
+        .spawn((Node {
+            width: Val::Percent(100.0),
+            padding: UiRect::top(Val::Px(6.0)),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },))
         .with_children(|hint| {
             hint.spawn((
                 Text::new("[↓] 切換股票"),

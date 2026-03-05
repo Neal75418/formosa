@@ -13,10 +13,11 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::vehicle::Vehicle;
+#[allow(clippy::wildcard_imports)]
+use super::destruction_effects::*;
 use crate::combat::{DamageEvent, DamageSource};
 use crate::core::EntityPool;
-use super::destruction_effects::*;
+use crate::vehicle::Vehicle;
 
 // ============================================================================
 // 常數
@@ -108,10 +109,7 @@ pub struct DestructibleVisuals {
 
 impl DestructibleVisuals {
     /// 建立新實例
-    pub fn new(
-        meshes: &mut Assets<Mesh>,
-        materials: &mut Assets<StandardMaterial>,
-    ) -> Self {
+    pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             // 玻璃碎片（小三角形）
             glass_shard_mesh: meshes.add(Mesh::from(Cuboid::new(0.1, 0.15, 0.02))),
@@ -191,9 +189,8 @@ impl DestructibleType {
     pub fn debris_count(&self) -> usize {
         match self {
             DestructibleType::Glass => GLASS_SHARD_COUNT,
-            DestructibleType::Wood => WOOD_DEBRIS_COUNT,
+            DestructibleType::Wood | DestructibleType::Plastic => WOOD_DEBRIS_COUNT,
             DestructibleType::Metal => METAL_DEBRIS_COUNT,
-            DestructibleType::Plastic => WOOD_DEBRIS_COUNT,
             DestructibleType::Electronic => METAL_DEBRIS_COUNT + 3, // 額外電子零件
         }
     }
@@ -223,6 +220,7 @@ pub enum DestructibleState {
 
 /// 可破壞物件組件
 #[derive(Component)]
+#[allow(clippy::struct_excessive_bools, clippy::struct_field_names)]
 pub struct Destructible {
     /// 物件類型
     pub destructible_type: DestructibleType,
@@ -310,6 +308,7 @@ impl Destructible {
 
 /// 碎片組件
 #[derive(Component)]
+#[allow(clippy::struct_field_names)]
 pub struct Debris {
     /// 碎片類型（對應材質）
     pub debris_type: DestructibleType,
@@ -382,7 +381,9 @@ pub fn vehicle_destructible_collision_system(
             continue;
         };
 
-        let Ok((entity, dest_transform, destructible)) = destructible_query.get(destructible_entity) else {
+        let Ok((entity, dest_transform, destructible)) =
+            destructible_query.get(destructible_entity)
+        else {
             continue;
         };
 
@@ -459,14 +460,21 @@ pub fn handle_environment_damage_system(
     mut commands: Commands,
     mut env_damage_events: MessageReader<EnvironmentDamageEvent>,
     mut destructible_query: Query<(Entity, &Transform, &mut Destructible, Option<&Collider>)>,
-    mut debris_query: Query<(&mut Debris, &mut Transform, &mut Velocity, &mut Visibility), Without<Destructible>>,
+    mut debris_query: Query<
+        (&mut Debris, &mut Transform, &mut Velocity, &mut Visibility),
+        Without<Destructible>,
+    >,
     visuals: Option<Res<DestructibleVisuals>>,
     mut debris_pool: ResMut<DebrisPool>,
 ) {
-    let Some(visuals) = visuals else { return; };
+    let Some(visuals) = visuals else {
+        return;
+    };
 
     for event in env_damage_events.read() {
-        let Ok((entity, transform, mut destructible, _collider)) = destructible_query.get_mut(event.target) else {
+        let Ok((entity, transform, mut destructible, _collider)) =
+            destructible_query.get_mut(event.target)
+        else {
             continue;
         };
 
@@ -533,7 +541,7 @@ pub fn handle_environment_damage_system(
                     commands.entity(entity).remove::<Collider>();
                     commands.entity(entity).insert(Visibility::Hidden);
                 }
-                _ => {}
+                DestructibleState::Intact => {}
             }
         }
     }
@@ -571,7 +579,13 @@ pub fn combat_destructible_damage_system(
 /// 碎片更新系統
 pub fn debris_update_system(
     _commands: Commands,
-    mut debris_query: Query<(Entity, &mut Debris, &mut Transform, Option<&mut MeshMaterial3d<StandardMaterial>>, &mut Visibility)>,
+    mut debris_query: Query<(
+        Entity,
+        &mut Debris,
+        &mut Transform,
+        Option<&mut MeshMaterial3d<StandardMaterial>>,
+        &mut Visibility,
+    )>,
     time: Res<Time>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut debris_pool: ResMut<DebrisPool>,
@@ -644,4 +658,3 @@ pub fn destruction_particle_update_system(
         }
     }
 }
-

@@ -10,8 +10,8 @@ pub use components::*;
 pub use integration::*;
 pub use systems::*;
 
-use bevy::prelude::*;
 use crate::core::AppState;
+use bevy::prelude::*;
 
 /// 音效插件
 pub struct AudioPlugin;
@@ -46,8 +46,7 @@ impl Plugin for AudioPlugin {
                 Update,
                 (
                     auto_attach_engine_sounds,
-                    update_engine_sounds
-                        .after(auto_attach_engine_sounds),
+                    update_engine_sounds.after(auto_attach_engine_sounds),
                     update_ambient_sounds,
                 )
                     .run_if(in_state(AppState::InGame)),
@@ -60,18 +59,14 @@ impl Plugin for AudioPlugin {
                     audio_mission_event_system,
                     audio_vehicle_enter_exit_system,
                     detect_ground_surface_system,
-                    audio_footstep_system
-                        .after(detect_ground_surface_system),
+                    audio_footstep_system.after(detect_ground_surface_system),
                     radio_input_system,
-                    radio_fade_system
-                        .after(radio_input_system),
-                    radio_playback_system
-                        .after(radio_fade_system),
+                    radio_fade_system.after(radio_input_system),
+                    radio_playback_system.after(radio_fade_system),
                     radio_station_name_timer,
                     police_radio_chatter_system,
                     npc_dialogue_cooldown_system,
-                    npc_dialogue_trigger_system
-                        .after(npc_dialogue_cooldown_system),
+                    npc_dialogue_trigger_system.after(npc_dialogue_cooldown_system),
                 )
                     .run_if(in_state(AppState::InGame)),
             );

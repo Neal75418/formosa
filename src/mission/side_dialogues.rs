@@ -11,10 +11,16 @@
 //! - 208/209: 飆車族（開始/結束）
 //! - 210/211: 陰謀論部落客（開始/結束）
 
-use super::dialogue::*;
-use super::side_dialogue_data::*;
+use super::dialogue::{
+    DialogueChoice, DialogueCondition, DialogueConsequence, DialogueDatabase, DialogueNode,
+    DialogueSpeaker, DialogueTree, NpcDialogueData, SpeakerEmotion,
+};
+use super::side_dialogue_data::{
+    create_blogger_end, create_blogger_start, create_dog_uncle_end, create_dog_uncle_start,
+    create_racer_end, create_racer_start,
+};
 
-/// 支線任務 NPC ID（與 side_missions.rs 的 quest_giver 對應）
+/// 支線任務 NPC ID（與 `side_missions.rs` 的 `quest_giver` 對應）
 const NPC_BETEL_NUT_BEAUTY: u32 = 200;
 const NPC_TEMPLE_KEEPER: u32 = 201;
 const NPC_NIGHT_MARKET_CHEF: u32 = 202;
@@ -87,36 +93,50 @@ fn create_betel_nut_start() -> DialogueTree {
     let mut tree = DialogueTree::new(200, "檳榔西施：求助");
 
     tree.add_node(
-        DialogueNode::new(0, npc, "大哥……你能不能幫幫我？那群流氓又來了，每天來騷擾我，生意都沒辦法做……")
-            .with_emotion(SpeakerEmotion::Sad)
-            .then(1),
+        DialogueNode::new(
+            0,
+            npc,
+            "大哥……你能不能幫幫我？那群流氓又來了，每天來騷擾我，生意都沒辦法做……",
+        )
+        .with_emotion(SpeakerEmotion::Sad)
+        .then(1),
     );
 
     tree.add_node(
-        DialogueNode::new(1, npc, "我報過警了，但警察來的時候他們就跑，警察走了又回來……")
-            .with_emotion(SpeakerEmotion::Afraid)
-            .with_choice(
-                DialogueChoice::simple("放心，我幫妳趕走他們", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_BETEL_NUT_BEAUTY,
-                        delta: 10,
-                    }),
-            )
-            .with_choice(
-                DialogueChoice::simple("幫忙可以，有什麼好處？", 3)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_BETEL_NUT_BEAUTY,
-                        delta: -5,
-                    }),
-            )
-            .with_choice(DialogueChoice::simple("妳不能換個地方擺攤嗎？", 4)),
+        DialogueNode::new(
+            1,
+            npc,
+            "我報過警了，但警察來的時候他們就跑，警察走了又回來……",
+        )
+        .with_emotion(SpeakerEmotion::Afraid)
+        .with_choice(
+            DialogueChoice::simple("放心，我幫妳趕走他們", 2).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_BETEL_NUT_BEAUTY,
+                    delta: 10,
+                },
+            ),
+        )
+        .with_choice(
+            DialogueChoice::simple("幫忙可以，有什麼好處？", 3).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_BETEL_NUT_BEAUTY,
+                    delta: -5,
+                },
+            ),
+        )
+        .with_choice(DialogueChoice::simple("妳不能換個地方擺攤嗎？", 4)),
     );
 
     // 義氣路線
     tree.add_node(
-        DialogueNode::new(2, npc, "真的嗎！？太好了！他們通常在附近的巷子裡，大概三個人。拜託你了！")
-            .with_emotion(SpeakerEmotion::Happy)
-            .with_choice(DialogueChoice::end("沒問題，交給我")),
+        DialogueNode::new(
+            2,
+            npc,
+            "真的嗎！？太好了！他們通常在附近的巷子裡，大概三個人。拜託你了！",
+        )
+        .with_emotion(SpeakerEmotion::Happy)
+        .with_choice(DialogueChoice::end("沒問題，交給我")),
     );
 
     // 談報酬路線
@@ -124,20 +144,16 @@ fn create_betel_nut_start() -> DialogueTree {
         DialogueNode::new(3, npc, "我……我沒什麼錢，但事成之後一定會好好謝謝你的！")
             .with_emotion(SpeakerEmotion::Sad)
             .with_choice(DialogueChoice::simple("好吧，我去看看", 2))
-            .with_choice(
-                DialogueChoice::simple("算了，我沒空", 5)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_BETEL_NUT_BEAUTY,
-                        delta: -10,
-                    }),
-            ),
+            .with_choice(DialogueChoice::simple("算了，我沒空", 5).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_BETEL_NUT_BEAUTY,
+                    delta: -10,
+                },
+            )),
     );
 
     // 換攤路線
-    tree.add_node(
-        DialogueNode::new(4, player, "妳不能換個地方擺攤嗎？")
-            .then(6),
-    );
+    tree.add_node(DialogueNode::new(4, player, "妳不能換個地方擺攤嗎？").then(6));
 
     // 拒絕結束
     tree.add_node(
@@ -147,16 +163,21 @@ fn create_betel_nut_start() -> DialogueTree {
     );
 
     tree.add_node(
-        DialogueNode::new(6, npc, "這個攤位是我阿嬤留下來的，我不想放棄……拜託你幫幫我好嗎？")
-            .with_emotion(SpeakerEmotion::Sad)
-            .with_choice(
-                DialogueChoice::simple("好，我去教訓他們", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_BETEL_NUT_BEAUTY,
-                        delta: 5,
-                    }),
-            )
-            .with_choice(DialogueChoice::simple("抱歉，我幫不了", 5)),
+        DialogueNode::new(
+            6,
+            npc,
+            "這個攤位是我阿嬤留下來的，我不想放棄……拜託你幫幫我好嗎？",
+        )
+        .with_emotion(SpeakerEmotion::Sad)
+        .with_choice(
+            DialogueChoice::simple("好，我去教訓他們", 2).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_BETEL_NUT_BEAUTY,
+                    delta: 5,
+                },
+            ),
+        )
+        .with_choice(DialogueChoice::simple("抱歉，我幫不了", 5)),
     );
 
     tree
@@ -176,18 +197,20 @@ fn create_betel_nut_end() -> DialogueTree {
         DialogueNode::new(1, npc, "這是一點心意，請你一定要收下！")
             .with_emotion(SpeakerEmotion::Happy)
             .with_choice(
-                DialogueChoice::simple("不客氣，舉手之勞", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
+                DialogueChoice::simple("不客氣，舉手之勞", 2).with_consequence(
+                    DialogueConsequence::ChangeRelationship {
                         npc_id: NPC_BETEL_NUT_BEAUTY,
                         delta: 5,
-                    }),
+                    },
+                ),
             )
             .with_choice(
-                DialogueChoice::simple("以後有事隨時找我", 3)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
+                DialogueChoice::simple("以後有事隨時找我", 3).with_consequence(
+                    DialogueConsequence::ChangeRelationship {
                         npc_id: NPC_BETEL_NUT_BEAUTY,
                         delta: 10,
-                    }),
+                    },
+                ),
             )
             .with_choice(
                 DialogueChoice::simple("要不要一起去吃個飯？", 4)
@@ -215,15 +238,18 @@ fn create_betel_nut_end() -> DialogueTree {
 
     // 義氣結束
     tree.add_node(
-        DialogueNode::new(3, npc, "有你在真的讓人安心！對了，我認識一些人，以後有消息我都會跟你說的！")
-            .with_emotion(SpeakerEmotion::Happy)
-            .with_choice(
-                DialogueChoice::end("好，保持聯絡")
-                    .with_consequence(DialogueConsequence::SetStoryFlag {
-                        flag: "betel_nut_informant".to_string(),
-                        value: true,
-                    }),
-            ),
+        DialogueNode::new(
+            3,
+            npc,
+            "有你在真的讓人安心！對了，我認識一些人，以後有消息我都會跟你說的！",
+        )
+        .with_emotion(SpeakerEmotion::Happy)
+        .with_choice(DialogueChoice::end("好，保持聯絡").with_consequence(
+            DialogueConsequence::SetStoryFlag {
+                flag: "betel_nut_informant".to_string(),
+                value: true,
+            },
+        )),
     );
 
     // 約會路線（高好感度）
@@ -274,42 +300,53 @@ fn create_temple_start() -> DialogueTree {
 
     // 虔誠路線
     tree.add_node(
-        DialogueNode::new(2, npc, "善哉善哉！記得到每個地方都要誠心祈禱，土地公保佑你。")
-            .with_emotion(SpeakerEmotion::Happy)
-            .with_choice(DialogueChoice::end("我這就出發")),
+        DialogueNode::new(
+            2,
+            npc,
+            "善哉善哉！記得到每個地方都要誠心祈禱，土地公保佑你。",
+        )
+        .with_emotion(SpeakerEmotion::Happy)
+        .with_choice(DialogueChoice::end("我這就出發")),
     );
 
     // 不信路線
     tree.add_node(
-        DialogueNode::new(3, npc, "唉……年輕人不信也沒關係，但是寧可信其有。你去走一趟也不虧嘛！")
-            .with_emotion(SpeakerEmotion::Sad)
-            .with_choice(
-                DialogueChoice::simple("好吧好吧，去就去", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_TEMPLE_KEEPER,
-                        delta: 5,
-                    }),
-            )
-            .with_choice(
-                DialogueChoice::simple("不了，謝謝", 5)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_TEMPLE_KEEPER,
-                        delta: -5,
-                    }),
+        DialogueNode::new(
+            3,
+            npc,
+            "唉……年輕人不信也沒關係，但是寧可信其有。你去走一趟也不虧嘛！",
+        )
+        .with_emotion(SpeakerEmotion::Sad)
+        .with_choice(
+            DialogueChoice::simple("好吧好吧，去就去", 2).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_TEMPLE_KEEPER,
+                    delta: 5,
+                },
             ),
+        )
+        .with_choice(DialogueChoice::simple("不了，謝謝", 5).with_consequence(
+            DialogueConsequence::ChangeRelationship {
+                npc_id: NPC_TEMPLE_KEEPER,
+                delta: -5,
+            },
+        )),
     );
 
     // 收費路線
     tree.add_node(
-        DialogueNode::new(4, npc, "不用不用！土地公的旨意，怎麼能收錢呢？你去做就好了。")
-            .with_emotion(SpeakerEmotion::Neutral)
-            .with_choice(
-                DialogueChoice::simple("那好，我去", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_TEMPLE_KEEPER,
-                        delta: 5,
-                    }),
-            ),
+        DialogueNode::new(
+            4,
+            npc,
+            "不用不用！土地公的旨意，怎麼能收錢呢？你去做就好了。",
+        )
+        .with_emotion(SpeakerEmotion::Neutral)
+        .with_choice(DialogueChoice::simple("那好，我去", 2).with_consequence(
+            DialogueConsequence::ChangeRelationship {
+                npc_id: NPC_TEMPLE_KEEPER,
+                delta: 5,
+            },
+        )),
     );
 
     // 拒絕結束
@@ -333,37 +370,43 @@ fn create_temple_end() -> DialogueTree {
     );
 
     tree.add_node(
-        DialogueNode::new(1, npc, "老夫代土地公謝謝你的誠心。這個平安符送給你，保你出入平安。")
-            .with_emotion(SpeakerEmotion::Happy)
-            .with_choice(
-                DialogueChoice::simple("謝謝廟公，受教了", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_TEMPLE_KEEPER,
-                        delta: 10,
-                    }),
-            )
-            .with_choice(
-                DialogueChoice::simple("大概只是巧合吧", 3)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_TEMPLE_KEEPER,
-                        delta: -10,
-                    }),
-            )
-            .with_choice(
-                DialogueChoice::simple("以後可以常來拜拜嗎？", 4)
-                    .with_condition(DialogueCondition::RelationshipMin {
-                        npc_id: NPC_TEMPLE_KEEPER,
-                        min: 15,
-                    })
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_TEMPLE_KEEPER,
-                        delta: 15,
-                    })
-                    .with_consequence(DialogueConsequence::SetStoryFlag {
-                        flag: "temple_regular".to_string(),
-                        value: true,
-                    }),
+        DialogueNode::new(
+            1,
+            npc,
+            "老夫代土地公謝謝你的誠心。這個平安符送給你，保你出入平安。",
+        )
+        .with_emotion(SpeakerEmotion::Happy)
+        .with_choice(
+            DialogueChoice::simple("謝謝廟公，受教了", 2).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_TEMPLE_KEEPER,
+                    delta: 10,
+                },
             ),
+        )
+        .with_choice(
+            DialogueChoice::simple("大概只是巧合吧", 3).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_TEMPLE_KEEPER,
+                    delta: -10,
+                },
+            ),
+        )
+        .with_choice(
+            DialogueChoice::simple("以後可以常來拜拜嗎？", 4)
+                .with_condition(DialogueCondition::RelationshipMin {
+                    npc_id: NPC_TEMPLE_KEEPER,
+                    min: 15,
+                })
+                .with_consequence(DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_TEMPLE_KEEPER,
+                    delta: 15,
+                })
+                .with_consequence(DialogueConsequence::SetStoryFlag {
+                    flag: "temple_regular".to_string(),
+                    value: true,
+                }),
+        ),
     );
 
     // 感謝結束
@@ -382,9 +425,13 @@ fn create_temple_end() -> DialogueTree {
 
     // 常客路線（高好感度）
     tree.add_node(
-        DialogueNode::new(4, npc, "當然歡迎！你以後有什麼煩惱都可以來求籤，廟公幫你解！")
-            .with_emotion(SpeakerEmotion::Happy)
-            .with_choice(DialogueChoice::end("好的，感恩廟公")),
+        DialogueNode::new(
+            4,
+            npc,
+            "當然歡迎！你以後有什麼煩惱都可以來求籤，廟公幫你解！",
+        )
+        .with_emotion(SpeakerEmotion::Happy)
+        .with_choice(DialogueChoice::end("好的，感恩廟公")),
     );
 
     tree
@@ -405,25 +452,27 @@ fn create_chef_start() -> DialogueTree {
     );
 
     tree.add_node(
-        DialogueNode::new(1, npc, "三個客人的蚵仔煎要送，但我的外送仔今天請假！再不送就冷掉了！拜託幫個忙！")
-            .with_emotion(SpeakerEmotion::Afraid)
-            .with_choice(
-                DialogueChoice::simple("交給我吧！", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_NIGHT_MARKET_CHEF,
-                        delta: 10,
-                    }),
-            )
-            .with_choice(
-                DialogueChoice::simple("報酬怎麼算？", 3),
-            )
-            .with_choice(
-                DialogueChoice::simple("我又不是外送員", 4)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_NIGHT_MARKET_CHEF,
-                        delta: -5,
-                    }),
+        DialogueNode::new(
+            1,
+            npc,
+            "三個客人的蚵仔煎要送，但我的外送仔今天請假！再不送就冷掉了！拜託幫個忙！",
+        )
+        .with_emotion(SpeakerEmotion::Afraid)
+        .with_choice(DialogueChoice::simple("交給我吧！", 2).with_consequence(
+            DialogueConsequence::ChangeRelationship {
+                npc_id: NPC_NIGHT_MARKET_CHEF,
+                delta: 10,
+            },
+        ))
+        .with_choice(DialogueChoice::simple("報酬怎麼算？", 3))
+        .with_choice(
+            DialogueChoice::simple("我又不是外送員", 4).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_NIGHT_MARKET_CHEF,
+                    delta: -5,
+                },
             ),
+        ),
     );
 
     // 爽快路線
@@ -435,35 +484,36 @@ fn create_chef_start() -> DialogueTree {
 
     // 談報酬
     tree.add_node(
-        DialogueNode::new(3, npc, "送完我請你吃一份招牌蚵仔煎加大份，再給你跑腿費！這樣可以嗎？")
-            .with_emotion(SpeakerEmotion::Neutral)
-            .with_choice(
-                DialogueChoice::simple("成交", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_NIGHT_MARKET_CHEF,
-                        delta: 5,
-                    }),
-            )
-            .with_choice(
-                DialogueChoice::simple("太少了吧", 5)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_NIGHT_MARKET_CHEF,
-                        delta: -5,
-                    }),
-            ),
+        DialogueNode::new(
+            3,
+            npc,
+            "送完我請你吃一份招牌蚵仔煎加大份，再給你跑腿費！這樣可以嗎？",
+        )
+        .with_emotion(SpeakerEmotion::Neutral)
+        .with_choice(DialogueChoice::simple("成交", 2).with_consequence(
+            DialogueConsequence::ChangeRelationship {
+                npc_id: NPC_NIGHT_MARKET_CHEF,
+                delta: 5,
+            },
+        ))
+        .with_choice(DialogueChoice::simple("太少了吧", 5).with_consequence(
+            DialogueConsequence::ChangeRelationship {
+                npc_id: NPC_NIGHT_MARKET_CHEF,
+                delta: -5,
+            },
+        )),
     );
 
     // 拒絕
     tree.add_node(
         DialogueNode::new(4, npc, "唉……那我只好自己跑了……客人要罵死我了……")
             .with_emotion(SpeakerEmotion::Sad)
-            .with_choice(
-                DialogueChoice::simple("好啦好啦我去", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_NIGHT_MARKET_CHEF,
-                        delta: 5,
-                    }),
-            )
+            .with_choice(DialogueChoice::simple("好啦好啦我去", 2).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_NIGHT_MARKET_CHEF,
+                    delta: 5,
+                },
+            ))
             .with_choice(DialogueChoice::end("抱歉啊")),
     );
 
@@ -493,19 +543,19 @@ fn create_chef_end() -> DialogueTree {
     tree.add_node(
         DialogueNode::new(1, npc, "這是你的報酬，辛苦了！以後有空常來吃喔！")
             .with_emotion(SpeakerEmotion::Happy)
+            .with_choice(DialogueChoice::simple("舉手之勞", 2).with_consequence(
+                DialogueConsequence::ChangeRelationship {
+                    npc_id: NPC_NIGHT_MARKET_CHEF,
+                    delta: 5,
+                },
+            ))
             .with_choice(
-                DialogueChoice::simple("舉手之勞", 2)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
-                        npc_id: NPC_NIGHT_MARKET_CHEF,
-                        delta: 5,
-                    }),
-            )
-            .with_choice(
-                DialogueChoice::simple("你的蚵仔煎真的很好吃", 3)
-                    .with_consequence(DialogueConsequence::ChangeRelationship {
+                DialogueChoice::simple("你的蚵仔煎真的很好吃", 3).with_consequence(
+                    DialogueConsequence::ChangeRelationship {
                         npc_id: NPC_NIGHT_MARKET_CHEF,
                         delta: 10,
-                    }),
+                    },
+                ),
             )
             .with_choice(
                 DialogueChoice::simple("以後可以打折嗎？", 4)
@@ -535,13 +585,12 @@ fn create_chef_end() -> DialogueTree {
     tree.add_node(
         DialogueNode::new(3, npc, "哈哈！識貨！下次來我教你我的獨門醬料配方！")
             .with_emotion(SpeakerEmotion::Happy)
-            .with_choice(
-                DialogueChoice::end("一言為定")
-                    .with_consequence(DialogueConsequence::SetStoryFlag {
-                        flag: "chef_secret_recipe".to_string(),
-                        value: true,
-                    }),
-            ),
+            .with_choice(DialogueChoice::end("一言為定").with_consequence(
+                DialogueConsequence::SetStoryFlag {
+                    flag: "chef_secret_recipe".to_string(),
+                    value: true,
+                },
+            )),
     );
 
     // 打折路線（高好感度）
@@ -553,7 +602,6 @@ fn create_chef_end() -> DialogueTree {
 
     tree
 }
-
 
 // ============================================================================
 // 測試
@@ -570,11 +618,7 @@ mod tests {
 
         // 12 個對話（6 個支線 × 2 start/end）
         for id in 200..=211 {
-            assert!(
-                database.get_dialogue(id).is_some(),
-                "對話 ID {} 未註冊",
-                id
-            );
+            assert!(database.get_dialogue(id).is_some(), "對話 ID {id} 未註冊");
         }
     }
 
@@ -585,11 +629,7 @@ mod tests {
 
         // 6 個 NPC
         for id in 200..=205 {
-            assert!(
-                database.get_npc(id).is_some(),
-                "NPC ID {} 未註冊",
-                id
-            );
+            assert!(database.get_npc(id).is_some(), "NPC ID {id} 未註冊");
         }
     }
 
@@ -618,11 +658,7 @@ mod tests {
         for id in (200..=210).step_by(2) {
             let tree = database.get_dialogue(id).unwrap();
             let has_choices = tree.nodes.values().any(|node| !node.choices.is_empty());
-            assert!(
-                has_choices,
-                "開始對話 {} 缺少分支選項",
-                id
-            );
+            assert!(has_choices, "開始對話 {id} 缺少分支選項");
         }
     }
 
@@ -636,15 +672,15 @@ mod tests {
             let tree = database.get_dialogue(id).unwrap();
             let has_relationship_consequence = tree.nodes.values().any(|node| {
                 node.choices.iter().any(|choice| {
-                    choice.consequences.iter().any(|c| {
-                        matches!(c, DialogueConsequence::ChangeRelationship { .. })
-                    })
+                    choice
+                        .consequences
+                        .iter()
+                        .any(|c| matches!(c, DialogueConsequence::ChangeRelationship { .. }))
                 })
             });
             assert!(
                 has_relationship_consequence,
-                "結束對話 {} 缺少好感度變化選項",
-                id
+                "結束對話 {id} 缺少好感度變化選項"
             );
         }
     }
@@ -665,11 +701,7 @@ mod tests {
                     )
                 })
             });
-            assert!(
-                has_relationship_gate,
-                "結束對話 {} 缺少高好感度專屬分支",
-                id
-            );
+            assert!(has_relationship_gate, "結束對話 {id} 缺少高好感度專屬分支");
         }
     }
 
@@ -709,11 +741,7 @@ mod tests {
                 }
             }
 
-            assert!(
-                found_end,
-                "對話 {} 從起始節點無法到達任何結束點",
-                id
-            );
+            assert!(found_end, "對話 {id} 從起始節點無法到達任何結束點");
         }
     }
 }

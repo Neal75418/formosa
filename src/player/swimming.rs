@@ -14,9 +14,9 @@ use crate::vehicle::watercraft::WATER_LEVEL;
 // 常數
 // ============================================================================
 
-/// 入水偵測門檻（玩家 Y < WATER_LEVEL + 此值 → 入水）
+/// 入水偵測門檻（玩家 Y < `WATER_LEVEL` + 此值 → 入水）
 const WATER_ENTER_THRESHOLD: f32 = 0.5;
-/// 出水偵測門檻（玩家 Y > WATER_LEVEL + 此值 → 出水）
+/// 出水偵測門檻（玩家 Y > `WATER_LEVEL` + 此值 → 出水）
 const WATER_EXIT_THRESHOLD: f32 = 1.0;
 /// 水面游泳高度（頭部露出水面）
 const SWIM_SURFACE_HEIGHT: f32 = 0.3;
@@ -76,7 +76,7 @@ impl Default for PlayerSwimming {
 // 系統
 // ============================================================================
 
-/// 偵測玩家是否入水/出水，插入或移除 PlayerSwimming 組件
+/// 偵測玩家是否入水/出水，插入或移除 `PlayerSwimming` 組件
 pub fn player_water_detection_system(
     mut commands: Commands,
     query: Query<(Entity, &Transform), With<Player>>,
@@ -145,7 +145,11 @@ pub fn player_swim_movement_system(
             // 快游
             let is_fast = keyboard.pressed(KeyCode::ShiftLeft);
             let speed = if is_fast { FAST_SWIM_SPEED } else { SWIM_SPEED };
-            let drain = if is_fast { FAST_SWIM_STAMINA_DRAIN } else { SWIM_STAMINA_DRAIN };
+            let drain = if is_fast {
+                FAST_SWIM_STAMINA_DRAIN
+            } else {
+                SWIM_STAMINA_DRAIN
+            };
 
             // 消耗體力
             if input != Vec3::ZERO || is_fast {
@@ -203,8 +207,7 @@ pub fn player_swim_movement_system(
         PlayerSwimState::Drowning => {
             // 溺水：持續下沉 + 造成傷害
             let sink = Vec3::Y * (-DROWNING_SINK_SPEED) * dt;
-            let clamped_y = (transform.translation.y + sink.y)
-                .max(WATER_LEVEL - MAX_DIVE_DEPTH);
+            let clamped_y = (transform.translation.y + sink.y).max(WATER_LEVEL - MAX_DIVE_DEPTH);
             let actual_sink = Vec3::Y * (clamped_y - transform.translation.y);
             controller.translation = Some(actual_sink);
 
@@ -231,14 +234,18 @@ pub fn player_swim_damage_system(
 
     // 溺水時持續自傷（體力耗盡）
     if swimming.state == PlayerSwimState::Drowning {
-        damage_events.write(
-            DamageEvent::new(entity, DROWN_DAMAGE_PER_SEC * dt, DamageSource::Environment),
-        );
+        damage_events.write(DamageEvent::new(
+            entity,
+            DROWN_DAMAGE_PER_SEC * dt,
+            DamageSource::Environment,
+        ));
     } else if swimming.breath_timer <= 0.0 && swimming.dive_depth > 0.2 {
         // 憋氣耗盡時在水下自傷（與溺水互斥，避免雙重傷害）
-        damage_events.write(
-            DamageEvent::new(entity, DROWN_DAMAGE_PER_SEC * 0.5 * dt, DamageSource::Environment),
-        );
+        damage_events.write(DamageEvent::new(
+            entity,
+            DROWN_DAMAGE_PER_SEC * 0.5 * dt,
+            DamageSource::Environment,
+        ));
     }
 }
 

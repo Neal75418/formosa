@@ -2,20 +2,19 @@
 //!
 //! 取代 println! 輸出，在畫面右上角顯示遊戲訊息
 
-
 use bevy::prelude::*;
 use std::collections::VecDeque;
 
 // ============================================================================
 // 常數設定
 // ============================================================================
-const MAX_NOTIFICATIONS: usize = 5;      // 最多同時顯示的通知數量
-const DEFAULT_DURATION: f32 = 3.0;       // 預設顯示時間（秒）
-const FADE_DURATION: f32 = 0.5;          // 淡出動畫時間（秒）
-const NOTIFICATION_HEIGHT: f32 = 40.0;   // 每則通知的高度（加大）
-const NOTIFICATION_SPACING: f32 = 6.0;   // 通知間距
-const NOTIFICATION_WIDTH: f32 = 320.0;   // 通知寬度（加寬）
-const NOTIFICATION_MARGIN: f32 = 16.0;   // 邊緣間距
+const MAX_NOTIFICATIONS: usize = 5; // 最多同時顯示的通知數量
+const DEFAULT_DURATION: f32 = 3.0; // 預設顯示時間（秒）
+const FADE_DURATION: f32 = 0.5; // 淡出動畫時間（秒）
+const NOTIFICATION_HEIGHT: f32 = 40.0; // 每則通知的高度（加大）
+const NOTIFICATION_SPACING: f32 = 6.0; // 通知間距
+const NOTIFICATION_WIDTH: f32 = 320.0; // 通知寬度（加寬）
+const NOTIFICATION_MARGIN: f32 = 16.0; // 邊緣間距
 
 // ============================================================================
 // GTA 風格通知顏色常數
@@ -31,10 +30,10 @@ const NOTIF_BORDER_ALPHA: f32 = 0.7;
 /// 通知類型（控制顏色與圖示）
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NotificationType {
-    Info,      // 一般訊息 (白色)
-    Success,   // 成功 (綠色)
-    Warning,   // 警告 (黃色)
-    Error,     // 錯誤 (紅色)
+    Info,    // 一般訊息 (白色)
+    Success, // 成功 (綠色)
+    Warning, // 警告 (黃色)
+    Error,   // 錯誤 (紅色)
 }
 
 impl NotificationType {
@@ -94,6 +93,7 @@ impl NotificationType {
 // ============================================================================
 /// 通知資料結構
 #[derive(Clone)]
+#[allow(clippy::struct_field_names)]
 pub struct Notification {
     pub message: String,
     pub notification_type: NotificationType,
@@ -238,7 +238,9 @@ fn calculate_notification_colors(notif_type: NotificationType, alpha: f32) -> No
     NotificationColors {
         text: notif_type.text_color().with_alpha(alpha),
         background: notif_type.bg_color().with_alpha(alpha * 0.92),
-        border: notif_type.border_color().with_alpha(alpha * NOTIF_BORDER_ALPHA),
+        border: notif_type
+            .border_color()
+            .with_alpha(alpha * NOTIF_BORDER_ALPHA),
         glow: notif_type.glow_color().with_alpha(alpha * NOTIF_GLOW_ALPHA),
     }
 }
@@ -283,36 +285,46 @@ fn spawn_notification_ui(
     let colors = calculate_notification_colors(notif_type, alpha);
 
     // 外發光層
-    let glow_entity = commands.spawn((
-        Node {
-            padding: UiRect::all(Val::Px(2.0)),
-            ..default()
-        },
-        BackgroundColor(colors.glow),
-        BorderRadius::all(Val::Px(8.0)),
-        NotificationUI { index },
-    )).id();
+    let glow_entity = commands
+        .spawn((
+            Node {
+                padding: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            BackgroundColor(colors.glow),
+            BorderRadius::all(Val::Px(8.0)),
+            NotificationUI { index },
+        ))
+        .id();
 
     // 主通知卡片
-    let notification_entity = commands.spawn((
-        Node {
-            width: Val::Px(NOTIFICATION_WIDTH),
-            min_height: Val::Px(NOTIFICATION_HEIGHT),
-            padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(10.0), Val::Px(10.0)),
-            border: UiRect::all(Val::Px(1.0)),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(10.0),
-            ..default()
-        },
-        BackgroundColor(colors.background),
-        BorderColor::all(colors.border),
-        BorderRadius::all(Val::Px(6.0)),
-    )).id();
+    let notification_entity = commands
+        .spawn((
+            Node {
+                width: Val::Px(NOTIFICATION_WIDTH),
+                min_height: Val::Px(NOTIFICATION_HEIGHT),
+                padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(10.0), Val::Px(10.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
+                ..default()
+            },
+            BackgroundColor(colors.background),
+            BorderColor::all(colors.border),
+            BorderRadius::all(Val::Px(6.0)),
+        ))
+        .id();
 
     // 圖示和文字
     let icon_entity = spawn_text_entity(commands, notif_type.icon(), font, 18.0, None);
-    let text_entity = spawn_text_entity(commands, &notification.message, font, 15.0, Some(colors.text));
+    let text_entity = spawn_text_entity(
+        commands,
+        &notification.message,
+        font,
+        15.0,
+        Some(colors.text),
+    );
 
     // 組裝層級
     commands.entity(notification_entity).add_child(icon_entity);
@@ -336,7 +348,9 @@ fn update_notification_fade(
 
     let text_col = notif_type.text_color().with_alpha(alpha);
     for child in children.iter() {
-        let Ok(mut text_color) = text_colors.get_mut(child) else { continue };
+        let Ok(mut text_color) = text_colors.get_mut(child) else {
+            continue;
+        };
         *text_color = TextColor(text_col);
     }
 }
@@ -345,9 +359,7 @@ fn update_notification_fade(
 // 系統
 // ============================================================================
 /// 初始化通知容器 UI
-pub fn setup_notification_ui(
-    mut commands: Commands,
-) {
+pub fn setup_notification_ui(mut commands: Commands) {
     // 建立通知容器（左上角 - GTA 5 風格）
     // 避免與右側的小地圖/時間/金錢/天氣 UI 重疊
     commands.spawn((
@@ -372,13 +384,18 @@ pub fn update_notifications(
     mut notification_queue: ResMut<NotificationQueue>,
     container_query: Query<Entity, With<NotificationContainer>>,
     notification_ui_query: Query<Entity, With<NotificationUI>>,
-    mut notification_colors: Query<(&NotificationUI, &mut BackgroundColor, &mut BorderColor, &Children)>,
+    mut notification_colors: Query<(
+        &NotificationUI,
+        &mut BackgroundColor,
+        &mut BorderColor,
+        &Children,
+    )>,
     mut text_colors: Query<&mut TextColor>,
     chinese_font: Option<Res<super::ChineseFont>>,
     mut last_version: Local<u32>,
 ) {
     // 更新所有通知的經過時間
-    for notification in notification_queue.notifications.iter_mut() {
+    for notification in &mut notification_queue.notifications {
         notification.elapsed += time.delta_secs();
     }
 
@@ -395,7 +412,9 @@ pub fn update_notifications(
     if needs_rebuild {
         *last_version = notification_queue.version;
 
-        let Ok(container) = container_query.single() else { return };
+        let Ok(container) = container_query.single() else {
+            return;
+        };
         let font = chinese_font.as_ref().map(|f| f.font.clone());
 
         // 清除現有的通知 UI
@@ -405,13 +424,16 @@ pub fn update_notifications(
 
         // 重建通知 UI
         for (index, notification) in notification_queue.notifications.iter().enumerate() {
-            let glow_entity = spawn_notification_ui(&mut commands, notification, index, font.as_ref());
+            let glow_entity =
+                spawn_notification_ui(&mut commands, notification, index, font.as_ref());
             commands.entity(container).add_child(glow_entity);
         }
     } else {
         // 只更新現有通知的顏色（用於淡出效果）
         for (notif_ui, mut bg_color, _border_color, children) in &mut notification_colors {
-            let Some(notification) = notification_queue.notifications.get(notif_ui.index) else { continue };
+            let Some(notification) = notification_queue.notifications.get(notif_ui.index) else {
+                continue;
+            };
             update_notification_fade(notification, &mut bg_color, children, &mut text_colors);
         }
     }

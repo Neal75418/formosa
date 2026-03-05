@@ -23,9 +23,8 @@ pub use effects::{
     blood_particle_update_system, floating_damage_number_update_system,
 };
 pub use reactions::{
-    enemy_hit_reaction_knockback_system, hit_reaction_knockback_system,
-    hit_reaction_update_system, hit_reaction_visual_system,
-    pedestrian_hit_reaction_knockback_system,
+    enemy_hit_reaction_knockback_system, hit_reaction_knockback_system, hit_reaction_update_system,
+    hit_reaction_visual_system, pedestrian_hit_reaction_knockback_system,
 };
 
 use bevy::ecs::system::SystemParam;
@@ -36,9 +35,9 @@ use super::health::{Armor, Health};
 use super::killcam::KillCamState;
 use super::ragdoll::BodyPart;
 use super::visuals::*;
+use crate::ai::{CoverPoint, CoverSeeker};
 use crate::audio::{AudioManager, WeaponSounds};
 use crate::pedestrian::Pedestrian;
-use crate::ai::{CoverPoint, CoverSeeker};
 use crate::player::{Player, Stamina};
 use crate::ui::{ChineseFont, DamageIndicatorState, FloatingDamageTracker, NotificationQueue};
 use crate::wanted::PoliceOfficer;
@@ -99,18 +98,10 @@ pub struct DeathSystemQueries<'w, 's> {
         'w,
         's,
         (Entity, &'static Transform, &'static Children),
-        (
-            With<Pedestrian>,
-            Without<Player>,
-            Without<Enemy>,
-        ),
+        (With<Pedestrian>, Without<Player>, Without<Enemy>),
     >,
-    pub police: Query<
-        'w,
-        's,
-        &'static Transform,
-        (With<PoliceOfficer>, Without<Player>, Without<Enemy>),
-    >,
+    pub police:
+        Query<'w, 's, &'static Transform, (With<PoliceOfficer>, Without<Player>, Without<Enemy>)>,
     pub body_parts: Query<
         'w,
         's,

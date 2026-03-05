@@ -138,9 +138,10 @@ fn calculate_gps_direction_angle(player_forward: Vec3, to_dest: Vec3) -> f32 {
 /// 格式化 GPS 距離顯示
 pub fn format_gps_distance(distance_xz: f32) -> String {
     if distance_xz >= 1000.0 {
-        format!("{:.1} km", distance_xz / 1000.0)
+        let km = distance_xz / 1000.0;
+        format!("{km:.1} km")
     } else {
-        format!("{:.0} m", distance_xz)
+        format!("{distance_xz:.0} m")
     }
 }
 
@@ -177,10 +178,10 @@ pub fn update_gps_navigation(
     // 如果導航未啟用，隱藏 UI
     let should_hide = gps.destination.is_none() || !gps.active;
     if should_hide {
-        for (mut vis, _, _) in arrow_query.iter_mut() {
+        for (mut vis, _, _) in &mut arrow_query {
             *vis = Visibility::Hidden;
         }
-        for (mut vis, _) in distance_query.iter_mut() {
+        for (mut vis, _) in &mut distance_query {
             *vis = Visibility::Hidden;
         }
         return;
@@ -203,7 +204,7 @@ pub fn update_gps_navigation(
 
     // 計算方向角度並更新箭頭
     let angle = calculate_gps_direction_angle(player_forward, to_dest);
-    for (mut vis, mut transform, _children) in arrow_query.iter_mut() {
+    for (mut vis, mut transform, _children) in &mut arrow_query {
         *vis = Visibility::Visible;
         transform.rotation = Quat::from_rotation_z(angle);
     }
@@ -220,13 +221,13 @@ pub fn update_gps_navigation(
 
     // 更新距離顯示
     let distance_str = format_gps_distance(distance_xz);
-    for (mut vis, children) in distance_query.iter_mut() {
+    for (mut vis, children) in &mut distance_query {
         *vis = Visibility::Visible;
-        for child in children.iter() {
-            let Ok(mut text) = text_query.get_mut(child) else {
+        for child in children {
+            let Ok(mut text) = text_query.get_mut(*child) else {
                 continue;
             };
-            **text = distance_str.clone();
+            (**text).clone_from(&distance_str);
         }
     }
 }
@@ -241,7 +242,7 @@ pub fn update_minimap_gps_marker(
 ) {
     // 如果 GPS 未啟用或無目標，隱藏現有標記
     if !gps.active || gps.destination.is_none() {
-        for (_, _, mut vis) in marker_query.iter_mut() {
+        for (_, _, mut vis) in &mut marker_query {
             *vis = Visibility::Hidden;
         }
         return;
@@ -396,7 +397,7 @@ pub fn update_gps_turn_indicator(
     mut turn_query: Query<(&mut Visibility, &Children), With<GpsTurnIndicator>>,
     mut text_query: Query<&mut Text>,
 ) {
-    for (mut vis, children) in turn_query.iter_mut() {
+    for (mut vis, children) in &mut turn_query {
         if !gps.active || gps.destination.is_none() {
             *vis = Visibility::Hidden;
             continue;

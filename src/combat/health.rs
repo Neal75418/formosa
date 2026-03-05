@@ -1,6 +1,5 @@
 //! 生命值與護甲系統
 
-
 use bevy::prelude::*;
 
 // ============================================================================
@@ -17,9 +16,9 @@ pub struct Health {
     pub current: f32,
     pub max: f32,
     #[allow(dead_code)]
-    pub regeneration: f32,     // 每秒回復量
+    pub regeneration: f32, // 每秒回復量
     #[allow(dead_code)]
-    pub regen_delay: f32,      // 受傷後多久開始回復
+    pub regen_delay: f32, // 受傷後多久開始回復
     pub last_damage_time: f32, // 上次受傷時間
 }
 
@@ -168,14 +167,14 @@ impl Armor {
 /// 傷害來源
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DamageSource {
-    Bullet,                  // 子彈
-    Explosion,               // 爆炸
-    Melee,                   // 近戰
-    Vehicle,                 // 車輛撞擊
+    Bullet,    // 子彈
+    Explosion, // 爆炸
+    Melee,     // 近戰
+    Vehicle,   // 車輛撞擊
     #[allow(dead_code)]
-    Fall,                    // 墜落
-    Fire,                    // 火焰
-    Environment,             // 環境傷害
+    Fall, // 墜落
+    Fire,      // 火焰
+    Environment, // 環境傷害
 }
 
 /// 傷害事件

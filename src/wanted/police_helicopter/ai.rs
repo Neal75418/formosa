@@ -1,11 +1,12 @@
 //! 直升機 AI 狀態機與移動系統
 
-use bevy::prelude::*;
-use bevy_rapier3d::prelude::{Real as RapierReal, *};
+use super::super::WantedLevel;
+#[allow(clippy::wildcard_imports)]
+use super::components::*;
 use crate::core::{rapier_real_to_f32, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::player::Player;
-use super::components::*;
-use super::super::WantedLevel;
+use bevy::prelude::*;
+use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 // ============================================================================
 // AI 系統
@@ -34,7 +35,9 @@ fn handle_hovering_state(
     helicopter.hover_timer += dt;
 
     // 玩家可見性追蹤（脫逃機制）
-    if !player_visible {
+    if player_visible {
+        helicopter.search_timer = 0.0;
+    } else {
         helicopter.search_timer += dt;
         // 超過脫逃時間，直升機放棄追蹤回到接近狀態（重新搜索）
         if helicopter.search_timer > PLAYER_ESCAPE_TIME {
@@ -43,8 +46,6 @@ fn handle_hovering_state(
             helicopter.hover_timer = 0.0;
             return;
         }
-    } else {
-        helicopter.search_timer = 0.0;
     }
 
     if helicopter.hover_timer > 2.0 && player_visible {
@@ -62,15 +63,15 @@ fn handle_pursuing_state(
     dt: f32,
 ) {
     // 玩家可見性追蹤（脫逃機制）
-    if !player_visible {
+    if player_visible {
+        helicopter.search_timer = 0.0;
+    } else {
         helicopter.search_timer += dt;
         if helicopter.search_timer > PLAYER_ESCAPE_TIME {
             helicopter.state = HelicopterState::Approaching;
             helicopter.search_timer = 0.0;
             return;
         }
-    } else {
-        helicopter.search_timer = 0.0;
     }
 
     if horizontal_distance_sq < HELICOPTER_ATTACK_RANGE_CLOSE_SQ {
@@ -91,14 +92,14 @@ fn handle_attacking_state(
         return;
     }
 
-    if !player_visible {
+    if player_visible {
+        helicopter.search_timer = 0.0;
+    } else {
         helicopter.search_timer += dt;
         if helicopter.search_timer > 5.0 {
             helicopter.state = HelicopterState::Hovering;
             helicopter.search_timer = 0.0;
         }
-    } else {
-        helicopter.search_timer = 0.0;
     }
 }
 
@@ -118,11 +119,7 @@ fn should_trigger_evade(helicopter: &PoliceHelicopter, current_time: f32) -> boo
 }
 
 /// 檢查直升機是否能看到玩家（獨立 LOS 檢測）
-fn check_helicopter_los(
-    heli_pos: Vec3,
-    player_pos: Vec3,
-    rapier: &RapierContext,
-) -> bool {
+fn check_helicopter_los(heli_pos: Vec3, player_pos: Vec3, rapier: &RapierContext) -> bool {
     let ray_origin = heli_pos + Vec3::new(0.0, -1.0, 0.0); // 從機腹往下看
     let to_player = player_pos - ray_origin;
     let distance = to_player.length();
@@ -154,12 +151,16 @@ pub fn helicopter_ai_system(
     let dt = time.delta_secs();
     let current_time = time.elapsed_secs();
 
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
-    let Ok(rapier) = rapier_context.single() else { return; };
+    let Ok(rapier) = rapier_context.single() else {
+        return;
+    };
 
-    for (mut helicopter, transform) in helicopter_query.iter_mut() {
+    for (mut helicopter, transform) in &mut helicopter_query {
         if helicopter.state == HelicopterState::Crashing {
             continue;
         }
@@ -175,13 +176,28 @@ pub fn helicopter_ai_system(
                 handle_approaching_state(&mut helicopter, horizontal_distance_sq);
             }
             HelicopterState::Hovering => {
-                handle_hovering_state(&mut helicopter, horizontal_distance_sq, heli_can_see_player, dt);
+                handle_hovering_state(
+                    &mut helicopter,
+                    horizontal_distance_sq,
+                    heli_can_see_player,
+                    dt,
+                );
             }
             HelicopterState::Pursuing => {
-                handle_pursuing_state(&mut helicopter, horizontal_distance_sq, heli_can_see_player, dt);
+                handle_pursuing_state(
+                    &mut helicopter,
+                    horizontal_distance_sq,
+                    heli_can_see_player,
+                    dt,
+                );
             }
             HelicopterState::Attacking => {
-                handle_attacking_state(&mut helicopter, horizontal_distance_sq, heli_can_see_player, dt);
+                handle_attacking_state(
+                    &mut helicopter,
+                    horizontal_distance_sq,
+                    heli_can_see_player,
+                    dt,
+                );
             }
             HelicopterState::Evading => {
                 handle_evading_state(&mut helicopter, dt);
@@ -235,7 +251,9 @@ fn handle_normal_flight(
     elapsed_secs: f32,
     dt: f32,
 ) {
-    let Some(target) = helicopter.target_position else { return };
+    let Some(target) = helicopter.target_position else {
+        return;
+    };
 
     let to_target = target - transform.translation;
     let horizontal_dir = Vec3::new(to_target.x, 0.0, to_target.z).normalize_or_zero();
@@ -249,7 +267,9 @@ fn handle_normal_flight(
 
     // 水平移動
     let horizontal_distance_sq = Vec2::new(to_target.x, to_target.z).length_squared();
-    if horizontal_distance_sq > HELICOPTER_MOVE_THRESHOLD_SQ || helicopter.state == HelicopterState::Evading {
+    if horizontal_distance_sq > HELICOPTER_MOVE_THRESHOLD_SQ
+        || helicopter.state == HelicopterState::Evading
+    {
         transform.translation += move_dir * HELICOPTER_SPEED * speed_mult * dt;
     }
 
@@ -260,15 +280,14 @@ fn handle_normal_flight(
     }
 
     // 高度限制
-    transform.translation.y = transform.translation.y.clamp(
-        HELICOPTER_MIN_ALTITUDE,
-        HELICOPTER_MAX_ALTITUDE,
-    );
+    transform.translation.y = transform
+        .translation
+        .y
+        .clamp(HELICOPTER_MIN_ALTITUDE, HELICOPTER_MAX_ALTITUDE);
 
     // 面向目標（使用標準 Bevy 坐標系統慣例）
     if horizontal_dir != Vec3::ZERO {
-        let target_rotation =
-            Quat::from_rotation_y((-horizontal_dir.x).atan2(-horizontal_dir.z));
+        let target_rotation = Quat::from_rotation_y((-horizontal_dir.x).atan2(-horizontal_dir.z));
         transform.rotation = transform
             .rotation
             .slerp(target_rotation, HELICOPTER_TURN_RATE * dt);
@@ -283,7 +302,7 @@ pub fn helicopter_movement_system(
     let dt = time.delta_secs();
     let elapsed = time.elapsed_secs();
 
-    for (mut transform, helicopter) in helicopter_query.iter_mut() {
+    for (mut transform, helicopter) in &mut helicopter_query {
         if helicopter.state == HelicopterState::Crashing {
             handle_crash_movement(&mut transform, helicopter.crash_velocity, dt);
         } else {

@@ -4,13 +4,34 @@ use super::*;
 
 #[test]
 fn damage_state_from_health_percent_boundaries() {
-    assert_eq!(VehicleDamageState::from_health_percent(1.0), VehicleDamageState::Pristine);
-    assert_eq!(VehicleDamageState::from_health_percent(1.5), VehicleDamageState::Pristine);
-    assert_eq!(VehicleDamageState::from_health_percent(0.75), VehicleDamageState::Light);
-    assert_eq!(VehicleDamageState::from_health_percent(0.50), VehicleDamageState::Moderate);
-    assert_eq!(VehicleDamageState::from_health_percent(0.25), VehicleDamageState::Heavy);
-    assert_eq!(VehicleDamageState::from_health_percent(0.10), VehicleDamageState::Critical);
-    assert_eq!(VehicleDamageState::from_health_percent(0.0), VehicleDamageState::Destroyed);
+    assert_eq!(
+        VehicleDamageState::from_health_percent(1.0),
+        VehicleDamageState::Pristine
+    );
+    assert_eq!(
+        VehicleDamageState::from_health_percent(1.5),
+        VehicleDamageState::Pristine
+    );
+    assert_eq!(
+        VehicleDamageState::from_health_percent(0.75),
+        VehicleDamageState::Light
+    );
+    assert_eq!(
+        VehicleDamageState::from_health_percent(0.50),
+        VehicleDamageState::Moderate
+    );
+    assert_eq!(
+        VehicleDamageState::from_health_percent(0.25),
+        VehicleDamageState::Heavy
+    );
+    assert_eq!(
+        VehicleDamageState::from_health_percent(0.10),
+        VehicleDamageState::Critical
+    );
+    assert_eq!(
+        VehicleDamageState::from_health_percent(0.0),
+        VehicleDamageState::Destroyed
+    );
 }
 
 // --- VehicleHealth ---
@@ -26,10 +47,22 @@ fn health_new_sets_max_and_current() {
 
 #[test]
 fn health_for_vehicle_type_correct_values() {
-    assert_eq!(VehicleHealth::for_vehicle_type(VehicleType::Scooter).max, 500.0);
-    assert_eq!(VehicleHealth::for_vehicle_type(VehicleType::Car).max, 1000.0);
-    assert_eq!(VehicleHealth::for_vehicle_type(VehicleType::Taxi).max, 1200.0);
-    assert_eq!(VehicleHealth::for_vehicle_type(VehicleType::Bus).max, 2000.0);
+    assert_eq!(
+        VehicleHealth::for_vehicle_type(VehicleType::Scooter).max,
+        500.0
+    );
+    assert_eq!(
+        VehicleHealth::for_vehicle_type(VehicleType::Car).max,
+        1000.0
+    );
+    assert_eq!(
+        VehicleHealth::for_vehicle_type(VehicleType::Taxi).max,
+        1200.0
+    );
+    assert_eq!(
+        VehicleHealth::for_vehicle_type(VehicleType::Bus).max,
+        2000.0
+    );
 }
 
 #[test]

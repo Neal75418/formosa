@@ -6,12 +6,12 @@
 #![allow(dead_code)]
 
 mod performance;
-mod visuals;
 mod systems;
+mod visuals;
 
 #[cfg(test)]
 mod tests;
 
 pub use performance::*;
-pub use visuals::*;
 pub use systems::*;
+pub use visuals::*;

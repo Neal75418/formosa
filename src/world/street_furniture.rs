@@ -2,9 +2,9 @@
 //!
 //! 路燈、自動販賣機、垃圾桶、電影看板、塗鴉牆、停車場
 
+use crate::world::{Building, BuildingType, StreetFurniture, StreetFurnitureType, StreetLight};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
-use crate::world::{Building, BuildingType, StreetFurniture, StreetFurnitureType, StreetLight};
 
 /// 路燈 (Lamppost)
 pub fn spawn_lamppost(
@@ -275,6 +275,7 @@ pub fn spawn_movie_billboard(
 }
 
 /// 塗鴉牆 (Graffiti Wall)
+#[allow(clippy::cast_precision_loss)]
 pub fn spawn_graffiti_wall(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -370,6 +371,7 @@ pub fn spawn_graffiti_wall(
 }
 
 /// 停車場 (Parking Garage)
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 pub fn spawn_parking_garage(
     cmd: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,

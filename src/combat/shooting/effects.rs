@@ -123,7 +123,9 @@ pub fn spawn_muzzle_flash(commands: &mut Commands, visuals: &CombatVisuals, posi
         Mesh3d(visuals.muzzle_mesh.clone()),
         MeshMaterial3d(visuals.muzzle_material.clone()),
         Transform::from_translation(position),
-        MuzzleFlash { lifetime: MUZZLE_FLASH_LIFETIME },
+        MuzzleFlash {
+            lifetime: MUZZLE_FLASH_LIFETIME,
+        },
     ));
 }
 
@@ -152,7 +154,7 @@ pub fn muzzle_flash_system(
     mut query: Query<(Entity, &mut MuzzleFlash)>,
 ) {
     let dt = time.delta_secs();
-    for (entity, mut flash) in query.iter_mut() {
+    for (entity, mut flash) in &mut query {
         if update_lifetime_and_check_despawn(&mut *flash, dt) {
             commands.entity(entity).despawn();
         }
@@ -166,7 +168,7 @@ pub fn bullet_tracer_system(
     mut query: Query<(Entity, &mut BulletTracer)>,
 ) {
     let dt = time.delta_secs();
-    for (entity, mut tracer) in query.iter_mut() {
+    for (entity, mut tracer) in &mut query {
         if update_lifetime_and_check_despawn(&mut *tracer, dt) {
             commands.entity(entity).despawn();
         }
@@ -181,7 +183,7 @@ pub fn impact_effect_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut effect, mut transform) in query.iter_mut() {
+    for (entity, mut effect, mut transform) in &mut query {
         effect.lifetime -= dt;
 
         // 縮放動畫：先快速膨脹，再慢慢消失
@@ -319,7 +321,7 @@ pub fn punch_animation_update_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, arm, mut transform, mut anim) in arm_query.iter_mut() {
+    for (entity, arm, mut transform, mut anim) in &mut arm_query {
         // 更新計時器
         anim.timer += dt;
 
@@ -362,8 +364,10 @@ pub fn punch_animation_update_system(
                 let phase_progress = phase_t / phase_duration;
                 let ease = ease_out_cubic(phase_progress);
 
-                let current_x = params.windup_rot.x + (params.strike_rot.x - params.windup_rot.x) * ease;
-                let current_y = params.windup_rot.y + (params.strike_rot.y - params.windup_rot.y) * ease;
+                let current_x =
+                    params.windup_rot.x + (params.strike_rot.x - params.windup_rot.x) * ease;
+                let current_y =
+                    params.windup_rot.y + (params.strike_rot.y - params.windup_rot.y) * ease;
 
                 let rotation = Quat::from_euler(
                     EulerRot::XYZ,
@@ -374,9 +378,13 @@ pub fn punch_animation_update_system(
 
                 let arc = (phase_progress * std::f32::consts::PI).sin();
                 let offset = Vec3::new(
-                    params.windup_offset.x + (params.strike_offset.x - params.windup_offset.x) * ease + params.arc_x * arc,
-                    params.windup_offset.y + (params.strike_offset.y - params.windup_offset.y) * ease,
-                    params.windup_offset.z + (params.strike_offset.z - params.windup_offset.z) * ease,
+                    params.windup_offset.x
+                        + (params.strike_offset.x - params.windup_offset.x) * ease
+                        + params.arc_x * arc,
+                    params.windup_offset.y
+                        + (params.strike_offset.y - params.windup_offset.y) * ease,
+                    params.windup_offset.z
+                        + (params.strike_offset.z - params.windup_offset.z) * ease,
                 );
 
                 transform.translation = arm.rest_position + offset;
@@ -389,12 +397,8 @@ pub fn punch_animation_update_system(
                 let phase_progress = phase_t / phase_duration;
                 let ease = ease_in_out_quad(phase_progress);
 
-                let strike_rotation = Quat::from_euler(
-                    EulerRot::XYZ,
-                    params.strike_rot.x,
-                    params.strike_rot.y,
-                    0.0,
-                );
+                let strike_rotation =
+                    Quat::from_euler(EulerRot::XYZ, params.strike_rot.x, params.strike_rot.y, 0.0);
 
                 transform.translation =
                     (arm.rest_position + params.strike_offset).lerp(arm.rest_position, ease);
@@ -457,7 +461,7 @@ pub fn spawn_player_weapons(
                     InheritedVisibility::default(),
                     ViewVisibility::default(),
                     WeaponModel { weapon_type },
-                    Name::new(format!("Weapon_{:?}", weapon_type)),
+                    Name::new(format!("Weapon_{weapon_type:?}")),
                     ChildOf(hand_entity), // 直接設定父實體
                 ))
                 .id();
@@ -543,10 +547,10 @@ pub fn bleed_damage_system(
     mut query: Query<(Entity, &mut BleedEffect)>,
     mut damage_events: MessageWriter<DamageEvent>,
 ) {
-    let dt = time.delta_secs();
     const BLEED_TICK_INTERVAL: f32 = 1.0; // 每秒造成一次傷害
+    let dt = time.delta_secs();
 
-    for (entity, mut bleed) in query.iter_mut() {
+    for (entity, mut bleed) in &mut query {
         bleed.remaining_time -= dt;
         bleed.tick_timer += dt;
 

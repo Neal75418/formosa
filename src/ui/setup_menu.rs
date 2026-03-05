@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 
 use super::components::{ButtonScaleState, PauseMenu, QuitButton, ResumeButton};
+#[allow(clippy::wildcard_imports)]
 use super::constants::*;
 use super::systems::{spawn_full_screen_overlay, spawn_key_hint, spawn_text_child};
 
@@ -67,31 +68,31 @@ fn spawn_pause_title_section(menu: &mut ChildSpawnerCommands, font: &Handle<Font
         margin: UiRect::bottom(Val::Px(10.0)),
         ..default()
     },))
-    .with_children(|title_area| {
-        // 暫停圖示（用方塊模擬）
-        title_area
-            .spawn((Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(8.0),
-                margin: UiRect::bottom(Val::Px(8.0)),
-                ..default()
-            },))
-            .with_children(|icon_row| {
-                spawn_pause_title_bar(icon_row);
-                spawn_pause_title_bar(icon_row);
-            });
+        .with_children(|title_area| {
+            // 暫停圖示（用方塊模擬）
+            title_area
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(8.0),
+                    margin: UiRect::bottom(Val::Px(8.0)),
+                    ..default()
+                },))
+                .with_children(|icon_row| {
+                    spawn_pause_title_bar(icon_row);
+                    spawn_pause_title_bar(icon_row);
+                });
 
-        // 標題文字
-        title_area.spawn((
-            Text::new("遊戲暫停"),
-            TextFont {
-                font_size: 32.0,
-                font: font.clone(),
-                ..default()
-            },
-            TextColor(PAUSE_TITLE_COLOR),
-        ));
-    });
+            // 標題文字
+            title_area.spawn((
+                Text::new("遊戲暫停"),
+                TextFont {
+                    font_size: 32.0,
+                    font: font.clone(),
+                    ..default()
+                },
+                TextColor(PAUSE_TITLE_COLOR),
+            ));
+        });
 }
 
 /// 生成選單分隔線
@@ -118,6 +119,7 @@ fn spawn_menu_separator(
 }
 
 /// 設置暫停選單（初始隱藏，GTA 風格毛玻璃效果）
+#[allow(clippy::too_many_lines)]
 pub(super) fn setup_pause_menu(commands: &mut Commands, font: &Handle<Font>) {
     spawn_full_screen_overlay(
         commands,

@@ -6,7 +6,9 @@ use bevy_rapier3d::prelude::*;
 use crate::ai::AiMovement;
 use crate::player::Player;
 
+#[allow(clippy::wildcard_imports)]
 use super::super::components::*;
+#[allow(clippy::wildcard_imports)]
 use super::super::config::*;
 
 // ============================================================================
@@ -14,7 +16,11 @@ use super::super::config::*;
 // ============================================================================
 
 fn calc_movement_velocity(direction: Vec3, speed: f32, dt: f32) -> Vec3 {
-    Vec3::new(direction.x * speed * dt, -9.81 * dt, direction.z * speed * dt)
+    Vec3::new(
+        direction.x * speed * dt,
+        -9.81 * dt,
+        direction.z * speed * dt,
+    )
 }
 
 fn calc_facing_rotation(direction: Vec3) -> Quat {
@@ -75,9 +81,15 @@ fn handle_alerted_state(
 
         if search_dist > 2.0 {
             let move_dir = to_search.normalize();
-            let speed = if officer.radio_alerted { movement.run_speed } else { movement.walk_speed * 1.5 };
+            let speed = if officer.radio_alerted {
+                movement.run_speed
+            } else {
+                movement.walk_speed * 1.5
+            };
             controller.translation = Some(calc_movement_velocity(move_dir, speed, dt));
-            transform.rotation = transform.rotation.slerp(calc_facing_rotation(move_dir), 5.0 * dt);
+            transform.rotation = transform
+                .rotation
+                .slerp(calc_facing_rotation(move_dir), 5.0 * dt);
         } else {
             officer.radio_alerted = false;
             officer.radio_alert_position = None;
@@ -104,7 +116,9 @@ fn handle_pursuing_state(
 ) {
     if distance > attack_range {
         controller.translation = Some(calc_movement_velocity(direction, movement.run_speed, dt));
-        transform.rotation = transform.rotation.slerp(calc_facing_rotation(direction), 8.0 * dt);
+        transform.rotation = transform
+            .rotation
+            .slerp(calc_facing_rotation(direction), 8.0 * dt);
     } else {
         officer.state = PoliceState::Engaging;
     }
@@ -128,7 +142,11 @@ fn handle_searching_state(
     if let Some(last_pos) = wanted.player_last_seen_pos {
         let to_last = last_pos - police_pos;
         if to_last.length() > 2.0 {
-            controller.translation = Some(calc_movement_velocity(to_last.normalize(), movement.walk_speed, dt));
+            controller.translation = Some(calc_movement_velocity(
+                to_last.normalize(),
+                movement.walk_speed,
+                dt,
+            ));
         }
     }
 
@@ -152,7 +170,9 @@ fn handle_engaging_state(
     elapsed_secs: f32,
     dt: f32,
 ) {
-    transform.rotation = transform.rotation.slerp(calc_facing_rotation(direction), 10.0 * dt);
+    transform.rotation = transform
+        .rotation
+        .slerp(calc_facing_rotation(direction), 10.0 * dt);
 
     if distance > attack_range * 1.5 {
         officer.state = PoliceState::Pursuing;
@@ -160,11 +180,19 @@ fn handle_engaging_state(
 
     let strafe_dir = Vec3::new(-direction.z, 0.0, direction.x);
     let strafe_speed = (elapsed_secs * 2.0).sin() * 0.3 * movement.walk_speed * dt;
-    controller.translation = Some(Vec3::new(strafe_dir.x * strafe_speed, -9.81 * dt, strafe_dir.z * strafe_speed));
+    controller.translation = Some(Vec3::new(
+        strafe_dir.x * strafe_speed,
+        -9.81 * dt,
+        strafe_dir.z * strafe_speed,
+    ));
 }
 
 fn handle_returning_state(officer: &mut PoliceOfficer, wanted_stars: u8) {
-    officer.state = if wanted_stars > 0 { PoliceState::Alerted } else { PoliceState::Patrolling };
+    officer.state = if wanted_stars > 0 {
+        PoliceState::Alerted
+    } else {
+        PoliceState::Patrolling
+    };
 }
 
 // ============================================================================
@@ -184,7 +212,9 @@ pub fn police_ai_system(
     time: Res<Time>,
     config: Res<PoliceConfig>,
 ) {
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
     let dt = time.delta_secs();
     let elapsed = time.elapsed_secs();
@@ -193,24 +223,72 @@ pub fn police_ai_system(
         let police_pos = transform.translation;
         let to_player = player_pos - police_pos;
         let distance = to_player.length();
-        let direction = if distance > 0.1 { to_player.normalize() } else { Vec3::ZERO };
+        let direction = if distance > 0.1 {
+            to_player.normalize()
+        } else {
+            Vec3::ZERO
+        };
         let can_see = officer.can_see_player;
 
         match officer.state {
             PoliceState::Patrolling => {
-                handle_patrolling_state(&mut officer, &mut transform, &mut controller, police_pos, wanted.stars, dt);
+                handle_patrolling_state(
+                    &mut officer,
+                    &mut transform,
+                    &mut controller,
+                    police_pos,
+                    wanted.stars,
+                    dt,
+                );
             }
             PoliceState::Alerted => {
-                handle_alerted_state(&mut officer, &mut transform, &mut controller, police_pos, distance, movement, &wanted, &config, dt);
+                handle_alerted_state(
+                    &mut officer,
+                    &mut transform,
+                    &mut controller,
+                    police_pos,
+                    distance,
+                    movement,
+                    &wanted,
+                    &config,
+                    dt,
+                );
             }
             PoliceState::Pursuing => {
-                handle_pursuing_state(&mut officer, &mut transform, &mut controller, direction, distance, movement, can_see, config.attack_range, dt);
+                handle_pursuing_state(
+                    &mut officer,
+                    &mut transform,
+                    &mut controller,
+                    direction,
+                    distance,
+                    movement,
+                    can_see,
+                    config.attack_range,
+                    dt,
+                );
             }
             PoliceState::Searching => {
-                handle_searching_state(&mut officer, &mut controller, police_pos, movement, &wanted, dt);
+                handle_searching_state(
+                    &mut officer,
+                    &mut controller,
+                    police_pos,
+                    movement,
+                    &wanted,
+                    dt,
+                );
             }
             PoliceState::Engaging => {
-                handle_engaging_state(&mut officer, &mut transform, &mut controller, direction, distance, movement, config.attack_range, elapsed, dt);
+                handle_engaging_state(
+                    &mut officer,
+                    &mut transform,
+                    &mut controller,
+                    direction,
+                    distance,
+                    movement,
+                    config.attack_range,
+                    elapsed,
+                    dt,
+                );
             }
             PoliceState::Returning => {
                 handle_returning_state(&mut officer, wanted.stars);

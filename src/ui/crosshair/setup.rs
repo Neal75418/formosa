@@ -8,6 +8,7 @@ use crate::ui::components::{
     HitMarkerLine, ReserveAmmoShadow, ReserveAmmoText, WeaponAreaContainer, WeaponDisplay,
     WeaponDisplayShadow, WeaponSlot,
 };
+#[allow(clippy::wildcard_imports)]
 use crate::ui::constants::*;
 
 /// 大字陰影偏移量（用於彈藥數字等大字體）
@@ -283,10 +284,10 @@ fn spawn_crosshair_center(commands: &mut Commands) {
                             // X 的四條線（斜向）- 左上、右上、左下、右下
                             let f = std::f32::consts::FRAC_PI_4;
                             let lines = [
-                                ( f, Val::Px(0.0), Val::Auto,   Val::Px(3.0), Val::Auto),    // 左上
-                                (-f, Val::Px(0.0), Val::Auto,   Val::Auto,    Val::Px(3.0)), // 右上
-                                (-f, Val::Auto,    Val::Px(0.0), Val::Px(3.0), Val::Auto),   // 左下
-                                ( f, Val::Auto,    Val::Px(0.0), Val::Auto,    Val::Px(3.0)), // 右下
+                                (f, Val::Px(0.0), Val::Auto, Val::Px(3.0), Val::Auto), // 左上
+                                (-f, Val::Px(0.0), Val::Auto, Val::Auto, Val::Px(3.0)), // 右上
+                                (-f, Val::Auto, Val::Px(0.0), Val::Px(3.0), Val::Auto), // 左下
+                                (f, Val::Auto, Val::Px(0.0), Val::Auto, Val::Px(3.0)), // 右下
                             ];
                             for (rot, top, bottom, left, right) in lines {
                                 spawn_hit_marker_line(hit_marker, rot, top, bottom, left, right);
@@ -297,6 +298,7 @@ fn spawn_crosshair_center(commands: &mut Commands) {
 }
 
 /// 右下角 GTA 風格武器 HUD（武器名、彈藥數、彈藥網格、武器槽位）
+#[allow(clippy::too_many_lines)]
 fn spawn_weapon_hud(commands: &mut Commands, font: Handle<Font>) {
     // 外發光層
     commands

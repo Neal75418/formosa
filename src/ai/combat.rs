@@ -150,7 +150,7 @@ fn spawn_muzzle_effects(
 /// 執行遠程攻擊的射擊邏輯
 /// 返回 true 表示成功開火
 #[inline]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::ref_option)]
 fn execute_ranged_attack(
     config: &AiConfig,
     commands: &mut Commands,
@@ -185,8 +185,12 @@ fn execute_ranged_attack(
     // 計算精度和彈道終點
     let mut rng = rand::rng();
     let hit_roll: f32 = rng.random();
-    let effective_accuracy =
-        calculate_effective_accuracy(config, combat.accuracy, weapon.effective_range(), target_distance);
+    let effective_accuracy = calculate_effective_accuracy(
+        config,
+        combat.accuracy,
+        weapon.effective_range(),
+        target_distance,
+    );
     let tracer_end = calculate_tracer_end(
         config,
         hit_roll,
@@ -261,8 +265,7 @@ pub fn ai_attack_system(
         // 計算與目標的距離（平方）
         let target_distance_sq = behavior
             .last_known_target_pos
-            .map(|pos| transform.translation.distance_squared(pos))
-            .unwrap_or(f32::MAX);
+            .map_or(f32::MAX, |pos| transform.translation.distance_squared(pos));
 
         // 判斷攻擊類型
         // MELEE_ATTACK_RANGE_SQ = 6.25
@@ -395,10 +398,10 @@ pub fn enemy_punch_animation_system(
         match anim.phase {
             PunchPhase::WindUp => apply_wind_up_animation(&mut transform, arm, t, wind_up_end),
             PunchPhase::Strike => {
-                apply_strike_animation(&mut transform, arm, t, wind_up_end, strike_end)
+                apply_strike_animation(&mut transform, arm, t, wind_up_end, strike_end);
             }
             PunchPhase::Return => {
-                apply_return_animation(&mut transform, arm, t, strike_end, duration)
+                apply_return_animation(&mut transform, arm, t, strike_end, duration);
             }
         }
 

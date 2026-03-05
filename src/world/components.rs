@@ -11,7 +11,7 @@ use rand::Rng;
 // ============================================================================
 
 /// 太陽標記組件
-/// 用於識別 DirectionalLight 作為太陽，以便根據時間旋轉
+/// 用於識別 `DirectionalLight` 作為太陽，以便根據時間旋轉
 #[derive(Component)]
 pub struct Sun;
 
@@ -164,17 +164,17 @@ pub struct StreetFurniture {
 #[derive(Component)]
 pub struct NeonSign {
     pub color: Color,
-    pub base_intensity: f32,      // 基礎發光強度
-    pub flicker_speed: f32,       // 閃爍速度 (0 = 不閃爍)
-    pub flicker_amount: f32,      // 閃爍幅度 (0.0 ~ 1.0)
-    pub is_broken: bool,          // 是否故障（隨機閃爍）
-    pub phase_offset: f32,        // 相位偏移（讓每個招牌閃爍不同步）
+    pub base_intensity: f32, // 基礎發光強度
+    pub flicker_speed: f32,  // 閃爍速度 (0 = 不閃爍)
+    pub flicker_amount: f32, // 閃爍幅度 (0.0 ~ 1.0)
+    pub is_broken: bool,     // 是否故障（隨機閃爍）
+    pub phase_offset: f32,   // 相位偏移（讓每個招牌閃爍不同步）
 }
 
 impl Default for NeonSign {
     fn default() -> Self {
         Self {
-            color: Color::srgb(1.0, 0.2, 0.5),  // 預設粉紅色
+            color: Color::srgb(1.0, 0.2, 0.5), // 預設粉紅色
             base_intensity: 8.0,
             flicker_speed: 0.0,
             flicker_amount: 0.0,
@@ -246,7 +246,7 @@ pub struct InteriorSpace {
     /// 躲藏等級（最高可躲避幾星通緝）
     pub max_hide_stars: u8,
     /// 營業時間（24小時制，None 表示全天開放）
-    pub open_hours: Option<(f32, f32)>,  // (開門時間, 關門時間)
+    pub open_hours: Option<(f32, f32)>, // (開門時間, 關門時間)
 }
 
 impl Default for InteriorSpace {
@@ -274,8 +274,8 @@ impl InteriorSpace {
             entrance_position: entrance,
             exit_position: entrance + Vec3::new(0.0, 0.0, 1.0),
             is_hiding_spot: true,
-            max_hide_stars: 1,  // 只能躲 1 星
-            open_hours: None,   // 24 小時營業
+            max_hide_stars: 1, // 只能躲 1 星
+            open_hours: None,  // 24 小時營業
         }
     }
 
@@ -289,7 +289,7 @@ impl InteriorSpace {
             exit_position: entrance + Vec3::new(0.0, 0.0, 1.0),
             is_hiding_spot: true,
             max_hide_stars: 2,
-            open_hours: Some((10.0, 22.0)),  // 10:00 - 22:00
+            open_hours: Some((10.0, 22.0)), // 10:00 - 22:00
         }
     }
 
@@ -302,16 +302,19 @@ impl InteriorSpace {
             entrance_position: entrance,
             exit_position: entrance + Vec3::new(0.0, 0.0, 1.0),
             is_hiding_spot: true,
-            max_hide_stars: 5,  // 可以完全躲避
+            max_hide_stars: 5, // 可以完全躲避
             open_hours: None,
         }
     }
 
     /// 檢查位置是否在室內
     pub fn contains(&self, local_pos: Vec3) -> bool {
-        local_pos.x >= self.bounds_min.x && local_pos.x <= self.bounds_max.x
-            && local_pos.y >= self.bounds_min.y && local_pos.y <= self.bounds_max.y
-            && local_pos.z >= self.bounds_min.z && local_pos.z <= self.bounds_max.z
+        local_pos.x >= self.bounds_min.x
+            && local_pos.x <= self.bounds_max.x
+            && local_pos.y >= self.bounds_min.y
+            && local_pos.y <= self.bounds_max.y
+            && local_pos.z >= self.bounds_min.z
+            && local_pos.z <= self.bounds_max.z
     }
 
     /// 檢查是否在營業時間內
@@ -387,11 +390,11 @@ pub struct InteriorPrompt;
 /// 建築窗戶（隨日夜變化）
 #[derive(Component)]
 pub struct BuildingWindow {
-    pub is_lit: bool,              // 是否點亮
-    pub light_probability: f32,    // 點亮機率 (0.0 ~ 1.0)
-    pub base_color: Color,         // 窗戶基礎顏色
-    pub lit_emissive: f32,         // 點亮時發光強度
-    pub is_shop: bool,             // 是否為商店（深夜會關燈）
+    pub is_lit: bool,           // 是否點亮
+    pub light_probability: f32, // 點亮機率 (0.0 ~ 1.0)
+    pub base_color: Color,      // 窗戶基礎顏色
+    pub lit_emissive: f32,      // 點亮時發光強度
+    pub is_shop: bool,          // 是否為商店（深夜會關燈）
 }
 
 impl Default for BuildingWindow {
@@ -399,7 +402,7 @@ impl Default for BuildingWindow {
         Self {
             is_lit: false,
             light_probability: 0.5,
-            base_color: Color::srgb(1.0, 0.95, 0.7),  // 暖黃色
+            base_color: Color::srgb(1.0, 0.95, 0.7), // 暖黃色
             lit_emissive: 3.0,
             is_shop: false,
         }

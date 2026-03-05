@@ -5,7 +5,9 @@
 use bevy::prelude::*;
 
 use super::components::{DamageEdge, DamageIndicator, DamageIndicatorEdge, DamageIndicatorState};
-use super::constants::{DAMAGE_EDGE_WIDTH, DAMAGE_FADE_RATE, DAMAGE_INDICATOR_COLOR, DAMAGE_INDICATOR_MAX_ALPHA};
+use super::constants::{
+    DAMAGE_EDGE_WIDTH, DAMAGE_FADE_RATE, DAMAGE_INDICATOR_COLOR, DAMAGE_INDICATOR_MAX_ALPHA,
+};
 
 /// 設置受傷指示器 UI（螢幕邊緣暈影）
 pub fn setup_damage_indicator(mut commands: Commands) {

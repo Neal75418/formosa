@@ -12,8 +12,8 @@
 
 use bevy::prelude::*;
 
-use crate::player::Player;
 use crate::economy::PlayerWallet;
+use crate::player::Player;
 
 // ============================================================================
 // 常數
@@ -257,7 +257,10 @@ pub fn random_event_spawn_system(
     manager.check_timer = 0.0;
 
     // 檢查是否達到上限
-    manager.active_event_count = event_query.iter().count() as u32;
+    #[allow(clippy::cast_possible_truncation)]
+    {
+        manager.active_event_count = event_query.iter().count() as u32;
+    }
     if manager.active_event_count >= manager.max_active_events {
         return;
     }
@@ -287,7 +290,8 @@ pub fn random_event_spawn_system(
 
     // 計算事件位置（玩家周圍隨機位置）
     let angle = rand::random::<f32>() * std::f32::consts::TAU;
-    let distance = EVENT_MIN_DISTANCE + rand::random::<f32>() * (EVENT_MAX_DISTANCE - EVENT_MIN_DISTANCE);
+    let distance =
+        EVENT_MIN_DISTANCE + rand::random::<f32>() * (EVENT_MAX_DISTANCE - EVENT_MIN_DISTANCE);
 
     let event_pos = Vec3::new(
         player_pos.x + angle.cos() * distance,
@@ -296,12 +300,14 @@ pub fn random_event_spawn_system(
     );
 
     // 生成事件
-    let event_entity = commands.spawn((
-        Name::new(format!("RandomEvent_{:?}", event_type)),
-        Transform::from_translation(event_pos),
-        GlobalTransform::default(),
-        RandomEvent::new(event_type, event_pos),
-    )).id();
+    let event_entity = commands
+        .spawn((
+            Name::new(format!("RandomEvent_{event_type:?}")),
+            Transform::from_translation(event_pos),
+            GlobalTransform::default(),
+            RandomEvent::new(event_type, event_pos),
+        ))
+        .id();
 
     // 發送觸發事件
     event_triggered.write(RandomEventTriggered {
@@ -310,7 +316,10 @@ pub fn random_event_spawn_system(
         position: event_pos,
     });
 
-    info!("🎲 隨機事件: {:?} 於 ({:.1}, {:.1})", event_type, event_pos.x, event_pos.z);
+    info!(
+        "🎲 隨機事件: {:?} 於 ({:.1}, {:.1})",
+        event_type, event_pos.x, event_pos.z
+    );
 }
 
 // ============================================================================
@@ -326,7 +335,8 @@ fn update_participants(
         return None;
     }
 
-    let valid_participants: Vec<Entity> = event.participants
+    let valid_participants: Vec<Entity> = event
+        .participants
         .iter()
         .filter(|&&e| participant_query.get(e).is_ok())
         .copied()
@@ -336,7 +346,9 @@ fn update_participants(
     let result = if valid_participants.is_empty() && event.state == RandomEventState::Active {
         info!("事件 {:?} 所有參與者消失，自動完成", event.event_type);
         Some(match event.event_type {
-            RandomEventType::StreetRobbery | RandomEventType::CarTheft => RandomEventState::Resolved,
+            RandomEventType::StreetRobbery | RandomEventType::CarTheft => {
+                RandomEventState::Resolved
+            }
             _ => RandomEventState::Failed,
         })
     } else {
@@ -358,7 +370,7 @@ fn handle_active_event(event: &mut RandomEvent, distance: f32) {
     }
 }
 
-/// 處理 PlayerIntervening 狀態
+/// 處理 `PlayerIntervening` 狀態
 fn handle_intervening_event(event: &mut RandomEvent, distance: f32) {
     if event.remaining_time <= event.event_type.duration() - 10.0 {
         event.state = RandomEventState::Resolved;
@@ -378,7 +390,11 @@ fn send_completion(
         return;
     }
 
-    let reward = if success { event.event_type.base_reward() } else { 0 };
+    let reward = if success {
+        event.event_type.base_reward()
+    } else {
+        0
+    };
 
     event_completed.write(RandomEventCompleted {
         event_entity: entity,
@@ -428,8 +444,12 @@ pub fn random_event_update_system(
         match event.state {
             RandomEventState::Active => handle_active_event(&mut event, distance),
             RandomEventState::PlayerIntervening => handle_intervening_event(&mut event, distance),
-            RandomEventState::Resolved => send_completion(&mut event, entity, true, &mut event_completed),
-            RandomEventState::Failed => send_completion(&mut event, entity, false, &mut event_completed),
+            RandomEventState::Resolved => {
+                send_completion(&mut event, entity, true, &mut event_completed);
+            }
+            RandomEventState::Failed => {
+                send_completion(&mut event, entity, false, &mut event_completed);
+            }
             RandomEventState::Completed => {
                 commands.entity(entity).despawn();
             }
@@ -471,32 +491,34 @@ pub fn event_notification_system(
 
     // 處理新事件通知
     for event in event_triggered.read() {
-        commands.spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Percent(50.0),
-                top: Val::Px(100.0),
-                padding: UiRect::all(Val::Px(10.0)),
-                margin: UiRect::left(Val::Px(-150.0)),
-                width: Val::Px(300.0),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.8)),
-            EventNotification {
-                text: event.event_type.description().to_string(),
-                remaining_time: 5.0,
-            },
-        )).with_children(|parent| {
-            parent.spawn((
-                Text::new(event.event_type.description()),
-                TextColor(Color::srgb(1.0, 1.0, 0.0)),
-                TextFont {
-                    font_size: 18.0,
+        commands
+            .spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(50.0),
+                    top: Val::Px(100.0),
+                    padding: UiRect::all(Val::Px(10.0)),
+                    margin: UiRect::left(Val::Px(-150.0)),
+                    width: Val::Px(300.0),
+                    justify_content: JustifyContent::Center,
                     ..default()
                 },
-            ));
-        });
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.8)),
+                EventNotification {
+                    text: event.event_type.description().to_string(),
+                    remaining_time: 5.0,
+                },
+            ))
+            .with_children(|parent| {
+                parent.spawn((
+                    Text::new(event.event_type.description()),
+                    TextColor(Color::srgb(1.0, 1.0, 0.0)),
+                    TextFont {
+                        font_size: 18.0,
+                        ..default()
+                    },
+                ));
+            });
     }
 
     // 更新通知計時器

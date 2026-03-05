@@ -4,8 +4,10 @@
 
 use bevy::prelude::*;
 
-use super::dialogue::*;
-use super::dialogue_systems::*;
+use super::dialogue::{DialogueDatabase, DialogueEvent, DialogueSpeaker, DialogueState};
+use super::dialogue_systems::{
+    get_displayed_text, get_valid_choices, process_dialogue_consequences,
+};
 use super::economy::RespectManager;
 use super::relationship::RelationshipManager;
 use super::unlocks::UnlockManager;
@@ -90,6 +92,7 @@ pub struct PortraitContainer;
 // ============================================================================
 
 /// 設置對話 UI
+#[allow(clippy::too_many_lines)]
 fn setup_dialogue_ui(mut commands: Commands) {
     // 根容器（全螢幕覆蓋）
     commands
@@ -353,7 +356,7 @@ fn update_dialogue_speaker(
                 if let Some(npc) = database.get_npc(*npc_id) {
                     npc.name.clone()
                 } else {
-                    format!("NPC #{}", npc_id)
+                    format!("NPC #{npc_id}")
                 }
             }
             DialogueSpeaker::Narrator => String::new(), // 旁白不顯示名字
@@ -425,7 +428,7 @@ fn update_dialogue_choices(
     // 更新選項文字
     for (choice_text, mut text) in &mut choice_text_query {
         if choice_text.index < valid_choices.len() {
-            text.0 = valid_choices[choice_text.index].text.clone();
+            text.0.clone_from(&valid_choices[choice_text.index].text);
         } else {
             text.0 = String::new();
         }

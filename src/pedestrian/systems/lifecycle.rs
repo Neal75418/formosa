@@ -1,5 +1,11 @@
 //! 行人核心生命週期（設置、生成、移動、銷毀）
 
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::similar_names,
+    clippy::items_after_statements
+)]
+
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
@@ -9,13 +15,13 @@ use crate::combat::{BodyPart, Damageable, Health, HitReaction};
 use crate::core::math::look_rotation_y_flat;
 use crate::core::COLLISION_GROUP_CHARACTER;
 use crate::pedestrian::behavior::{DailyBehavior, ShelterSeeker};
-use crate::pedestrian::pathfinding::AStarPath;
 use crate::pedestrian::components::{
     GunshotTracker, PedState, Pedestrian, PedestrianArm, PedestrianConfig, PedestrianLeg,
     PedestrianPaths, PedestrianState, PedestrianType, PedestrianVisuals, SidewalkPath,
     WalkingAnimation, WitnessState,
 };
 use crate::pedestrian::panic::PanicState;
+use crate::pedestrian::pathfinding::AStarPath;
 use crate::player::Player;
 
 /// 最小生成距離平方 (15.0²)
@@ -204,6 +210,7 @@ pub fn pedestrian_spawn_system(
 }
 
 /// 生成單個行人
+#[allow(clippy::too_many_lines)]
 fn spawn_pedestrian(
     commands: &mut Commands,
     position: Vec3,
@@ -417,19 +424,24 @@ fn get_movement_target(
 pub fn pedestrian_movement_system(
     time: Res<Time>,
     config: Res<PedestrianConfig>,
-    mut ped_query: Query<(
-        &Pedestrian,
-        &PedestrianState,
-        &mut Transform,
-        &mut PatrolPath,
-        &mut AiMovement,
-        &mut KinematicCharacterController,
-        Option<&DailyBehavior>,
-    ), Without<AStarPath>>,
+    mut ped_query: Query<
+        (
+            &Pedestrian,
+            &PedestrianState,
+            &mut Transform,
+            &mut PatrolPath,
+            &mut AiMovement,
+            &mut KinematicCharacterController,
+            Option<&DailyBehavior>,
+        ),
+        Without<AStarPath>,
+    >,
 ) {
     let dt = time.delta_secs();
 
-    for (_ped, state, mut transform, mut patrol, movement, mut controller, daily_behavior) in ped_query.iter_mut() {
+    for (_ped, state, mut transform, mut patrol, movement, mut controller, daily_behavior) in
+        &mut ped_query
+    {
         let mut speed = get_pedestrian_speed(state.state, &config);
 
         // 非逃跑狀態下，尊重 DailyBehavior 的速度倍率
@@ -503,7 +515,7 @@ pub fn pedestrian_despawn_system(
 
     // 使用 distance_squared 避免 sqrt
     let despawn_radius_sq = config.despawn_radius * config.despawn_radius;
-    for (entity, transform, mut state) in ped_query.iter_mut() {
+    for (entity, transform, mut state) in &mut ped_query {
         let current_pos = transform.translation;
 
         // 超出地圖邊界，立即移除
@@ -531,7 +543,6 @@ pub fn pedestrian_despawn_system(
             if state.stuck_timer > STUCK_TIMEOUT {
                 // 卡住太久，移除
                 commands.entity(entity).despawn();
-                continue;
             }
         } else {
             // 有移動，重置計時器並更新位置

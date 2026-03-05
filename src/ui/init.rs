@@ -31,7 +31,10 @@ pub fn setup_ui_scale(mut ui_scale: ResMut<UiScale>, windows: Query<&Window>) {
 }
 
 /// 動態更新 UI 縮放（視窗大小改變時）
-pub fn update_ui_scale(mut resize_events: MessageReader<WindowResized>, mut ui_scale: ResMut<UiScale>) {
+pub fn update_ui_scale(
+    mut resize_events: MessageReader<WindowResized>,
+    mut ui_scale: ResMut<UiScale>,
+) {
     for event in resize_events.read() {
         let scale = event.height / BASE_RESOLUTION_HEIGHT;
         ui_scale.0 = scale;

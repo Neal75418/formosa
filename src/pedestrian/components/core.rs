@@ -24,10 +24,10 @@ impl Default for Pedestrian {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PedestrianType {
     #[default]
-    Casual,     // 一般路人
-    Business,   // 上班族
-    Student,    // 學生
-    Tourist,    // 觀光客
+    Casual, // 一般路人
+    Business, // 上班族
+    Student,  // 學生
+    Tourist,  // 觀光客
 }
 
 /// 行人狀態組件
@@ -63,9 +63,9 @@ impl Default for PedestrianState {
 /// 行人行為狀態
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PedState {
-    Idle,           // 站著（等紅燈、看手機）
+    Idle, // 站著（等紅燈、看手機）
     #[default]
-    Walking,        // 正常行走
-    Fleeing,        // 逃跑中
-    CallingPolice,  // 報警中（掏出手機打電話）
+    Walking, // 正常行走
+    Fleeing, // 逃跑中
+    CallingPolice, // 報警中（掏出手機打電話）
 }

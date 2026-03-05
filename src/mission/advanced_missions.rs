@@ -4,6 +4,11 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use bevy::prelude::*;
 use rand::Rng;
@@ -233,12 +238,8 @@ impl MissionManager {
         MissionData {
             id,
             mission_type: MissionType::Assassination,
-            title: format!("暗殺: {}", name),
-            description: format!(
-                "消滅目標 {}（護衛 {} 人）",
-                name,
-                difficulty.guard_count()
-            ),
+            title: format!("暗殺: {name}"),
+            description: format!("消滅目標 {name}（護衛 {} 人）", difficulty.guard_count()),
             start_pos: Vec3::ZERO,
             end_pos: *pos,
             reward,
@@ -267,8 +268,8 @@ impl MissionManager {
         MissionData {
             id,
             mission_type: MissionType::Escort,
-            title: format!("護送: {}", name),
-            description: format!("護送 {} 安全抵達目的地（{} 波伏擊）", name, waves),
+            title: format!("護送: {name}"),
+            description: format!("護送 {name} 安全抵達目的地（{waves} 波伏擊）"),
             start_pos: *start,
             end_pos: *dest,
             reward: *reward,
@@ -295,8 +296,8 @@ impl MissionManager {
         MissionData {
             id,
             mission_type: MissionType::ChaseDown,
-            title: format!("追逐: {}", desc),
-            description: format!("追上並攔截 {}", desc),
+            title: format!("追逐: {desc}"),
+            description: format!("追上並攔截 {desc}"),
             start_pos: *start,
             end_pos,
             reward: *reward,
@@ -318,16 +319,13 @@ impl MissionManager {
         let id = self.next_mission_id;
         self.next_mission_id += 1;
 
-        let start_pos = targets
-            .first()
-            .map(|t| t.position)
-            .unwrap_or(Vec3::ZERO);
+        let start_pos = targets.first().map_or(Vec3::ZERO, |t| t.position);
 
         MissionData {
             id,
             mission_type: MissionType::Photography,
-            title: format!("拍照: {}", theme),
-            description: format!("拍攝 {} 個指定場景（{}）", targets.len(), theme),
+            title: format!("拍照: {theme}"),
+            description: format!("拍攝 {} 個指定場景（{theme}）", targets.len()),
             start_pos,
             end_pos: start_pos,
             reward: *reward,

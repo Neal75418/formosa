@@ -22,10 +22,10 @@ mod phone_apps;
 mod phone_apps_stock;
 mod save_slot_ui;
 mod screen_effect;
-mod story_mission_hud;
 mod setup_hud;
 mod setup_map;
 mod setup_menu;
+mod story_mission_hud;
 mod systems;
 mod weapon_wheel;
 mod weather_hud;
@@ -48,15 +48,15 @@ pub use systems::*;
 #[cfg(all(debug_assertions, feature = "dev_tools"))]
 pub use fps_counter::*;
 
+use crate::core::{AppState, GameSet};
 use bevy::ecs::schedule::SystemCondition;
 use bevy::prelude::*;
-use crate::core::{AppState, GameSet};
 
 /// 子 Plugin 共用：Startup 系統集（在字型初始化後執行）
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 struct UiSetup;
 
-/// 子 Plugin 共用：Update 系統集（含 GameSet::Ui + InGame/Paused 條件）
+/// 子 Plugin 共用：Update 系統集（含 `GameSet::Ui` + InGame/Paused 條件）
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 struct UiActive;
 

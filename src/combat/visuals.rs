@@ -412,6 +412,7 @@ pub struct WeaponPart {
 
 impl WeaponVisuals {
     /// 建立新實例
+    #[allow(clippy::too_many_lines)]
     pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         // === 材質定義 ===
         // 金屬槍身（深灰/黑色）
@@ -705,9 +706,7 @@ impl WeaponVisuals {
             WeaponType::Pistol => Some(&self.pistol),
             WeaponType::SMG => Some(&self.smg),
             WeaponType::Shotgun => Some(&self.shotgun),
-            WeaponType::Rifle => Some(&self.rifle),
-            WeaponType::SniperRifle => Some(&self.rifle), // 暫用步槍模型
-            WeaponType::RPG => Some(&self.rifle),         // 暫用步槍模型
+            WeaponType::Rifle | WeaponType::SniperRifle | WeaponType::RPG => Some(&self.rifle), // SniperRifle/RPG 暫用步槍模型
         }
     }
 }

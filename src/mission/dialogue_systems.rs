@@ -4,11 +4,21 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use super::dialogue::*;
+use super::dialogue::{
+    create_sample_dialogue, ActiveDialogue, DialogueChoice, DialogueCondition, DialogueConsequence,
+    DialogueDatabase, DialogueEvent, DialogueHistoryEntry, DialogueNode, DialogueSettings,
+    DialogueSpeaker, DialogueState, DialogueTree, NpcDialogueData, SpeakerEmotion,
+};
 use super::relationship::RelationshipManager;
 use super::story_data::DialogueId;
 use super::story_manager::StoryMissionManager;
@@ -25,7 +35,10 @@ const NPC_LAO_WANG: u32 = 100;
 /// 範例對話 ID
 const DIALOGUE_ID_MISSION2: DialogueId = 2;
 
-use super::dialogue_actions::*;
+use super::dialogue_actions::{
+    dialogue_action_executor_system, dialogue_action_trigger_system, DialogueActionEvent,
+    DialogueActionState,
+};
 
 /// 對話系統 Plugin
 pub struct DialogueSystemPlugin;
@@ -124,13 +137,9 @@ fn create_mission2_dialogue() -> DialogueTree {
 
     // 節點 3：接受任務
     tree.add_node(
-        DialogueNode::new(
-            3,
-            speaker,
-            "好，地點我發到你手機了。記住，我要活的。",
-        )
-        .with_emotion(SpeakerEmotion::Neutral)
-        .with_choice(DialogueChoice::end("出發")),
+        DialogueNode::new(3, speaker, "好，地點我發到你手機了。記住，我要活的。")
+            .with_emotion(SpeakerEmotion::Neutral)
+            .with_choice(DialogueChoice::end("出發")),
     );
 
     // 節點 4：談報酬
@@ -166,10 +175,8 @@ fn handle_dialogue_start(
     let mut active = ActiveDialogue::new(dialogue_id, tree.start_node);
     active.start_time = elapsed_secs;
 
-    for (key, value) in participants.iter() {
-        active
-            .participants
-            .insert(key.to_string(), value.to_string());
+    for (key, value) in participants {
+        active.participants.insert(key.clone(), value.clone());
     }
 
     dialogue_state.active_dialogue = Some(active);
@@ -511,7 +518,7 @@ pub fn substitute_variables(text: &str, participants: &HashMap<String, String>) 
     let mut result = text.to_string();
 
     for (key, value) in participants {
-        let pattern = format!("{{{}}}", key);
+        let pattern = format!("{{{key}}}");
         result = result.replace(&pattern, value);
     }
 
@@ -647,17 +654,11 @@ pub fn process_dialogue_consequences(
             DialogueConsequence::FailMission => {
                 story_manager.fail_current_mission(super::story_data::FailCondition::PlayerDeath);
             }
-            DialogueConsequence::SkipPhase => {
-                // 由任務系統處理
-            }
-            DialogueConsequence::TriggerCombat => {
-                // 由戰鬥系統處理
-            }
-            DialogueConsequence::PlaySound(_sound) => {
-                // 由音效系統處理
-            }
-            DialogueConsequence::CustomEvent(_event) => {
-                // 由自定義系統處理
+            DialogueConsequence::SkipPhase
+            | DialogueConsequence::TriggerCombat
+            | DialogueConsequence::PlaySound(_)
+            | DialogueConsequence::CustomEvent(_) => {
+                // 由其他系統處理
             }
         }
     }
@@ -740,8 +741,7 @@ fn dialogue_history_system(
             DialogueSpeaker::Player => "玩家".to_string(),
             DialogueSpeaker::Npc(npc_id) => database
                 .get_npc(npc_id)
-                .map(|npc| npc.name.clone())
-                .unwrap_or_else(|| format!("NPC {}", npc_id)),
+                .map_or_else(|| format!("NPC {npc_id}"), |npc| npc.name.clone()),
             DialogueSpeaker::Narrator => "旁白".to_string(),
             DialogueSpeaker::Radio => "電台".to_string(),
             DialogueSpeaker::System => "系統".to_string(),

@@ -94,21 +94,30 @@ fn mods_total_value_sums_all() {
 
 #[test]
 fn modified_acceleration_applies_engine_multiplier() {
-    let mods = VehicleModifications { engine: ModLevel::Level2, ..VehicleModifications::default() };
+    let mods = VehicleModifications {
+        engine: ModLevel::Level2,
+        ..VehicleModifications::default()
+    };
     let result = modified_acceleration(10.0, &mods);
     assert!((result - 12.5).abs() < f32::EPSILON);
 }
 
 #[test]
 fn modified_max_speed_applies_transmission() {
-    let mods = VehicleModifications { transmission: ModLevel::Level3, ..VehicleModifications::default() };
+    let mods = VehicleModifications {
+        transmission: ModLevel::Level3,
+        ..VehicleModifications::default()
+    };
     let result = modified_max_speed(30.0, &mods);
     assert!((result - 45.0).abs() < f32::EPSILON);
 }
 
 #[test]
 fn modified_health_applies_armor() {
-    let mods = VehicleModifications { armor: ModLevel::Level1, ..VehicleModifications::default() };
+    let mods = VehicleModifications {
+        armor: ModLevel::Level1,
+        ..VehicleModifications::default()
+    };
     let result = modified_health(1000.0, &mods);
     assert!((result - 1100.0).abs() < f32::EPSILON);
 }
@@ -164,10 +173,10 @@ fn visual_mods_default_is_stock() {
 #[test]
 fn visual_mods_total_value() {
     let vm = VehicleVisualMods {
-        paint: PaintColor::CrimsonRed,   // 3000
-        tint: WindowTint::Dark,          // 3500
-        spoiler: SpoilerType::GtWing,    // 10000
-        rims: RimType::CarbonFiber,      // 15000
+        paint: PaintColor::CrimsonRed, // 3000
+        tint: WindowTint::Dark,        // 3500
+        spoiler: SpoilerType::GtWing,  // 10000
+        rims: RimType::CarbonFiber,    // 15000
     };
     assert_eq!(vm.total_value(), 31_500);
 }

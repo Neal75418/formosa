@@ -9,17 +9,20 @@ mod police_ai;
 mod police_combat;
 mod wanted_hud;
 
+use crate::core::rapier_real_to_f32;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
-use crate::core::rapier_real_to_f32;
 
-use crate::player::Player;
 use crate::ai::AiMovement;
 use crate::combat::{Health, HitReaction};
 use crate::core::PoliceSpatialHash;
+use crate::player::Player;
 
+#[allow(clippy::wildcard_imports)]
 use super::components::*;
+#[allow(clippy::wildcard_imports)]
 use super::config::*;
+#[allow(clippy::wildcard_imports)]
 use super::events::*;
 
 pub use police_ai::police_ai_system;
@@ -54,8 +57,13 @@ pub fn setup_police_visuals(
     });
 
     commands.insert_resource(PoliceVisuals {
-        body_mesh, head_mesh, arm_mesh, leg_mesh,
-        uniform_material, skin_material, badge_material,
+        body_mesh,
+        head_mesh,
+        arm_mesh,
+        leg_mesh,
+        uniform_material,
+        skin_material,
+        badge_material,
     });
 }
 
@@ -70,9 +78,9 @@ pub fn update_police_spatial_hash_system(
 ) {
     police_hash.clear();
     police_hash.insert_batch(
-        police_query.iter().map(|(entity, transform)| {
-            (entity, transform.translation)
-        })
+        police_query
+            .iter()
+            .map(|(entity, transform)| (entity, transform.translation)),
     );
 }
 
@@ -97,7 +105,10 @@ pub fn process_crime_events(
 
         if wanted.stars != old_stars {
             level_changed.write(WantedLevelChanged::new(old_stars, wanted.stars));
-            info!("通緝等級變化: {} -> {} (熱度: {:.1})", old_stars, wanted.stars, wanted.heat);
+            info!(
+                "通緝等級變化: {} -> {} (熱度: {:.1})",
+                old_stars, wanted.stars, wanted.heat
+            );
         }
     }
 }
@@ -116,8 +127,10 @@ pub fn process_witness_reports(
 
         if wanted.stars != old_stars {
             level_changed.write(WantedLevelChanged::new(old_stars, wanted.stars));
-            info!("目擊者報警: {} - 通緝等級 {} -> {} (熱度: {:.1})",
-                report.crime_description, old_stars, wanted.stars, wanted.heat);
+            info!(
+                "目擊者報警: {} - 通緝等級 {} -> {} (熱度: {:.1})",
+                report.crime_description, old_stars, wanted.stars, wanted.heat
+            );
         }
     }
 }
@@ -142,20 +155,32 @@ fn update_police_vision(
     let half_fov = config.vision_fov / 2.0;
 
     for (police_entity, police_pos, _) in police_hash.query_radius(player_pos, VISION_RANGE) {
-        let Ok((police_transform, mut officer)) = police_query.get_mut(police_entity) else { continue; };
-        if officer.state == PoliceState::Patrolling { continue; }
+        let Ok((police_transform, mut officer)) = police_query.get_mut(police_entity) else {
+            continue;
+        };
+        if officer.state == PoliceState::Patrolling {
+            continue;
+        }
 
         let to_player = player_pos - police_transform.translation;
         let distance = to_player.length();
 
         let police_forward = police_transform.forward().as_vec3();
-        let angle = police_forward.dot(to_player.normalize()).clamp(-1.0, 1.0).acos();
-        if angle > half_fov { continue; }
+        let angle = police_forward
+            .dot(to_player.normalize())
+            .clamp(-1.0, 1.0)
+            .acos();
+        if angle > half_fov {
+            continue;
+        }
 
         let ray_origin = police_pos + Vec3::Y * RAYCAST_ORIGIN_HEIGHT;
         if let Some((_, toi)) = rapier.cast_ray(
-            ray_origin, to_player.normalize(), distance as RapierReal,
-            true, QueryFilter::default().exclude_rigid_body(police_entity),
+            ray_origin,
+            to_player.normalize(),
+            distance as RapierReal,
+            true,
+            QueryFilter::default().exclude_rigid_body(police_entity),
         ) {
             if rapier_real_to_f32(toi) >= distance - RAYCAST_HIT_TOLERANCE {
                 officer.can_see_player = true;
@@ -182,7 +207,10 @@ fn process_cooldown(
 
         if wanted.stars != old_stars {
             level_changed.write(WantedLevelChanged::new(old_stars, wanted.stars));
-            info!("⭐ 通緝等級消退: {} → {} (熱度: {:.1})", old_stars, wanted.stars, wanted.heat);
+            info!(
+                "⭐ 通緝等級消退: {} → {} (熱度: {:.1})",
+                old_stars, wanted.stars, wanted.heat
+            );
         }
 
         if wanted.stars == 0 {
@@ -203,14 +231,26 @@ pub fn wanted_cooldown_system(
     rapier_context: ReadRapierContext,
     config: Res<PoliceConfig>,
 ) {
-    if wanted.stars == 0 { return; }
+    if wanted.stars == 0 {
+        return;
+    }
 
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     let player_visible = rapier_context
         .single()
-        .map(|rapier| update_police_vision(player_pos, &police_hash, &mut police_query, &rapier, &config))
+        .map(|rapier| {
+            update_police_vision(
+                player_pos,
+                &police_hash,
+                &mut police_query,
+                &rapier,
+                &config,
+            )
+        })
         .unwrap_or(false);
 
     wanted.player_visible = player_visible;
@@ -235,6 +275,7 @@ pub fn wanted_cooldown_system(
 }
 
 /// 警察生成系統
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 pub fn spawn_police_system(
     mut commands: Commands,
     wanted: Res<WantedLevel>,
@@ -244,16 +285,26 @@ pub fn spawn_police_system(
     visuals: Option<Res<PoliceVisuals>>,
     time: Res<Time>,
 ) {
-    if wanted.stars == 0 { return; }
-    let Some(visuals) = visuals else { return; };
-    let Ok(player_transform) = player_query.single() else { return; };
+    if wanted.stars == 0 {
+        return;
+    }
+    let Some(visuals) = visuals else {
+        return;
+    };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
 
     let current_count = police_query.iter().count() as u32;
     let target_count = wanted.target_police_count();
-    if current_count >= target_count { return; }
+    if current_count >= target_count {
+        return;
+    }
 
     let elapsed = time.elapsed_secs();
-    if elapsed - config.last_spawn_time < config.spawn_interval { return; }
+    if elapsed - config.last_spawn_time < config.spawn_interval {
+        return;
+    }
     config.last_spawn_time = elapsed;
 
     let player_pos = player_transform.translation;
@@ -268,10 +319,17 @@ pub fn spawn_police_system(
     );
 
     spawn_police_officer(&mut commands, spawn_pos, &visuals, wanted.stars);
-    info!("生成警察 at ({:.1}, {:.1}) - 當前: {}/{}", spawn_pos.x, spawn_pos.z, current_count + 1, target_count);
+    info!(
+        "生成警察 at ({:.1}, {:.1}) - 當前: {}/{}",
+        spawn_pos.x,
+        spawn_pos.z,
+        current_count + 1,
+        target_count
+    );
 }
 
 /// 生成單個警察 NPC
+#[allow(clippy::too_many_lines)]
 fn spawn_police_officer(
     commands: &mut Commands,
     position: Vec3,
@@ -317,8 +375,16 @@ fn spawn_police_officer(
                 ..default()
             },
             Health {
-                current: if officer_type == PoliceType::Military { MILITARY_HEALTH } else { POLICE_OFFICER_HEALTH },
-                max: if officer_type == PoliceType::Military { MILITARY_HEALTH } else { POLICE_OFFICER_HEALTH },
+                current: if officer_type == PoliceType::Military {
+                    MILITARY_HEALTH
+                } else {
+                    POLICE_OFFICER_HEALTH
+                },
+                max: if officer_type == PoliceType::Military {
+                    MILITARY_HEALTH
+                } else {
+                    POLICE_OFFICER_HEALTH
+                },
                 ..default()
             },
             HitReaction::default(),
@@ -341,12 +407,36 @@ fn spawn_police_officer(
         .id();
 
     let body_parts: &[(&Handle<Mesh>, &Handle<StandardMaterial>, Vec3)] = &[
-        (&visuals.body_mesh, &visuals.uniform_material, Vec3::new(0.0, 0.0, 0.0)),
-        (&visuals.head_mesh, &visuals.skin_material, Vec3::new(0.0, 0.45, 0.0)),
-        (&visuals.leg_mesh, &visuals.uniform_material, Vec3::new(-0.1, -0.5, 0.0)),
-        (&visuals.leg_mesh, &visuals.uniform_material, Vec3::new(0.1, -0.5, 0.0)),
-        (&visuals.arm_mesh, &visuals.uniform_material, Vec3::new(-0.3, 0.1, 0.0)),
-        (&visuals.arm_mesh, &visuals.uniform_material, Vec3::new(0.3, 0.1, 0.0)),
+        (
+            &visuals.body_mesh,
+            &visuals.uniform_material,
+            Vec3::new(0.0, 0.0, 0.0),
+        ),
+        (
+            &visuals.head_mesh,
+            &visuals.skin_material,
+            Vec3::new(0.0, 0.45, 0.0),
+        ),
+        (
+            &visuals.leg_mesh,
+            &visuals.uniform_material,
+            Vec3::new(-0.1, -0.5, 0.0),
+        ),
+        (
+            &visuals.leg_mesh,
+            &visuals.uniform_material,
+            Vec3::new(0.1, -0.5, 0.0),
+        ),
+        (
+            &visuals.arm_mesh,
+            &visuals.uniform_material,
+            Vec3::new(-0.3, 0.1, 0.0),
+        ),
+        (
+            &visuals.arm_mesh,
+            &visuals.uniform_material,
+            Vec3::new(0.3, 0.1, 0.0),
+        ),
     ];
 
     commands.entity(police_entity).with_children(|parent| {
@@ -368,7 +458,9 @@ pub fn despawn_police_system(
     wanted: Res<WantedLevel>,
     config: Res<PoliceConfig>,
 ) {
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     for (entity, transform) in &police_query {

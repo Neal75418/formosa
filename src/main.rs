@@ -2,10 +2,7 @@
 //!
 //! 一款以台灣為舞台的 3D 開放世界動作冒險遊戲
 
-// Bevy ECS 系統常見的 lint 豁免
-#![allow(clippy::too_many_arguments)]
-#![allow(clippy::type_complexity)]
-// dead_code 警告已改為逐模組標記，見各模組內的 #[allow(dead_code)]
+// Lint 政策由 Cargo.toml [lints.clippy] 統一管理
 
 // ============================================================================
 // 模組
@@ -62,7 +59,7 @@ fn main() {
         app.add_plugins(RapierDebugRenderPlugin::default()); // Rapier 碰撞箱可視化
         app.add_plugins(EguiPlugin::default()); // Egui 插件（Inspector 的依賴）
         app.add_plugins(WorldInspectorPlugin::new()); // 即時編輯器
-        // Picking 已包含在 DefaultPlugins 中，不需額外加入
+                                                      // Picking 已包含在 DefaultPlugins 中，不需額外加入
 
         app.add_plugins(FrameTimeDiagnosticsPlugin::default()); // FPS 診斷（Bevy 內建）
         app.add_plugins(LogDiagnosticsPlugin::default()); // 在 console 顯示 FPS
@@ -128,10 +125,7 @@ fn main() {
                 .chain(),
         )
         // === 啟動系統 ===
-        .add_systems(
-            Startup,
-            mission::spawn_mission_markers,
-        )
+        .add_systems(Startup, mission::spawn_mission_markers)
         // === 更新系統 ===
         .add_systems(
             Update,

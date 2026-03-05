@@ -5,7 +5,6 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -130,8 +129,7 @@ pub fn vehicle_shooting_input_system(
     let signed_angle = if cross >= 0.0 { angle } else { -angle };
 
     // 檢查角度是否在允許範圍內（假設駕駛座）
-    let in_range =
-        (-DRIVER_LEFT_ANGLE_LIMIT..=DRIVER_RIGHT_ANGLE_LIMIT).contains(&signed_angle);
+    let in_range = (-DRIVER_LEFT_ANGLE_LIMIT..=DRIVER_RIGHT_ANGLE_LIMIT).contains(&signed_angle);
     combat_state.vehicle_aim_valid = in_range;
 }
 

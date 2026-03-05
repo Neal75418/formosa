@@ -5,11 +5,10 @@
 //! - Climb（攀爬）：中等高度牆面（1.0-1.8m），抓住邊緣往上爬
 //! - HighClimb（高位攀爬）：較高牆面（1.8-2.5m），需要更長時間
 
-
+use super::{skills::award_climb_xp, PlayerSkills};
+use crate::core::{ease_in_out_quad, ease_out_cubic, rapier_real_to_f32};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
-use crate::core::{ease_out_cubic, ease_in_out_quad, rapier_real_to_f32};
-use super::{PlayerSkills, skills::award_climb_xp};
 
 // ============================================================================
 // 常數定義
@@ -224,13 +223,12 @@ impl ClimbState {
         self.progress = 0.0;
         self.phase = match (self.phase, self.climb_type) {
             // Vault：跳過 GrabbingEdge
-            (ClimbPhase::Approaching, ClimbType::Vault) => ClimbPhase::Ascending,
-            // Climb/HighClimb：需要抓住邊緣
+            (ClimbPhase::Approaching, ClimbType::Vault)
+            // Climb/HighClimb：需要抓住邊緣，經過 GrabbingEdge 後同樣進入 Ascending
+            | (ClimbPhase::GrabbingEdge, _) => ClimbPhase::Ascending,
             (ClimbPhase::Approaching, _) => ClimbPhase::GrabbingEdge,
-            (ClimbPhase::GrabbingEdge, _) => ClimbPhase::Ascending,
             (ClimbPhase::Ascending, _) => ClimbPhase::Landing,
-            (ClimbPhase::Landing, _) => ClimbPhase::None,
-            (ClimbPhase::None, _) => ClimbPhase::None,
+            (ClimbPhase::Landing | ClimbPhase::None, _) => ClimbPhase::None,
         };
     }
 
@@ -262,7 +260,6 @@ pub struct ClimbDetectionResult {
     pub landing_position: Vec3,
 }
 
-
 // ============================================================================
 // 障礙物檢測函數
 // ============================================================================
@@ -273,6 +270,7 @@ pub struct ClimbDetectionResult {
 /// 1. 前方射線（胸高）檢測障礙物存在
 /// 2. 向上掃描找到障礙物頂部邊緣
 /// 3. 著地點檢測確認翻越後的落腳處
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 pub fn detect_climbable_obstacle(
     player_pos: Vec3,
     player_forward: Vec3,
@@ -287,7 +285,13 @@ pub fn detect_climbable_obstacle(
 
     // Step 1: 前方射線檢測障礙物（從胸口高度發射）
     let chest_origin = player_pos + Vec3::Y * CHEST_HEIGHT;
-    let forward_hit = rapier.cast_ray(chest_origin, forward, DETECTION_DISTANCE as RapierReal, true, filter);
+    let forward_hit = rapier.cast_ray(
+        chest_origin,
+        forward,
+        DETECTION_DISTANCE as RapierReal,
+        true,
+        filter,
+    );
 
     let Some((_, forward_toi)) = forward_hit else {
         return ClimbDetectionResult::default();
@@ -321,7 +325,9 @@ pub fn detect_climbable_obstacle(
     }
 
     // Step 3: 確認頂部表面存在（向下射線）
-    let above_edge = player_pos + forward * (rapier_real_to_f32(forward_toi) + 0.3) + Vec3::Y * (edge_height + 0.3);
+    let above_edge = player_pos
+        + forward * (rapier_real_to_f32(forward_toi) + 0.3)
+        + Vec3::Y * (edge_height + 0.3);
     let down_hit = rapier.cast_ray(above_edge, -Vec3::Y, 0.6 as RapierReal, true, filter);
 
     let Some((_, down_toi)) = down_hit else {
@@ -332,7 +338,13 @@ pub fn detect_climbable_obstacle(
 
     // Step 4: 檢測著地點（翻越後的落腳處）
     let landing_check_origin = edge_position + forward * LANDING_CHECK_DEPTH + Vec3::Y * 1.5;
-    let landing_hit = rapier.cast_ray(landing_check_origin, -Vec3::Y, 3.0 as RapierReal, true, filter);
+    let landing_hit = rapier.cast_ray(
+        landing_check_origin,
+        -Vec3::Y,
+        3.0 as RapierReal,
+        true,
+        filter,
+    );
 
     let landing_position = match landing_hit {
         Some((_, toi)) => landing_check_origin - Vec3::Y * rapier_real_to_f32(toi) + Vec3::Y * 0.1,
@@ -362,20 +374,11 @@ pub fn detect_climbable_obstacle(
 /// 計算翻越（Vault）軌跡位置
 ///
 /// 使用拋物線軌跡跨越障礙物
-pub fn calculate_vault_position(
-    start: Vec3,
-    edge: Vec3,
-    landing: Vec3,
-    progress: f32,
-) -> Vec3 {
+pub fn calculate_vault_position(start: Vec3, edge: Vec3, landing: Vec3, progress: f32) -> Vec3 {
     let t = ease_in_out_quad(progress.clamp(0.0, 1.0));
 
     // 水平方向：線性插值
-    let horizontal = Vec3::new(
-        start.x.lerp(landing.x, t),
-        0.0,
-        start.z.lerp(landing.z, t),
-    );
+    let horizontal = Vec3::new(start.x.lerp(landing.x, t), 0.0, start.z.lerp(landing.z, t));
 
     // 垂直方向：拋物線弧度
     let peak_height = edge.y + VAULT_PEAK_OFFSET;
@@ -447,7 +450,9 @@ pub fn climb_detection_system(
         &crate::combat::PlayerCoverState,
     )>,
 ) {
-    let Ok(rapier) = rapier_context.single() else { return; };
+    let Ok(rapier) = rapier_context.single() else {
+        return;
+    };
 
     // 上下車動畫中禁止攀爬
     if vehicle_transition.is_animating() {
@@ -464,12 +469,7 @@ pub fn climb_detection_system(
         let forward = transform.forward().as_vec3();
 
         // 檢測障礙物
-        let detection = detect_climbable_obstacle(
-            transform.translation,
-            forward,
-            entity,
-            &rapier,
-        );
+        let detection = detect_climbable_obstacle(transform.translation, forward, entity, &rapier);
 
         if !detection.detected {
             continue;
@@ -486,7 +486,8 @@ pub fn climb_detection_system(
 
         // 放寬自動觸發條件：不只衝刺，高速走路也能觸發
         let is_moving_fast = player.is_sprinting || player.current_speed > 8.0;
-        let is_moving_forward = keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp);
+        let is_moving_forward =
+            keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp);
         let auto_trigger = is_moving_fast && is_moving_forward;
         let manual_trigger = keyboard.just_pressed(KeyCode::Space);
 
@@ -636,7 +637,10 @@ mod tests {
 
     #[test]
     fn test_total_duration() {
-        let mut state = ClimbState { climb_type: ClimbType::Vault, ..ClimbState::default() };
+        let mut state = ClimbState {
+            climb_type: ClimbType::Vault,
+            ..ClimbState::default()
+        };
         let vault_duration = state.total_duration();
         assert!(vault_duration < 1.0);
         assert!(vault_duration > 0.0);

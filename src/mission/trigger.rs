@@ -4,6 +4,11 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::cast_precision_loss
+)]
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -12,8 +17,7 @@ use super::story_data::{DialogueId, NpcId, StoryMissionId};
 use crate::core::InteractionState; // Fix missing type
 
 /// 觸發器類型
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[allow(clippy::enum_variant_names)] // On- prefix 表達事件時機語義，移除反而降低可讀性
 pub enum TriggerType {
     /// 進入區域自動觸發
@@ -28,7 +32,6 @@ pub enum TriggerType {
     /// 停留一段時間後觸發
     OnStay { duration: u32 }, // 毫秒
 }
-
 
 /// 觸發器形狀
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -88,6 +91,7 @@ impl Default for TriggerAction {
 
 /// 通用觸發器組件
 #[derive(Component, Debug, Clone)]
+#[allow(clippy::struct_field_names)]
 pub struct Trigger {
     pub action: TriggerAction,
     pub trigger_type: TriggerType,
@@ -191,8 +195,7 @@ pub fn trigger_system(
         let event_type = match &trigger.action {
             TriggerAction::Mission(id) => TriggerEventType::Mission(*id),
             TriggerAction::Dialogue(id) => TriggerEventType::Dialogue(*id),
-            TriggerAction::Area { .. } => TriggerEventType::Area,
-            TriggerAction::Custom(_) => TriggerEventType::Area, // 暫時映射
+            TriggerAction::Area { .. } | TriggerAction::Custom(_) => TriggerEventType::Area,
         };
 
         // 處理進入/離開狀態
@@ -415,12 +418,10 @@ impl NpcMarkerType {
     pub fn icon(&self) -> &'static str {
         match self {
             Self::None => "",
-            Self::Mission => "!",
-            Self::MissionInProgress => "?",
-            Self::MissionComplete => "?",
+            Self::Mission | Self::Hostile => "!",
+            Self::MissionInProgress | Self::MissionComplete => "?",
             Self::Dialogue => "...",
             Self::Shop => "$",
-            Self::Hostile => "!",
         }
     }
 }
@@ -615,10 +616,10 @@ pub struct PlayerInTrigger {
 
 /// 任務目標實體標記
 ///
-/// 用於標記需要追蹤的實體（如追蹤任務中的車輛、護送任務中的 NPC）
+/// 用於標記需要追蹤的實體（如追蹤任務中的車輛、護送任務中的 `NPC`）
 #[derive(Component, Debug, Clone)]
 pub struct MissionTargetEntity {
-    /// 目標 ID（與 ObjectiveType 中的 ID 對應）
+    /// 目標 ID（與 `ObjectiveType` 中的 ID 對應）
     pub target_id: String,
     /// 關聯的任務 ID
     pub mission_id: StoryMissionId,

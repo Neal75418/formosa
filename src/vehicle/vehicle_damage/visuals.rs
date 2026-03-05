@@ -1,14 +1,16 @@
 //! 車輛損壞視覺效果（煙霧、火焰、粒子）
 
-
-use bevy::prelude::*;
-use rand::Rng;
-use super::super::{Vehicle, VehicleType, VehicleChassisMesh, VehicleCabinMesh, VehicleOriginalColor, VehicleVisualRoot};
+use super::super::{
+    Vehicle, VehicleCabinMesh, VehicleChassisMesh, VehicleOriginalColor, VehicleType,
+    VehicleVisualRoot,
+};
 use super::health::{
-    BodyPartDamage, BodyPartState, VehicleDamageState, VehicleHealth,
-    BODY_HOOD, BODY_FRONT_BUMPER, BODY_REAR_BUMPER, BODY_LEFT_PANEL, BODY_RIGHT_PANEL, BODY_ROOF,
+    BodyPartDamage, BodyPartState, VehicleDamageState, VehicleHealth, BODY_FRONT_BUMPER, BODY_HOOD,
+    BODY_LEFT_PANEL, BODY_REAR_BUMPER, BODY_RIGHT_PANEL, BODY_ROOF,
 };
 use crate::core::lifetime_linear_alpha;
+use bevy::prelude::*;
+use rand::Rng;
 
 /// 車輛損壞視覺效果資源
 #[derive(Resource)]
@@ -255,7 +257,7 @@ pub fn vehicle_damage_particle_update_system(
     let dt = time.delta_secs();
 
     // 更新煙霧粒子
-    for (entity, mut smoke, mut transform) in smoke_query.iter_mut() {
+    for (entity, mut smoke, mut transform) in &mut smoke_query {
         smoke.lifetime += dt;
 
         if smoke.lifetime >= smoke.max_lifetime {
@@ -276,7 +278,7 @@ pub fn vehicle_damage_particle_update_system(
     }
 
     // 更新火焰粒子
-    for (entity, mut fire, mut transform) in fire_query.iter_mut() {
+    for (entity, mut fire, mut transform) in &mut fire_query {
         fire.lifetime += dt;
 
         if fire.lifetime >= fire.max_lifetime {
@@ -315,7 +317,10 @@ pub fn body_part_visual_damage_system(
     vehicle_query: Query<(Entity, &BodyPartDamage), Changed<BodyPartDamage>>,
     children_query: Query<&Children>,
     visual_root_query: Query<&Children, With<VehicleVisualRoot>>,
-    chassis_query: Query<(&MeshMaterial3d<StandardMaterial>, &VehicleOriginalColor), With<VehicleChassisMesh>>,
+    chassis_query: Query<
+        (&MeshMaterial3d<StandardMaterial>, &VehicleOriginalColor),
+        With<VehicleChassisMesh>,
+    >,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (entity, body_parts) in &vehicle_query {
@@ -361,42 +366,82 @@ fn compute_chassis_deformation(body_parts: &BodyPartDamage) -> (Vec3, Vec3) {
 
     // HOOD — Y 軸壓縮（引擎蓋下陷）
     match body_parts.states[BODY_HOOD] {
-        BodyPartState::Scratched => { scale.y *= 0.95; }
-        BodyPartState::Dented => { scale.y *= 0.88; offset.y -= 0.03; }
-        BodyPartState::Crushed => { scale.y *= 0.75; offset.y -= 0.08; }
-        _ => {}
+        BodyPartState::Scratched => {
+            scale.y *= 0.95;
+        }
+        BodyPartState::Dented => {
+            scale.y *= 0.88;
+            offset.y -= 0.03;
+        }
+        BodyPartState::Crushed => {
+            scale.y *= 0.75;
+            offset.y -= 0.08;
+        }
+        BodyPartState::Intact => {}
     }
 
     // FRONT_BUMPER — Z 軸向後壓縮（前部撞凹）
     match body_parts.states[BODY_FRONT_BUMPER] {
-        BodyPartState::Scratched => { offset.z -= 0.02; }
-        BodyPartState::Dented => { offset.z -= 0.05; scale.z *= 0.92; }
-        BodyPartState::Crushed => { offset.z -= 0.1; scale.z *= 0.8; }
-        _ => {}
+        BodyPartState::Scratched => {
+            offset.z -= 0.02;
+        }
+        BodyPartState::Dented => {
+            offset.z -= 0.05;
+            scale.z *= 0.92;
+        }
+        BodyPartState::Crushed => {
+            offset.z -= 0.1;
+            scale.z *= 0.8;
+        }
+        BodyPartState::Intact => {}
     }
 
     // REAR_BUMPER — Z 軸向前壓縮（後部撞凹）
     match body_parts.states[BODY_REAR_BUMPER] {
-        BodyPartState::Scratched => { offset.z += 0.02; }
-        BodyPartState::Dented => { offset.z += 0.05; scale.z *= 0.92; }
-        BodyPartState::Crushed => { offset.z += 0.1; scale.z *= 0.8; }
-        _ => {}
+        BodyPartState::Scratched => {
+            offset.z += 0.02;
+        }
+        BodyPartState::Dented => {
+            offset.z += 0.05;
+            scale.z *= 0.92;
+        }
+        BodyPartState::Crushed => {
+            offset.z += 0.1;
+            scale.z *= 0.8;
+        }
+        BodyPartState::Intact => {}
     }
 
     // LEFT_PANEL — X 軸向內壓縮
     match body_parts.states[BODY_LEFT_PANEL] {
-        BodyPartState::Scratched => { offset.x += 0.02; }
-        BodyPartState::Dented => { offset.x += 0.05; scale.x *= 0.95; }
-        BodyPartState::Crushed => { offset.x += 0.08; scale.x *= 0.88; }
-        _ => {}
+        BodyPartState::Scratched => {
+            offset.x += 0.02;
+        }
+        BodyPartState::Dented => {
+            offset.x += 0.05;
+            scale.x *= 0.95;
+        }
+        BodyPartState::Crushed => {
+            offset.x += 0.08;
+            scale.x *= 0.88;
+        }
+        BodyPartState::Intact => {}
     }
 
     // RIGHT_PANEL — X 軸向內壓縮
     match body_parts.states[BODY_RIGHT_PANEL] {
-        BodyPartState::Scratched => { offset.x -= 0.02; }
-        BodyPartState::Dented => { offset.x -= 0.05; scale.x *= 0.95; }
-        BodyPartState::Crushed => { offset.x -= 0.08; scale.x *= 0.88; }
-        _ => {}
+        BodyPartState::Scratched => {
+            offset.x -= 0.02;
+        }
+        BodyPartState::Dented => {
+            offset.x -= 0.05;
+            scale.x *= 0.95;
+        }
+        BodyPartState::Crushed => {
+            offset.x -= 0.08;
+            scale.x *= 0.88;
+        }
+        BodyPartState::Intact => {}
     }
 
     (scale, offset)
@@ -436,8 +481,13 @@ pub fn vehicle_deformation_system(
                     let mut y_offset = 0.0;
 
                     match body_parts.states[BODY_ROOF] {
-                        BodyPartState::Dented => { scale.y = 0.92; }
-                        BodyPartState::Crushed => { scale.y = 0.8; y_offset = -0.05; }
+                        BodyPartState::Dented => {
+                            scale.y = 0.92;
+                        }
+                        BodyPartState::Crushed => {
+                            scale.y = 0.8;
+                            y_offset = -0.05;
+                        }
                         _ => {}
                     }
 

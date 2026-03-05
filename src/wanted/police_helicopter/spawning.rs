@@ -1,10 +1,11 @@
 //! 直升機設置與生成
 
-use bevy::prelude::*;
+use super::super::WantedLevel;
+#[allow(clippy::wildcard_imports)]
+use super::components::*;
 use crate::combat::Health;
 use crate::player::Player;
-use super::components::*;
-use super::super::WantedLevel;
+use bevy::prelude::*;
 
 // ============================================================================
 // 設置系統
@@ -94,7 +95,9 @@ pub fn spawn_helicopter_system(
     }
 
     // 取得玩家位置
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     // 在玩家後方遠處生成
@@ -102,7 +105,7 @@ pub fn spawn_helicopter_system(
     let spawn_distance = 100.0 + rand::random::<f32>() * 50.0;
     let spawn_pos = Vec3::new(
         player_pos.x + spawn_angle.cos() * spawn_distance,
-        HELICOPTER_HOVER_ALTITUDE + 20.0,  // 高空進場
+        HELICOPTER_HOVER_ALTITUDE + 20.0, // 高空進場
         player_pos.z + spawn_angle.sin() * spawn_distance,
     );
 
@@ -122,56 +125,66 @@ fn spawn_helicopter(
     position: Vec3,
 ) -> Entity {
     // 機身
-    let helicopter_id = commands.spawn((
-        Mesh3d(visuals.body_mesh.clone()),
-        MeshMaterial3d(visuals.body_material.clone()),
-        Transform::from_translation(position),
-        PoliceHelicopter::default(),
-        Health::new(HELICOPTER_HEALTH),
-        Name::new("PoliceHelicopter"),
-    )).id();
+    let helicopter_id = commands
+        .spawn((
+            Mesh3d(visuals.body_mesh.clone()),
+            MeshMaterial3d(visuals.body_material.clone()),
+            Transform::from_translation(position),
+            PoliceHelicopter::default(),
+            Health::new(HELICOPTER_HEALTH),
+            Name::new("PoliceHelicopter"),
+        ))
+        .id();
 
     // 主旋翼（在機身上方）
-    let main_rotor_id = commands.spawn((
-        Mesh3d(visuals.main_rotor_mesh.clone()),
-        MeshMaterial3d(visuals.rotor_material.clone()),
-        Transform::from_translation(Vec3::new(0.0, 2.0, 0.0)),
-        HelicopterRotor::main(),
-        HelicopterParent(helicopter_id),
-        Name::new("MainRotor"),
-    )).id();
+    let main_rotor_id = commands
+        .spawn((
+            Mesh3d(visuals.main_rotor_mesh.clone()),
+            MeshMaterial3d(visuals.rotor_material.clone()),
+            Transform::from_translation(Vec3::new(0.0, 2.0, 0.0)),
+            HelicopterRotor::main(),
+            HelicopterParent(helicopter_id),
+            Name::new("MainRotor"),
+        ))
+        .id();
 
     // 尾旋翼（在機尾側面）
-    let tail_rotor_id = commands.spawn((
-        Mesh3d(visuals.tail_rotor_mesh.clone()),
-        MeshMaterial3d(visuals.rotor_material.clone()),
-        Transform::from_translation(Vec3::new(0.0, 0.5, -4.0))
-            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-        HelicopterRotor::tail(),
-        HelicopterParent(helicopter_id),
-        Name::new("TailRotor"),
-    )).id();
+    let tail_rotor_id = commands
+        .spawn((
+            Mesh3d(visuals.tail_rotor_mesh.clone()),
+            MeshMaterial3d(visuals.rotor_material.clone()),
+            Transform::from_translation(Vec3::new(0.0, 0.5, -4.0))
+                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+            HelicopterRotor::tail(),
+            HelicopterParent(helicopter_id),
+            Name::new("TailRotor"),
+        ))
+        .id();
 
     // 探照燈（在機身下方）
-    let spotlight_id = commands.spawn((
-        SpotLight {
-            color: Color::srgb(1.0, 1.0, 0.9),
-            intensity: 500000.0,
-            range: SPOTLIGHT_RANGE,
-            outer_angle: SPOTLIGHT_CONE_ANGLE.to_radians(),
-            inner_angle: (SPOTLIGHT_CONE_ANGLE * 0.6).to_radians(),
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_translation(Vec3::new(0.0, -1.5, 1.0))
-            .looking_at(Vec3::new(0.0, -10.0, 5.0), Vec3::Y),
-        HelicopterSpotlight::default(),
-        HelicopterParent(helicopter_id),
-        Name::new("Spotlight"),
-    )).id();
+    let spotlight_id = commands
+        .spawn((
+            SpotLight {
+                color: Color::srgb(1.0, 1.0, 0.9),
+                intensity: 500_000.0,
+                range: SPOTLIGHT_RANGE,
+                outer_angle: SPOTLIGHT_CONE_ANGLE.to_radians(),
+                inner_angle: (SPOTLIGHT_CONE_ANGLE * 0.6).to_radians(),
+                shadows_enabled: true,
+                ..default()
+            },
+            Transform::from_translation(Vec3::new(0.0, -1.5, 1.0))
+                .looking_at(Vec3::new(0.0, -10.0, 5.0), Vec3::Y),
+            HelicopterSpotlight::default(),
+            HelicopterParent(helicopter_id),
+            Name::new("Spotlight"),
+        ))
+        .id();
 
     // 設置父子關係
-    commands.entity(helicopter_id).add_children(&[main_rotor_id, tail_rotor_id, spotlight_id]);
+    commands
+        .entity(helicopter_id)
+        .add_children(&[main_rotor_id, tail_rotor_id, spotlight_id]);
 
     helicopter_id
 }

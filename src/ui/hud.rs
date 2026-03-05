@@ -5,11 +5,11 @@
 use bevy::prelude::*;
 
 use super::components::{
-    ArmorBarFill, ArmorLabel, ArmorLabelShadow, ArmorSection, ControlSpeedDisplay, ControlStatusTag,
-    HealthBarFill, HealthBarGlow, HealthBarHighlight, HealthLabel, HealthLabelShadow,
-    HudAnimationState, MinimapPlayerGlow, MinimapScanLine, MissionInfo, MoneyDisplay,
-    RadioDescription, RadioDisplayContainer, RadioFrequency, RadioStationName, RadioVolumeBarFill,
-    TimeDisplay, UiText,
+    ArmorBarFill, ArmorLabel, ArmorLabelShadow, ArmorSection, ControlSpeedDisplay,
+    ControlStatusTag, HealthBarFill, HealthBarGlow, HealthBarHighlight, HealthLabel,
+    HealthLabelShadow, HudAnimationState, MinimapPlayerGlow, MinimapScanLine, MissionInfo,
+    MoneyDisplay, RadioDescription, RadioDisplayContainer, RadioFrequency, RadioStationName,
+    RadioVolumeBarFill, TimeDisplay, UiText,
 };
 use crate::audio::RadioManager;
 use crate::combat::{Armor, Health};
@@ -54,6 +54,7 @@ fn get_vehicle_type_name(vehicle_type: VehicleType) -> &'static str {
 }
 
 /// 取得控制提示文字
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 fn get_control_hint_text(
     game_state: &GameState,
     vehicle_query: &Query<&Vehicle>,
@@ -84,17 +85,23 @@ fn get_control_hint_text(
 }
 
 /// 格式化世界時間
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
 fn format_world_time(world_time: &WorldTime) -> String {
     let hour = world_time.hour as u32;
     let minute = ((world_time.hour - hour as f32) * 60.0) as u32;
     let day_night = if (6..18).contains(&hour) { "D" } else { "N" };
-    format!("[{}] {:02}:{:02}", day_night, hour, minute)
+    format!("[{day_night}] {hour:02}:{minute:02}")
 }
 
 // ============================================================================
 // UI 更新系統
 // ============================================================================
 /// 更新 UI（時間、速度、狀態標籤）
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 pub fn update_ui(
     game_state: Res<GameState>,
     world_time: Res<WorldTime>,
@@ -145,8 +152,7 @@ pub fn update_ui(
             vehicle_query
                 .iter()
                 .next()
-                .map(|v| get_vehicle_type_name(v.vehicle_type))
-                .unwrap_or("駕駛")
+                .map_or("駕駛", |v| get_vehicle_type_name(v.vehicle_type))
         } else {
             "步行"
         };
@@ -163,7 +169,7 @@ pub fn update_ui(
     }
     if let Some(vehicle) = vehicle_query.iter().next() {
         let speed_kmh = (vehicle.current_speed * KMH_CONVERSION_FACTOR).abs() as i32;
-        **speed_text = format!("{} km/h", speed_kmh);
+        **speed_text = format!("{speed_kmh} km/h");
         *visibility = Visibility::Visible;
     }
 }
@@ -190,7 +196,7 @@ pub fn update_mission_ui(
                 }
             }
         } else {
-            **text = "".to_string();
+            **text = String::new();
         }
     }
 }
@@ -229,7 +235,7 @@ fn update_armor_section(
         ),
     >,
 ) {
-    let should_show = armor_opt.map(|a| a.current > 0.0).unwrap_or(false);
+    let should_show = armor_opt.is_some_and(|a| a.current > 0.0);
 
     if let Ok(mut visibility) = armor_section_query.single_mut() {
         *visibility = if should_show {
@@ -248,7 +254,7 @@ fn update_armor_section(
 
         let armor_text = format!("{:.0}/{:.0}", armor.current, armor.max);
         if let Ok(mut text) = armor_label_query.single_mut() {
-            **text = armor_text.clone();
+            (**text).clone_from(&armor_text);
         }
         if let Ok(mut text) = armor_shadow_query.single_mut() {
             **text = armor_text;
@@ -355,7 +361,7 @@ pub fn update_hud(
     // 更新血量數值標籤和陰影
     let health_text = format!("{:.0}/{:.0}", health.current, health.max);
     if let Ok(mut text) = health_label_query.single_mut() {
-        **text = health_text.clone();
+        (**text).clone_from(&health_text);
     }
     if let Ok(mut text) = health_shadow_query.single_mut() {
         **text = health_text;
@@ -420,12 +426,12 @@ pub fn update_hud_animations(
                 anim_state.low_health_pulse_phase,
                 health_percent,
             );
-            for mut bg in health_glow_query.iter_mut() {
+            for mut bg in &mut health_glow_query {
                 *bg = BackgroundColor(Color::srgba(0.8, 0.15, 0.1, final_intensity));
             }
         } else {
             anim_state.low_health_pulse_phase = 0.0;
-            for mut bg in health_glow_query.iter_mut() {
+            for mut bg in &mut health_glow_query {
                 *bg = BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0));
             }
         }
@@ -436,7 +442,7 @@ pub fn update_hud_animations(
     if anim_state.minimap_scan_position > 1.0 {
         anim_state.minimap_scan_position -= 1.0;
     }
-    for mut node in minimap_scan_query.iter_mut() {
+    for mut node in &mut minimap_scan_query {
         node.top = Val::Percent(anim_state.minimap_scan_position * 100.0);
     }
 
@@ -445,7 +451,7 @@ pub fn update_hud_animations(
     wrap_animation_phase(&mut anim_state.player_marker_pulse_phase);
     let marker_pulse = (anim_state.player_marker_pulse_phase.sin() + 1.0) * 0.5;
     let marker_glow_alpha = 0.15 + marker_pulse * 0.2;
-    for mut bg in player_glow_query.iter_mut() {
+    for mut bg in &mut player_glow_query {
         *bg = BackgroundColor(Color::srgba(1.0, 1.0, 1.0, marker_glow_alpha));
     }
 }

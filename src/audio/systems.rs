@@ -3,20 +3,15 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
-
-use bevy::prelude::*;
-use crate::core::WorldTime;
-use crate::vehicle::{Vehicle, VehicleType};
-use crate::player::Player;
-use super::{AudioManager, EngineSound, AmbientSound, WeaponSounds};
+use super::{AmbientSound, AudioManager, EngineSound, WeaponSounds};
 use crate::combat::WeaponType;
+use crate::core::WorldTime;
+use crate::player::Player;
+use crate::vehicle::{Vehicle, VehicleType};
+use bevy::prelude::*;
 
 /// 初始化音效資源
-pub fn setup_audio(
-    mut commands: Commands,
-) {
+pub fn setup_audio(mut commands: Commands) {
     // 音效系統初始化
     // 注意：音檔需要放在 assets/audio/ 目錄下
     // 目前暫時不載入 BGM，等音檔準備好後再啟用
@@ -156,7 +151,12 @@ pub fn spawn_scooter_engine_sound(
     asset_server: &AssetServer,
     scooter_entity: Entity,
 ) {
-    spawn_engine_sound(commands, asset_server, scooter_entity, super::EngineType::Scooter);
+    spawn_engine_sound(
+        commands,
+        asset_server,
+        scooter_entity,
+        super::EngineType::Scooter,
+    );
 }
 
 /// 根據引擎類型生成對應引擎音效
@@ -284,10 +284,7 @@ pub(crate) fn calculate_sfx_volume(audio_manager: &AudioManager, multiplier: f32
 // ============================================================================
 
 /// 初始化武器音效資源
-pub fn setup_weapon_sounds(
-    mut commands: Commands,
-    _asset_server: Res<AssetServer>,
-) {
+pub fn setup_weapon_sounds(mut commands: Commands, _asset_server: Res<AssetServer>) {
     // 武器音效系統（音檔待添加）
     // 當音檔準備好後，取消註解下方程式碼並移除 None
     //
@@ -330,11 +327,12 @@ pub fn play_weapon_fire_sound(
     let sound_handle = match weapon_type {
         WeaponType::Pistol => weapon_sounds.pistol_fire.clone(),
         WeaponType::SMG => weapon_sounds.smg_fire.clone(),
-        WeaponType::Shotgun => weapon_sounds.shotgun_fire.clone(),
+        WeaponType::Shotgun | WeaponType::RPG => weapon_sounds.shotgun_fire.clone(), // RPG 暫用霰彈槍音效
         WeaponType::Rifle | WeaponType::SniperRifle => weapon_sounds.rifle_fire.clone(),
-        WeaponType::RPG => weapon_sounds.shotgun_fire.clone(), // 暫用霰彈槍音效
         // 近戰武器使用揮擊音效
-        WeaponType::Fist | WeaponType::Staff | WeaponType::Knife => weapon_sounds.punch_whoosh.clone(),
+        WeaponType::Fist | WeaponType::Staff | WeaponType::Knife => {
+            weapon_sounds.punch_whoosh.clone()
+        }
     };
 
     let volume = calculate_sfx_volume(audio_manager, 1.0);
@@ -400,7 +398,7 @@ pub fn play_empty_clip_sound(
 // 車輛音效系統 (GTA 5 風格)
 // ============================================================================
 
-use super::{VehicleSounds, PlayerSounds, UISounds};
+use super::{PlayerSounds, UISounds, VehicleSounds};
 
 /// 初始化車輛音效資源
 pub fn setup_vehicle_sounds(mut commands: Commands) {

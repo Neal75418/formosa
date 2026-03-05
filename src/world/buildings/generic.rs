@@ -2,9 +2,9 @@
 //!
 //! 用於無特定風格的建築物
 
+use crate::world::{Building, BuildingType, BuildingWindow};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
-use crate::world::{Building, BuildingType, BuildingWindow};
 
 /// 通用建築 (形狀變體)
 pub fn spawn_generic_building(

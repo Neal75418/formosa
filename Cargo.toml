@@ -35,6 +35,29 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
+# === Lint 政策 ===
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Bevy ECS 假陽性
+needless_pass_by_value = "allow"       # Bevy 系統要求 Res<T>/Query 按值傳遞
+trivially_copy_pass_by_ref = "allow"   # ECS 模式中 &f32 參數常見
+# 遊戲數學
+float_cmp = "allow"                    # 遊戲中 == 0.0、>= 1.0 是刻意的
+cast_precision_loss = "allow"          # u32 as f32 等是刻意的
+cast_possible_truncation = "allow"     # 同上
+cast_sign_loss = "allow"              # 同上
+# Bevy 慣例
+wildcard_imports = "allow"             # use bevy::prelude::* 是 Bevy 慣例
+module_name_repetitions = "allow"      # Bevy 模組命名慣例
+doc_markdown = "allow"                 # 遊戲術語不需要 backticks
+# 遊戲狀態結構
+cast_possible_wrap = "allow"           # 遊戲中 usize→i32 是刻意的
+struct_excessive_bools = "allow"       # 遊戲狀態結構需要多個布林值
+similar_names = "allow"                # 遊戲變數名稱自然相似（pos/pois 等）
+# 已有壓制（從 main.rs 移入統一管理）
+too_many_arguments = "allow"
+type_complexity = "allow"
+
 # 發布版本的優化
 [profile.release]
 lto = "thin"

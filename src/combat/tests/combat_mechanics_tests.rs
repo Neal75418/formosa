@@ -1,7 +1,7 @@
 //! 戰鬥機制測試：近戰動畫、布娃娃、血液粒子、敵人類型、傷害事件、爆頭判定、受傷反應
 
-use bevy::prelude::*;
 use crate::combat::*;
+use bevy::prelude::*;
 
 // ============================================================================
 // MeleeAnimationType 測試
@@ -339,7 +339,12 @@ fn test_combo_step_animation_duration() {
     // 終結技動畫應最長
     assert!(ComboStep::Finisher.animation_duration() > ComboStep::Jab.animation_duration());
     // 所有動畫時長在合理範圍
-    for step in [ComboStep::Jab, ComboStep::Hook, ComboStep::Uppercut, ComboStep::Finisher] {
+    for step in [
+        ComboStep::Jab,
+        ComboStep::Hook,
+        ComboStep::Uppercut,
+        ComboStep::Finisher,
+    ] {
         let d = step.animation_duration();
         assert!((0.2..=0.5).contains(&d), "動畫時長 {d} 超出合理範圍");
     }
@@ -380,7 +385,7 @@ fn test_combo_timeout_resets() {
     let mut state = MeleeComboState::default();
     state.register_hit(1.0); // Jab
     state.register_hit(1.3); // Hook
-    // 超出窗口 (> 0.6s)
+                             // 超出窗口 (> 0.6s)
     state.register_hit(2.0);
     assert_eq!(state.current_step, ComboStep::Jab); // 重置
 }
@@ -400,11 +405,11 @@ fn test_combo_reset() {
 #[test]
 fn test_combo_full_cycle_wraps() {
     let mut state = MeleeComboState::default();
-    state.register_hit(1.0);  // Jab
-    state.register_hit(1.2);  // Hook
-    state.register_hit(1.4);  // Uppercut
-    state.register_hit(1.6);  // Finisher
-    state.register_hit(1.8);  // Wraps → Jab
+    state.register_hit(1.0); // Jab
+    state.register_hit(1.2); // Hook
+    state.register_hit(1.4); // Uppercut
+    state.register_hit(1.6); // Finisher
+    state.register_hit(1.8); // Wraps → Jab
     assert_eq!(state.current_step, ComboStep::Jab);
 }
 

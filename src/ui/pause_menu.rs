@@ -165,7 +165,7 @@ pub fn button_hover_effect(
     let lerp_speed = dt * BUTTON_SCALE_SPEED;
 
     // 繼續遊戲按鈕
-    for (interaction, mut bg, mut node, mut scale_state) in resume_query.iter_mut() {
+    for (interaction, mut bg, mut node, mut scale_state) in &mut resume_query {
         update_single_button(
             interaction,
             &mut bg,
@@ -177,7 +177,7 @@ pub fn button_hover_effect(
     }
 
     // 退出遊戲按鈕
-    for (interaction, mut bg, mut node, mut scale_state) in quit_query.iter_mut() {
+    for (interaction, mut bg, mut node, mut scale_state) in &mut quit_query {
         update_single_button(
             interaction,
             &mut bg,

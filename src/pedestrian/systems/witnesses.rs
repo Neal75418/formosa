@@ -6,8 +6,8 @@ use rand::Rng;
 use crate::combat::{WeaponInventory, WeaponType};
 use crate::economy::PlayerWallet;
 use crate::pedestrian::components::{
-    PedState, Pedestrian, PedestrianState, WitnessState, WitnessedCrime,
-    BRIBE_COST, BRIBE_DISTANCE, BRIBE_HEAT_REDUCTION,
+    PedState, Pedestrian, PedestrianState, WitnessState, WitnessedCrime, BRIBE_COST,
+    BRIBE_DISTANCE, BRIBE_HEAT_REDUCTION,
 };
 use crate::player::Player;
 use crate::wanted::{CrimeEvent, WantedLevel, WantedLevelChanged, WitnessReport};
@@ -41,12 +41,10 @@ mod witness_constants {
 fn crime_event_to_witnessed_crime(crime: &CrimeEvent) -> WitnessedCrime {
     match crime {
         CrimeEvent::Shooting { .. } => WitnessedCrime::Gunshot,
-        CrimeEvent::Assault { .. } => WitnessedCrime::Assault,
-        CrimeEvent::Murder { .. } => WitnessedCrime::Murder,
+        CrimeEvent::Assault { .. } | CrimeEvent::ShopRobbery { .. } => WitnessedCrime::Assault,
+        CrimeEvent::Murder { .. } | CrimeEvent::PoliceKilled { .. } => WitnessedCrime::Murder,
         CrimeEvent::VehicleTheft { .. } => WitnessedCrime::VehicleTheft,
         CrimeEvent::VehicleHit { .. } => WitnessedCrime::VehicleHit,
-        CrimeEvent::PoliceKilled { .. } => WitnessedCrime::Murder,
-        CrimeEvent::ShopRobbery { .. } => WitnessedCrime::Assault,
     }
 }
 
@@ -109,7 +107,7 @@ pub fn witness_crime_detection_system(
     player_query: Query<&Transform, With<Player>>,
     mut ped_query: Query<(&Transform, &mut PedestrianState, &mut WitnessState), With<Pedestrian>>,
 ) {
-    use witness_constants::*;
+    use witness_constants::{BASE_CALL_DURATION, FLEE_INSTEAD_OF_CALL_CHANCE, WITNESS_FOV_DEGREES};
 
     let Ok(player_transform) = player_query.single() else {
         return;
@@ -123,7 +121,7 @@ pub fn witness_crime_detection_system(
         let witness_range_sq = witnessed_crime.witness_range().powi(2);
         let flee_chance = FLEE_INSTEAD_OF_CALL_CHANCE * witnessed_crime.severity();
 
-        for (ped_transform, mut state, mut witness) in ped_query.iter_mut() {
+        for (ped_transform, mut state, mut witness) in &mut ped_query {
             // 跳過已經在逃跑或報警的行人
             if state.state == PedState::Fleeing || state.state == PedState::CallingPolice {
                 continue;
@@ -156,8 +154,7 @@ pub fn witness_crime_detection_system(
 fn is_player_armed(weapon_inventory: Option<&WeaponInventory>) -> bool {
     weapon_inventory
         .and_then(|inv| inv.current_weapon())
-        .map(|w| w.stats.weapon_type != WeaponType::Fist)
-        .unwrap_or(false)
+        .is_some_and(|w| w.stats.weapon_type != WeaponType::Fist)
 }
 
 /// 獲取目擊犯罪的描述
@@ -204,7 +201,7 @@ pub fn witness_phone_call_system(
     >,
     mut witness_reports: MessageWriter<WitnessReport>,
 ) {
-    use witness_constants::*;
+    use witness_constants::{ARMED_INTIMIDATION_DISTANCE, INTIMIDATION_DISTANCE};
 
     let dt = time.delta_secs();
 
@@ -220,7 +217,7 @@ pub fn witness_phone_call_system(
     };
     let intimidation_dist_sq = intimidation_dist * intimidation_dist;
 
-    for (_entity, ped_transform, mut state, mut witness) in ped_query.iter_mut() {
+    for (_entity, ped_transform, mut state, mut witness) in &mut ped_query {
         // 只處理正在報警的行人
         if state.state != PedState::CallingPolice {
             witness.tick(dt);
@@ -258,7 +255,7 @@ pub fn witness_visual_system(
     existing_icons: Query<(Entity, &WitnessPhoneIcon)>,
 ) {
     // 移除不再需要的圖標
-    for (icon_entity, icon) in existing_icons.iter() {
+    for (icon_entity, icon) in &existing_icons {
         let should_remove = ped_query
             .get(icon.owner)
             .map(|(_, _, state, _)| state.state != PedState::CallingPolice)
@@ -270,7 +267,7 @@ pub fn witness_visual_system(
     }
 
     // 為報警中的行人添加圖標
-    for (ped_entity, transform, state, _witness) in ped_query.iter() {
+    for (ped_entity, transform, state, _witness) in &ped_query {
         if state.state != PedState::CallingPolice {
             continue;
         }
@@ -309,7 +306,7 @@ pub fn witness_icon_follow_system(
 ) {
     let elapsed = time.elapsed_secs();
 
-    for (icon, mut icon_transform) in icon_query.iter_mut() {
+    for (icon, mut icon_transform) in &mut icon_query {
         if let Ok((ped_transform, witness)) = ped_query.get(icon.owner) {
             // 跟隨行人
             let target_pos = ped_transform.translation + Vec3::new(0.0, 2.2, 0.0);
@@ -339,9 +336,9 @@ pub fn witness_progress_ui_system(
     let player_pos = player_transform.translation;
 
     // 找出最近的報警中行人
-    let mut _nearest_witness: Option<(&Transform, &WitnessState, f32)> = None;
+    let mut nearest_witness: Option<(&Transform, &WitnessState, f32)> = None;
 
-    for (ped_transform, witness) in ped_query.iter() {
+    for (ped_transform, witness) in &ped_query {
         if !witness.witnessed_crime {
             continue;
         }
@@ -349,9 +346,9 @@ pub fn witness_progress_ui_system(
         // 使用 distance_squared 避免 sqrt
         let dist_sq = ped_transform.translation.distance_squared(player_pos);
         if dist_sq < WITNESS_UI_DISTANCE_SQ {
-            let is_closer = _nearest_witness.is_none_or(|(_, _, d)| dist_sq < d);
+            let is_closer = nearest_witness.is_none_or(|(_, _, d)| dist_sq < d);
             if is_closer {
-                _nearest_witness = Some((ped_transform, witness, dist_sq));
+                nearest_witness = Some((ped_transform, witness, dist_sq));
             }
         }
     }

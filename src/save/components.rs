@@ -264,7 +264,7 @@ impl Default for SaveManager {
 impl SaveManager {
     /// 取得存檔檔案路徑
     pub fn get_save_path(&self, slot: usize) -> PathBuf {
-        self.save_directory.join(format!("save_{:02}.json", slot))
+        self.save_directory.join(format!("save_{slot:02}.json"))
     }
 
     /// 取得自動存檔路徑

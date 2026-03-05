@@ -1,5 +1,11 @@
 //! GTA5 風格群體恐慌傳播系統
 
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::similar_names,
+    clippy::items_after_statements
+)]
+
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::KinematicCharacterController;
 use rand::Rng;
@@ -16,7 +22,7 @@ use crate::pedestrian::panic::{PanicState, PanicWave, PanicWaveManager};
 
 /// 恐慌系統常數
 mod panic_constants {
-    /// 恐慌消退速率（每秒減少的 panic_level）
+    /// 恐慌消退速率（每秒減少的 `panic_level`）
     pub const PANIC_CALM_DOWN_RATE: f32 = 0.05;
     /// 恐慌逃跑時的速度加成
     pub const PANIC_FLEE_SPEED_MULTIPLIER: f32 = 1.5;
@@ -127,7 +133,7 @@ fn handle_panic_fade(
 
 /// 恐慌波傳播系統（空間哈希優化版）
 ///
-/// 使用 PedestrianSpatialHash 將 O(行人×波數) 降為 O(波數×附近行人)。
+/// 使用 `PedestrianSpatialHash` 將 O(行人×波數) 降為 O(波數×附近行人)。
 /// 每個恐慌波只檢查其半徑內的行人，而非所有行人。
 pub fn panic_wave_propagation_system(
     time: Res<Time>,
@@ -135,7 +141,7 @@ pub fn panic_wave_propagation_system(
     ped_hash: Res<PedestrianSpatialHash>,
     mut ped_query: Query<(&Transform, &mut PedestrianState, &mut PanicState), With<Pedestrian>>,
 ) {
-    use panic_constants::*;
+    use panic_constants::{FLEE_TIMER_BASE, FLEE_TIMER_PANIC_MULTIPLIER, PANIC_CALM_DOWN_RATE};
     let dt = time.delta_secs();
     const WAVE_FRONT_WIDTH: f32 = 2.0;
 
@@ -143,11 +149,14 @@ pub fn panic_wave_propagation_system(
     panic_manager.update(dt);
 
     // 階段 1：使用空間哈希找出被恐慌波影響的行人
-    let panic_triggers =
-        collect_panic_triggers(panic_manager.active_waves.make_contiguous(), &ped_hash, WAVE_FRONT_WIDTH);
+    let panic_triggers = collect_panic_triggers(
+        panic_manager.active_waves.make_contiguous(),
+        &ped_hash,
+        WAVE_FRONT_WIDTH,
+    );
 
     // 階段 2：處理所有行人（更新計時器）
-    for (_, _, mut panic_state) in ped_query.iter_mut() {
+    for (_, _, mut panic_state) in &mut ped_query {
         panic_state.update(dt);
     }
 
@@ -167,7 +176,7 @@ pub fn panic_wave_propagation_system(
     }
 
     // 階段 4：恐慌消退（僅處理正在恐慌的行人）
-    for (ped_transform, mut ped_state, mut panic_state) in ped_query.iter_mut() {
+    for (ped_transform, mut ped_state, mut panic_state) in &mut ped_query {
         if panic_state.panic_level <= 0.0 {
             continue;
         }
@@ -194,7 +203,7 @@ pub fn pedestrian_scream_system(
 ) {
     let current_time = time.elapsed_secs();
 
-    for (ped_transform, mut panic_state) in ped_query.iter_mut() {
+    for (ped_transform, mut panic_state) in &mut ped_query {
         // 檢查是否可以尖叫傳播恐慌
         if panic_state.can_scream() {
             let ped_pos = ped_transform.translation;
@@ -255,7 +264,9 @@ pub fn panic_flee_direction_system(
         With<Pedestrian>,
     >,
 ) {
-    use panic_constants::*;
+    use panic_constants::{
+        PANIC_DIRECTION_JITTER, PANIC_FLEE_SPEED_MULTIPLIER, ROTATION_SLERP_SPEED,
+    };
     use rand::SeedableRng;
 
     let dt = time.delta_secs();
@@ -263,7 +274,7 @@ pub fn panic_flee_direction_system(
     // 初始化持久化 RNG（只在第一次調用時創建）
     let rng = rng.get_or_insert_with(|| rand::rngs::StdRng::from_rng(&mut rand::rng()));
 
-    for (mut transform, ped_state, panic_state, mut anim, mut controller) in ped_query.iter_mut() {
+    for (mut transform, ped_state, panic_state, mut anim, mut controller) in &mut ped_query {
         // 只處理因恐慌而逃跑的行人
         if ped_state.state != PedState::Fleeing || !panic_state.is_panicked() {
             continue;

@@ -8,6 +8,7 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
+#[allow(clippy::wildcard_imports)]
 use super::destructible::*;
 use crate::vehicle::random_rotation;
 
@@ -41,13 +42,18 @@ fn get_debris_mesh_and_material(
     debris_type: DestructibleType,
 ) -> (Handle<Mesh>, Handle<StandardMaterial>) {
     match debris_type {
-        DestructibleType::Glass => (visuals.glass_shard_mesh.clone(), visuals.glass_material.clone()),
-        DestructibleType::Wood | DestructibleType::Plastic => {
-            (visuals.wood_debris_mesh.clone(), visuals.wood_material.clone())
-        }
-        DestructibleType::Metal | DestructibleType::Electronic => {
-            (visuals.metal_debris_mesh.clone(), visuals.metal_material.clone())
-        }
+        DestructibleType::Glass => (
+            visuals.glass_shard_mesh.clone(),
+            visuals.glass_material.clone(),
+        ),
+        DestructibleType::Wood | DestructibleType::Plastic => (
+            visuals.wood_debris_mesh.clone(),
+            visuals.wood_material.clone(),
+        ),
+        DestructibleType::Metal | DestructibleType::Electronic => (
+            visuals.metal_debris_mesh.clone(),
+            visuals.metal_material.clone(),
+        ),
     }
 }
 
@@ -62,11 +68,12 @@ fn calc_random_debris_params(base_position: Vec3, impact_direction: Vec3) -> Deb
     let velocity = (impact_direction * 0.5 + random_offset).normalize()
         * (DEBRIS_MIN_SPEED + rand::random::<f32>() * (DEBRIS_MAX_SPEED - DEBRIS_MIN_SPEED));
 
-    let position = base_position + Vec3::new(
-        (rand::random::<f32>() - 0.5) * 0.5,
-        rand::random::<f32>() * 0.5,
-        (rand::random::<f32>() - 0.5) * 0.5,
-    );
+    let position = base_position
+        + Vec3::new(
+            (rand::random::<f32>() - 0.5) * 0.5,
+            rand::random::<f32>() * 0.5,
+            (rand::random::<f32>() - 0.5) * 0.5,
+        );
 
     DebrisParams {
         position,
@@ -112,8 +119,7 @@ fn spawn_particle(
     commands.spawn((
         Mesh3d(mesh),
         MeshMaterial3d(material),
-        Transform::from_translation(position + Vec3::Y * y_offset)
-            .with_scale(Vec3::splat(scale)),
+        Transform::from_translation(position + Vec3::Y * y_offset).with_scale(Vec3::splat(scale)),
         DestructionParticle {
             is_spark,
             lifetime,
@@ -131,28 +137,34 @@ fn spawn_debris_entity(
     debris_type: DestructibleType,
     index: usize,
 ) -> Entity {
-    commands.spawn((
-        Name::new(format!("Debris_{}", index)),
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        Transform::from_translation(params.position)
-            .with_rotation(params.rotation)
-            .with_scale(Vec3::splat(params.scale)),
-        RigidBody::Dynamic,
-        Collider::cuboid(0.05 * params.scale, 0.05 * params.scale, 0.05 * params.scale),
-        Velocity::linear(params.velocity),
-        GravityScale(1.5),
-        Damping {
-            linear_damping: 0.5,
-            angular_damping: 0.8,
-        },
-        Debris {
-            debris_type,
-            lifetime: params.lifetime,
-            max_lifetime: DEBRIS_LIFETIME + 2.0,
-        },
-        Visibility::Visible,
-    )).id()
+    commands
+        .spawn((
+            Name::new(format!("Debris_{index}")),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(params.position)
+                .with_rotation(params.rotation)
+                .with_scale(Vec3::splat(params.scale)),
+            RigidBody::Dynamic,
+            Collider::cuboid(
+                0.05 * params.scale,
+                0.05 * params.scale,
+                0.05 * params.scale,
+            ),
+            Velocity::linear(params.velocity),
+            GravityScale(1.5),
+            Damping {
+                linear_damping: 0.5,
+                angular_damping: 0.8,
+            },
+            Debris {
+                debris_type,
+                lifetime: params.lifetime,
+                max_lifetime: DEBRIS_LIFETIME + 2.0,
+            },
+            Visibility::Visible,
+        ))
+        .id()
 }
 
 // ============================================================================
@@ -179,7 +191,9 @@ pub fn spawn_debris_pooled<F: bevy::ecs::query::QueryFilter>(
         // 嘗試從池中取得實體
         if let Some(pooled_entity) = debris_pool.acquire() {
             // 重用池中的實體
-            if let Ok((mut debris, mut transform, mut velocity, mut visibility)) = debris_query.get_mut(pooled_entity) {
+            if let Ok((mut debris, mut transform, mut velocity, mut visibility)) =
+                debris_query.get_mut(pooled_entity)
+            {
                 debris.debris_type = debris_type;
                 debris.lifetime = params.lifetime;
                 debris.max_lifetime = DEBRIS_LIFETIME + 2.0;
@@ -198,7 +212,14 @@ pub fn spawn_debris_pooled<F: bevy::ecs::query::QueryFilter>(
 
         // 池中無可用實體，創建新的（但限制總數）
         if debris_pool.can_create_new() {
-            let entity = spawn_debris_entity(commands, mesh.clone(), material.clone(), &params, debris_type, i);
+            let entity = spawn_debris_entity(
+                commands,
+                mesh.clone(),
+                material.clone(),
+                &params,
+                debris_type,
+                i,
+            );
             debris_pool.add_new_entity(entity);
             spawned += 1;
         }
@@ -224,7 +245,14 @@ pub fn spawn_debris(
 
     for i in 0..actual_count {
         let params = calc_random_debris_params(position, impact_direction);
-        spawn_debris_entity(commands, mesh.clone(), material.clone(), &params, debris_type, i);
+        spawn_debris_entity(
+            commands,
+            mesh.clone(),
+            material.clone(),
+            &params,
+            debris_type,
+            i,
+        );
     }
 }
 
@@ -313,13 +341,15 @@ pub fn spawn_destructible_object(
         ),
     };
 
-    commands.spawn((
-        Name::new(format!("Destructible_{:?}", destructible_type)),
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        Transform::from_translation(position),
-        Collider::cuboid(size.x, size.y, size.z),
-        RigidBody::Fixed,
-        Destructible::new(destructible_type),
-    )).id()
+    commands
+        .spawn((
+            Name::new(format!("Destructible_{destructible_type:?}")),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(position),
+            Collider::cuboid(size.x, size.y, size.z),
+            RigidBody::Fixed,
+            Destructible::new(destructible_type),
+        ))
+        .id()
 }

@@ -1,8 +1,8 @@
 //! 失敗和解鎖條件
 
+use super::StoryMissionId;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use super::StoryMissionId;
 
 /// 失敗條件
 #[derive(Clone, Debug, Serialize, Deserialize)]

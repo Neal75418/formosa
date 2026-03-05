@@ -58,23 +58,23 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-use std::collections::VecDeque;
-use bevy::prelude::*;
 use super::components::PedState;
+use bevy::prelude::*;
+use std::collections::VecDeque;
 
 // ============================================================================
 // 群體恐慌傳播系統（GTA5 風格）
 // ============================================================================
 
 /// 恐慌波常數
-const PANIC_WAVE_DEFAULT_MAX_RADIUS: f32 = 15.0;      // 預設最大傳播半徑（米）
-const PANIC_WAVE_DEFAULT_SPEED: f32 = 8.0;            // 預設傳播速度（米/秒）
-const PANIC_WAVE_GUNSHOT_MAX_RADIUS: f32 = 30.0;      // 槍聲恐慌波最大半徑
-const PANIC_WAVE_GUNSHOT_SPEED: f32 = 15.0;           // 槍聲恐慌波傳播速度
-const PANIC_WAVE_FRONT_WIDTH: f32 = 2.0;              // 恐慌波前緣寬度
-const PANIC_SCREAM_COOLDOWN: f32 = 3.0;               // 尖叫冷卻時間（秒）
-const PANIC_SPREAD_THRESHOLD: f32 = 0.7;              // 恐慌傳播閾值（panic_level）
-const PANIC_IS_PANICKED_THRESHOLD: f32 = 0.3;         // 判斷「正在恐慌」的閾值
+const PANIC_WAVE_DEFAULT_MAX_RADIUS: f32 = 15.0; // 預設最大傳播半徑（米）
+const PANIC_WAVE_DEFAULT_SPEED: f32 = 8.0; // 預設傳播速度（米/秒）
+const PANIC_WAVE_GUNSHOT_MAX_RADIUS: f32 = 30.0; // 槍聲恐慌波最大半徑
+const PANIC_WAVE_GUNSHOT_SPEED: f32 = 15.0; // 槍聲恐慌波傳播速度
+const PANIC_WAVE_FRONT_WIDTH: f32 = 2.0; // 恐慌波前緣寬度
+const PANIC_SCREAM_COOLDOWN: f32 = 3.0; // 尖叫冷卻時間（秒）
+const PANIC_SPREAD_THRESHOLD: f32 = 0.7; // 恐慌傳播閾值（panic_level）
+const PANIC_IS_PANICKED_THRESHOLD: f32 = 0.3; // 判斷「正在恐慌」的閾值
 
 /// 恐慌波檢測結果
 #[derive(Clone, Debug)]
@@ -98,7 +98,14 @@ const MAX_ACTIVE_WAVES: usize = 32;
 
 impl PanicWaveManager {
     /// 添加新的恐慌波
-    pub fn add_wave(&mut self, origin: Vec3, max_radius: f32, speed: f32, intensity: f32, spawn_time: f32) {
+    pub fn add_wave(
+        &mut self,
+        origin: Vec3,
+        max_radius: f32,
+        speed: f32,
+        intensity: f32,
+        spawn_time: f32,
+    ) {
         if self.active_waves.len() >= MAX_ACTIVE_WAVES {
             self.active_waves.pop_front();
         }
@@ -118,7 +125,7 @@ impl PanicWaveManager {
             position,
             PANIC_WAVE_GUNSHOT_MAX_RADIUS,
             PANIC_WAVE_GUNSHOT_SPEED,
-            1.0,  // 槍聲恐慌強度最高
+            1.0, // 槍聲恐慌強度最高
             spawn_time,
         );
     }
@@ -129,7 +136,7 @@ impl PanicWaveManager {
             position,
             PANIC_WAVE_DEFAULT_MAX_RADIUS,
             PANIC_WAVE_DEFAULT_SPEED,
-            intensity * 0.8,  // 傳播會衰減
+            intensity * 0.8, // 傳播會衰減
             spawn_time,
         );
     }
@@ -142,7 +149,8 @@ impl PanicWaveManager {
         }
 
         // 清理已達最大半徑的波
-        self.active_waves.retain(|w| w.current_radius < w.max_radius);
+        self.active_waves
+            .retain(|w| w.current_radius < w.max_radius);
     }
 
     /// 檢查位置是否在任何恐慌波的前緣
@@ -292,7 +300,8 @@ impl PanicState {
 
     /// 計算逃跑方向
     pub fn flee_direction(&self, current_pos: Vec3) -> Option<Vec3> {
-        self.panic_source.map(|source| (current_pos - source).normalize_or_zero())
+        self.panic_source
+            .map(|source| (current_pos - source).normalize_or_zero())
     }
 
     /// 是否處於恐慌狀態

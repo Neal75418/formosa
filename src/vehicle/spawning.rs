@@ -1,14 +1,15 @@
 //! 載具生成（NPC 車輛、機車、初始交通）
 
-use super::*;
 use super::vehicle_damage::BodyPartDamage;
-use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
+#[allow(clippy::wildcard_imports)]
+use super::*;
 use crate::core::math::look_rotation_y_flat;
 use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::world::{
     W_MAIN, W_SECONDARY, W_ZHONGHUA, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU, Z_HANKOU,
 };
+use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 // ============================================================================
 // 車輛生成輔助函數
@@ -334,11 +335,7 @@ fn spawn_tuning_parts(
         parent.spawn((
             Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 2.5))),
             MeshMaterial3d(neon_mat.clone()),
-            Transform::from_xyz(
-                x_sign * (chassis_size.x / 2.0 + 0.02),
-                neon_y,
-                0.0,
-            ),
+            Transform::from_xyz(x_sign * (chassis_size.x / 2.0 + 0.02), neon_y, 0.0),
             GlobalTransform::default(),
         ));
     }
@@ -401,7 +398,7 @@ pub fn spawn_npc_vehicle(
                 current_wp_index: start_index,
                 ..default()
             },
-            Name::new(format!("NpcVehicle_{:?}", vehicle_type)),
+            Name::new(format!("NpcVehicle_{vehicle_type:?}")),
         ))
         .insert(TireDamage::default()) // 輪胎損壞狀態（分離插入避免 tuple 大小限制）
         .insert(BodyPartDamage::default()) // 車體部位損壞追蹤
@@ -416,11 +413,32 @@ pub fn spawn_npc_vehicle(
                     VehicleVisualRoot,
                 ))
                 .with_children(|parent| {
-                    spawn_vehicle_body(parent, meshes, materials, shared_mats, chassis_size, vehicle_type, color);
+                    spawn_vehicle_body(
+                        parent,
+                        meshes,
+                        materials,
+                        shared_mats,
+                        chassis_size,
+                        vehicle_type,
+                        color,
+                    );
                     spawn_vehicle_wheels(parent, meshes, shared_mats, chassis_size, wheel_offset_z);
-                    spawn_vehicle_lights(parent, meshes, shared_mats.headlight.clone(), shared_mats.taillight.clone(), chassis_size);
+                    spawn_vehicle_lights(
+                        parent,
+                        meshes,
+                        shared_mats.headlight.clone(),
+                        shared_mats.taillight.clone(),
+                        chassis_size,
+                    );
                     if vehicle_type == VehicleType::Car || vehicle_type == VehicleType::Taxi {
-                        spawn_tuning_parts(parent, meshes, materials, shared_mats, chassis_size, color);
+                        spawn_tuning_parts(
+                            parent,
+                            meshes,
+                            materials,
+                            shared_mats,
+                            chassis_size,
+                            color,
+                        );
                     }
                 });
         });
@@ -438,6 +456,8 @@ fn lane_offset(total_width: f32) -> f32 {
 /// 系統：初始化交通 (在 Setup 階段運行)
 /// 使用共享材質資源以優化效能
 /// 生成 8-10 台 NPC 車輛和紅綠燈
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
 pub fn spawn_initial_traffic(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -450,6 +470,8 @@ pub fn spawn_initial_traffic(
     //   1. 路線點必須在道路中心線左右偏移 (Lane Offset)
     //   2. 不同路線的車道必須錯開，避免重疊
     //   3. 車寬約 2.5m，車道間距至少 8m (主要道路為雙向各1車道)
+
+    use std::sync::Arc;
 
     // === 道路座標參考（與 world/setup.rs 同步）===
     let lane_offset_main = lane_offset(W_MAIN);
@@ -469,8 +491,6 @@ pub fn spawn_initial_traffic(
     let x_xining_west = X_XINING - lane_offset_secondary;
     let x_kangding_east = X_KANGDING + lane_offset_main;
     let x_kangding_west = X_KANGDING - lane_offset_main;
-
-    use std::sync::Arc;
 
     // 路線 A：外圈 (逆時針) - 走主要幹道外側
     let route_outer = Arc::new(vec![
@@ -654,8 +674,23 @@ pub fn spawn_scooter(
                     VehicleVisualRoot,
                 ))
                 .with_children(|parent| {
-                    spawn_scooter_body_parts(parent, meshes, shared_mats, body_mat.clone(), body_width, body_length, seat_height);
-                    spawn_scooter_wheels_and_lights(parent, meshes, shared_mats, body_mat, body_length, seat_height);
+                    spawn_scooter_body_parts(
+                        parent,
+                        meshes,
+                        shared_mats,
+                        body_mat.clone(),
+                        body_width,
+                        body_length,
+                        seat_height,
+                    );
+                    spawn_scooter_wheels_and_lights(
+                        parent,
+                        meshes,
+                        shared_mats,
+                        body_mat,
+                        body_length,
+                        seat_height,
+                    );
                 });
         });
 

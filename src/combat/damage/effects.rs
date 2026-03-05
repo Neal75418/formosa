@@ -100,10 +100,10 @@ pub fn blood_particle_update_system(
     time: Res<Time>,
     mut particle_query: Query<(Entity, &mut BloodParticle, &mut Transform)>,
 ) {
-    let dt = time.delta_secs();
     const GRAVITY: f32 = 15.0;
+    let dt = time.delta_secs();
 
-    for (entity, mut particle, mut transform) in particle_query.iter_mut() {
+    for (entity, mut particle, mut transform) in &mut particle_query {
         // 更新生命時間
         particle.lifetime += dt;
 
@@ -234,7 +234,7 @@ pub fn floating_damage_number_update_system(
     let dt = time.delta_secs();
     let camera_pos = camera_query.single().map(|t| t.translation).ok();
 
-    for (entity, mut damage, mut transform, mut text_color) in damage_query.iter_mut() {
+    for (entity, mut damage, mut transform, mut text_color) in &mut damage_query {
         damage.lifetime += dt;
 
         // 檢查是否過期
@@ -361,7 +361,7 @@ pub fn armor_spark_update_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut spark, mut transform) in spark_query.iter_mut() {
+    for (entity, mut spark, mut transform) in &mut spark_query {
         spark.lifetime += dt;
 
         if spark.lifetime >= spark.max_lifetime {
@@ -387,10 +387,10 @@ pub fn armor_shard_update_system(
     time: Res<Time>,
     mut shard_query: Query<(Entity, &mut ArmorShardParticle, &mut Transform)>,
 ) {
-    let dt = time.delta_secs();
     const GRAVITY: f32 = 12.0;
+    let dt = time.delta_secs();
 
-    for (entity, mut shard, mut transform) in shard_query.iter_mut() {
+    for (entity, mut shard, mut transform) in &mut shard_query {
         shard.lifetime += dt;
 
         if shard.lifetime >= shard.max_lifetime {

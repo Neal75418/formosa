@@ -8,12 +8,12 @@ use rand::Rng;
 
 use super::effects::spawn_blood_particles;
 use super::{DeathSystemQueries, DeathSystemResources, RespawnState, RESPAWN_POSITION};
+use crate::ai::{AiBehavior, AiCombat, AiMovement, AiPerception};
 use crate::combat::components::*;
 use crate::combat::health::*;
 use crate::combat::killcam::{KillCamState, KillCamTrigger};
 use crate::combat::ragdoll::convert_to_skeletal_ragdoll;
 use crate::combat::visuals::*;
-use crate::ai::{AiBehavior, AiCombat, AiMovement, AiPerception};
 use crate::economy::CashPickup;
 use crate::player::Player;
 use crate::ui::NotificationQueue;
@@ -158,8 +158,7 @@ fn determine_killcam_trigger(
     // 檢查擊殺條件（優先順序：爆頭 > 最後敵人 > 連殺）
     let is_headshot = event
         .hit_position
-        .map(|p| p.y > enemy_pos.y + HEADSHOT_HEIGHT_THRESHOLD)
-        .unwrap_or(false);
+        .is_some_and(|p| p.y > enemy_pos.y + HEADSHOT_HEIGHT_THRESHOLD);
 
     if is_headshot {
         Some(KillCamTrigger::Headshot)
@@ -245,7 +244,9 @@ fn manage_ragdoll_limit(
             break;
         }
     }
-    ragdoll_tracker.ragdolls.push_back((new_entity, current_time));
+    ragdoll_tracker
+        .ragdolls
+        .push_back((new_entity, current_time));
 }
 
 /// 設置布娃娃物理組件
@@ -288,6 +289,7 @@ fn setup_ragdoll_physics(
 }
 
 /// 處理敵人死亡效果
+#[allow(clippy::ref_option)]
 fn handle_enemy_death(
     commands: &mut Commands,
     event: &DeathEvent,
@@ -360,11 +362,7 @@ pub fn death_system(
 
     for event in death_events.read() {
         // 玩家死亡
-        if handle_player_death(
-            event.entity,
-            &queries.player,
-            &mut res.respawn_state,
-        ) {
+        if handle_player_death(event.entity, &queries.player, &mut res.respawn_state) {
             continue;
         }
 
@@ -456,7 +454,7 @@ pub fn player_respawn_system(
 
     if respawn_state.respawn_timer <= 0.0 {
         // 重生玩家
-        for (mut transform, mut health, armor) in player_query.iter_mut() {
+        for (mut transform, mut health, armor) in &mut player_query {
             // 重置位置
             transform.translation = RESPAWN_POSITION;
 
@@ -487,7 +485,7 @@ pub fn ragdoll_update_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut ragdoll, mut transform, velocity) in ragdoll_query.iter_mut() {
+    for (entity, mut ragdoll, mut transform, velocity) in &mut ragdoll_query {
         // 更新計時器
         ragdoll.lifetime += dt;
 

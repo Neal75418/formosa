@@ -3,8 +3,8 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-use bevy::prelude::*;
 use crate::core::{clamp_dot, safe_normalize};
+use bevy::prelude::*;
 
 /// AI 感知組件（視覺、聽覺）
 #[derive(Component, Debug)]
@@ -26,9 +26,9 @@ pub struct AiPerception {
 impl Default for AiPerception {
     fn default() -> Self {
         Self {
-            fov: 60.0,              // 60 度視野
-            sight_range: 30.0,       // 30 公尺視距
-            hearing_range: 50.0,     // 50 公尺聽力
+            fov: 60.0,           // 60 度視野
+            sight_range: 30.0,   // 30 公尺視距
+            hearing_range: 50.0, // 50 公尺聽力
             can_see_target: false,
             has_heard_noise: false,
             noise_position: None,

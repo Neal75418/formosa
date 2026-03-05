@@ -4,13 +4,24 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::economy::RespectManager;
-use super::story_data::*;
+use super::story_data::{
+    ActiveStoryMission, FailCondition, MissionCompletionResult, MissionObjective,
+    MissionPerformance, MissionRewards, StoryMission, StoryMissionId, StoryMissionRating,
+    StoryMissionStatus, UnlockCondition,
+};
 use super::unlocks::UnlockManager;
 use crate::core::WorldTime;
 use crate::economy::PlayerWallet;
@@ -106,11 +117,17 @@ impl StoryMissionManager {
         // 檢查任務是否可用
         let status = self.get_mission_status(mission.id);
         if status != StoryMissionStatus::Available {
-            return Err(format!("任務狀態不可用: {:?}", status));
+            return Err(format!("任務狀態不可用: {status:?}"));
         }
 
         // 檢查解鎖條件
-        if !self.check_unlock_conditions(&mission.unlock_conditions, wallet, respect, unlocks, world_time) {
+        if !self.check_unlock_conditions(
+            &mission.unlock_conditions,
+            wallet,
+            respect,
+            unlocks,
+            world_time,
+        ) {
             return Err("不滿足解鎖條件".to_string());
         }
 
@@ -145,9 +162,7 @@ impl StoryMissionManager {
             performance.completion_time = self.total_play_time - performance.start_time;
 
             // 從任務定義獲取目標時間（estimated_time 是分鐘，轉換為秒）
-            let target_time = mission
-                .map(|m| m.estimated_time * 60.0)
-                .unwrap_or(300.0);
+            let target_time = mission.map_or(300.0, |m| m.estimated_time * 60.0);
             let rating = performance.calculate_rating(target_time);
 
             // 更新最佳評分
@@ -161,21 +176,28 @@ impl StoryMissionManager {
             }
 
             // 從任務定義獲取基礎獎勵
-            let base_reward = mission
-                .map(|m| m.rewards.money as i32)
-                .unwrap_or(1000);
+            let base_reward = mission.map_or(1000, |m| m.rewards.money as i32);
             let final_reward = (base_reward as f32 * rating.bonus_multiplier()) as i32;
 
             // 從任務定義獲取任務名稱
-            let mission_name = mission
-                .map(|m| m.title.clone())
-                .unwrap_or_else(|| format!("任務 {:?}", mission_id));
+            let mission_name =
+                mission.map_or_else(|| format!("任務 {mission_id:?}"), |m| m.title.clone());
 
             // 從任務定義獲取解鎖物品（轉為顯示用字串）
             let unlocked_items: Vec<String> = mission
                 .map(|m| {
-                    let weapons: Vec<String> = m.rewards.unlock_weapons.iter().map(|w| w.save_key().to_string()).collect();
-                    let vehicles: Vec<String> = m.rewards.unlock_vehicles.iter().map(|v| v.save_key().to_string()).collect();
+                    let weapons: Vec<String> = m
+                        .rewards
+                        .unlock_weapons
+                        .iter()
+                        .map(|w| w.save_key().to_string())
+                        .collect();
+                    let vehicles: Vec<String> = m
+                        .rewards
+                        .unlock_vehicles
+                        .iter()
+                        .map(|v| v.save_key().to_string())
+                        .collect();
                     weapons.into_iter().chain(vehicles).collect()
                 })
                 .unwrap_or_default();
@@ -657,16 +679,13 @@ impl StoryMissionDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mission::story_data::{Difficulty, MissionPhase, StoryMissionType};
 
     fn create_test_mission(id: StoryMissionId) -> StoryMission {
-        StoryMission::new(id, format!("測試任務{}", id), "測試描述")
+        StoryMission::new(id, format!("測試任務{id}"), "測試描述")
             .chapter(1)
             .difficulty(Difficulty::Normal)
-            .with_phase(MissionPhase::new(
-                1,
-                StoryMissionType::Dialogue,
-                "階段1",
-            ))
+            .with_phase(MissionPhase::new(1, StoryMissionType::Dialogue, "階段1"))
     }
 
     #[test]

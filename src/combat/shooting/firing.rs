@@ -8,18 +8,17 @@ use bevy_rapier3d::prelude::*;
 
 use super::auto_aim::apply_lock_on_aim_assist;
 use super::effects::{spawn_bullet_tracer, spawn_impact_effect, spawn_muzzle_flash};
+use crate::ai::AiBehavior;
+use crate::audio::{play_weapon_fire_sound, AudioManager, WeaponSounds};
 use crate::combat::components::*;
 use crate::combat::health::{
-    check_headshot, DamageEvent, DamageSource, Damageable,
-    HEADSHOT_MULTIPLIER,
+    check_headshot, DamageEvent, DamageSource, Damageable, HEADSHOT_MULTIPLIER,
 };
 use crate::combat::visuals::*;
 use crate::combat::weapon::*;
-use crate::audio::{play_weapon_fire_sound, AudioManager, WeaponSounds};
-use crate::ai::AiBehavior;
 use crate::core::{rapier_real_to_f32, CameraSettings, CameraShake, RecoilState};
-use crate::player::{Player, PlayerSkills, StealthState, STEALTH_KILL_MULTIPLIER};
 use crate::player::skills::{award_shooting_xp, award_stealth_kill_xp};
+use crate::player::{Player, PlayerSkills, StealthState, STEALTH_KILL_MULTIPLIER};
 
 /// 武器音效資源（合併為 SystemParam 以減少系統參數數量）
 #[derive(SystemParam)]
@@ -35,7 +34,7 @@ pub(crate) struct MeleeCombatContext<'w, 's> {
     pub combo: ResMut<'w, MeleeComboState>,
     pub block: ResMut<'w, BlockState>,
     pub stealth: Res<'w, StealthState>,
-    pub skills: ResMut<'w, PlayerSkills>,  // ResMut 以支持 XP 獎勵
+    pub skills: ResMut<'w, PlayerSkills>, // ResMut 以支持 XP 獎勵
     pub ai_query: Query<'w, 's, &'static AiBehavior>,
     pub takedown: ResMut<'w, StealthTakedownState>,
 }
@@ -136,7 +135,7 @@ pub fn rpg_projectile_update_system(
     };
     let dt = time.delta_secs();
 
-    for (entity, mut transform, mut projectile) in query.iter_mut() {
+    for (entity, mut transform, mut projectile) in &mut query {
         projectile.lifetime += dt;
 
         // 超時：空中爆炸
@@ -226,6 +225,9 @@ fn calculate_aim_point(
     player_pos: Vec3,
     rapier: &RapierContext,
 ) -> Vec3 {
+    // 從攝影機發射 raycast 找到瞄準點
+    const MAX_AIM_DISTANCE: f32 = 500.0;
+
     let yaw = camera_settings.yaw;
     let pitch = camera_settings.pitch;
     let cam_distance = camera_settings.distance;
@@ -243,9 +245,6 @@ fn calculate_aim_point(
     let cam_back = Vec3::new(yaw.sin(), 0.0, yaw.cos());
     let cam_up = Vec3::Y * pitch.sin().abs();
     let camera_pos = player_center + cam_back * cam_distance * pitch.cos() + cam_up * cam_distance;
-
-    // 從攝影機發射 raycast 找到瞄準點
-    const MAX_AIM_DISTANCE: f32 = 500.0;
     let aim_filter = QueryFilter::default();
 
     if let Some((_, toi)) = rapier.cast_ray(
@@ -334,7 +333,11 @@ fn apply_ranged_fire_effects(
     camera_shake: &mut CameraShake,
 ) {
     // 瞄準倍率與技能倍率疊加（相乘）
-    let aim_mult = if is_aiming { AIM_RECOIL_MULTIPLIER } else { 1.0 };
+    let aim_mult = if is_aiming {
+        AIM_RECOIL_MULTIPLIER
+    } else {
+        1.0
+    };
     let final_recoil_mult = aim_mult * skill_recoil_multiplier;
     recoil_state.add_recoil(
         weapon.stats.recoil_vertical * final_recoil_mult,
@@ -409,7 +412,7 @@ fn fire_ranged_weapon(
     is_aiming: bool,
     rapier: &RapierContext,
     damage_events: &mut MessageWriter<DamageEvent>,
-    skills: &mut PlayerSkills,  // 用於 XP 獎勵
+    skills: &mut PlayerSkills, // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -432,12 +435,28 @@ fn fire_ranged_weapon(
     if weapon.stats.weapon_type == WeaponType::Shotgun {
         let pattern = generate_shotgun_pattern(weapon.stats.pellet_count, spread);
         for offset in pattern {
-            fire_bullet_with_offset(commands, &ctx, offset, damage_events, skills, damageable_query, transform_query);
+            fire_bullet_with_offset(
+                commands,
+                &ctx,
+                offset,
+                damage_events,
+                skills,
+                damageable_query,
+                transform_query,
+            );
         }
     } else {
         // 其他武器使用隨機散佈
         for _ in 0..weapon.stats.pellet_count {
-            fire_bullet(commands, &ctx, spread, damage_events, skills, damageable_query, transform_query);
+            fire_bullet(
+                commands,
+                &ctx,
+                spread,
+                damage_events,
+                skills,
+                damageable_query,
+                transform_query,
+            );
         }
     }
 
@@ -449,7 +468,7 @@ fn fire_ranged_weapon(
 // ============================================================================
 
 /// 發射武器系統
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn fire_weapon_system(
     input: Res<ShootingInput>,
     time: Res<Time>,
@@ -480,7 +499,7 @@ pub fn fire_weapon_system(
         return;
     }
 
-    for (player_entity, player_transform, mut inventory) in player_query.iter_mut() {
+    for (player_entity, player_transform, mut inventory) in &mut player_query {
         let Some(weapon) = inventory.current_weapon_mut() else {
             continue;
         };
@@ -494,13 +513,13 @@ pub fn fire_weapon_system(
 
         // 計算瞄準點（含自動瞄準吸附）
         let raw_aim_point = calculate_aim_point(&camera_settings, player_pos, &rapier);
-        let aim_point = apply_lock_on_aim_assist(raw_aim_point, &melee_ctx.lock_on, &transform_query);
+        let aim_point =
+            apply_lock_on_aim_assist(raw_aim_point, &melee_ctx.lock_on, &transform_query);
 
         let muzzle_offset = weapon_visuals
             .as_ref()
             .and_then(|wv| wv.get(weapon.stats.weapon_type))
-            .map(|wd| wd.muzzle_offset)
-            .unwrap_or(Vec3::new(0.0, 0.0, 0.15));
+            .map_or(Vec3::new(0.0, 0.0, 0.15), |wd| wd.muzzle_offset);
 
         let muzzle_pos = calculate_muzzle_position(
             player_pos,
@@ -537,10 +556,10 @@ pub fn fire_weapon_system(
                     let target_unaware = melee_ctx
                         .ai_query
                         .get(target_entity)
-                        .is_ok_and(|ai| ai.is_unaware());
-                    let from_behind = transform_query
-                        .get(target_entity)
-                        .is_ok_and(|t| is_backstab(player_pos, t.translation, t.forward().as_vec3()));
+                        .is_ok_and(AiBehavior::is_unaware);
+                    let from_behind = transform_query.get(target_entity).is_ok_and(|t| {
+                        is_backstab(player_pos, t.translation, t.forward().as_vec3())
+                    });
                     if target_unaware && from_behind {
                         let target_pos = transform_query
                             .get(target_entity)
@@ -570,10 +589,8 @@ pub fn fire_weapon_system(
                 continue; // 跳過普通近戰，進入 takedown 流程
             }
 
-            let combo_mult =
-                melee_ctx.combo.damage_multiplier() * counter_mult * stealth_mult;
-            let is_finisher = melee_ctx.combo.current_step.is_finisher()
-                || stealth_mult > 1.0; // 靜默擊殺也觸發擊退
+            let combo_mult = melee_ctx.combo.damage_multiplier() * counter_mult * stealth_mult;
+            let is_finisher = melee_ctx.combo.current_step.is_finisher() || stealth_mult > 1.0; // 靜默擊殺也觸發擊退
             let hit = fire_melee(
                 &mut commands,
                 player_entity,
@@ -606,8 +623,7 @@ pub fn fire_weapon_system(
         } else if weapon.stats.weapon_type == WeaponType::RPG {
             // RPG：生成投射物而非 hitscan
             commands.spawn((
-                Transform::from_translation(muzzle_pos)
-                    .looking_to(direction, Vec3::Y),
+                Transform::from_translation(muzzle_pos).looking_to(direction, Vec3::Y),
                 GlobalTransform::default(),
                 RpgProjectile {
                     direction,
@@ -694,7 +710,7 @@ fn fire_bullet(
     ctx: &FireContext,
     spread_degrees: f32,
     damage_events: &mut MessageWriter<DamageEvent>,
-    skills: &mut PlayerSkills,  // 用於 XP 獎勵
+    skills: &mut PlayerSkills, // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -719,7 +735,7 @@ fn fire_bullet_with_offset(
     ctx: &FireContext,
     spread_offset: Vec2,
     damage_events: &mut MessageWriter<DamageEvent>,
-    skills: &mut PlayerSkills,  // 用於 XP 獎勵
+    skills: &mut PlayerSkills, // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -738,10 +754,33 @@ fn fire_bullet_with_offset(
 
     if penetration == 0 {
         // === 無穿透：使用原有的 cast_ray（效能最佳）===
-        fire_bullet_single_hit(commands, ctx, spread_dir, max_toi, filter, tracer_style, damage_events, skills, damageable_query, transform_query);
+        fire_bullet_single_hit(
+            commands,
+            ctx,
+            spread_dir,
+            max_toi,
+            filter,
+            tracer_style,
+            damage_events,
+            skills,
+            damageable_query,
+            transform_query,
+        );
     } else {
         // === 有穿透：收集射線路徑上所有命中 ===
-        fire_bullet_penetrating(commands, ctx, spread_dir, max_toi, filter, tracer_style, penetration, damage_events, skills, damageable_query, transform_query);
+        fire_bullet_penetrating(
+            commands,
+            ctx,
+            spread_dir,
+            max_toi,
+            filter,
+            tracer_style,
+            penetration,
+            damage_events,
+            skills,
+            damageable_query,
+            transform_query,
+        );
     }
 }
 
@@ -754,13 +793,14 @@ fn fire_bullet_single_hit(
     filter: QueryFilter,
     tracer_style: TracerStyle,
     damage_events: &mut MessageWriter<DamageEvent>,
-    skills: &mut PlayerSkills,  // 用於 XP 獎勵
+    skills: &mut PlayerSkills, // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
-    if let Some((hit_entity, toi)) = ctx.rapier.cast_ray(
-        ctx.origin, spread_dir, max_toi, true, filter,
-    ) {
+    if let Some((hit_entity, toi)) = ctx
+        .rapier
+        .cast_ray(ctx.origin, spread_dir, max_toi, true, filter)
+    {
         let hit_pos = ctx.origin + spread_dir * rapier_real_to_f32(toi);
         let distance = rapier_real_to_f32(toi);
 
@@ -769,7 +809,14 @@ fn fire_bullet_single_hit(
         let falloff_multiplier = ctx.weapon.stats.calculate_damage_falloff(distance);
 
         let (final_damage, is_headshot) = calculate_hit_damage(
-            ctx, hit_entity, hit_pos, distance, falloff_multiplier, 1.0, damageable_query, transform_query,
+            ctx,
+            hit_entity,
+            hit_pos,
+            distance,
+            falloff_multiplier,
+            1.0,
+            damageable_query,
+            transform_query,
         );
 
         damage_events.write(
@@ -799,7 +846,7 @@ fn fire_bullet_penetrating(
     tracer_style: TracerStyle,
     penetration: u8,
     damage_events: &mut MessageWriter<DamageEvent>,
-    skills: &mut PlayerSkills,  // 用於 XP 獎勵
+    skills: &mut PlayerSkills, // 用於 XP 獎勵
     damageable_query: &Query<Entity, (With<Damageable>, With<Transform>)>,
     transform_query: &Query<&Transform>,
 ) {
@@ -808,7 +855,11 @@ fn fire_bullet_penetrating(
     let mut hits: Vec<(Entity, f32)> = Vec::with_capacity(max_hits);
 
     ctx.rapier.intersect_ray(
-        ctx.origin, spread_dir, max_toi, true, filter,
+        ctx.origin,
+        spread_dir,
+        max_toi,
+        true,
+        filter,
         |entity, intersection| {
             hits.push((entity, rapier_real_to_f32(intersection.time_of_impact)));
             hits.len() < max_hits
@@ -825,9 +876,17 @@ fn fire_bullet_penetrating(
     hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // 子彈拖尾到最遠命中點
-    let Some(farthest_hit) = hits.last() else { return; };
+    let Some(farthest_hit) = hits.last() else {
+        return;
+    };
     let farthest_hit_pos = ctx.origin + spread_dir * farthest_hit.1;
-    spawn_bullet_tracer(commands, ctx.visuals, ctx.origin, farthest_hit_pos, tracer_style);
+    spawn_bullet_tracer(
+        commands,
+        ctx.visuals,
+        ctx.origin,
+        farthest_hit_pos,
+        tracer_style,
+    );
 
     // 對每個命中目標造成傷害，逐層衰減
     let penetration_falloff = ctx.weapon.stats.penetration_falloff;
@@ -837,8 +896,14 @@ fn fire_bullet_penetrating(
         let penetration_multiplier = penetration_falloff.powi(layer as i32);
 
         let (final_damage, is_headshot) = calculate_hit_damage(
-            ctx, hit_entity, hit_pos, distance, falloff_multiplier, penetration_multiplier,
-            damageable_query, transform_query,
+            ctx,
+            hit_entity,
+            hit_pos,
+            distance,
+            falloff_multiplier,
+            penetration_multiplier,
+            damageable_query,
+            transform_query,
         );
 
         damage_events.write(
@@ -880,7 +945,10 @@ fn calculate_hit_damage(
         }
         (damage, headshot)
     } else {
-        (ctx.weapon.stats.damage * falloff_multiplier * penetration_multiplier, false)
+        (
+            ctx.weapon.stats.damage * falloff_multiplier * penetration_multiplier,
+            false,
+        )
     }
 }
 
@@ -922,8 +990,9 @@ pub fn stealth_takedown_system(
                 takedown.damage_applied = true;
                 if let Some(target) = takedown.target {
                     if damageable_query.get(target).is_ok() {
-                        let mut event = DamageEvent::new(target, takedown.pending_damage, DamageSource::Melee)
-                            .with_position(takedown.target_position);
+                        let mut event =
+                            DamageEvent::new(target, takedown.pending_damage, DamageSource::Melee)
+                                .with_position(takedown.target_position);
                         event.force_knockback = true;
                         damage_events.write(event);
                     }

@@ -5,7 +5,10 @@
 
 use bevy::prelude::*;
 
-use super::story_data::*;
+use super::story_data::{
+    Difficulty, MissionObjective, MissionPhase, MissionRewards, ObjectiveType, StoryMission,
+    StoryMissionId, StoryMissionType,
+};
 use super::story_manager::StoryMissionDatabase;
 
 /// 支線任務 ID 起始值（避免與主線 1-99 衝突）
@@ -215,11 +218,9 @@ fn create_stray_dog_uncle() -> StoryMission {
             .with_start_dialogue(206),
     )
     .with_phase(
-        MissionPhase::new(2, StoryMissionType::Elimination, "趕走混混")
-            .with_objective(
-                MissionObjective::new(2, ObjectiveType::KillCount(2), "教訓虐狗混混")
-                    .with_count(2),
-            ),
+        MissionPhase::new(2, StoryMissionType::Elimination, "趕走混混").with_objective(
+            MissionObjective::new(2, ObjectiveType::KillCount(2), "教訓虐狗混混").with_count(2),
+        ),
     )
     .with_phase(
         MissionPhase::new(3, StoryMissionType::Dialogue, "回報大叔")
@@ -367,11 +368,7 @@ mod tests {
 
         // 6 個支線任務
         for id in 100..=105 {
-            assert!(
-                database.get(id).is_some(),
-                "支線任務 ID {} 未註冊",
-                id
-            );
+            assert!(database.get(id).is_some(), "支線任務 ID {id} 未註冊");
         }
     }
 
@@ -389,9 +386,7 @@ mod tests {
                 let dist = loc.distance(*existing);
                 assert!(
                     dist > 10.0,
-                    "任務 {} 的位置與其他任務太近 (距離: {:.1})",
-                    id,
-                    dist
+                    "任務 {id} 的位置與其他任務太近 (距離: {dist:.1})"
                 );
             }
             locations.push(loc);
@@ -405,16 +400,8 @@ mod tests {
 
         for id in 100..=105 {
             let mission = database.get(id).unwrap();
-            assert!(
-                mission.rewards.money > 0,
-                "任務 {} 沒有金錢獎勵",
-                id
-            );
-            assert!(
-                mission.rewards.respect > 0,
-                "任務 {} 沒有聲望獎勵",
-                id
-            );
+            assert!(mission.rewards.money > 0, "任務 {id} 沒有金錢獎勵");
+            assert!(mission.rewards.respect > 0, "任務 {id} 沒有聲望獎勵");
         }
     }
 
@@ -428,8 +415,7 @@ mod tests {
             let mission = database.get(id).unwrap();
             assert!(
                 mission.unlock_conditions.is_empty(),
-                "支線任務 {} 不應有前置條件",
-                id
+                "支線任務 {id} 不應有前置條件"
             );
         }
     }

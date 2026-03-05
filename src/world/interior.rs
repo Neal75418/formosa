@@ -2,14 +2,13 @@
 //!
 //! 處理玩家進入/離開室內空間的邏輯
 
-
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use super::{InteriorSpace, Door, DoorState, PlayerInteriorState, InteriorPrompt};
+use super::{Door, DoorState, InteriorPrompt, InteriorSpace, PlayerInteriorState};
+use crate::core::{InteractionState, WorldTime};
 use crate::player::Player;
 use crate::ui::{ChineseFont, NotificationQueue};
-use crate::core::{InteractionState, WorldTime};
 use crate::wanted::WantedLevel;
 
 // ============================================================================
@@ -24,8 +23,7 @@ fn is_interior_open(
 ) -> bool {
     door.interior_entity
         .and_then(|entity| interior_query.get(entity).ok())
-        .map(|interior| interior.is_open(current_hour))
-        .unwrap_or(true)
+        .is_none_or(|interior| interior.is_open(current_hour))
 }
 
 /// 決定門的提示文字
@@ -66,8 +64,12 @@ fn try_exit_interior(
     interior_query: &Query<&InteriorSpace>,
     notifications: &mut NotificationQueue,
 ) {
-    let Some(interior_entity) = interior_state.current_interior else { return };
-    let Ok(interior) = interior_query.get(interior_entity) else { return };
+    let Some(interior_entity) = interior_state.current_interior else {
+        return;
+    };
+    let Ok(interior) = interior_query.get(interior_entity) else {
+        return;
+    };
 
     notifications.info(format!("離開 {}", interior.name));
     interior_state.is_inside = false;
@@ -90,7 +92,9 @@ pub fn interior_proximity_system(
     prompt_query: Query<Entity, With<InteriorPrompt>>,
 ) {
     let Some(font) = font else { return };
-    let Ok(player_transform) = player_query.single() else { return };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     // 清除舊提示
@@ -121,8 +125,7 @@ pub fn interior_proximity_system(
                 ..default()
             },
             TextColor(Color::srgb(1.0, 1.0, 0.8)),
-            Transform::from_translation(door_pos + Vec3::Y * 2.5)
-                .with_scale(Vec3::splat(0.015)),
+            Transform::from_translation(door_pos + Vec3::Y * 2.5).with_scale(Vec3::splat(0.015)),
             InteriorPrompt,
         ));
     }
@@ -142,7 +145,9 @@ pub fn interior_enter_system(
         return;
     }
 
-    let Ok((player_transform, mut interior_state)) = player_query.single_mut() else { return };
+    let Ok((player_transform, mut interior_state)) = player_query.single_mut() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     // 如果已在室內，嘗試離開
@@ -153,7 +158,7 @@ pub fn interior_enter_system(
     }
 
     // 尋找可進入的門
-    for (door_transform, mut door) in door_query.iter_mut() {
+    for (door_transform, mut door) in &mut door_query {
         let door_pos = door_transform.translation;
         let distance_sq = player_pos.distance_squared(door_pos);
 
@@ -167,16 +172,28 @@ pub fn interior_enter_system(
             return;
         }
 
-        let Some(interior_entity) = door.interior_entity else { continue };
-        let Ok(interior) = interior_query.get(interior_entity) else { continue };
+        let Some(interior_entity) = door.interior_entity else {
+            continue;
+        };
+        let Ok(interior) = interior_query.get(interior_entity) else {
+            continue;
+        };
 
-        if try_enter_interior(&mut door, interior_entity, interior, &mut interior_state, &world_time, &mut notifications) {
+        if try_enter_interior(
+            &mut door,
+            interior_entity,
+            interior,
+            &mut interior_state,
+            &world_time,
+            &mut notifications,
+        ) {
             interaction.consume();
             return;
         }
     }
 }
 
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 /// 室內躲藏效果系統
 /// 玩家在室內時降低通緝熱度
 pub fn interior_hiding_system(
@@ -185,7 +202,9 @@ pub fn interior_hiding_system(
     interior_query: Query<&InteriorSpace>,
     mut wanted: ResMut<WantedLevel>,
 ) {
-    let Ok(interior_state) = player_query.single() else { return };
+    let Ok(interior_state) = player_query.single() else {
+        return;
+    };
 
     if !interior_state.is_inside {
         return;
@@ -206,26 +225,18 @@ pub fn interior_hiding_system(
 }
 
 /// 門動畫系統
-pub fn door_animation_system(
-    time: Res<Time>,
-    mut door_query: Query<(&mut Door, &mut Transform)>,
-) {
+pub fn door_animation_system(time: Res<Time>, mut door_query: Query<(&mut Door, &mut Transform)>) {
     let dt = time.delta_secs();
     let open_speed = 2.0;
 
-    for (mut door, mut transform) in door_query.iter_mut() {
+    for (mut door, mut transform) in &mut door_query {
         match door.state {
             DoorState::Opening => {
                 // 門打開動畫（旋轉）
                 let current = transform.rotation.to_euler(EulerRot::XYZ);
                 let target_y = std::f32::consts::FRAC_PI_2; // 90 度
                 let new_y = (current.1 + open_speed * dt).min(target_y);
-                transform.rotation = Quat::from_euler(
-                    EulerRot::XYZ,
-                    current.0,
-                    new_y,
-                    current.2,
-                );
+                transform.rotation = Quat::from_euler(EulerRot::XYZ, current.0, new_y, current.2);
                 if new_y >= target_y {
                     door.state = DoorState::Open;
                 }
@@ -234,12 +245,7 @@ pub fn door_animation_system(
                 // 門關閉動畫
                 let current = transform.rotation.to_euler(EulerRot::XYZ);
                 let new_y = (current.1 - open_speed * dt).max(0.0);
-                transform.rotation = Quat::from_euler(
-                    EulerRot::XYZ,
-                    current.0,
-                    new_y,
-                    current.2,
-                );
+                transform.rotation = Quat::from_euler(EulerRot::XYZ, current.0, new_y, current.2);
                 if new_y <= 0.0 {
                     door.state = DoorState::Closed;
                 }
@@ -274,21 +280,25 @@ pub fn spawn_convenience_store(
     });
 
     // 室內空間
-    let interior_entity = commands.spawn((
-        Transform::from_translation(position),
-        InteriorSpace::convenience_store(name, position + Vec3::new(0.0, 0.0, 3.0)),
-        Name::new(format!("Interior_{}", name)),
-    )).id();
+    let interior_entity = commands
+        .spawn((
+            Transform::from_translation(position),
+            InteriorSpace::convenience_store(name, position + Vec3::new(0.0, 0.0, 3.0)),
+            Name::new(format!("Interior_{name}")),
+        ))
+        .id();
 
     // 建築外觀
-    let _building_entity = commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(8.0, 4.0, 6.0))),
-        MeshMaterial3d(wall_material),
-        Transform::from_translation(position + Vec3::Y * 2.0),
-        Collider::cuboid(4.0, 2.0, 3.0),
-        RigidBody::Fixed,
-        Name::new(format!("Building_{}", name)),
-    )).id();
+    let _building_entity = commands
+        .spawn((
+            Mesh3d(meshes.add(Cuboid::new(8.0, 4.0, 6.0))),
+            MeshMaterial3d(wall_material),
+            Transform::from_translation(position + Vec3::Y * 2.0),
+            Collider::cuboid(4.0, 2.0, 3.0),
+            RigidBody::Fixed,
+            Name::new(format!("Building_{name}")),
+        ))
+        .id();
 
     // 門
     commands.spawn((
@@ -300,7 +310,7 @@ pub fn spawn_convenience_store(
             interact_radius: 2.5,
             ..default()
         },
-        Name::new(format!("Door_{}", name)),
+        Name::new(format!("Door_{name}")),
     ));
 
     interior_entity

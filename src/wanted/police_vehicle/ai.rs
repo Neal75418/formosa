@@ -3,19 +3,18 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::player::Player;
-use crate::core::{clamp_dot, safe_normalize};
-use crate::core::GameState;
-use crate::vehicle::{Vehicle, VehicleHealth};
 use crate::combat::{DamageEvent, DamageSource};
+use crate::core::GameState;
+use crate::core::{clamp_dot, safe_normalize};
+use crate::player::Player;
+use crate::vehicle::{Vehicle, VehicleHealth};
 use crate::wanted::WantedLevel;
 
 use super::{
-    PoliceCar, PoliceCarState, PoliceCarConfig, SirenLight,
-    PIT_MANEUVER_DISTANCE_SQ, PIT_MANEUVER_ANGLE, PIT_ABANDON_DISTANCE_SQ,
-    CHASE_SWITCH_DISTANCE_SQ, CHASE_SPEED_MULTIPLIER,
-    INTERCEPT_DISTANCE_SQ, INTERCEPT_ABANDON_DISTANCE_SQ,
-    FRONT_DOT_THRESHOLD, POLICE_CAR_COLLISION_DAMAGE,
+    PoliceCar, PoliceCarConfig, PoliceCarState, SirenLight, CHASE_SPEED_MULTIPLIER,
+    CHASE_SWITCH_DISTANCE_SQ, FRONT_DOT_THRESHOLD, INTERCEPT_ABANDON_DISTANCE_SQ,
+    INTERCEPT_DISTANCE_SQ, PIT_ABANDON_DISTANCE_SQ, PIT_MANEUVER_ANGLE, PIT_MANEUVER_DISTANCE_SQ,
+    POLICE_CAR_COLLISION_DAMAGE,
 };
 
 // ============================================================================
@@ -78,13 +77,22 @@ fn handle_chasing_state(
     let to_predicted = (predicted_pos - car_pos).normalize_or_zero();
 
     // 檢查 PIT 機動
-    if can_attempt_pit(distance_sq, police_car.pit_cooldown, wanted_stars, car_forward, to_player) {
+    if can_attempt_pit(
+        distance_sq,
+        police_car.pit_cooldown,
+        wanted_stars,
+        car_forward,
+        to_player,
+    ) {
         police_car.state = PoliceCarState::PitManeuver;
         return true;
     }
 
     // 檢查攔截
-    if distance_sq > INTERCEPT_DISTANCE_SQ && police_car.chase_timer > 5.0 && rand::random::<f32>() < 0.3 {
+    if distance_sq > INTERCEPT_DISTANCE_SQ
+        && police_car.chase_timer > 5.0
+        && rand::random::<f32>() < 0.3
+    {
         police_car.state = PoliceCarState::Intercepting;
         police_car.chase_timer = 0.0;
         return true;
@@ -193,7 +201,11 @@ pub fn police_car_ai_system(
         let to_player = player_pos - car_pos;
         let distance_sq = to_player.length_squared();
         let direction = to_player.normalize_or_zero();
-        let direction = if direction == Vec3::ZERO { car_forward } else { direction };
+        let direction = if direction == Vec3::ZERO {
+            car_forward
+        } else {
+            direction
+        };
 
         // 更新冷卻計時器
         if police_car.pit_cooldown > 0.0 {
@@ -202,7 +214,10 @@ pub fn police_car_ai_system(
 
         // 玩家不在車上時，強制切為 Responding（低速靠近，不做 PIT/攔截）
         if !game_state.player_in_vehicle
-            && !matches!(police_car.state, PoliceCarState::Disabled | PoliceCarState::Responding)
+            && !matches!(
+                police_car.state,
+                PoliceCarState::Disabled | PoliceCarState::Responding
+            )
         {
             police_car.state = PoliceCarState::Responding;
         }
@@ -210,18 +225,55 @@ pub fn police_car_ai_system(
         // 根據狀態執行行為
         match police_car.state {
             PoliceCarState::Responding => {
-                handle_responding_state(&mut police_car, &mut force, transform, direction, distance_sq, &config, dt);
+                handle_responding_state(
+                    &mut police_car,
+                    &mut force,
+                    transform,
+                    direction,
+                    distance_sq,
+                    &config,
+                    dt,
+                );
             }
             PoliceCarState::Chasing => {
-                if handle_chasing_state(&mut police_car, &mut force, transform, car_forward, to_player, distance_sq, player_vel, wanted.stars, &config, dt) {
-                    continue;
-                }
+                handle_chasing_state(
+                    &mut police_car,
+                    &mut force,
+                    transform,
+                    car_forward,
+                    to_player,
+                    distance_sq,
+                    player_vel,
+                    wanted.stars,
+                    &config,
+                    dt,
+                );
             }
             PoliceCarState::PitManeuver => {
-                handle_pit_maneuver_state(&mut police_car, &mut force, transform, car_forward, player_pos, distance_sq, &config, dt);
+                handle_pit_maneuver_state(
+                    &mut police_car,
+                    &mut force,
+                    transform,
+                    car_forward,
+                    player_pos,
+                    distance_sq,
+                    &config,
+                    dt,
+                );
             }
             PoliceCarState::Intercepting => {
-                handle_intercepting_state(&mut police_car, &mut force, transform, car_forward, to_player, player_pos, player_vel, distance_sq, &config, dt);
+                handle_intercepting_state(
+                    &mut police_car,
+                    &mut force,
+                    transform,
+                    car_forward,
+                    to_player,
+                    player_pos,
+                    player_vel,
+                    distance_sq,
+                    &config,
+                    dt,
+                );
             }
             PoliceCarState::Disabled => {
                 force.force = Vec3::ZERO;
@@ -292,7 +344,9 @@ pub fn police_car_collision_system(
         };
 
         // 獲取警車資料
-        let Ok((transform, mut police_car, mut health, police_vehicle)) = police_car_query.get_mut(police_entity) else {
+        let Ok((transform, mut police_car, mut health, police_vehicle)) =
+            police_car_query.get_mut(police_entity)
+        else {
             continue;
         };
 
@@ -304,7 +358,8 @@ pub fn police_car_collision_system(
         police_car.last_collision_time = elapsed;
 
         // 計算相對速度（兩車速度差）
-        let relative_speed = (police_vehicle.current_speed - player_vehicle_data.current_speed).abs();
+        let relative_speed =
+            (police_vehicle.current_speed - player_vehicle_data.current_speed).abs();
         // 速度因子：低速碰撞傷害減少，高速碰撞傷害增加
         let speed_factor = (relative_speed / COLLISION_REFERENCE_SPEED).clamp(0.3, 2.0);
 
@@ -327,8 +382,10 @@ pub fn police_car_collision_system(
             force_knockback: false,
         });
 
-        info!("警車碰撞！相對速度: {:.1} m/s, 玩家傷害: {:.1}, 警車傷害: {:.1}, 警車血量: {:.0}",
-              relative_speed, player_damage, police_damage, health.current);
+        info!(
+            "警車碰撞！相對速度: {:.1} m/s, 玩家傷害: {:.1}, 警車傷害: {:.1}, 警車血量: {:.0}",
+            relative_speed, player_damage, police_damage, health.current
+        );
     }
 }
 

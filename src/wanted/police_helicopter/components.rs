@@ -32,10 +32,13 @@ pub const HELICOPTER_ATTACK_RANGE: f32 = 50.0;
 pub const HELICOPTER_ATTACK_RANGE_SQ: f32 = HELICOPTER_ATTACK_RANGE * HELICOPTER_ATTACK_RANGE;
 pub(super) const HELICOPTER_ATTACK_RANGE_CLOSE: f32 = HELICOPTER_ATTACK_RANGE * 0.8;
 pub(super) const HELICOPTER_ATTACK_RANGE_FAR: f32 = HELICOPTER_ATTACK_RANGE * 1.2;
-pub(super) const HELICOPTER_ATTACK_RANGE_CLOSE_SQ: f32 = HELICOPTER_ATTACK_RANGE_CLOSE * HELICOPTER_ATTACK_RANGE_CLOSE;
-pub(super) const HELICOPTER_ATTACK_RANGE_FAR_SQ: f32 = HELICOPTER_ATTACK_RANGE_FAR * HELICOPTER_ATTACK_RANGE_FAR;
+pub(super) const HELICOPTER_ATTACK_RANGE_CLOSE_SQ: f32 =
+    HELICOPTER_ATTACK_RANGE_CLOSE * HELICOPTER_ATTACK_RANGE_CLOSE;
+pub(super) const HELICOPTER_ATTACK_RANGE_FAR_SQ: f32 =
+    HELICOPTER_ATTACK_RANGE_FAR * HELICOPTER_ATTACK_RANGE_FAR;
 pub(super) const HELICOPTER_MOVE_THRESHOLD: f32 = 10.0;
-pub(super) const HELICOPTER_MOVE_THRESHOLD_SQ: f32 = HELICOPTER_MOVE_THRESHOLD * HELICOPTER_MOVE_THRESHOLD;
+pub(super) const HELICOPTER_MOVE_THRESHOLD_SQ: f32 =
+    HELICOPTER_MOVE_THRESHOLD * HELICOPTER_MOVE_THRESHOLD;
 /// 直升機射擊頻率（每秒發射數）
 pub const HELICOPTER_FIRE_RATE: f32 = 8.0;
 /// 直升機子彈傷害
@@ -69,12 +72,12 @@ pub(super) const PLAYER_ESCAPE_TIME: f32 = 15.0;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum HelicopterState {
     #[default]
-    Approaching,  // 飛向玩家
-    Hovering,     // 懸停觀察
-    Pursuing,     // 追蹤移動中的玩家
-    Attacking,    // 射擊玩家
-    Evading,      // 規避傷害
-    Crashing,     // 被擊落墜毀
+    Approaching, // 飛向玩家
+    Hovering,  // 懸停觀察
+    Pursuing,  // 追蹤移動中的玩家
+    Attacking, // 射擊玩家
+    Evading,   // 規避傷害
+    Crashing,  // 被擊落墜毀
 }
 
 /// 警用直升機組件

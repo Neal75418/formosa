@@ -65,36 +65,32 @@ pub fn update_sky_color(
 
 /// 根據時間計算基礎天空顏色
 fn calculate_sky_color_by_time(hour: f32) -> Color {
-    match () {
-        // 深夜 (0-5)：深藍色夜空
-        _ if (0.0..5.0).contains(&hour) => Color::srgb(0.02, 0.02, 0.08),
-        // 日出 (5-7)：橙紅漸變
-        _ if (5.0..7.0).contains(&hour) => {
-            let t = (hour - 5.0) / 2.0;
-            Color::srgb(0.02 + 0.5 * t, 0.02 + 0.2 * t, 0.08 + 0.2 * t)
-        }
-        // 清晨 (7-9)：淡藍色
-        _ if (7.0..9.0).contains(&hour) => {
-            let t = (hour - 7.0) / 2.0;
-            Color::srgb(0.52 - 0.17 * t, 0.22 + 0.38 * t, 0.28 + 0.52 * t)
-        }
-        // 白天 (9-16)：天藍色
-        _ if (9.0..16.0).contains(&hour) => Color::srgb(0.35, 0.60, 0.80),
-        // 黃昏 (16-18)：金橙色
-        _ if (16.0..18.0).contains(&hour) => {
-            let t = (hour - 16.0) / 2.0;
-            Color::srgb(0.35 + 0.45 * t, 0.60 - 0.25 * t, 0.80 - 0.45 * t)
-        }
-        // 傍晚 (18-20)：深紫紅色
-        _ if (18.0..20.0).contains(&hour) => {
-            let t = (hour - 18.0) / 2.0;
-            Color::srgb(0.80 - 0.55 * t, 0.35 - 0.25 * t, 0.35 - 0.15 * t)
-        }
-        // 夜晚 (20-24)：逐漸變深
-        _ => {
-            let t = (hour - 20.0) / 4.0;
-            Color::srgb(0.25 - 0.23 * t, 0.10 - 0.08 * t, 0.20 - 0.12 * t)
-        }
+    // 深夜 (0-5)：深藍色夜空
+    if (0.0..5.0).contains(&hour) {
+        Color::srgb(0.02, 0.02, 0.08)
+    // 日出 (5-7)：橙紅漸變
+    } else if (5.0..7.0).contains(&hour) {
+        let t = (hour - 5.0) / 2.0;
+        Color::srgb(0.02 + 0.5 * t, 0.02 + 0.2 * t, 0.08 + 0.2 * t)
+    // 清晨 (7-9)：淡藍色
+    } else if (7.0..9.0).contains(&hour) {
+        let t = (hour - 7.0) / 2.0;
+        Color::srgb(0.52 - 0.17 * t, 0.22 + 0.38 * t, 0.28 + 0.52 * t)
+    // 白天 (9-16)：天藍色
+    } else if (9.0..16.0).contains(&hour) {
+        Color::srgb(0.35, 0.60, 0.80)
+    // 黃昏 (16-18)：金橙色
+    } else if (16.0..18.0).contains(&hour) {
+        let t = (hour - 16.0) / 2.0;
+        Color::srgb(0.35 + 0.45 * t, 0.60 - 0.25 * t, 0.80 - 0.45 * t)
+    // 傍晚 (18-20)：深紫紅色
+    } else if (18.0..20.0).contains(&hour) {
+        let t = (hour - 18.0) / 2.0;
+        Color::srgb(0.80 - 0.55 * t, 0.35 - 0.25 * t, 0.35 - 0.15 * t)
+    // 夜晚 (20-24)：逐漸變深
+    } else {
+        let t = (hour - 20.0) / 4.0;
+        Color::srgb(0.25 - 0.23 * t, 0.10 - 0.08 * t, 0.20 - 0.12 * t)
     }
 }
 
@@ -242,8 +238,8 @@ pub fn spawn_rain_drops(
             Name::new("RainSystem"),
         ))
         .with_children(|parent| {
-            let mut rng = rand::rng();
             use rand::Rng;
+            let mut rng = rand::rng();
             for _ in 0..300 {
                 let x = rng.random::<f32>() * 200.0 - 100.0;
                 let y = rng.random::<f32>() * 50.0 + 10.0;
@@ -273,15 +269,16 @@ pub fn update_rain_drops(
     weather: Res<WeatherState>,
     mut rain_query: Query<(&mut Transform, &mut RainDrop)>,
 ) {
+    use rand::Rng;
+
     if !weather.weather_type.has_rain() {
         return;
     }
 
     let dt = time.delta_secs();
     let mut rng = rand::rng();
-    use rand::Rng;
 
-    for (mut transform, mut drop) in rain_query.iter_mut() {
+    for (mut transform, mut drop) in &mut rain_query {
         // 更新位置
         transform.translation += drop.velocity * dt;
 
@@ -420,8 +417,8 @@ pub fn spawn_rain_puddles(
             Name::new("PuddleSystem"),
         ))
         .with_children(|parent| {
-            let mut rng = rand::rng();
             use rand::Rng;
+            let mut rng = rand::rng();
 
             // 在徒步區和道路上生成水坑
             // 徒步區: X ∈ [-30, 30], Z ∈ [-50, 20]
@@ -509,7 +506,7 @@ pub fn update_rain_puddles(
     let is_raining = weather.weather_type.has_rain();
     let dt = time.delta_secs();
 
-    for (entity, mut puddle, mut transform) in puddle_query.iter_mut() {
+    for (entity, mut puddle, mut transform) in &mut puddle_query {
         if is_raining {
             puddle.lifetime = 0.0;
         } else if handle_puddle_drying(&mut puddle, &mut transform, dt) {
@@ -532,6 +529,8 @@ pub fn update_lightning(
     mut lightning: ResMut<LightningState>,
     mut ambient: ResMut<AmbientLight>,
 ) {
+    use rand::Rng;
+
     // 只在雨天/暴風雨有閃電
     if !weather.weather_type.has_rain() {
         lightning.is_flashing = false;
@@ -550,7 +549,6 @@ pub fn update_lightning(
 
         // 計算下次閃電時間
         let mut rng = rand::rng();
-        use rand::Rng;
         let interval = lightning.min_interval
             + rng.random::<f32>() * (lightning.max_interval - lightning.min_interval);
         lightning.next_flash_time = current_time + interval;
@@ -585,7 +583,7 @@ pub fn lightning_visual_effect(
     }
 
     // 閃電時太陽光瞬間增強
-    for mut sun in sun_query.iter_mut() {
+    for mut sun in &mut sun_query {
         sun.illuminance += lightning.flash_intensity * 30000.0;
     }
 }

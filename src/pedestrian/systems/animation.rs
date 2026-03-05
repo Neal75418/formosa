@@ -69,7 +69,7 @@ pub fn pedestrian_walking_animation_system(
     let dt = time.delta_secs();
 
     // 更新每個行人的動畫相位
-    for (state, mut anim) in ped_query.iter_mut() {
+    for (state, mut anim) in &mut ped_query {
         let target_speed = get_animation_target_speed(state.state);
 
         // 平滑過渡動畫速度
@@ -83,7 +83,7 @@ pub fn pedestrian_walking_animation_system(
     }
 
     // 更新腿部擺動
-    for (parent, leg, mut transform) in leg_query.iter_mut() {
+    for (parent, leg, mut transform) in &mut leg_query {
         let Ok((_, anim)) = ped_query.get(parent.get()) else {
             continue;
         };
@@ -91,7 +91,7 @@ pub fn pedestrian_walking_animation_system(
     }
 
     // 更新手臂擺動（與腿相反）
-    for (parent, arm, mut transform) in arm_query.iter_mut() {
+    for (parent, arm, mut transform) in &mut arm_query {
         let Ok((_, anim)) = ped_query.get(parent.get()) else {
             continue;
         };
@@ -106,7 +106,7 @@ pub fn behavior_animation_system(
 ) {
     let elapsed = time.elapsed_secs();
 
-    for (behavior, mut transform, mut anim) in ped_query.iter_mut() {
+    for (behavior, mut transform, mut anim) in &mut ped_query {
         match behavior.behavior {
             BehaviorType::PhoneWatching => {
                 // 看手機：微微低頭，偶爾抬頭

@@ -9,11 +9,11 @@ use super::components::{
     DeliveryStreakDisplay,
 };
 use super::constants::{
-    ADDRESS_TEXT_COLOR, DELIVERY_APP_BG, DELIVERY_APP_BORDER, DELIVERY_APP_GLOW,
+    icon_box_node, ADDRESS_TEXT_COLOR, DELIVERY_APP_BG, DELIVERY_APP_BORDER, DELIVERY_APP_GLOW,
     DELIVERY_APP_INNER_BORDER, DELIVERY_APP_SUBTITLE, DELIVERY_APP_TITLE, KEY_ICON_BG,
     KEY_ICON_BORDER, KEY_TEXT_COLOR, ORDER_CARD_BG, ORDER_CARD_BORDER, ORDER_CARD_GLOW,
     PANEL_BORDER_GRAY, RATING_STAR_COLOR, RESTAURANT_NAME_COLOR, REWARD_TEXT_COLOR, STREAK_COLOR,
-    TEXT_GRAY_90, TEXT_MUTED, TEXT_SECONDARY, icon_box_node,
+    TEXT_GRAY_90, TEXT_MUTED, TEXT_SECONDARY,
 };
 use crate::mission::MissionManager;
 use crate::ui::UiState;
@@ -362,7 +362,7 @@ fn update_rating_display(
     } else {
         5.0 // 新手預設滿星
     };
-    **text = format!("[*] {:.1}", avg);
+    **text = format!("[*] {avg:.1}");
 }
 
 /// 更新連擊顯示
@@ -377,7 +377,7 @@ fn update_streak_display(
         return;
     };
     **text = if streak > 0 {
-        format!("x{} 連擊", streak)
+        format!("x{streak} 連擊")
     } else {
         "x0 連擊".to_string()
     };
@@ -533,12 +533,8 @@ fn spawn_order_title_row(
     delivery_info: Option<&crate::mission::DeliveryOrder>,
     font: &Handle<Font>,
 ) {
-    let restaurant_name = delivery_info
-        .map(|d| d.restaurant_name.as_str())
-        .unwrap_or("未知餐廳");
-    let food_item = delivery_info
-        .map(|d| d.food_item.as_str())
-        .unwrap_or("外送品項");
+    let restaurant_name = delivery_info.map_or("未知餐廳", |d| d.restaurant_name.as_str());
+    let food_item = delivery_info.map_or("外送品項", |d| d.food_item.as_str());
 
     card.spawn((Node {
         flex_direction: FlexDirection::Row,
@@ -595,9 +591,7 @@ fn spawn_order_address_row(
     delivery_info: Option<&crate::mission::DeliveryOrder>,
     font: &Handle<Font>,
 ) {
-    let address = delivery_info
-        .map(|d| d.customer_address.as_str())
-        .unwrap_or("未知地址");
+    let address = delivery_info.map_or("未知地址", |d| d.customer_address.as_str());
 
     card.spawn((Node {
         flex_direction: FlexDirection::Row,
@@ -633,7 +627,7 @@ fn spawn_order_info_row(
     delivery_info: Option<&crate::mission::DeliveryOrder>,
     font: &Handle<Font>,
 ) {
-    let distance = delivery_info.map(|d| d.distance).unwrap_or(0.0);
+    let distance = delivery_info.map_or(0.0, |d| d.distance);
     let time_limit = order.time_limit.unwrap_or(0.0);
 
     card.spawn((
@@ -685,7 +679,7 @@ fn spawn_order_info_row(
             },))
             .with_children(|meta| {
                 meta.spawn((
-                    Text::new(format!("🗺 {:.0}m", distance)),
+                    Text::new(format!("🗺 {distance:.0}m")),
                     TextFont {
                         font_size: 11.0,
                         font: font.clone(),
@@ -694,7 +688,7 @@ fn spawn_order_info_row(
                     TextColor(TEXT_SECONDARY),
                 ));
                 meta.spawn((
-                    Text::new(format!("⏱ {:.0}s", time_limit)),
+                    Text::new(format!("⏱ {time_limit:.0}s")),
                     TextFont {
                         font_size: 11.0,
                         font: font.clone(),

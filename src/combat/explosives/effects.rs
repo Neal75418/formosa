@@ -46,8 +46,7 @@ pub(super) fn spawn_smoke_particles(
         // 每個粒子創建獨立材質
         let particle_material = base_material
             .clone()
-            .map(|m| materials.add(m))
-            .unwrap_or_else(|| visuals.smoke_material.clone());
+            .map_or_else(|| visuals.smoke_material.clone(), |m| materials.add(m));
 
         commands.spawn((
             Mesh3d(visuals.smoke_mesh.clone()),
@@ -86,10 +85,10 @@ pub(super) fn spawn_fire_particles(
         let lifetime = 0.5 + rng.random::<f32>() * 0.5; // 火焰粒子短命
 
         // 每個粒子創建獨立材質
-        let particle_material = base_material
-            .clone()
-            .map(|m| materials.add(m))
-            .unwrap_or_else(|| visuals.fire_particle_material.clone());
+        let particle_material = base_material.clone().map_or_else(
+            || visuals.fire_particle_material.clone(),
+            |m| materials.add(m),
+        );
 
         commands.spawn((
             Mesh3d(visuals.fire_particle_mesh.clone()),

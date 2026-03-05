@@ -115,10 +115,18 @@ impl ExplosiveType {
         }
     }
 
-    pub fn name(&self) -> &'static str { self.stats().name }
-    pub fn throw_force(&self) -> f32 { self.stats().throw_force }
-    pub fn explosion_radius(&self) -> f32 { self.stats().explosion_radius }
-    pub fn damage(&self) -> f32 { self.stats().damage }
+    pub fn name(&self) -> &'static str {
+        self.stats().name
+    }
+    pub fn throw_force(&self) -> f32 {
+        self.stats().throw_force
+    }
+    pub fn explosion_radius(&self) -> f32 {
+        self.stats().explosion_radius
+    }
+    pub fn damage(&self) -> f32 {
+        self.stats().damage
+    }
 }
 
 // ============================================================================
@@ -127,6 +135,7 @@ impl ExplosiveType {
 
 /// 爆炸物組件
 #[derive(Component)]
+#[allow(clippy::struct_field_names)]
 pub struct Explosive {
     /// 爆炸物類型
     pub explosive_type: ExplosiveType,
@@ -394,14 +403,11 @@ impl ExplosiveInventory {
             (ExplosiveType::StickyBomb, self.sticky_bombs),
         ];
 
-        let current_idx = self
-            .selected
-            .map(|s| match s {
-                ExplosiveType::Grenade => 0,
-                ExplosiveType::Molotov => 1,
-                ExplosiveType::StickyBomb | ExplosiveType::Rocket => 2,
-            })
-            .unwrap_or(0);
+        let current_idx = self.selected.map_or(0, |s| match s {
+            ExplosiveType::Grenade => 0,
+            ExplosiveType::Molotov => 1,
+            ExplosiveType::StickyBomb | ExplosiveType::Rocket => 2,
+        });
 
         // 找下一個有庫存的類型
         for i in 1..=3 {

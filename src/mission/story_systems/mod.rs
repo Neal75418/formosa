@@ -7,17 +7,15 @@
 //! - `objective_tracking` - 目標追蹤、階段切換、失敗檢查
 //! - `mission_markers` - 任務觸發點視覺效果
 
-mod trigger_handler;
-mod objective_tracking;
 mod mission_markers;
+mod objective_tracking;
+mod trigger_handler;
 
 use bevy::prelude::*;
 
-use super::story_manager::*;
+use super::story_manager::{StoryMissionDatabase, StoryMissionEvent, StoryMissionManager};
 use super::story_manager_data::create_sample_missions;
-use super::trigger::{
-    trigger_system, ObjectiveMarker,
-};
+use super::trigger::{trigger_system, ObjectiveMarker};
 use crate::core::InteractionSet;
 
 pub use mission_markers::{
@@ -30,8 +28,7 @@ pub struct StoryMissionPlugin;
 
 impl Plugin for StoryMissionPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .init_resource::<StoryMissionManager>()
+        app.init_resource::<StoryMissionManager>()
             .init_resource::<super::economy::RespectManager>()
             .init_resource::<super::relationship::RelationshipManager>()
             .init_resource::<super::unlocks::UnlockManager>()
@@ -57,8 +54,10 @@ impl Plugin for StoryMissionPlugin {
                         .after(trigger_system),
                     trigger_handler::mission_npc_interaction_system,
                     objective_tracking::mission_objective_tracking_system,
-                    objective_tracking::mission_phase_system.after(objective_tracking::mission_objective_tracking_system),
-                    objective_tracking::mission_fail_check_system.after(objective_tracking::mission_phase_system),
+                    objective_tracking::mission_phase_system
+                        .after(objective_tracking::mission_objective_tracking_system),
+                    objective_tracking::mission_fail_check_system
+                        .after(objective_tracking::mission_phase_system),
                     mission_event_handler,
                     objective_tracking::checkpoint_retry_system,
                 )
@@ -91,7 +90,10 @@ fn setup_story_missions(
         manager.unlock_mission(id);
     }
 
-    info!("任務系統初始化完成，共 {} 個任務（含支線）", database.total_count());
+    info!(
+        "任務系統初始化完成，共 {} 個任務（含支線）",
+        database.total_count()
+    );
 }
 
 fn mission_event_handler(
@@ -107,7 +109,9 @@ fn mission_event_handler(
         match event {
             StoryMissionEvent::Started(mission_id) => {
                 if let Some(mission) = database.get(*mission_id) {
-                    if let Err(e) = manager.start_mission(mission, &wallet, &respect, &unlocks, &world_time) {
+                    if let Err(e) =
+                        manager.start_mission(mission, &wallet, &respect, &unlocks, &world_time)
+                    {
                         warn!("無法開始任務 {}: {}", mission_id, e);
                     } else {
                         info!("📋 任務開始: {} - {}", mission_id, mission.title);

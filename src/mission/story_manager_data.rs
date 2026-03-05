@@ -7,8 +7,11 @@
 
 use bevy::prelude::*;
 
-use super::story_data::*;
-use super::story_manager::*;
+use super::story_data::{
+    Difficulty, FailCondition, MissionObjective, MissionPhase, MissionRewards, ObjectiveType,
+    StoryMission, StoryMissionType,
+};
+use super::story_manager::StoryMissionDatabase;
 use crate::combat::WeaponType;
 
 // ============================================================================
@@ -16,6 +19,7 @@ use crate::combat::WeaponType;
 // ============================================================================
 
 /// 創建範例任務（用於測試）
+#[allow(clippy::too_many_lines)]
 pub fn create_sample_missions(database: &mut StoryMissionDatabase) {
     // 第一章第一個任務：對話任務
     let mission1 = StoryMission::new(1, "初來乍到", "在酒吧與神秘人交談，了解這座島嶼的情況")
@@ -226,6 +230,7 @@ mod tests {
     use crate::core::WorldTime;
     use crate::economy::PlayerWallet;
     use crate::mission::economy::RespectManager;
+    use crate::mission::story_manager::{CheckpointError, StoryMissionManager};
     use crate::mission::unlocks::UnlockManager;
 
     fn setup_test_env() -> (StoryMissionManager, StoryMissionDatabase) {
@@ -244,7 +249,9 @@ mod tests {
         let respect = RespectManager::default();
         let unlocks = UnlockManager::default();
 
-        manager.start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default()).unwrap();
+        manager
+            .start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default())
+            .unwrap();
         manager.create_checkpoint(Vec3::new(10.0, 0.0, 20.0), 1);
 
         let checkpoint = manager.load_checkpoint().expect("應有檢查點");
@@ -261,7 +268,9 @@ mod tests {
         let respect = RespectManager::default();
         let unlocks = UnlockManager::default();
 
-        manager.start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default()).unwrap();
+        manager
+            .start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default())
+            .unwrap();
         manager.create_checkpoint(Vec3::ZERO, 0);
         assert!(manager.load_checkpoint().is_some());
 
@@ -277,7 +286,9 @@ mod tests {
         let respect = RespectManager::default();
         let unlocks = UnlockManager::default();
 
-        manager.start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default()).unwrap();
+        manager
+            .start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default())
+            .unwrap();
         manager.create_checkpoint(Vec3::new(50.0, 0.0, 50.0), 1);
 
         // 模擬失敗
@@ -302,7 +313,9 @@ mod tests {
         let respect = RespectManager::default();
         let unlocks = UnlockManager::default();
 
-        manager.start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default()).unwrap();
+        manager
+            .start_mission(mission, &wallet, &respect, &unlocks, &WorldTime::default())
+            .unwrap();
         manager.create_checkpoint(Vec3::ZERO, 0);
 
         let result = manager.validate_and_load_checkpoint(&database);

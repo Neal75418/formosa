@@ -117,8 +117,7 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     pub fn new(cell_size: f32) -> Self {
         assert!(
             cell_size > 0.0,
-            "cell_size must be positive, got {}",
-            cell_size
+            "cell_size must be positive, got {cell_size}",
         );
         Self {
             cell_size,
@@ -136,8 +135,7 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
     pub fn with_capacity(cell_size: f32, capacity: usize) -> Self {
         assert!(
             cell_size > 0.0,
-            "cell_size must be positive, got {}",
-            cell_size
+            "cell_size must be positive, got {cell_size}",
         );
         Self {
             cell_size,
@@ -305,7 +303,7 @@ impl<T: Clone + Copy + PartialEq + Eq + std::hash::Hash> SpatialHashGrid<T> {
 
     /// 取得網格內的實體數量
     pub fn len(&self) -> usize {
-        self.cells.values().map(|v| v.len()).sum()
+        self.cells.values().map(Vec::len).sum()
     }
 
     /// 檢查是否為空

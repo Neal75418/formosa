@@ -6,6 +6,7 @@ use super::components::{
     FullMapContainer, FullMapPlayerMarker, MinimapContainer, MinimapPlayerGlow,
     MinimapPlayerMarker, MinimapScanLine,
 };
+#[allow(clippy::wildcard_imports)]
 use super::constants::*;
 use super::minimap::spawn_map_layer;
 use super::systems::{spawn_compass_marker, spawn_full_screen_overlay};
@@ -187,6 +188,7 @@ fn spawn_fullmap_player_marker(map: &mut ChildSpawnerCommands) {
 }
 
 /// 生成大地圖網格線
+#[allow(clippy::cast_precision_loss)]
 fn spawn_fullmap_grid_lines(map: &mut ChildSpawnerCommands) {
     for i in 0..9 {
         map.spawn((
@@ -337,12 +339,7 @@ fn spawn_minimap_decorations(parent: &mut ChildSpawnerCommands, font: &Handle<Fo
                 position_type: PositionType::Absolute,
                 top: Val::Px(4.0),
                 left: Val::Px(4.0),
-                padding: UiRect::new(
-                    Val::Px(6.0),
-                    Val::Px(6.0),
-                    Val::Px(2.0),
-                    Val::Px(2.0),
-                ),
+                padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(2.0), Val::Px(2.0)),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
@@ -363,6 +360,7 @@ fn spawn_minimap_decorations(parent: &mut ChildSpawnerCommands, font: &Handle<Fo
 }
 
 /// 生成小地圖掃描線效果（模擬雷達感）
+#[allow(clippy::cast_precision_loss)]
 fn spawn_minimap_scan_effects(parent: &mut ChildSpawnerCommands) {
     for i in 0..6 {
         parent.spawn((
@@ -383,6 +381,7 @@ fn spawn_minimap_scan_effects(parent: &mut ChildSpawnerCommands) {
 // 分區設置函數
 // ============================================================================
 /// 設置右上角小地圖（GTA 風格多層邊框）
+#[allow(clippy::too_many_lines)]
 pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
     // 外層發光框
     commands
@@ -473,10 +472,26 @@ pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
 
                         // === 方位標示（帶圓角背景）===
                         for (label, color, position) in [
-                            ("N", COMPASS_NORTH, (Val::Px(6.0), Val::Auto, Val::Px(140.0), Val::Auto)),
-                            ("S", Color::WHITE, (Val::Auto, Val::Px(6.0), Val::Px(140.0), Val::Auto)),
-                            ("E", Color::WHITE, (Val::Px(140.0), Val::Auto, Val::Auto, Val::Px(6.0))),
-                            ("W", Color::WHITE, (Val::Px(140.0), Val::Auto, Val::Px(6.0), Val::Auto)),
+                            (
+                                "N",
+                                COMPASS_NORTH,
+                                (Val::Px(6.0), Val::Auto, Val::Px(140.0), Val::Auto),
+                            ),
+                            (
+                                "S",
+                                Color::WHITE,
+                                (Val::Auto, Val::Px(6.0), Val::Px(140.0), Val::Auto),
+                            ),
+                            (
+                                "E",
+                                Color::WHITE,
+                                (Val::Px(140.0), Val::Auto, Val::Auto, Val::Px(6.0)),
+                            ),
+                            (
+                                "W",
+                                Color::WHITE,
+                                (Val::Px(140.0), Val::Auto, Val::Px(6.0), Val::Auto),
+                            ),
                         ] {
                             spawn_compass_marker(parent, label, font, 13.0, color, 20.0, position);
                         }
@@ -489,6 +504,7 @@ pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
 }
 
 /// 設置大地圖（GTA 風格，初始隱藏）
+#[allow(clippy::too_many_lines)]
 pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
     spawn_full_screen_overlay(
         commands,
@@ -600,10 +616,26 @@ pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
 
                             // === 方位標示（帶圓角背景）===
                             for (label, color, position) in [
-                                ("N", COMPASS_NORTH, (Val::Px(15.0), Val::Auto, Val::Px(582.0), Val::Auto)),
-                                ("S", Color::WHITE, (Val::Auto, Val::Px(15.0), Val::Px(582.0), Val::Auto)),
-                                ("E", Color::WHITE, (Val::Px(382.0), Val::Auto, Val::Auto, Val::Px(15.0))),
-                                ("W", Color::WHITE, (Val::Px(382.0), Val::Auto, Val::Px(15.0), Val::Auto)),
+                                (
+                                    "N",
+                                    COMPASS_NORTH,
+                                    (Val::Px(15.0), Val::Auto, Val::Px(582.0), Val::Auto),
+                                ),
+                                (
+                                    "S",
+                                    Color::WHITE,
+                                    (Val::Auto, Val::Px(15.0), Val::Px(582.0), Val::Auto),
+                                ),
+                                (
+                                    "E",
+                                    Color::WHITE,
+                                    (Val::Px(382.0), Val::Auto, Val::Auto, Val::Px(15.0)),
+                                ),
+                                (
+                                    "W",
+                                    Color::WHITE,
+                                    (Val::Px(382.0), Val::Auto, Val::Px(15.0), Val::Auto),
+                                ),
                             ] {
                                 spawn_compass_marker(map, label, font, 22.0, color, 36.0, position);
                             }

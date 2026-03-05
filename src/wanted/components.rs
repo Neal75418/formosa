@@ -32,6 +32,7 @@ pub struct WantedLevel {
 
 impl WantedLevel {
     /// 根據熱度計算星級
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn calculate_stars(&self) -> u8 {
         match self.heat as u32 {
             0..=19 => 0,
@@ -58,7 +59,6 @@ impl WantedLevel {
     /// 根據星級獲取目標警察數量
     pub fn target_police_count(&self) -> u32 {
         match self.stars {
-            0 => 0,
             1 => 2,
             2 => 4,
             3 => 6,
@@ -75,8 +75,8 @@ impl WantedLevel {
             1 => 10.0,
             2 => 15.0,
             3 => 20.0,
-            4 => 40.0,  // 提高：4星應該更難消退
-            5 => 60.0,  // 提高：5星需要很長時間
+            4 => 40.0, // 提高：4星應該更難消退
+            5 => 60.0, // 提高：5星需要很長時間
             _ => 5.0,
         }
     }
@@ -130,8 +130,8 @@ impl Default for PoliceConfig {
             // 戰鬥配置
             damage: 15.0,
             attack_cooldown: 1.5,
-            base_hit_chance: 0.28,        // 降低：避免 6 警察秒殺玩家
-            distance_hit_penalty: 0.2,    // 降低：讓距離衰減更平滑
+            base_hit_chance: 0.28,     // 降低：避免 6 警察秒殺玩家
+            distance_hit_penalty: 0.2, // 降低：讓距離衰減更平滑
         }
     }
 }
@@ -254,11 +254,12 @@ pub struct WantedStar {
 
 impl WantedStar {
     /// 建立新實例
+    #[allow(clippy::cast_precision_loss)]
     pub fn new(index: u8) -> Self {
         Self {
             index,
             flash_timer: 0.0,
-            scale_phase: index as f32 * 0.5,  // 錯開相位
+            scale_phase: f32::from(index) * 0.5, // 錯開相位
             is_gaining: false,
             gain_progress: 1.0,
         }
@@ -266,7 +267,7 @@ impl WantedStar {
 
     /// 觸發獲得動畫
     pub fn trigger_gain(&mut self) {
-        self.flash_timer = 0.5;  // 0.5 秒閃爍
+        self.flash_timer = 0.5; // 0.5 秒閃爍
         self.is_gaining = true;
         self.gain_progress = 0.0;
     }

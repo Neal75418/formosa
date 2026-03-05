@@ -6,12 +6,12 @@ use bevy::prelude::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum AiState {
     #[default]
-    Idle,       // 閒置：站在原地
-    Patrol,     // 巡邏：沿路徑移動
-    Alert,      // 警戒：聽到聲音，搜索中
-    Chase,      // 追逐：看到目標，追趕中
-    Attack,     // 攻擊：在攻擊範圍內，開火
-    Flee,       // 逃跑：血量過低
+    Idle, // 閒置：站在原地
+    Patrol,      // 巡邏：沿路徑移動
+    Alert,       // 警戒：聽到聲音，搜索中
+    Chase,       // 追逐：看到目標，追趕中
+    Attack,      // 攻擊：在攻擊範圍內，開火
+    Flee,        // 逃跑：血量過低
     TakingCover, // 躲掩體：血量低時尋找掩體
 }
 
@@ -24,19 +24,22 @@ impl AiState {
         matches!(
             (self, target),
             // Idle 可以進入巡邏、警戒，或直接看到目標時追逐/逃跑
-            (AiState::Idle, AiState::Patrol | AiState::Alert | AiState::Chase | AiState::Flee)
+            (AiState::Idle,
+                AiState::Patrol | AiState::Alert | AiState::Chase | AiState::Flee) |
             // Patrol 可以回到閒置、進入警戒，或直接看到目標時追逐/逃跑
-            | (AiState::Patrol, AiState::Idle | AiState::Alert | AiState::Chase | AiState::Flee)
+            (AiState::Patrol,
+                AiState::Idle | AiState::Alert | AiState::Chase | AiState::Flee) |
             // Alert 是中樞狀態，可以轉換到大部分狀態
-            | (AiState::Alert, AiState::Chase | AiState::Attack | AiState::Flee | AiState::Idle | AiState::Patrol)
-            // Chase 可以進入攻擊、回到警戒或開始逃跑
-            | (AiState::Chase, AiState::Attack | AiState::Alert | AiState::Flee)
+            (AiState::Alert,
+                AiState::Chase | AiState::Attack | AiState::Flee | AiState::Idle | AiState::Patrol) |
+            // Chase/TakingCover 可以進入攻擊、警戒或逃跑
+            (AiState::Chase | AiState::TakingCover,
+                AiState::Attack | AiState::Alert | AiState::Flee) |
             // Attack 可以追逐、警戒、逃跑或躲掩體
-            | (AiState::Attack, AiState::Chase | AiState::Alert | AiState::Flee | AiState::TakingCover)
+            (AiState::Attack,
+                AiState::Chase | AiState::Alert | AiState::Flee | AiState::TakingCover) |
             // Flee 可以回到閒置或警戒（脫離威脅後）
-            | (AiState::Flee, AiState::Idle | AiState::Alert)
-            // TakingCover 可以回到警戒、攻擊或逃跑
-            | (AiState::TakingCover, AiState::Alert | AiState::Attack | AiState::Flee)
+            (AiState::Flee, AiState::Idle | AiState::Alert)
         )
     }
 }

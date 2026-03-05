@@ -13,12 +13,11 @@ use crate::combat::{Armor, Health, Weapon, WeaponInventory, WeaponStats};
 use crate::core::{GameState, WeatherState, WorldTime};
 use crate::economy::PlayerWallet;
 use crate::environment::DestroyedObjectTracker;
-use crate::mission::{
-    RelationshipManager, RespectManager, StoryMissionManager, UnlockManager,
-};
+use crate::mission::{RelationshipManager, RespectManager, StoryMissionManager, UnlockManager};
 use crate::player::Player;
 use crate::vehicle::{NitroBoost, Vehicle, VehicleId, VehicleModifications};
 
+#[allow(clippy::wildcard_imports)]
 use super::components::*;
 use super::systems::{
     u8_to_mod_level, validate_save_data, weapon_stats_from_type, SaveError, SaveTaskTracker,
@@ -145,14 +144,14 @@ pub fn apply_pending_load_data(
     }
 }
 
-/// 待恢復的破壞資料（一次性緩衝，由 apply_pending_load_data 填入，
-/// 由 apply_pending_destruction_data 處理後清除）
+/// 待恢復的破壞資料（一次性緩衝，由 `apply_pending_load_data` 填入，
+/// 由 `apply_pending_destruction_data` 處理後清除）
 #[derive(Resource, Default)]
 pub struct PendingDestructionRestore {
     pub ids: Option<Vec<u32>>,
 }
 
-/// 套用破壞持久化資料（獨立系統，在 apply_pending_load_data 之後執行）
+/// 套用破壞持久化資料（獨立系統，在 `apply_pending_load_data` 之後執行）
 pub fn apply_pending_destruction_data(
     mut commands: Commands,
     mut pending: ResMut<PendingDestructionRestore>,
@@ -163,10 +162,16 @@ pub fn apply_pending_destruction_data(
         return;
     };
 
-    apply_destruction_data(&mut commands, &mut destroyed_tracker, &destructible_query, &ids);
+    apply_destruction_data(
+        &mut commands,
+        &mut destroyed_tracker,
+        &destructible_query,
+        &ids,
+    );
 }
 
 /// 非同步執行讀檔 IO
+#[allow(clippy::unused_async)]
 async fn perform_load_async(path: PathBuf) -> Result<SaveData, SaveError> {
     // 讀取檔案
     let json = std::fs::read_to_string(&path).map_err(|e| SaveError::IoError(e.to_string()))?;
@@ -311,6 +316,7 @@ fn apply_world_data(
     );
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn apply_mission_data(
     story_manager: &mut StoryMissionManager,
     unlocks: &mut UnlockManager,
@@ -318,9 +324,7 @@ fn apply_mission_data(
     save_data: &SaveData,
 ) {
     // 還原 mission_states（v2 優先，v1 向後相容）
-    if !save_data.missions.mission_states.is_empty() {
-        story_manager.mission_states = save_data.missions.mission_states.clone();
-    } else {
+    if save_data.missions.mission_states.is_empty() {
         // v1 向後相容：從 completed_missions 字串重建
         story_manager.mission_states.clear();
         for id_str in &save_data.missions.completed_missions {
@@ -330,6 +334,10 @@ fn apply_mission_data(
                     .insert(id, crate::mission::StoryMissionStatus::Completed);
             }
         }
+    } else {
+        story_manager
+            .mission_states
+            .clone_from(&save_data.missions.mission_states);
     }
 
     // 從實際狀態計算 completed_count（取代直接用 len()）
@@ -345,7 +353,9 @@ fn apply_mission_data(
     }
     if !save_data.missions.best_ratings.is_empty() {
         // v2 格式優先
-        story_manager.mission_ratings = save_data.missions.best_ratings.clone();
+        story_manager
+            .mission_ratings
+            .clone_from(&save_data.missions.best_ratings);
     } else if !save_data.missions.mission_ratings.is_empty() {
         // v1 fallback：從 Vec<(String, u8)> 轉換為 HashMap<u32, StoryMissionRating>
         story_manager.mission_ratings.clear();
@@ -357,7 +367,10 @@ fn apply_mission_data(
             }
         }
     }
-    story_manager.total_play_time = save_data.play_time_secs as f32;
+    #[allow(clippy::cast_possible_truncation)]
+    {
+        story_manager.total_play_time = save_data.play_time_secs as f32;
+    }
 
     // 還原 unlocks
     unlocks.unlocked_items = save_data.missions.unlocked_items.iter().cloned().collect();
@@ -397,7 +410,7 @@ fn apply_vehicle_modifications(
     save_data: &SaveData,
 ) {
     let vehicles: Vec<_> = vehicle_mod_query.iter_mut().collect();
-    for (entity, vehicle_id, mut mods, nitro) in vehicles.into_iter() {
+    for (entity, vehicle_id, mut mods, nitro) in vehicles {
         #[allow(deprecated)]
         let saved_mods = save_data
             .world
@@ -461,10 +474,7 @@ fn apply_vehicle_state(
 
                 info!("還原車內狀態: 車輛 ID={}", target_id);
             } else {
-                warn!(
-                    "存檔中的車輛 ID {} 不存在，玩家將以步行狀態還原",
-                    target_id
-                );
+                warn!("存檔中的車輛 ID {} 不存在，玩家將以步行狀態還原", target_id);
                 game_state.player_in_vehicle = false;
                 game_state.current_vehicle = None;
             }

@@ -3,17 +3,14 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
-
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 use super::{
     calculate_sfx_volume, play_checkpoint_sound, play_door_open_sound, play_engine_start_sound,
     play_footstep_sound, play_mission_complete_sound, play_mission_fail_sound,
-    play_mission_start_sound, play_money_gain_sound, play_wanted_clear_sound,
-    play_wanted_up_sound, spawn_one_shot_sound, FootstepSurface,
+    play_mission_start_sound, play_money_gain_sound, play_wanted_clear_sound, play_wanted_up_sound,
+    spawn_one_shot_sound, FootstepSurface,
 };
 use super::{
     AudioManager, AudioVehicleState, FootstepTimer, GroundSurface, NpcDialogueCooldown,
@@ -125,13 +122,9 @@ pub fn detect_ground_surface_system(
     let ray_dir = Vec3::NEG_Y;
     let max_dist: RapierReal = 3.0;
 
-    if let Some((entity, _toi)) = rapier.cast_ray(
-        ray_origin,
-        ray_dir,
-        max_dist,
-        true,
-        QueryFilter::default(),
-    ) {
+    if let Some((entity, _toi)) =
+        rapier.cast_ray(ray_origin, ray_dir, max_dist, true, QueryFilter::default())
+    {
         // 如果命中實體有 GroundSurface 組件，使用該材質
         if let Ok(surface) = ground_query.get(entity) {
             player_ground.surface = *surface;
@@ -178,12 +171,7 @@ pub fn audio_footstep_system(
     if footstep_timer.elapsed >= interval {
         footstep_timer.elapsed = 0.0;
         let surface: FootstepSurface = player_ground.surface.into();
-        play_footstep_sound(
-            &mut commands,
-            &player_sounds,
-            &audio_manager,
-            surface,
-        );
+        play_footstep_sound(&mut commands, &player_sounds, &audio_manager, surface);
     }
 }
 
@@ -279,25 +267,33 @@ pub fn radio_fade_system(
     let dt = time.delta_secs();
 
     match radio.fade_state {
-        RadioFadeState::FadingOut { elapsed, duration, next_station } => {
+        RadioFadeState::FadingOut {
+            elapsed,
+            duration,
+            next_station,
+        } => {
             let new_elapsed = elapsed + dt;
             if new_elapsed >= duration {
                 // 淡出完成 → 切換到新電台
                 radio.fade_volume = 0.0;
                 radio.current_station = next_station;
-                if next_station != RadioStation::Off {
+                if next_station == RadioStation::Off {
+                    radio.fade_state = RadioFadeState::Idle;
+                    radio.fade_volume = 1.0;
+                } else {
                     radio.fade_state = RadioFadeState::FadingIn {
                         elapsed: 0.0,
                         duration: RADIO_FADE_IN_DURATION,
                     };
-                } else {
-                    radio.fade_state = RadioFadeState::Idle;
-                    radio.fade_volume = 1.0;
                 }
             } else {
                 let t = new_elapsed / duration;
                 radio.fade_volume = 1.0 - t;
-                radio.fade_state = RadioFadeState::FadingOut { elapsed: new_elapsed, duration, next_station };
+                radio.fade_state = RadioFadeState::FadingOut {
+                    elapsed: new_elapsed,
+                    duration,
+                    next_station,
+                };
             }
         }
         RadioFadeState::FadingIn { elapsed, duration } => {
@@ -308,7 +304,10 @@ pub fn radio_fade_system(
             } else {
                 let t = new_elapsed / duration;
                 radio.fade_volume = t;
-                radio.fade_state = RadioFadeState::FadingIn { elapsed: new_elapsed, duration };
+                radio.fade_state = RadioFadeState::FadingIn {
+                    elapsed: new_elapsed,
+                    duration,
+                };
             }
         }
         RadioFadeState::Idle => {}
@@ -361,7 +360,12 @@ pub fn radio_playback_system(
         let sound = playlists
             .random_track(radio.current_station)
             .cloned()
-            .or_else(|| radio.current_station.audio_path().map(|p| asset_server.load(p)));
+            .or_else(|| {
+                radio
+                    .current_station
+                    .audio_path()
+                    .map(|p| asset_server.load(p))
+            });
 
         if let Some(sound) = sound {
             let volume = audio_manager.master_volume
@@ -391,10 +395,7 @@ pub fn radio_playback_system(
 }
 
 /// 電台名稱顯示計時器系統
-pub fn radio_station_name_timer(
-    time: Res<Time>,
-    mut radio: ResMut<RadioManager>,
-) {
+pub fn radio_station_name_timer(time: Res<Time>, mut radio: ResMut<RadioManager>) {
     if radio.show_station_name {
         radio.station_name_timer -= time.delta_secs();
         if radio.station_name_timer <= 0.0 {
@@ -452,7 +453,11 @@ pub fn police_radio_chatter_system(
             let idx = (rand::random::<f32>() * radio_state.chatter_sounds.len() as f32) as usize;
             let idx = idx.min(radio_state.chatter_sounds.len() - 1);
             let volume = calculate_sfx_volume(&audio_manager, 0.5);
-            spawn_one_shot_sound(&mut commands, radio_state.chatter_sounds[idx].clone(), volume);
+            spawn_one_shot_sound(
+                &mut commands,
+                radio_state.chatter_sounds[idx].clone(),
+                volume,
+            );
         }
 
         // 重置計時器（隨機間隔）
@@ -550,7 +555,8 @@ pub fn npc_dialogue_trigger_system(
 
         // 播放對話音效（若有）
         if !dialogue_manager.dialogue_sounds.is_empty() {
-            let sound_idx = (rand::random::<f32>() * dialogue_manager.dialogue_sounds.len() as f32) as usize;
+            let sound_idx =
+                (rand::random::<f32>() * dialogue_manager.dialogue_sounds.len() as f32) as usize;
             let sound_idx = sound_idx.min(dialogue_manager.dialogue_sounds.len() - 1);
             let volume = calculate_sfx_volume(&audio_manager, 0.6);
             spawn_one_shot_sound(
@@ -564,7 +570,9 @@ pub fn npc_dialogue_trigger_system(
         if let Some(mut cd) = cooldown {
             cd.remaining = 30.0; // 同一 NPC 30 秒內不再說話
         } else {
-            commands.entity(entity).insert(NpcDialogueCooldown { remaining: 30.0 });
+            commands
+                .entity(entity)
+                .insert(NpcDialogueCooldown { remaining: 30.0 });
         }
         dialogue_manager.global_cooldown = dialogue_manager.cooldown_interval;
 
@@ -617,7 +625,9 @@ mod tests {
 
     #[test]
     fn audio_vehicle_state_detects_transition() {
-        let mut state = AudioVehicleState { was_in_vehicle: false };
+        let mut state = AudioVehicleState {
+            was_in_vehicle: false,
+        };
         // 上車
         let in_vehicle = true;
         assert_ne!(in_vehicle, state.was_in_vehicle);
@@ -656,7 +666,10 @@ mod tests {
 
     #[test]
     fn police_radio_deactivates_without_wanted() {
-        let mut state = PoliceRadioState { active: true, ..Default::default() };
+        let mut state = PoliceRadioState {
+            active: true,
+            ..Default::default()
+        };
         // 模擬通緝結束
         let stars = 0u8;
         if stars == 0 {

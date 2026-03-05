@@ -88,7 +88,7 @@ impl ModCategory {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ModLevel {
     #[default]
-    Stock,  // 原廠
+    Stock, // 原廠
     Level1, // 一級改裝
     Level2, // 二級改裝
     Level3, // 三級改裝

@@ -1,7 +1,7 @@
 //! Loading Screen 載入畫面 (GTA 5 風格)
 //!
 //! 遊戲啟動時顯示深色背景、遊戲標題、進度條與輪播提示文字。
-//! 所有關鍵資產（字體、紋理）載入完成且最少顯示 2 秒後轉場至 InGame。
+//! 所有關鍵資產（字體、紋理）載入完成且最少顯示 2 秒後轉場至 `InGame`。
 
 use bevy::prelude::*;
 
@@ -227,19 +227,13 @@ fn loading_screen_update(
         info!("📦 載入完成，轉場至 InGame（{:.1}s）", state.elapsed);
         next_state.set(AppState::InGame);
     } else if state.elapsed >= MAX_LOADING_TIME {
-        error!(
-            "⚠️ 載入超時（{:.0}s），強制轉場至 InGame",
-            state.elapsed
-        );
+        error!("⚠️ 載入超時（{:.0}s），強制轉場至 InGame", state.elapsed);
         next_state.set(AppState::InGame);
     }
 }
 
 /// 清理載入畫面
-fn cleanup_loading_screen(
-    mut commands: Commands,
-    query: Query<Entity, With<LoadingScreenRoot>>,
-) {
+fn cleanup_loading_screen(mut commands: Commands, query: Query<Entity, With<LoadingScreenRoot>>) {
     for entity in &query {
         commands.entity(entity).despawn();
     }
@@ -254,14 +248,11 @@ pub(super) struct LoadingScreenPlugin;
 
 impl Plugin for LoadingScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Startup,
-            setup_loading_screen.in_set(super::UiSetup),
-        )
-        .add_systems(
-            Update,
-            loading_screen_update.run_if(in_state(AppState::Loading)),
-        )
-        .add_systems(OnExit(AppState::Loading), cleanup_loading_screen);
+        app.add_systems(Startup, setup_loading_screen.in_set(super::UiSetup))
+            .add_systems(
+                Update,
+                loading_screen_update.run_if(in_state(AppState::Loading)),
+            )
+            .add_systems(OnExit(AppState::Loading), cleanup_loading_screen);
     }
 }

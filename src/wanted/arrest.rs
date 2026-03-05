@@ -12,11 +12,12 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
-use crate::player::Player;
-use crate::core::{rapier_real_to_f32, GameState};
 use crate::combat::{Health, WeaponInventory};
+use crate::core::{rapier_real_to_f32, GameState};
 use crate::economy::PlayerWallet;
+use crate::player::Player;
 
+#[allow(clippy::wildcard_imports)]
 use super::components::*;
 
 // ============================================================================
@@ -210,7 +211,9 @@ pub fn player_surrender_input_system(
         surrender_state.is_surrendering = true;
         surrender_state.surrender_hold_timer += dt;
 
-        if surrender_state.surrender_hold_timer >= SURRENDER_HOLD_TIME && !surrender_state.has_surrendered {
+        if surrender_state.surrender_hold_timer >= SURRENDER_HOLD_TIME
+            && !surrender_state.has_surrendered
+        {
             surrender_state.has_surrendered = true;
             info!("🏳️ 玩家投降！通緝等級: {} 星", wanted.stars);
         }
@@ -229,7 +232,8 @@ pub fn police_arrest_system(
     rapier_context: ReadRapierContext,
     time: Res<Time>,
 ) {
-    let Ok((player_entity, player_transform, mut surrender_state)) = player_query.single_mut() else {
+    let Ok((player_entity, player_transform, mut surrender_state)) = player_query.single_mut()
+    else {
         return;
     };
 
@@ -272,7 +276,10 @@ pub fn police_arrest_system(
         // 警覺、追逐、交戰、搜索狀態的警察皆可逮捕
         if !matches!(
             officer.state,
-            PoliceState::Engaging | PoliceState::Pursuing | PoliceState::Alerted | PoliceState::Searching
+            PoliceState::Engaging
+                | PoliceState::Pursuing
+                | PoliceState::Alerted
+                | PoliceState::Searching
         ) {
             continue;
         }
@@ -314,10 +321,22 @@ pub fn police_arrest_system(
 }
 
 /// 處理逮捕完成事件
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 pub fn handle_arrest_event_system(
     mut arrest_events: MessageReader<ArrestEvent>,
     mut arrest_complete: MessageWriter<ArrestComplete>,
-    mut player_query: Query<(&mut Transform, &mut PlayerSurrenderState, &mut WeaponInventory), With<Player>>,
+    mut player_query: Query<
+        (
+            &mut Transform,
+            &mut PlayerSurrenderState,
+            &mut WeaponInventory,
+        ),
+        With<Player>,
+    >,
     mut wallet: ResMut<PlayerWallet>,
     mut wanted: ResMut<WantedLevel>,
     screen_effect: Res<crate::ui::ScreenEffectState>,
@@ -330,12 +349,14 @@ pub fn handle_arrest_event_system(
 
         match event.arrest_type {
             ArrestType::PlayerSurrender => {
-                let Ok((mut transform, mut surrender_state, mut inventory)) = player_query.single_mut() else {
+                let Ok((mut transform, mut surrender_state, mut inventory)) =
+                    player_query.single_mut()
+                else {
                     continue;
                 };
 
                 // 計算罰款
-                let fine = wanted.stars as f32 * FINE_PER_STAR;
+                let fine = f32::from(wanted.stars) * FINE_PER_STAR;
                 let fine_amount = fine as i32;
 
                 // 扣除罰款（盡可能支付，不足部分豁免）
@@ -379,10 +400,7 @@ pub fn handle_arrest_event_system(
                     weapons_confiscated: confiscated,
                 });
 
-                info!(
-                    "逮捕完成！罰款: ${:.0}, 沒收武器: {}",
-                    fine, confiscated
-                );
+                info!("逮捕完成！罰款: ${:.0}, 沒收武器: {}", fine, confiscated);
             }
 
             ArrestType::EnemySurrender => {
@@ -434,53 +452,52 @@ pub fn surrender_visual_system(
 }
 
 /// 生成進度條 UI 的輔助函數
-fn spawn_progress_bar_ui(
-    commands: &mut Commands,
-    bar_color: Color,
-    text: &'static str,
-) {
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            top: Val::Percent(70.0),
-            width: Val::Px(200.0),
-            height: Val::Px(30.0),
-            margin: UiRect::left(Val::Px(-100.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
-        SurrenderUI,
-    )).with_children(|parent| {
-        // 進度條
-        parent.spawn((
-            Node {
-                width: Val::Percent(0.0),
-                height: Val::Percent(100.0),
-                ..default()
-            },
-            BackgroundColor(bar_color),
-            SurrenderProgressBar,
-        ));
-    }).with_children(|parent| {
-        // 文字
-        parent.spawn((
+fn spawn_progress_bar_ui(commands: &mut Commands, bar_color: Color, text: &'static str) {
+    commands
+        .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
+                left: Val::Percent(50.0),
+                top: Val::Percent(70.0),
+                width: Val::Px(200.0),
+                height: Val::Px(30.0),
+                margin: UiRect::left(Val::Px(-100.0)),
                 ..default()
             },
-            Text::new(text),
-            TextColor(Color::WHITE),
-            TextFont {
-                font_size: 16.0,
-                ..default()
-            },
-        ));
-    });
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
+            SurrenderUI,
+        ))
+        .with_children(|parent| {
+            // 進度條
+            parent.spawn((
+                Node {
+                    width: Val::Percent(0.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                BackgroundColor(bar_color),
+                SurrenderProgressBar,
+            ));
+        })
+        .with_children(|parent| {
+            // 文字
+            parent.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Text::new(text),
+                TextColor(Color::WHITE),
+                TextFont {
+                    font_size: 16.0,
+                    ..default()
+                },
+            ));
+        });
 }
 
 /// 投降 UI 系統
@@ -498,30 +515,32 @@ pub fn surrender_ui_system(
     // 顯示載具內警告訊息
     if surrender_state.vehicle_warning_timer > 0.0 {
         if !has_ui {
-            commands.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(50.0),
-                    top: Val::Percent(70.0),
-                    width: Val::Px(200.0),
-                    height: Val::Px(30.0),
-                    margin: UiRect::left(Val::Px(-100.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.8, 0.2, 0.2, 0.8)),
-                SurrenderUI,
-            )).with_children(|parent| {
-                parent.spawn((
-                    Text::new("請先下車再投降"),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 16.0,
+            commands
+                .spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(50.0),
+                        top: Val::Percent(70.0),
+                        width: Val::Px(200.0),
+                        height: Val::Px(30.0),
+                        margin: UiRect::left(Val::Px(-100.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
                         ..default()
                     },
-                ));
-            });
+                    BackgroundColor(Color::srgba(0.8, 0.2, 0.2, 0.8)),
+                    SurrenderUI,
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("請先下車再投降"),
+                        TextColor(Color::WHITE),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                    ));
+                });
         }
         return;
     }
@@ -531,7 +550,11 @@ pub fn surrender_ui_system(
     let needs_arrest_ui = surrender_state.being_arrested;
 
     if needs_surrender_ui && !has_ui {
-        spawn_progress_bar_ui(&mut commands, Color::srgb(1.0, 1.0, 0.0), "投降中... 按住 Y");
+        spawn_progress_bar_ui(
+            &mut commands,
+            Color::srgb(1.0, 1.0, 0.0),
+            "投降中... 按住 Y",
+        );
     } else if needs_arrest_ui && !has_ui {
         spawn_progress_bar_ui(&mut commands, Color::srgb(1.0, 0.0, 0.0), "被逮捕中...");
     } else if !needs_surrender_ui && !needs_arrest_ui {

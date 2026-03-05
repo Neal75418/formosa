@@ -1,6 +1,5 @@
 //! 遊戲執行狀態與系統分組
 
-
 use bevy::prelude::*;
 
 /// 遊戲執行狀態（用於暫停/選單控制）
@@ -23,4 +22,3 @@ pub enum GameSet {
     World,
     Ui,
 }
-

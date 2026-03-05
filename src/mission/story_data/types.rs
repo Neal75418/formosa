@@ -34,8 +34,7 @@ pub enum StoryMissionStatus {
 }
 
 /// 劇情任務類型
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
 pub enum StoryMissionType {
     // === 戰鬥類 ===
     /// 刺殺：消滅特定目標

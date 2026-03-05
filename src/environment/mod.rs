@@ -8,8 +8,8 @@ mod systems;
 pub use components::*;
 pub use systems::*;
 
-use bevy::prelude::*;
 use crate::core::AppState;
+use bevy::prelude::*;
 
 /// 環境系統插件
 pub struct EnvironmentPlugin;
@@ -22,15 +22,20 @@ impl Plugin for EnvironmentPlugin {
             // 事件
             .add_message::<DestructionEvent>()
             // 啟動 - 初始化視覺資源，然後生成可破壞物件
-            .add_systems(Startup, (
-                setup_destructible_visuals,
-                setup_world_destructibles,
-            ).chain())
+            .add_systems(
+                Startup,
+                (setup_destructible_visuals, setup_world_destructibles).chain(),
+            )
             // 更新
-            .add_systems(Update, (
-                destructible_damage_system,
-                destruction_effect_system,
-                debris_update_system,
-            ).chain().run_if(in_state(AppState::InGame)));
+            .add_systems(
+                Update,
+                (
+                    destructible_damage_system,
+                    destruction_effect_system,
+                    debris_update_system,
+                )
+                    .chain()
+                    .run_if(in_state(AppState::InGame)),
+            );
     }
 }

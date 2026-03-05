@@ -264,7 +264,7 @@ pub fn update_world_name_tags(
         return;
     };
 
-    for (mut node, mut visibility, tag) in tag_query.iter_mut() {
+    for (mut node, mut visibility, tag) in &mut tag_query {
         if let Ok(target_transform) = target_query.get(tag.target_entity) {
             let world_position = target_transform.translation() + tag.offset;
 
@@ -327,6 +327,7 @@ struct MapDrawCtx {
 }
 
 /// 統一生成地圖內容（道路 + 地標）
+#[allow(clippy::too_many_lines)]
 pub fn spawn_map_layer(
     parent: &mut ChildSpawnerCommands,
     scale: f32,
@@ -342,25 +343,102 @@ pub fn spawn_map_layer(
         X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
     };
 
-    let ctx = MapDrawCtx { scale, off_x, off_y, font };
+    let ctx = MapDrawCtx {
+        scale,
+        off_x,
+        off_y,
+        font,
+    };
 
     // 1. 繪製道路 (Roads) - 完整西門町道路網格
     let v_len_main = 180.0;
     let h_center_x = -10.0; // 水平道路中心點
 
     // 南北向道路 (Vertical)
-    draw_road_rect(parent, X_ZHONGHUA, -15.0, W_ZHONGHUA * road_width_factor, v_len_main, &ctx, if is_fullmap { "中華路" } else { "" });
-    draw_road_rect(parent, X_XINING, -15.0, W_SECONDARY * road_width_factor, v_len_main, &ctx, if is_fullmap { "西寧南路" } else { "" });
-    draw_road_rect(parent, X_KANGDING, -15.0, W_MAIN * road_width_factor, v_len_main, &ctx, if is_fullmap { "康定路" } else { "" });
-    draw_road_rect(parent, X_HAN, 0.0, W_PEDESTRIAN * road_width_factor, 100.0, &ctx, if is_fullmap { "漢中街" } else { "" });
+    draw_road_rect(
+        parent,
+        X_ZHONGHUA,
+        -15.0,
+        W_ZHONGHUA * road_width_factor,
+        v_len_main,
+        &ctx,
+        if is_fullmap { "中華路" } else { "" },
+    );
+    draw_road_rect(
+        parent,
+        X_XINING,
+        -15.0,
+        W_SECONDARY * road_width_factor,
+        v_len_main,
+        &ctx,
+        if is_fullmap { "西寧南路" } else { "" },
+    );
+    draw_road_rect(
+        parent,
+        X_KANGDING,
+        -15.0,
+        W_MAIN * road_width_factor,
+        v_len_main,
+        &ctx,
+        if is_fullmap { "康定路" } else { "" },
+    );
+    draw_road_rect(
+        parent,
+        X_HAN,
+        0.0,
+        W_PEDESTRIAN * road_width_factor,
+        100.0,
+        &ctx,
+        if is_fullmap { "漢中街" } else { "" },
+    );
 
     // 東西向道路 (Horizontal)
     let h_len = 200.0;
-    draw_road_rect(parent, h_center_x, Z_HANKOU, h_len, W_SECONDARY * road_width_factor, &ctx, if is_fullmap { "漢口街" } else { "" });
-    draw_road_rect(parent, h_center_x, Z_WUCHANG, h_len, W_PEDESTRIAN * road_width_factor, &ctx, if is_fullmap { "武昌街" } else { "" });
-    draw_road_rect(parent, h_center_x, Z_KUNMING, h_len, W_ALLEY * road_width_factor, &ctx, if is_fullmap { "昆明街" } else { "" });
-    draw_road_rect(parent, h_center_x, Z_EMEI, h_len, W_PEDESTRIAN * road_width_factor, &ctx, if is_fullmap { "峨嵋街" } else { "" });
-    draw_road_rect(parent, h_center_x, Z_CHENGDU, h_len, W_MAIN * road_width_factor, &ctx, if is_fullmap { "成都路" } else { "" });
+    draw_road_rect(
+        parent,
+        h_center_x,
+        Z_HANKOU,
+        h_len,
+        W_SECONDARY * road_width_factor,
+        &ctx,
+        if is_fullmap { "漢口街" } else { "" },
+    );
+    draw_road_rect(
+        parent,
+        h_center_x,
+        Z_WUCHANG,
+        h_len,
+        W_PEDESTRIAN * road_width_factor,
+        &ctx,
+        if is_fullmap { "武昌街" } else { "" },
+    );
+    draw_road_rect(
+        parent,
+        h_center_x,
+        Z_KUNMING,
+        h_len,
+        W_ALLEY * road_width_factor,
+        &ctx,
+        if is_fullmap { "昆明街" } else { "" },
+    );
+    draw_road_rect(
+        parent,
+        h_center_x,
+        Z_EMEI,
+        h_len,
+        W_PEDESTRIAN * road_width_factor,
+        &ctx,
+        if is_fullmap { "峨嵋街" } else { "" },
+    );
+    draw_road_rect(
+        parent,
+        h_center_x,
+        Z_CHENGDU,
+        h_len,
+        W_MAIN * road_width_factor,
+        &ctx,
+        if is_fullmap { "成都路" } else { "" },
+    );
 
     // 2. 繪製地標 (Landmarks) - 根據新的建築位置更新
     let landmarks = [
@@ -474,13 +552,15 @@ pub fn spawn_map_layer(
         },
     ];
 
-    for lm in landmarks.iter() {
+    for lm in &landmarks {
         if is_fullmap {
             // 大地圖：顯示完整矩形
             // Size mapping based on scale 1.2 adjusted:
             // 為了保持與之前手動調整的一致性 (UI Size ~= World Size * 1.2)
             // 這裡我們直接使用 (World Size * Scale)
-            draw_building_rect(parent, lm.world_x, lm.world_z, lm.w, lm.d, &ctx, lm.color, lm.name);
+            draw_building_rect(
+                parent, lm.world_x, lm.world_z, lm.w, lm.d, &ctx, lm.color, lm.name,
+            );
         } else {
             // 小地圖：顯示簡化點
             draw_minimap_point(parent, lm.world_x, lm.world_z, &ctx, lm.color, lm.name);
@@ -534,7 +614,17 @@ fn draw_building_rect(
     let ui_x = x * ctx.scale + ctx.off_x;
     let ui_y = -z * ctx.scale + ctx.off_y; // Z 軸翻轉
 
-    spawn_centered_rect(parent, ui_x, ui_y, ui_w, ui_h, color, name, 10.0, ctx.font.clone());
+    spawn_centered_rect(
+        parent,
+        ui_x,
+        ui_y,
+        ui_w,
+        ui_h,
+        color,
+        name,
+        10.0,
+        ctx.font.clone(),
+    );
 }
 
 /// 生成置中矩形 (共用 helper)

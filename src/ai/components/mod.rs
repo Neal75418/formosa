@@ -11,19 +11,19 @@
 
 // 完整 AI 系統組件定義，部分組件預留供未來關卡使用。
 
-mod state;
-mod perception;
-mod movement;
 mod combat;
+mod movement;
+mod perception;
 mod resources;
+mod state;
 
 // 重新導出所有公開項目
+pub use combat::{AiCombat, CoverPoint, CoverSeeker};
+pub use movement::{AiMovement, PatrolPath};
+pub use perception::AiPerception;
+pub use resources::{EnemySpawnTimer, EnemyTypeAppearance, EnemyVisuals, HairStyle};
 #[allow(unused_imports)] // re-export: public API constants for AI awareness thresholds
 pub use state::{
     AiBehavior, AiState, AWARENESS_ALERT, AWARENESS_DECAY_RATE, AWARENESS_NOISE_RATE,
     AWARENESS_SUSPICIOUS, AWARENESS_VISUAL_RATE,
 };
-pub use perception::AiPerception;
-pub use movement::{PatrolPath, AiMovement};
-pub use combat::{AiCombat, CoverPoint, CoverSeeker};
-pub use resources::{EnemySpawnTimer, EnemyTypeAppearance, EnemyVisuals, HairStyle};

@@ -6,11 +6,12 @@ use crate::combat::{CombatState, LockOnState, WeaponInventory};
 use crate::core::GameState;
 use crate::player::Player;
 use crate::ui::components::{
-    AmmoBulletIcon, AmmoVisualGrid, Crosshair, CrosshairDirection, CrosshairDot,
-    CrosshairDynamics, CrosshairHitMarker, CrosshairLine, CrosshairOuterRing, CurrentAmmoShadow,
-    CurrentAmmoText, HitMarkerLine, ReserveAmmoShadow, ReserveAmmoText, WeaponDisplay,
-    WeaponDisplayShadow, WeaponSlot, WeaponSwitchAnimation,
+    AmmoBulletIcon, AmmoVisualGrid, Crosshair, CrosshairDirection, CrosshairDot, CrosshairDynamics,
+    CrosshairHitMarker, CrosshairLine, CrosshairOuterRing, CurrentAmmoShadow, CurrentAmmoText,
+    HitMarkerLine, ReserveAmmoShadow, ReserveAmmoText, WeaponDisplay, WeaponDisplayShadow,
+    WeaponSlot, WeaponSwitchAnimation,
 };
+#[allow(clippy::wildcard_imports)]
 use crate::ui::constants::*;
 
 use super::setup::spawn_bullet_icon;
@@ -47,8 +48,7 @@ fn should_show_crosshair(
         .single()
         .ok()
         .and_then(|inv| inv.current_weapon())
-        .map(|w| w.stats.magazine_size > 0)
-        .unwrap_or(false)
+        .is_some_and(|w| w.stats.magazine_size > 0)
 }
 
 /// 更新準星擴散值（逐漸恢復）
@@ -104,7 +104,7 @@ pub fn update_crosshair(
 ) {
     // 更新可見性
     let should_show = should_show_crosshair(&game_state, &combat_state, &player_query);
-    for mut visibility in crosshair_query.iter_mut() {
+    for mut visibility in &mut crosshair_query {
         *visibility = if should_show {
             Visibility::Visible
         } else {
@@ -120,13 +120,13 @@ pub fn update_crosshair(
 
     // 更新線條位置
     let offset = calculate_crosshair_offset(bloom, is_aiming);
-    for (mut node, line) in line_query.iter_mut() {
+    for (mut node, line) in &mut line_query {
         apply_crosshair_line_offset(&mut node, line.direction, offset);
     }
 
     // 更新外圈大小
     let ring_size = calculate_outer_ring_size(bloom, is_aiming);
-    for mut node in outer_ring_query.iter_mut() {
+    for mut node in &mut outer_ring_query {
         node.width = Val::Px(ring_size);
         node.height = Val::Px(ring_size);
     }
@@ -139,7 +139,7 @@ pub fn update_crosshair(
     } else {
         CROSSHAIR_MAIN
     };
-    for mut bg in dot_query.iter_mut() {
+    for mut bg in &mut dot_query {
         *bg = BackgroundColor(dot_color);
     }
 }
@@ -158,7 +158,7 @@ pub fn update_hit_marker(
 
     // 更新命中標記可見性
     let should_show = combat_state.hit_marker_timer > 0.0;
-    for mut visibility in hit_marker_query.iter_mut() {
+    for mut visibility in &mut hit_marker_query {
         *visibility = if should_show {
             Visibility::Visible
         } else {
@@ -181,7 +181,7 @@ pub fn update_hit_marker(
             color.to_srgba().blue,
             color.to_srgba().alpha * alpha,
         );
-        for mut bg in hit_marker_line_query.iter_mut() {
+        for mut bg in &mut hit_marker_line_query {
             *bg = BackgroundColor(faded_color);
         }
     }
@@ -197,7 +197,7 @@ fn format_current_ammo_text(magazine_size: u32, current_ammo: u32, is_reloading:
     } else if is_reloading {
         "...".to_string()
     } else {
-        format!("{}", current_ammo)
+        format!("{current_ammo}")
     }
 }
 
@@ -221,7 +221,7 @@ fn format_reserve_ammo_text(magazine_size: u32, reserve_ammo: u32, is_reloading:
     } else if is_reloading {
         "換彈中".to_string()
     } else {
-        format!("{}", reserve_ammo)
+        format!("{reserve_ammo}")
     }
 }
 
@@ -230,6 +230,11 @@ fn format_reserve_ammo_text(magazine_size: u32, reserve_ammo: u32, is_reloading:
 // ============================================================================
 /// 更新彈藥顯示（GTA 風格，支援低彈藥變色）
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 pub fn update_ammo_display(
     player_query: Query<&WeaponInventory, With<Player>>,
     mut current_ammo_query: Query<
@@ -317,36 +322,36 @@ pub fn update_ammo_display(
         format_current_ammo_text(magazine_size, weapon.current_ammo, weapon.is_reloading);
     let current_color = get_current_ammo_color(magazine_size, weapon.is_reloading, is_low_ammo);
 
-    for (mut text, mut color) in current_ammo_query.iter_mut() {
-        **text = current_text.clone();
+    for (mut text, mut color) in &mut current_ammo_query {
+        (**text).clone_from(&current_text);
         color.0 = current_color;
     }
-    for mut text in current_ammo_shadow_query.iter_mut() {
-        **text = current_text.clone();
+    for mut text in &mut current_ammo_shadow_query {
+        (**text).clone_from(&current_text);
     }
 
     // 後備彈藥顯示
     let reserve_text =
         format_reserve_ammo_text(magazine_size, weapon.reserve_ammo, weapon.is_reloading);
-    for mut text in reserve_ammo_query.iter_mut() {
-        **text = reserve_text.clone();
+    for mut text in &mut reserve_ammo_query {
+        (**text).clone_from(&reserve_text);
     }
-    for mut text in reserve_ammo_shadow_query.iter_mut() {
-        **text = reserve_text.clone();
+    for mut text in &mut reserve_ammo_shadow_query {
+        (**text).clone_from(&reserve_text);
     }
 
     // 武器名稱
     let weapon_name = weapon.stats.weapon_type.name().to_string();
-    for mut text in weapon_query.iter_mut() {
-        **text = weapon_name.clone();
+    for mut text in &mut weapon_query {
+        (**text).clone_from(&weapon_name);
     }
-    for mut text in weapon_shadow_query.iter_mut() {
-        **text = weapon_name.clone();
+    for mut text in &mut weapon_shadow_query {
+        (**text).clone_from(&weapon_name);
     }
 
     // 武器槽位高亮
     let current_slot = inventory.current_index;
-    for (mut bg, slot) in slot_query.iter_mut() {
+    for (mut bg, slot) in &mut slot_query {
         *bg = BackgroundColor(if slot.slot_index == current_slot {
             SLOT_ACTIVE
         } else {
@@ -381,6 +386,11 @@ fn get_bullet_icon_color(is_filled: bool, is_low_ammo: bool, blink_alpha: f32) -
 }
 
 /// 檢查是否為低彈藥狀態
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 fn is_low_ammo_state(current: usize, max: usize, is_reloading: bool) -> bool {
     max > 0 && current < (max as f32 * 0.25).ceil() as usize && !is_reloading
 }
@@ -438,7 +448,7 @@ pub fn update_ammo_visual_grid(
     }
 
     // 更新現有子彈圖示顏色
-    for (mut bg, bullet) in bullet_query.iter_mut() {
+    for (mut bg, bullet) in &mut bullet_query {
         let is_filled = bullet.index < current_ammo;
         *bg = BackgroundColor(get_bullet_icon_color(is_filled, is_low_ammo, blink_alpha));
     }
@@ -472,7 +482,7 @@ fn apply_brightness_to_color(color: Color, brightness: f32) -> Color {
     )
 }
 
-/// 更新切換動畫進度，回傳 (透明度, ease_out)
+/// 更新切換動畫進度，回傳 (透明度, `ease_out`)
 fn update_switch_animation_progress(
     anim: &mut WeaponSwitchAnimation,
     dt: f32,
@@ -488,7 +498,7 @@ fn update_switch_animation_progress(
 }
 
 /// 更新武器切換動畫（簡化版：只做透明度和縮放，不做位置變化）
-/// 注意：此系統需要在 update_ammo_display 之後執行，避免 Query 衝突導致 SIGSEGV
+/// 注意：此系統需要在 `update_ammo_display` 之後執行，避免 Query 衝突導致 SIGSEGV
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_weapon_switch_animation(
     time: Res<Time>,
@@ -592,28 +602,28 @@ pub fn update_weapon_switch_animation(
 
     // 應用透明度到文字和陰影
     let shadow_alpha = opacity * 0.65;
-    for mut c in weapon_display_query.iter_mut() {
+    for mut c in &mut weapon_display_query {
         c.0 = c.0.with_alpha(opacity);
     }
-    for mut c in weapon_shadow_query.iter_mut() {
+    for mut c in &mut weapon_shadow_query {
         c.0 = c.0.with_alpha(shadow_alpha);
     }
-    for mut c in current_ammo_query.iter_mut() {
+    for mut c in &mut current_ammo_query {
         c.0 = c.0.with_alpha(opacity);
     }
-    for mut c in current_shadow_query.iter_mut() {
+    for mut c in &mut current_shadow_query {
         c.0 = c.0.with_alpha(shadow_alpha);
     }
-    for mut c in reserve_ammo_query.iter_mut() {
+    for mut c in &mut reserve_ammo_query {
         c.0 = c.0.with_alpha(opacity);
     }
-    for mut c in reserve_shadow_query.iter_mut() {
+    for mut c in &mut reserve_shadow_query {
         c.0 = c.0.with_alpha(shadow_alpha);
     }
 
     // 武器槽位亮度脈衝
     let brightness = calculate_slot_brightness(ease_out);
-    for mut bg in slot_query.iter_mut() {
+    for mut bg in &mut slot_query {
         bg.0 = apply_brightness_to_color(bg.0, brightness);
     }
 }

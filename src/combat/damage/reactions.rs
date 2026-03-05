@@ -15,7 +15,7 @@ use crate::pedestrian::Pedestrian;
 pub fn hit_reaction_update_system(time: Res<Time>, mut query: Query<&mut HitReaction>) {
     let delta = time.delta_secs();
 
-    for mut reaction in query.iter_mut() {
+    for mut reaction in &mut query {
         reaction.update(delta);
     }
 }
@@ -26,14 +26,14 @@ pub fn hit_reaction_visual_system(
     reaction_query: Query<(&HitReaction, &Children), Changed<HitReaction>>,
     mut transform_query: Query<&mut Transform, Without<HitReaction>>,
 ) {
-    for (reaction, children) in reaction_query.iter() {
+    for (reaction, children) in &reaction_query {
         if reaction.phase == HitReactionPhase::None {
             continue;
         }
 
         // 將視覺旋轉應用到第一個子實體（通常是模型）
-        for child in children.iter() {
-            if let Ok(mut transform) = transform_query.get_mut(child) {
+        for child in children {
+            if let Ok(mut transform) = transform_query.get_mut(*child) {
                 // 只修改 X 軸旋轉（後仰效果），保持其他旋轉
                 let current_euler = transform.rotation.to_euler(EulerRot::XYZ);
                 let target_euler = reaction.visual_rotation.to_euler(EulerRot::XYZ);
@@ -57,7 +57,7 @@ pub fn hit_reaction_knockback_system(
 ) {
     let delta = time.delta_secs();
 
-    for (reaction, mut controller) in query.iter_mut() {
+    for (reaction, mut controller) in &mut query {
         let knockback = reaction.get_knockback_velocity();
         if knockback.length_squared() > 0.001 {
             // 將擊退速度加到控制器的位移上
@@ -88,7 +88,7 @@ pub fn enemy_hit_reaction_knockback_system(
     mut query: Query<(&HitReaction, &mut Transform), (With<Enemy>, Without<Ragdoll>)>,
 ) {
     let delta = time.delta_secs();
-    for (reaction, mut transform) in query.iter_mut() {
+    for (reaction, mut transform) in &mut query {
         apply_knockback_to_transform(reaction, &mut transform, delta);
     }
 }
@@ -99,7 +99,7 @@ pub fn pedestrian_hit_reaction_knockback_system(
     mut query: Query<(&HitReaction, &mut Transform), (With<Pedestrian>, Without<Ragdoll>)>,
 ) {
     let delta = time.delta_secs();
-    for (reaction, mut transform) in query.iter_mut() {
+    for (reaction, mut transform) in &mut query {
         apply_knockback_to_transform(reaction, &mut transform, delta);
     }
 }

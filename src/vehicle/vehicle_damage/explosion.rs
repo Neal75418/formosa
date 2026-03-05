@@ -3,13 +3,13 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-use bevy::prelude::*;
-use crate::core::lifetime_linear_alpha;
+use super::health::VehicleHealth;
 use crate::combat::{DamageEvent, DamageSource, Enemy};
+use crate::core::lifetime_linear_alpha;
 use crate::pedestrian::Pedestrian;
 use crate::player::Player;
 use crate::wanted::PoliceOfficer;
-use super::health::VehicleHealth;
+use bevy::prelude::*;
 
 /// 車輛爆炸效果
 #[derive(Component)]
@@ -140,7 +140,7 @@ pub fn vehicle_explosion_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut explosion, mut transform) in explosion_query.iter_mut() {
+    for (entity, mut explosion, mut transform) in &mut explosion_query {
         explosion.lifetime += dt;
         transform.scale = Vec3::splat(explosion.scale());
 

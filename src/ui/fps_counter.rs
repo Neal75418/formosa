@@ -14,7 +14,7 @@ pub fn setup_fps_counter(mut commands: Commands) {
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(10.0),
-                left: Val::Px(10.0),  // 改到左上角，避免被小地圖擋住
+                left: Val::Px(10.0), // 改到左上角，避免被小地圖擋住
                 padding: UiRect::all(Val::Px(8.0)),
                 ..default()
             },

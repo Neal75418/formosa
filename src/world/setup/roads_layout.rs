@@ -3,13 +3,13 @@
 use bevy::prelude::*;
 
 use crate::world::constants::{
-    ROAD_Y, W_ALLEY, W_MAIN, W_PEDESTRIAN, W_SECONDARY, W_ZHONGHUA,
-    X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA,
-    Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
+    ROAD_Y, W_ALLEY, W_MAIN, W_PEDESTRIAN, W_SECONDARY, W_ZHONGHUA, X_HAN, X_KANGDING, X_XINING,
+    X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
 };
 use crate::world::roads::{spawn_road_segment, RoadType};
 
 /// 道路材質與道路網格生成
+#[allow(clippy::too_many_lines)]
 pub(super) fn setup_roads(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -48,34 +48,88 @@ pub(super) fn setup_roads(
     // ========== 南北向道路 (車行道) ==========
 
     // 中華路 (東邊界) - 主幹道，貫穿南北
-    spawn_road_segment(commands, meshes, materials, road_mat.clone(), line_mat.clone(),
-        Vec3::new(X_ZHONGHUA, ROAD_Y, -15.0), W_ZHONGHUA, 180.0, RoadType::Asphalt);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        road_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(X_ZHONGHUA, ROAD_Y, -15.0),
+        W_ZHONGHUA,
+        180.0,
+        RoadType::Asphalt,
+    );
 
     // 西寧南路 - 貫穿南北
-    spawn_road_segment(commands, meshes, materials, road_mat.clone(), line_mat.clone(),
-        Vec3::new(X_XINING, ROAD_Y, -15.0), W_SECONDARY, 180.0, RoadType::Asphalt);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        road_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(X_XINING, ROAD_Y, -15.0),
+        W_SECONDARY,
+        180.0,
+        RoadType::Asphalt,
+    );
 
     // 康定路 (西邊界) - 貫穿南北
-    spawn_road_segment(commands, meshes, materials, road_mat.clone(), line_mat.clone(),
-        Vec3::new(X_KANGDING, ROAD_Y, -15.0), W_MAIN, 180.0, RoadType::Asphalt);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        road_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(X_KANGDING, ROAD_Y, -15.0),
+        W_MAIN,
+        180.0,
+        RoadType::Asphalt,
+    );
 
     // ========== 南北向道路 (徒步區) ==========
 
     // 漢中街 - 徒步區主軸 (從武昌街到成都路)
     let hanzhong_len = Z_CHENGDU - Z_WUCHANG - W_PEDESTRIAN;
-    let hanzhong_center_z = (Z_WUCHANG + Z_CHENGDU) / 2.0;
-    spawn_road_segment(commands, meshes, materials, pedestrian_mat.clone(), line_mat.clone(),
-        Vec3::new(X_HAN, ROAD_Y + 0.15, hanzhong_center_z), W_PEDESTRIAN, hanzhong_len, RoadType::Pedestrian);
+    let hanzhong_center_z = f32::midpoint(Z_WUCHANG, Z_CHENGDU);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        pedestrian_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(X_HAN, ROAD_Y + 0.15, hanzhong_center_z),
+        W_PEDESTRIAN,
+        hanzhong_len,
+        RoadType::Pedestrian,
+    );
 
     // ========== 東西向道路 (車行道) ==========
 
     // 漢口街 (北邊界) - 車行道
-    spawn_road_segment(commands, meshes, materials, road_mat.clone(), line_mat.clone(),
-        Vec3::new(-10.0, ROAD_Y, Z_HANKOU), 200.0, W_SECONDARY, RoadType::Asphalt);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        road_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(-10.0, ROAD_Y, Z_HANKOU),
+        200.0,
+        W_SECONDARY,
+        RoadType::Asphalt,
+    );
 
     // 成都路 (南邊界) - 主幹道
-    spawn_road_segment(commands, meshes, materials, road_mat.clone(), line_mat.clone(),
-        Vec3::new(-10.0, ROAD_Y, Z_CHENGDU), 200.0, W_MAIN, RoadType::Asphalt);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        road_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(-10.0, ROAD_Y, Z_CHENGDU),
+        200.0,
+        W_MAIN,
+        RoadType::Asphalt,
+    );
 
     // ========== 東西向道路 (徒步區) ==========
 
@@ -91,20 +145,74 @@ pub(super) fn setup_roads(
     let east_center = (X_HAN + han_half_w + ped_east_edge) / 2.0;
 
     // 武昌街二段 - 徒步區 (分東西兩段)
-    spawn_road_segment(commands, meshes, materials, pedestrian_mat.clone(), line_mat.clone(),
-        Vec3::new(west_center, ROAD_Y + 0.15, Z_WUCHANG), west_len, W_PEDESTRIAN, RoadType::Pedestrian);
-    spawn_road_segment(commands, meshes, materials, pedestrian_mat.clone(), line_mat.clone(),
-        Vec3::new(east_center, ROAD_Y + 0.15, Z_WUCHANG), east_len, W_PEDESTRIAN, RoadType::Pedestrian);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        pedestrian_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(west_center, ROAD_Y + 0.15, Z_WUCHANG),
+        west_len,
+        W_PEDESTRIAN,
+        RoadType::Pedestrian,
+    );
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        pedestrian_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(east_center, ROAD_Y + 0.15, Z_WUCHANG),
+        east_len,
+        W_PEDESTRIAN,
+        RoadType::Pedestrian,
+    );
 
     // 昆明街 - 小巷 (分東西兩段)
-    spawn_road_segment(commands, meshes, materials, pedestrian_mat.clone(), line_mat.clone(),
-        Vec3::new(west_center, ROAD_Y + 0.15, Z_KUNMING), west_len, W_ALLEY, RoadType::Pedestrian);
-    spawn_road_segment(commands, meshes, materials, pedestrian_mat.clone(), line_mat.clone(),
-        Vec3::new(east_center, ROAD_Y + 0.15, Z_KUNMING), east_len, W_ALLEY, RoadType::Pedestrian);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        pedestrian_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(west_center, ROAD_Y + 0.15, Z_KUNMING),
+        west_len,
+        W_ALLEY,
+        RoadType::Pedestrian,
+    );
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        pedestrian_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(east_center, ROAD_Y + 0.15, Z_KUNMING),
+        east_len,
+        W_ALLEY,
+        RoadType::Pedestrian,
+    );
 
     // 峨嵋街 - 徒步區 (分東西兩段)
-    spawn_road_segment(commands, meshes, materials, pedestrian_mat.clone(), line_mat.clone(),
-        Vec3::new(west_center, ROAD_Y + 0.15, Z_EMEI), west_len, W_PEDESTRIAN, RoadType::Pedestrian);
-    spawn_road_segment(commands, meshes, materials, pedestrian_mat.clone(), line_mat.clone(),
-        Vec3::new(east_center, ROAD_Y + 0.15, Z_EMEI), east_len, W_PEDESTRIAN, RoadType::Pedestrian);
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        pedestrian_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(west_center, ROAD_Y + 0.15, Z_EMEI),
+        west_len,
+        W_PEDESTRIAN,
+        RoadType::Pedestrian,
+    );
+    spawn_road_segment(
+        commands,
+        meshes,
+        materials,
+        pedestrian_mat.clone(),
+        line_mat.clone(),
+        Vec3::new(east_center, ROAD_Y + 0.15, Z_EMEI),
+        east_len,
+        W_PEDESTRIAN,
+        RoadType::Pedestrian,
+    );
 }

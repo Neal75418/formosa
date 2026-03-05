@@ -1,7 +1,7 @@
 //! UI 系統單元測試
 
-use bevy::color::Alpha;
 use super::notification::{Notification, NotificationQueue, NotificationType};
+use bevy::color::Alpha;
 
 // ============================================================================
 // NotificationType 測試
@@ -189,7 +189,7 @@ fn notification_queue_max_capacity() {
 
     // 新增 7 個通知（超過 MAX_NOTIFICATIONS = 5）
     for i in 0..7 {
-        queue.push(Notification::info(format!("通知 {}", i)));
+        queue.push(Notification::info(format!("通知 {i}")));
     }
 
     // 應該只保留最新的 5 個
@@ -207,7 +207,10 @@ fn notification_queue_info_convenience() {
     queue.info("資訊");
 
     assert_eq!(queue.notifications.len(), 1);
-    assert_eq!(queue.notifications[0].notification_type, NotificationType::Info);
+    assert_eq!(
+        queue.notifications[0].notification_type,
+        NotificationType::Info
+    );
     assert_eq!(queue.notifications[0].message, "資訊");
 }
 
@@ -218,7 +221,10 @@ fn notification_queue_success_convenience() {
     queue.success("成功");
 
     assert_eq!(queue.notifications.len(), 1);
-    assert_eq!(queue.notifications[0].notification_type, NotificationType::Success);
+    assert_eq!(
+        queue.notifications[0].notification_type,
+        NotificationType::Success
+    );
 }
 
 #[test]
@@ -228,7 +234,10 @@ fn notification_queue_warning_convenience() {
     queue.warning("警告");
 
     assert_eq!(queue.notifications.len(), 1);
-    assert_eq!(queue.notifications[0].notification_type, NotificationType::Warning);
+    assert_eq!(
+        queue.notifications[0].notification_type,
+        NotificationType::Warning
+    );
 }
 
 #[test]
@@ -238,12 +247,18 @@ fn notification_queue_error_convenience() {
     queue.error("錯誤");
 
     assert_eq!(queue.notifications.len(), 1);
-    assert_eq!(queue.notifications[0].notification_type, NotificationType::Error);
+    assert_eq!(
+        queue.notifications[0].notification_type,
+        NotificationType::Error
+    );
 }
 
 #[test]
 fn notification_queue_version_wrapping() {
-    let mut queue = NotificationQueue { version: u32::MAX - 1, ..Default::default() };
+    let mut queue = NotificationQueue {
+        version: u32::MAX - 1,
+        ..Default::default()
+    };
 
     queue.push(Notification::info("1"));
     assert_eq!(queue.version, u32::MAX);
@@ -363,9 +378,18 @@ fn interaction_prompt_state_fade_clamped() {
 #[test]
 fn gps_turn_direction_straight() {
     use super::components::GpsTurnDirection;
-    assert_eq!(GpsTurnDirection::from_angle(0.0), GpsTurnDirection::Straight);
-    assert_eq!(GpsTurnDirection::from_angle(0.1), GpsTurnDirection::Straight);
-    assert_eq!(GpsTurnDirection::from_angle(-0.1), GpsTurnDirection::Straight);
+    assert_eq!(
+        GpsTurnDirection::from_angle(0.0),
+        GpsTurnDirection::Straight
+    );
+    assert_eq!(
+        GpsTurnDirection::from_angle(0.1),
+        GpsTurnDirection::Straight
+    );
+    assert_eq!(
+        GpsTurnDirection::from_angle(-0.1),
+        GpsTurnDirection::Straight
+    );
 }
 
 #[test]

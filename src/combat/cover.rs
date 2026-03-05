@@ -2,7 +2,6 @@
 //!
 //! 允許玩家進入掩體、探出射擊、掩體間移動
 
-
 use bevy::prelude::*;
 
 use crate::ai::CoverPoint;
@@ -71,7 +70,7 @@ pub enum PlayerCoverType {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PeekState {
     #[default]
-    Hidden,     // 完全躲藏
+    Hidden, // 完全躲藏
     PeekingLeft,  // 向左探出
     PeekingRight, // 向右探出
     PeekingUp,    // 向上探出（低掩體）
@@ -134,7 +133,10 @@ fn check_exit_cover_input(keyboard: &ButtonInput<KeyCode>) -> bool {
 
 /// 檢測探出方向輸入
 #[inline]
-fn get_peek_direction(keyboard: &ButtonInput<KeyCode>, cover_type: PlayerCoverType) -> Option<PeekState> {
+fn get_peek_direction(
+    keyboard: &ButtonInput<KeyCode>,
+    cover_type: PlayerCoverType,
+) -> Option<PeekState> {
     if keyboard.pressed(KeyCode::KeyA) {
         Some(PeekState::PeekingLeft)
     } else if keyboard.pressed(KeyCode::KeyD) {
@@ -170,18 +172,28 @@ fn handle_cover_swap_input(
     cover_events: &mut MessageWriter<PlayerCoverEvent>,
 ) {
     // 左側移動
-    let left_pressed = keyboard.just_pressed(KeyCode::KeyQ) || keyboard.just_pressed(KeyCode::ArrowLeft);
+    let left_pressed =
+        keyboard.just_pressed(KeyCode::KeyQ) || keyboard.just_pressed(KeyCode::ArrowLeft);
     if left_pressed {
-        if let Some(target) = find_adjacent_cover(player_pos, cover_state.current_cover, cover_query, true) {
-            cover_events.write(PlayerCoverEvent::SwapCover { target_cover: target });
+        if let Some(target) =
+            find_adjacent_cover(player_pos, cover_state.current_cover, cover_query, true)
+        {
+            cover_events.write(PlayerCoverEvent::SwapCover {
+                target_cover: target,
+            });
         }
     }
 
     // 右側移動
-    let right_pressed = keyboard.just_pressed(KeyCode::KeyE) || keyboard.just_pressed(KeyCode::ArrowRight);
+    let right_pressed =
+        keyboard.just_pressed(KeyCode::KeyE) || keyboard.just_pressed(KeyCode::ArrowRight);
     if right_pressed {
-        if let Some(target) = find_adjacent_cover(player_pos, cover_state.current_cover, cover_query, false) {
-            cover_events.write(PlayerCoverEvent::SwapCover { target_cover: target });
+        if let Some(target) =
+            find_adjacent_cover(player_pos, cover_state.current_cover, cover_query, false)
+        {
+            cover_events.write(PlayerCoverEvent::SwapCover {
+                target_cover: target,
+            });
         }
     }
 }
@@ -211,7 +223,13 @@ pub fn player_cover_input_system(
         handle_peek_input(&keyboard, cover_state, &mut cover_events);
 
         // 掩體間移動
-        handle_cover_swap_input(&keyboard, player_pos, cover_state, &cover_query, &mut cover_events);
+        handle_cover_swap_input(
+            &keyboard,
+            player_pos,
+            cover_state,
+            &cover_query,
+            &mut cover_events,
+        );
     } else {
         // 按 C 進入掩體
         if keyboard.just_pressed(KeyCode::KeyC) {
@@ -228,7 +246,11 @@ pub fn player_cover_input_system(
 /// 根據掩體高度決定掩體類型
 #[inline]
 fn determine_cover_type(height: f32) -> PlayerCoverType {
-    if height < 1.2 { PlayerCoverType::Low } else { PlayerCoverType::High }
+    if height < 1.2 {
+        PlayerCoverType::Low
+    } else {
+        PlayerCoverType::High
+    }
 }
 
 /// 重置掩體狀態為非掩體狀態
@@ -277,7 +299,13 @@ fn handle_enter_cover(
         return;
     }
 
-    setup_cover_transition(cover_state, cover_entity, &cover_point, player_pos, cover_transform.translation);
+    setup_cover_transition(
+        cover_state,
+        cover_entity,
+        &cover_point,
+        player_pos,
+        cover_transform.translation,
+    );
     cover_point.occupy(player_entity);
     info!("進入掩體: {:?}", cover_state.cover_type);
 }
@@ -312,10 +340,20 @@ fn handle_swap_cover(
     }
 
     // 進入新掩體
-    let Ok((new_transform, mut new_point)) = cover_query.get_mut(target_cover) else { return };
-    if !new_point.is_available() { return }
+    let Ok((new_transform, mut new_point)) = cover_query.get_mut(target_cover) else {
+        return;
+    };
+    if !new_point.is_available() {
+        return;
+    }
 
-    setup_cover_transition(cover_state, target_cover, &new_point, player_pos, new_transform.translation);
+    setup_cover_transition(
+        cover_state,
+        target_cover,
+        &new_point,
+        player_pos,
+        new_transform.translation,
+    );
     new_point.occupy(player_entity);
     info!("移動到新掩體");
 }
@@ -335,7 +373,13 @@ pub fn player_cover_event_system(
     for event in events.read() {
         match event {
             PlayerCoverEvent::EnterCover { cover_entity } => {
-                handle_enter_cover(*cover_entity, player_entity, player_pos, &mut cover_state, &mut cover_query);
+                handle_enter_cover(
+                    *cover_entity,
+                    player_entity,
+                    player_pos,
+                    &mut cover_state,
+                    &mut cover_query,
+                );
             }
             PlayerCoverEvent::ExitCover => {
                 handle_exit_cover(&mut cover_state, &mut cover_query);
@@ -351,7 +395,13 @@ pub fn player_cover_event_system(
                 cover_state.peek_timer = 0.0;
             }
             PlayerCoverEvent::SwapCover { target_cover } => {
-                handle_swap_cover(*target_cover, player_entity, player_pos, &mut cover_state, &mut cover_query);
+                handle_swap_cover(
+                    *target_cover,
+                    player_entity,
+                    player_pos,
+                    &mut cover_state,
+                    &mut cover_query,
+                );
             }
         }
     }
@@ -367,8 +417,12 @@ fn check_cover_destroyed(
     cover_state: &mut PlayerCoverState,
     cover_query: &Query<(&Transform, &CoverPoint), Without<Player>>,
 ) -> bool {
-    let Some(cover_entity) = cover_state.current_cover else { return false };
-    if cover_query.get(cover_entity).is_ok() { return false }
+    let Some(cover_entity) = cover_state.current_cover else {
+        return false;
+    };
+    if cover_query.get(cover_entity).is_ok() {
+        return false;
+    }
 
     warn!("掩體被摧毀，強制離開掩體狀態");
     reset_cover_state(cover_state);
@@ -379,7 +433,9 @@ fn check_cover_destroyed(
 /// 返回插值後的位置（如果正在過渡中）
 #[inline]
 fn update_cover_transition(cover_state: &mut PlayerCoverState, delta: f32) -> Option<Vec3> {
-    if !cover_state.is_transitioning { return None }
+    if !cover_state.is_transitioning {
+        return None;
+    }
 
     cover_state.transition_progress += delta * 5.0; // 0.2 秒完成過渡
 
@@ -402,7 +458,9 @@ fn apply_peek_offset(
     cover_point: &CoverPoint,
     player_transform: &mut Transform,
 ) {
-    let peek_offset = cover_state.peek_state.get_offset(cover_point.cover_direction);
+    let peek_offset = cover_state
+        .peek_state
+        .get_offset(cover_point.cover_direction);
     player_transform.translation = cover_transform.translation + peek_offset;
 
     // 探出時面向掩體方向
@@ -422,8 +480,12 @@ pub fn player_cover_update_system(
         return;
     };
 
-    if !cover_state.is_in_cover { return }
-    if check_cover_destroyed(&mut cover_state, &cover_query) { return }
+    if !cover_state.is_in_cover {
+        return;
+    }
+    if check_cover_destroyed(&mut cover_state, &cover_query) {
+        return;
+    }
 
     let delta = time.delta_secs();
 
@@ -436,7 +498,12 @@ pub fn player_cover_update_system(
     if !cover_state.is_transitioning {
         if let Some(cover_entity) = cover_state.current_cover {
             if let Ok((cover_transform, cover_point)) = cover_query.get(cover_entity) {
-                apply_peek_offset(&cover_state, cover_transform, cover_point, &mut player_transform);
+                apply_peek_offset(
+                    &cover_state,
+                    cover_transform,
+                    cover_point,
+                    &mut player_transform,
+                );
             }
         }
     }

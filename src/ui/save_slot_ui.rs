@@ -3,21 +3,17 @@
 //! 10 格存檔槽選擇介面，支援存檔/讀檔模式切換。
 //! F7 開啟存檔模式、F8 開啟讀檔模式、ESC 關閉。
 
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
-
 use bevy::prelude::*;
 use bevy::time::Real;
 
 use super::components::{
-    ButtonScaleState, SaveSlotCard, SaveSlotContainer, SaveSlotDetail,
-    SaveSlotModeTab, SaveSlotMode, SaveSlotUiState, UiState,
+    ButtonScaleState, SaveSlotCard, SaveSlotContainer, SaveSlotDetail, SaveSlotMode,
+    SaveSlotModeTab, SaveSlotUiState, UiState,
 };
+#[allow(clippy::wildcard_imports)]
 use super::constants::*;
 use super::systems::{spawn_full_screen_overlay, spawn_key_hint};
-use crate::save::{
-    LoadGameEvent, LoadType, SaveData, SaveGameEvent, SaveManager, SaveType,
-};
+use crate::save::{LoadGameEvent, LoadType, SaveData, SaveGameEvent, SaveManager, SaveType};
 
 /// 存檔槽卡片寬度
 const SAVE_CARD_WIDTH: f32 = 300.0;
@@ -30,7 +26,7 @@ const SAVE_PANEL_WIDTH: f32 = 700.0;
 // 設置系統
 // ============================================================================
 
-/// 設置存檔槽 UI 面板（由 setup_ui 呼叫，初始隱藏）
+/// 設置存檔槽 UI 面板（由 `setup_ui` 呼叫，初始隱藏）
 pub(super) fn setup_save_slot_ui_panel(commands: &mut Commands, font: &Handle<Font>) {
     let f = font.clone();
 
@@ -320,13 +316,25 @@ pub fn save_slot_input_system(
 
     // F7 = 存檔模式切換
     if keyboard.just_pressed(KeyCode::F7) {
-        toggle_save_slot_mode(is_visible, SaveSlotMode::Save, &mut save_slot_state, &mut ui_state, &mut visibility);
+        toggle_save_slot_mode(
+            is_visible,
+            SaveSlotMode::Save,
+            &mut save_slot_state,
+            &mut ui_state,
+            &mut visibility,
+        );
         return;
     }
 
     // F8 = 讀檔模式切換
     if keyboard.just_pressed(KeyCode::F8) {
-        toggle_save_slot_mode(is_visible, SaveSlotMode::Load, &mut save_slot_state, &mut ui_state, &mut visibility);
+        toggle_save_slot_mode(
+            is_visible,
+            SaveSlotMode::Load,
+            &mut save_slot_state,
+            &mut ui_state,
+            &mut visibility,
+        );
     }
 }
 
@@ -427,7 +435,7 @@ pub fn save_slot_click_system(
                 if save_slot_state
                     .slot_cache
                     .get(card.slot)
-                    .is_some_and(|s| s.is_some())
+                    .is_some_and(Option::is_some)
                 {
                     load_events.write(LoadGameEvent {
                         load_type: LoadType::Slot,
@@ -500,11 +508,12 @@ fn scan_save_file(path: &std::path::Path) -> Option<super::components::SlotCache
 }
 
 /// 格式化遊玩時間
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn format_play_time(secs: f64) -> String {
     let total = secs as u64;
     let h = total / 3600;
     let m = (total % 3600) / 60;
-    format!("{}h {:02}m", h, m)
+    format!("{h}h {m:02}m")
 }
 
 /// 格式化 Unix 時間戳為 YYYY-MM-DD HH:MM
@@ -517,11 +526,11 @@ fn format_timestamp(timestamp: u64) -> String {
     let hours = day_secs / 3600;
     let minutes = (day_secs % 3600) / 60;
     let (y, m, d) = civil_from_days(days);
-    format!("{:04}-{:02}-{:02} {:02}:{:02}", y, m, d, hours, minutes)
+    format!("{y:04}-{m:02}-{d:02} {hours:02}:{minutes:02}")
 }
 
 /// 將 Unix epoch 起算天數轉為 (年, 月, 日)
-/// 基於 Howard Hinnant 的 civil_from_days 演算法
+/// 基於 Howard Hinnant 的 `civil_from_days` 演算法
 fn civil_from_days(days: u64) -> (u64, u64, u64) {
     let z = days + 719_468;
     let era = z / 146_097;
@@ -622,6 +631,6 @@ mod tests {
         assert_eq!(state.mode, SaveSlotMode::Save);
         assert!(state.needs_refresh);
         assert_eq!(state.slot_cache.len(), 10);
-        assert!(state.slot_cache.iter().all(|s| s.is_none()));
+        assert!(state.slot_cache.iter().all(std::option::Option::is_none));
     }
 }

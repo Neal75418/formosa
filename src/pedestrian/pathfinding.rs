@@ -2,9 +2,16 @@
 //!
 //! 提供基於網格的 A* 尋路功能，用於行人導航。
 
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+
 use bevy::prelude::*;
-use std::collections::{BinaryHeap, HashMap};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 
 // ============================================================================
 // A* 尋路系統
@@ -31,8 +38,14 @@ impl PartialOrd for AStarNode {
 
 /// A* 四方向與對角線移動
 const ASTAR_DIRECTIONS: [(i32, i32); 8] = [
-    (-1, 0), (1, 0), (0, -1), (0, 1),  // 四方向
-    (-1, -1), (-1, 1), (1, -1), (1, 1), // 對角線
+    (-1, 0),
+    (1, 0),
+    (0, -1),
+    (0, 1), // 四方向
+    (-1, -1),
+    (-1, 1),
+    (1, -1),
+    (1, 1), // 對角線
 ];
 
 /// 計算曼哈頓距離啟發式
@@ -100,7 +113,7 @@ impl Default for PathfindingGrid {
         // 西門町區域: X ∈ [-70, 50], Z ∈ [-70, 60]
         // 使用 2m 格子
         let cell_size = 2.0;
-        let width = 60;  // 120m / 2m = 60 格
+        let width = 60; // 120m / 2m = 60 格
         let height = 65; // 130m / 2m = 65 格
         let origin = Vec3::new(-70.0, 0.0, -70.0);
 
@@ -230,12 +243,12 @@ impl PathfindingGrid {
     ) {
         let current_g = *g_score.get(&current_pos).unwrap_or(&i32::MAX);
 
-        for (dx, dz) in ASTAR_DIRECTIONS.iter() {
-            let Some(neighbor) = self.get_neighbor(current_pos, *dx, *dz) else {
+        for &(dx, dz) in &ASTAR_DIRECTIONS {
+            let Some(neighbor) = self.get_neighbor(current_pos, dx, dz) else {
                 continue;
             };
 
-            let is_diagonal = *dx != 0 && *dz != 0;
+            let is_diagonal = dx != 0 && dz != 0;
             let move_cost = if is_diagonal { 14 } else { 10 };
             let tentative_g = current_g + move_cost;
 
@@ -323,7 +336,8 @@ mod tests {
     fn world_to_grid_and_back() {
         let grid = small_grid();
         let world_pos = Vec3::new(3.2, 0.0, 5.8);
-        let (gx, gz) = grid.world_to_grid(world_pos)
+        let (gx, gz) = grid
+            .world_to_grid(world_pos)
             .expect("world_pos (3.2, 5.8) should be valid within grid bounds");
         assert_eq!((gx, gz), (3, 5));
         let back = grid.grid_to_world(gx, gz);
@@ -372,7 +386,9 @@ mod tests {
         assert!(path.is_some());
         let waypoints = path.expect("path should exist for straight line from start to goal");
         assert!(waypoints.len() >= 2);
-        assert!((waypoints.last().expect("waypoints should not be empty").x - 5.5).abs() < f32::EPSILON);
+        assert!(
+            (waypoints.last().expect("waypoints should not be empty").x - 5.5).abs() < f32::EPSILON
+        );
     }
 
     #[test]

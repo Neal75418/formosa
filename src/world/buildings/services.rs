@@ -2,12 +2,13 @@
 //!
 //! 飯店、刺青店、誠品、現代網格店、潮流服飾店
 
+use super::{spawn_building_base, BuildingMaterialConfig, BuildingParams};
+use crate::world::{Building, BuildingType};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
-use crate::world::{Building, BuildingType};
-use super::{BuildingParams, BuildingMaterialConfig, spawn_building_base};
 
 /// 誠品 (植生牆風格)
+#[allow(clippy::cast_precision_loss)]
 pub fn spawn_eslite(
     cmd: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -43,6 +44,7 @@ pub fn spawn_eslite(
 }
 
 /// 現代網格 (H&M / Uniqlo)
+#[allow(clippy::cast_precision_loss)]
 pub fn spawn_modern_grid(
     cmd: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -114,6 +116,7 @@ pub fn spawn_modern_grid(
 }
 
 /// 飯店 (Hotel)
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 pub fn spawn_hotel(
     cmd: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,

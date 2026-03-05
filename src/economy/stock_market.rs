@@ -5,8 +5,13 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
+// 遊戲數學常用 f32/i32/u32 互轉，允許精度與截斷轉型
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+// 小型 Copy 結構上的 &self 方法保留 Rust 慣用風格
 
 use std::collections::VecDeque;
 
@@ -88,12 +93,12 @@ impl StockSymbol {
     /// 波動率（每次更新的最大百分比變動）
     pub fn volatility(&self) -> f32 {
         match self {
-            StockSymbol::TSMC => 0.03,          // 3% 穩定型
-            StockSymbol::PineAir => 0.06,       // 6% 中等波動
-            StockSymbol::BobaGroup => 0.04,     // 4%
+            StockSymbol::TSMC => 0.03,            // 3% 穩定型
+            StockSymbol::PineAir => 0.06,         // 6% 中等波動
+            StockSymbol::BobaGroup => 0.04,       // 4%
             StockSymbol::NightMarketKing => 0.08, // 8% 高波動
-            StockSymbol::DragonBuild => 0.05,   // 5%
-            StockSymbol::BearEnergy => 0.07,    // 7% 較高波動
+            StockSymbol::DragonBuild => 0.05,     // 5%
+            StockSymbol::BearEnergy => 0.07,      // 7% 較高波動
         }
     }
 }
@@ -433,7 +438,6 @@ mod tests {
     #[test]
     fn stock_tick_changes_price() {
         let mut stock = Stock::new(StockSymbol::NightMarketKing);
-        let _original = stock.price;
         // 多次 tick 確保價格變動
         for _ in 0..10 {
             stock.tick_price(1.0);
@@ -541,9 +545,12 @@ mod tests {
 
     #[test]
     fn market_closed_blocks_trading() {
-        let mut market = StockMarket { is_open: false, ..Default::default() };
+        let mut market = StockMarket {
+            is_open: false,
+            ..Default::default()
+        };
         let mut wallet = PlayerWallet {
-            cash: 100000,
+            cash: 100_000,
             bank: 0,
             total_earned: 0,
             total_spent: 0,

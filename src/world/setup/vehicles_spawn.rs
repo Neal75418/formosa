@@ -33,9 +33,14 @@ pub(super) fn setup_player_and_vehicles(
 
     // 峨嵋立體停車場
     spawn_parking_garage(
-        commands, meshes, materials,
+        commands,
+        meshes,
+        materials,
         Vec3::new(X_KANGDING + 25.0, 10.0, Z_EMEI + 20.0),
-        22.0, 22.0, 32.0, "峨嵋停車場",
+        22.0,
+        22.0,
+        32.0,
+        "峨嵋停車場",
     );
 
     // === 共享載具材質與機車停放區 ===
@@ -44,7 +49,10 @@ pub(super) fn setup_player_and_vehicles(
 
     // 漢中街徒步區旁 - 紅色機車
     spawn_scooter(
-        commands, meshes, materials, &vehicle_mats,
+        commands,
+        meshes,
+        materials,
+        &vehicle_mats,
         Vec3::new(12.0, 0.0, -8.0),
         Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
         Color::srgb(0.9, 0.1, 0.1),
@@ -52,7 +60,9 @@ pub(super) fn setup_player_and_vehicles(
 
     // 徒步區閒置汽車 - 深藍色
     spawn_vehicle(
-        commands, meshes, materials,
+        commands,
+        meshes,
+        materials,
         Vec3::new(-8.0, 0.0, -15.0),
         VehiclePreset::car(),
         Color::srgb(0.2, 0.3, 0.6),
@@ -61,6 +71,7 @@ pub(super) fn setup_player_and_vehicles(
     info!("🚗 已生成 1 台機車和 1 台汽車於徒步區");
 }
 
+#[allow(clippy::too_many_lines)]
 fn spawn_vehicle(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -76,9 +87,10 @@ fn spawn_vehicle(
     let vehicle_type = preset.vehicle.vehicle_type;
 
     let (chassis_size, wheel_offset_z) = match vehicle_type {
-        VehicleType::Car | VehicleType::Taxi => (Vec3::new(2.0, 0.6, 4.0), 1.2),
+        VehicleType::Car | VehicleType::Taxi | VehicleType::Scooter => {
+            (Vec3::new(2.0, 0.6, 4.0), 1.2)
+        }
         VehicleType::Bus => (Vec3::new(2.8, 1.2, 8.0), 2.5),
-        _ => (Vec3::new(2.0, 0.6, 4.0), 1.2),
     };
 
     commands

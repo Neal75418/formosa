@@ -5,9 +5,8 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-
+use crate::core::{ease_in_quad, ease_out_quad};
 use bevy::prelude::*;
-use crate::core::{ease_out_quad, ease_in_quad};
 
 // ============================================================================
 // Kill Cam 常數
@@ -25,28 +24,28 @@ const PHASE_EASE_IN_END: f32 = 0.2;
 const PHASE_EASE_OUT_START: f32 = 0.8;
 
 // --- 爆頭擊殺參數 ---
-const HEADSHOT_TIME_SCALE: f32 = 0.2;   // 5 倍慢動作
-const HEADSHOT_DURATION: f32 = 1.5;     // 持續 1.5 秒
-const HEADSHOT_ZOOM: f32 = 2.0;         // 2 倍縮放
+const HEADSHOT_TIME_SCALE: f32 = 0.2; // 5 倍慢動作
+const HEADSHOT_DURATION: f32 = 1.5; // 持續 1.5 秒
+const HEADSHOT_ZOOM: f32 = 2.0; // 2 倍縮放
 
 // --- 最後敵人參數 ---
-const LAST_ENEMY_TIME_SCALE: f32 = 0.15;  // 6.7 倍慢動作
-const LAST_ENEMY_DURATION: f32 = 2.0;     // 持續 2 秒
-const LAST_ENEMY_ZOOM: f32 = 2.5;         // 2.5 倍縮放
+const LAST_ENEMY_TIME_SCALE: f32 = 0.15; // 6.7 倍慢動作
+const LAST_ENEMY_DURATION: f32 = 2.0; // 持續 2 秒
+const LAST_ENEMY_ZOOM: f32 = 2.5; // 2.5 倍縮放
 
 // --- 遠距離擊殺參數 ---
-const LONG_RANGE_TIME_SCALE: f32 = 0.25;  // 4 倍慢動作
-const LONG_RANGE_DURATION: f32 = 1.2;     // 持續 1.2 秒
-const LONG_RANGE_ZOOM: f32 = 1.8;         // 1.8 倍縮放
+const LONG_RANGE_TIME_SCALE: f32 = 0.25; // 4 倍慢動作
+const LONG_RANGE_DURATION: f32 = 1.2; // 持續 1.2 秒
+const LONG_RANGE_ZOOM: f32 = 1.8; // 1.8 倍縮放
 
 // --- 連殺參數 ---
-const MULTI_KILL_BASE_TIME_SCALE: f32 = 0.3;   // 基礎時間縮放
-const MULTI_KILL_SCALE_PER_KILL: f32 = 0.05;   // 每次連殺額外減速
-const MULTI_KILL_MIN_TIME_SCALE: f32 = 0.1;    // 最慢時間縮放
-const MULTI_KILL_BASE_DURATION: f32 = 1.0;     // 基礎持續時間
+const MULTI_KILL_BASE_TIME_SCALE: f32 = 0.3; // 基礎時間縮放
+const MULTI_KILL_SCALE_PER_KILL: f32 = 0.05; // 每次連殺額外減速
+const MULTI_KILL_MIN_TIME_SCALE: f32 = 0.1; // 最慢時間縮放
+const MULTI_KILL_BASE_DURATION: f32 = 1.0; // 基礎持續時間
 const MULTI_KILL_DURATION_PER_KILL: f32 = 0.3; // 每次連殺額外時間
-const MULTI_KILL_BASE_ZOOM: f32 = 1.5;         // 基礎縮放
-const MULTI_KILL_ZOOM_PER_KILL: f32 = 0.2;     // 每次連殺額外縮放
+const MULTI_KILL_BASE_ZOOM: f32 = 1.5; // 基礎縮放
+const MULTI_KILL_ZOOM_PER_KILL: f32 = 0.2; // 每次連殺額外縮放
 
 // ============================================================================
 // Kill Cam 狀態
@@ -112,7 +111,7 @@ impl Default for KillCamState {
             original_camera_distance: 0.0,
             kill_streak: 0,
             last_kill_time: 0.0,
-            kill_streak_window: 3.0,  // 3 秒內連續擊殺算連殺
+            kill_streak_window: 3.0, // 3 秒內連續擊殺算連殺
         }
     }
 }
@@ -133,28 +132,22 @@ impl KillCamState {
 
         // 設定效果參數（使用常數定義）
         let (time_scale, duration, zoom) = match trigger_type {
-            KillCamTrigger::Headshot => (
-                HEADSHOT_TIME_SCALE,
-                HEADSHOT_DURATION,
-                HEADSHOT_ZOOM,
-            ),
-            KillCamTrigger::LastEnemy => (
-                LAST_ENEMY_TIME_SCALE,
-                LAST_ENEMY_DURATION,
-                LAST_ENEMY_ZOOM,
-            ),
+            KillCamTrigger::Headshot => (HEADSHOT_TIME_SCALE, HEADSHOT_DURATION, HEADSHOT_ZOOM),
+            KillCamTrigger::LastEnemy => {
+                (LAST_ENEMY_TIME_SCALE, LAST_ENEMY_DURATION, LAST_ENEMY_ZOOM)
+            }
             KillCamTrigger::MultiKill(count) => {
-                let scale = (MULTI_KILL_BASE_TIME_SCALE - count as f32 * MULTI_KILL_SCALE_PER_KILL)
+                let scale = (MULTI_KILL_BASE_TIME_SCALE
+                    - f32::from(count) * MULTI_KILL_SCALE_PER_KILL)
                     .max(MULTI_KILL_MIN_TIME_SCALE);
-                let dur = MULTI_KILL_BASE_DURATION + count as f32 * MULTI_KILL_DURATION_PER_KILL;
-                let z = MULTI_KILL_BASE_ZOOM + count as f32 * MULTI_KILL_ZOOM_PER_KILL;
+                let dur =
+                    MULTI_KILL_BASE_DURATION + f32::from(count) * MULTI_KILL_DURATION_PER_KILL;
+                let z = MULTI_KILL_BASE_ZOOM + f32::from(count) * MULTI_KILL_ZOOM_PER_KILL;
                 (scale, dur, z)
             }
-            KillCamTrigger::LongRange => (
-                LONG_RANGE_TIME_SCALE,
-                LONG_RANGE_DURATION,
-                LONG_RANGE_ZOOM,
-            ),
+            KillCamTrigger::LongRange => {
+                (LONG_RANGE_TIME_SCALE, LONG_RANGE_DURATION, LONG_RANGE_ZOOM)
+            }
         };
 
         // 確保持續時間和時間縮放不為零（防止除以零）
@@ -236,7 +229,8 @@ impl KillCamState {
                 self.time_scale = self.target_time_scale;
             } else {
                 let t = (progress - PHASE_EASE_OUT_START) / (1.0 - PHASE_EASE_OUT_START);
-                self.time_scale = self.target_time_scale + (1.0 - self.target_time_scale) * ease_in_quad(t);
+                self.time_scale =
+                    self.target_time_scale + (1.0 - self.target_time_scale) * ease_in_quad(t);
             }
         }
     }
@@ -286,7 +280,7 @@ pub fn killcam_update_system(
         // 使用虛擬時間縮放（不直接修改 TimeScale，而是讓遊戲邏輯參考這個值）
         // Bevy 的 Time 不支持直接修改時間縮放，需要在遊戲邏輯中手動處理
         *time_scale_writer = bevy::time::TimeUpdateStrategy::ManualDuration(
-            std::time::Duration::from_secs_f32(dt * killcam.time_scale)
+            std::time::Duration::from_secs_f32(dt * killcam.time_scale),
         );
     } else {
         *time_scale_writer = bevy::time::TimeUpdateStrategy::Automatic;
@@ -302,7 +296,7 @@ pub fn killcam_visual_system(
     // 如果 Kill Cam 啟用，微調攝影機
     if killcam.active {
         if let Some(target_pos) = killcam.target_position {
-            for mut transform in query.iter_mut() {
+            for mut transform in &mut query {
                 // 讓攝影機稍微看向目標
                 let current_forward = transform.forward().as_vec3();
                 let to_target = (target_pos - transform.translation).normalize_or_zero();

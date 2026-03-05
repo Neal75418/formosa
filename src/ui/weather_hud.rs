@@ -192,6 +192,7 @@ fn spawn_weather_icon_container<'a>(
 }
 
 /// 生成太陽圖示
+#[allow(clippy::cast_precision_loss)]
 fn spawn_sun_icon(parent: &mut ChildSpawnerCommands) {
     spawn_weather_icon_container(
         parent,
@@ -265,6 +266,7 @@ fn spawn_cloud_icon(parent: &mut ChildSpawnerCommands) {
 }
 
 /// 生成雨圖示
+#[allow(clippy::cast_precision_loss)]
 fn spawn_rain_icon(parent: &mut ChildSpawnerCommands) {
     spawn_weather_icon_container(parent, WeatherIconType::Rain, false, None).with_children(
         |rain| {
@@ -366,14 +368,12 @@ pub fn update_weather_hud(
     let target_icon = match display_weather {
         WeatherType::Clear => WeatherIconType::Sun,
         WeatherType::Cloudy => WeatherIconType::Cloud,
-        WeatherType::Rainy => WeatherIconType::Rain,
-        WeatherType::Foggy => WeatherIconType::Fog,
-        WeatherType::Stormy => WeatherIconType::Rain, // 暴風雨用雨天圖示
-        WeatherType::Sandstorm => WeatherIconType::Fog, // 沙塵暴暫用霧天圖示（待美術提供專用圖示）
+        WeatherType::Rainy | WeatherType::Stormy => WeatherIconType::Rain, // 暴風雨用雨天圖示
+        WeatherType::Foggy | WeatherType::Sandstorm => WeatherIconType::Fog, // 沙塵暴暫用霧天圖示
     };
 
     // 更新圖示可見性
-    for (icon_element, mut visibility) in icon_query.iter_mut() {
+    for (icon_element, mut visibility) in &mut icon_query {
         *visibility = if icon_element.weather_type == target_icon {
             Visibility::Inherited
         } else {

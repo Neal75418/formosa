@@ -2,10 +2,11 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
+// 小型 Copy 結構上的 &self 方法保留 Rust 慣用風格
 
+use crate::core::{lifetime_fade_alpha, EntityPool};
 use bevy::prelude::*;
 use std::collections::HashSet;
-use crate::core::{EntityPool, lifetime_fade_alpha};
 
 // ============================================================================
 // 可破壞物件
@@ -298,7 +299,7 @@ impl DebrisPool {
         }
     }
 
-    /// 從池中取得一個碎片實體（僅標記為候選，需呼叫 confirm_acquire 確認）
+    /// 從池中取得一個碎片實體（僅標記為候選，需呼叫 `confirm_acquire` 確認）
     #[inline]
     pub fn acquire(&mut self) -> Option<Entity> {
         self.pool.acquire()
@@ -423,12 +424,27 @@ impl DestructibleVisuals {
     }
 
     /// 取得對應材質的 mesh 和 material
-    pub fn get_debris_visuals(&self, material: DestructibleMaterial) -> (Handle<Mesh>, Handle<StandardMaterial>) {
+    pub fn get_debris_visuals(
+        &self,
+        material: DestructibleMaterial,
+    ) -> (Handle<Mesh>, Handle<StandardMaterial>) {
         match material {
-            DestructibleMaterial::Glass => (self.glass_shard_mesh.clone(), self.glass_shard_material.clone()),
-            DestructibleMaterial::Wood => (self.wood_chunk_mesh.clone(), self.wood_chunk_material.clone()),
-            DestructibleMaterial::Metal => (self.metal_shard_mesh.clone(), self.metal_shard_material.clone()),
-            DestructibleMaterial::Plastic => (self.plastic_chunk_mesh.clone(), self.plastic_chunk_material.clone()),
+            DestructibleMaterial::Glass => (
+                self.glass_shard_mesh.clone(),
+                self.glass_shard_material.clone(),
+            ),
+            DestructibleMaterial::Wood => (
+                self.wood_chunk_mesh.clone(),
+                self.wood_chunk_material.clone(),
+            ),
+            DestructibleMaterial::Metal => (
+                self.metal_shard_mesh.clone(),
+                self.metal_shard_material.clone(),
+            ),
+            DestructibleMaterial::Plastic => (
+                self.plastic_chunk_mesh.clone(),
+                self.plastic_chunk_material.clone(),
+            ),
         }
     }
 }

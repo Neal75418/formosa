@@ -4,8 +4,6 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -162,8 +160,7 @@ impl WaveParams {
     /// 計算某位置某時刻的水面高度
     pub fn water_height(&self, position: Vec3, time: f32) -> f32 {
         let wave1 = (position.x * 0.1 + time * self.frequency).sin() * self.amplitude;
-        let wave2 =
-            (position.z * 0.08 + time * self.frequency * 0.7).sin() * self.amplitude * 0.6;
+        let wave2 = (position.z * 0.08 + time * self.frequency * 0.7).sin() * self.amplitude * 0.6;
         let wave3 = ((position.x + position.z) * 0.05 + time * self.frequency * 1.3).sin()
             * self.amplitude
             * 0.3;
@@ -188,6 +185,7 @@ impl WaveParams {
 }
 
 /// 浮力數據（附加到水上載具實體）
+#[allow(clippy::struct_field_names)]
 #[derive(Component, Clone, Debug)]
 pub struct Buoyancy {
     /// 浮力係數（越大浮力越強）
@@ -234,10 +232,7 @@ pub fn create_harbors() -> Vec<Harbor> {
         Harbor {
             name: "漁人碼頭".to_string(),
             position: Vec3::new(90.0, WATER_LEVEL, -50.0),
-            available_crafts: vec![
-                WatercraftType::FishingBoat,
-                WatercraftType::Speedboat,
-            ],
+            available_crafts: vec![WatercraftType::FishingBoat, WatercraftType::Speedboat],
         },
         Harbor {
             name: "河濱碼頭".to_string(),
@@ -388,7 +383,11 @@ mod tests {
         let normal = waves.water_normal(Vec3::ZERO, 0.0);
 
         // 法線應大致朝上
-        assert!(normal.y > 0.5, "Normal Y should be positive, got {}", normal.y);
+        assert!(
+            normal.y > 0.5,
+            "Normal Y should be positive, got {}",
+            normal.y
+        );
     }
 
     #[test]

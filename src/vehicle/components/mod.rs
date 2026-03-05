@@ -10,32 +10,20 @@
 // 完整車輛系統組件定義，部分組件預留供未來關卡使用。
 
 mod core;
+mod npc;
 mod physics;
 mod presets;
-mod npc;
 mod visuals;
 
 // 重新導出所有公開項目
-pub use self::core::{VehicleId, VehicleMaterials, VehicleType, VehiclePhysicsMode, Vehicle};
+pub use self::core::{Vehicle, VehicleId, VehicleMaterials, VehiclePhysicsMode, VehicleType};
+pub use npc::{NpcState, NpcVehicle};
 pub use physics::{
-    VehicleLean,
-    VehiclePowerBand,
-    VehicleBraking,
+    VehicleBodyDynamics, VehicleBraking, VehicleDrift, VehicleInput, VehicleLean, VehiclePowerBand,
     VehicleSteering,
-    VehicleDrift,
-    VehicleBodyDynamics,
-    VehicleInput,
 };
 pub use presets::VehiclePreset;
-pub use npc::{NpcState, NpcVehicle};
 pub use visuals::{
-    VehicleVisualRoot,
-    VehicleChassisMesh,
-    VehicleCabinMesh,
-    VehicleOriginalColor,
-    TireTrack,
-    DriftSmoke,
-    NitroFlame,
-    VehicleEffectVisuals,
-    VehicleEffectTracker,
+    DriftSmoke, NitroFlame, TireTrack, VehicleCabinMesh, VehicleChassisMesh, VehicleEffectTracker,
+    VehicleEffectVisuals, VehicleOriginalColor, VehicleVisualRoot,
 };

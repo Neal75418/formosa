@@ -2,10 +2,10 @@
 //!
 //! 萬年大樓、唐吉訶德、電影院、遊戲中心、夾娃娃機店
 
+use super::{spawn_building_base, BuildingMaterialConfig, BuildingParams};
+use crate::world::{Building, BuildingType};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
-use crate::world::{Building, BuildingType};
-use super::{BuildingParams, BuildingMaterialConfig, spawn_building_base};
 
 /// 萬年大樓 (轉角圓柱風格)
 pub fn spawn_wannien(
@@ -86,6 +86,7 @@ pub fn spawn_wannien(
 }
 
 /// 唐吉訶德 (雜亂招牌風格)
+#[allow(clippy::cast_precision_loss)]
 pub fn spawn_donki(
     cmd: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -102,6 +103,8 @@ pub fn spawn_donki(
         ..default()
     };
     spawn_building_base(cmd, meshes, mats, &params, config).with_children(|parent| {
+        use rand::Rng;
+
         // 生成大量隨機突出的招牌
         let sign_mat_1 = mats.add(StandardMaterial {
             base_color: Color::srgb(0.0, 0.0, 0.0),
@@ -114,7 +117,6 @@ pub fn spawn_donki(
             ..default()
         });
 
-        use rand::Rng;
         let mut rng = rand::rng();
 
         for i in 0..10 {
@@ -155,6 +157,7 @@ pub fn spawn_donki(
 }
 
 /// 電影院 (Cinema)
+#[allow(clippy::cast_precision_loss)]
 pub fn spawn_cinema(
     cmd: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -194,6 +197,7 @@ pub fn spawn_cinema(
 }
 
 /// 遊戲中心 (Game Center) - 湯姆熊/彈珠台
+#[allow(clippy::cast_precision_loss)]
 pub fn spawn_game_center(
     cmd: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -265,6 +269,8 @@ pub fn spawn_claw_machine(
         ..default()
     };
     spawn_building_base(cmd, meshes, mats, &params, config).with_children(|parent| {
+        use rand::Rng;
+
         // 彩色閃爍燈
         let colors = [
             Color::srgb(1.0, 0.2, 0.5),
@@ -273,7 +279,6 @@ pub fn spawn_claw_machine(
             Color::srgb(1.0, 1.0, 0.2),
         ];
 
-        use rand::Rng;
         let mut rng = rand::rng();
 
         for i in 0..8 {

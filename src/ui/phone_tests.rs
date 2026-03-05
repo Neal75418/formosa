@@ -2,9 +2,7 @@
 //!
 //! 從 phone.rs 拆分，降低單檔行數。
 
-use crate::ui::components::{
-    MissionJournalTab, PhoneApp, PhoneUiState, StockMarketTab,
-};
+use crate::ui::components::{MissionJournalTab, PhoneApp, PhoneUiState, StockMarketTab};
 
 #[test]
 fn phone_app_labels() {

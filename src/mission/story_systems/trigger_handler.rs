@@ -9,11 +9,9 @@ use crate::economy::PlayerWallet;
 use super::super::dialogue::DialogueEvent;
 use super::super::dialogue_systems::is_dialogue_active;
 use super::super::economy::RespectManager;
-use super::super::story_data::*;
-use super::super::story_manager::*;
-use super::super::trigger::{
-    MissionNpc, Trigger, TriggerEvent, TriggerEventType,
-};
+use super::super::story_data::{DialogueId, StoryMissionId, StoryMissionStatus};
+use super::super::story_manager::{StoryMissionDatabase, StoryMissionEvent, StoryMissionManager};
+use super::super::trigger::{MissionNpc, Trigger, TriggerEvent, TriggerEventType};
 use super::super::unlocks::UnlockManager;
 
 // ============================================================================
@@ -54,9 +52,19 @@ pub fn mission_trigger_event_handler(
 
 fn extract_mission_trigger_event(event: &TriggerEvent) -> Option<(&Entity, &StoryMissionId)> {
     match event {
-        TriggerEvent::PlayerEntered { entity, trigger_type }
-        | TriggerEvent::PlayerInteracted { entity, trigger_type }
-        | TriggerEvent::PlayerStayed { entity, trigger_type, .. } => {
+        TriggerEvent::PlayerEntered {
+            entity,
+            trigger_type,
+        }
+        | TriggerEvent::PlayerInteracted {
+            entity,
+            trigger_type,
+        }
+        | TriggerEvent::PlayerStayed {
+            entity,
+            trigger_type,
+            ..
+        } => {
             if let TriggerEventType::Mission(mission_id) = trigger_type {
                 Some((entity, mission_id))
             } else {
@@ -119,7 +127,10 @@ fn try_start_mission(
     world_time: &WorldTime,
 ) {
     if let Some(mission) = database.get(mission_id) {
-        if manager.start_mission(mission, wallet, respect, unlocks, world_time).is_ok() {
+        if manager
+            .start_mission(mission, wallet, respect, unlocks, world_time)
+            .is_ok()
+        {
             events.write(StoryMissionEvent::Started(mission_id));
         }
     }
@@ -146,7 +157,10 @@ fn try_start_npc_mission(
     }
 
     if let Some(mission) = database.get(mission_id) {
-        if manager.start_mission(mission, wallet, respect, unlocks, world_time).is_ok() {
+        if manager
+            .start_mission(mission, wallet, respect, unlocks, world_time)
+            .is_ok()
+        {
             mission_events.write(StoryMissionEvent::Started(mission_id));
         } else {
             return false;
@@ -201,23 +215,40 @@ pub fn mission_npc_interaction_system(
     mut dialogue_events: MessageWriter<DialogueEvent>,
     mut mission_events: MessageWriter<StoryMissionEvent>,
 ) {
-    if is_dialogue_active(&dialogue_state) { return; }
-    if !interaction.can_interact() { return; }
+    if is_dialogue_active(&dialogue_state) {
+        return;
+    }
+    if !interaction.can_interact() {
+        return;
+    }
 
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     for (_entity, transform, npc) in &npc_query {
-        if !npc.can_interact { continue; }
+        if !npc.can_interact {
+            continue;
+        }
 
         let distance_sq = player_pos.distance_squared(transform.translation);
         let radius_sq = npc.interaction_radius * npc.interaction_radius;
-        if distance_sq > radius_sq { continue; }
+        if distance_sq > radius_sq {
+            continue;
+        }
 
         if let Some(mission_id) = npc.offers_mission {
             if try_start_npc_mission(
-                mission_id, &mut manager, &database, &wallet,
-                &respect, &unlocks, &world_time, &mut mission_events, &mut dialogue_events,
+                mission_id,
+                &mut manager,
+                &database,
+                &wallet,
+                &respect,
+                &unlocks,
+                &world_time,
+                &mut mission_events,
+                &mut dialogue_events,
             ) {
                 interaction.consume();
                 return;

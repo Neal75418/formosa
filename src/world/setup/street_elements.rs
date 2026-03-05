@@ -2,20 +2,17 @@
 
 use bevy::prelude::*;
 
-use crate::world::WorldMaterials;
-use crate::world::constants::{
-    ROAD_MARKING_Y_OFFSET, ROAD_Y,
-    W_MAIN, W_PEDESTRIAN, W_SECONDARY,
-    X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA,
-    Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_WUCHANG,
-    ZEBRA_CROSSING_OFFSET,
-};
 use crate::world::characters::spawn_cover_points;
+use crate::world::constants::{
+    ROAD_MARKING_Y_OFFSET, ROAD_Y, W_MAIN, W_PEDESTRIAN, W_SECONDARY, X_HAN, X_KANGDING, X_XINING,
+    X_ZHONGHUA, ZEBRA_CROSSING_OFFSET, Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_WUCHANG,
+};
 use crate::world::roads::spawn_zebra_crossing;
 use crate::world::street_furniture::{
-    spawn_graffiti_wall, spawn_lamppost, spawn_movie_billboard,
-    spawn_trash_can, spawn_vending_machine,
+    spawn_graffiti_wall, spawn_lamppost, spawn_movie_billboard, spawn_trash_can,
+    spawn_vending_machine,
 };
+use crate::world::WorldMaterials;
 
 /// 路燈、自動販賣機、垃圾桶生成
 pub(super) fn setup_street_furniture(
@@ -116,24 +113,64 @@ pub(super) fn setup_zebra_crossings(
     let mut zebra_count = 0;
     for (cx, cz, road_ns_w, road_ew_w, _name) in intersections {
         // 北側
-        spawn_zebra_crossing(commands, meshes, &zebra_mat,
-            Vec3::new(cx, ROAD_Y + ROAD_MARKING_Y_OFFSET, cz - road_ew_w / 2.0 - ZEBRA_CROSSING_OFFSET),
-            road_ns_w, true);
+        spawn_zebra_crossing(
+            commands,
+            meshes,
+            &zebra_mat,
+            Vec3::new(
+                cx,
+                ROAD_Y + ROAD_MARKING_Y_OFFSET,
+                cz - road_ew_w / 2.0 - ZEBRA_CROSSING_OFFSET,
+            ),
+            road_ns_w,
+            true,
+        );
         // 南側
-        spawn_zebra_crossing(commands, meshes, &zebra_mat,
-            Vec3::new(cx, ROAD_Y + ROAD_MARKING_Y_OFFSET, cz + road_ew_w / 2.0 + ZEBRA_CROSSING_OFFSET),
-            road_ns_w, true);
+        spawn_zebra_crossing(
+            commands,
+            meshes,
+            &zebra_mat,
+            Vec3::new(
+                cx,
+                ROAD_Y + ROAD_MARKING_Y_OFFSET,
+                cz + road_ew_w / 2.0 + ZEBRA_CROSSING_OFFSET,
+            ),
+            road_ns_w,
+            true,
+        );
         // 西側
-        spawn_zebra_crossing(commands, meshes, &zebra_mat,
-            Vec3::new(cx - road_ns_w / 2.0 - ZEBRA_CROSSING_OFFSET, ROAD_Y + ROAD_MARKING_Y_OFFSET, cz),
-            road_ew_w, false);
+        spawn_zebra_crossing(
+            commands,
+            meshes,
+            &zebra_mat,
+            Vec3::new(
+                cx - road_ns_w / 2.0 - ZEBRA_CROSSING_OFFSET,
+                ROAD_Y + ROAD_MARKING_Y_OFFSET,
+                cz,
+            ),
+            road_ew_w,
+            false,
+        );
         // 東側
-        spawn_zebra_crossing(commands, meshes, &zebra_mat,
-            Vec3::new(cx + road_ns_w / 2.0 + ZEBRA_CROSSING_OFFSET, ROAD_Y + ROAD_MARKING_Y_OFFSET, cz),
-            road_ew_w, false);
+        spawn_zebra_crossing(
+            commands,
+            meshes,
+            &zebra_mat,
+            Vec3::new(
+                cx + road_ns_w / 2.0 + ZEBRA_CROSSING_OFFSET,
+                ROAD_Y + ROAD_MARKING_Y_OFFSET,
+                cz,
+            ),
+            road_ew_w,
+            false,
+        );
         zebra_count += 4;
     }
-    info!("🦓 已生成 {} 條斑馬線於 {} 個交叉口", zebra_count, intersections.len());
+    info!(
+        "🦓 已生成 {} 條斑馬線於 {} 個交叉口",
+        zebra_count,
+        intersections.len()
+    );
 }
 
 /// 電影看板、塗鴉牆、掩體點生成
@@ -144,10 +181,26 @@ pub(super) fn setup_special_elements(
 ) {
     // 電影看板
     let billboard_configs = [
-        (Vec3::new(25.0, 8.0, -58.0), Color::srgb(1.0, 0.3, 0.2), "動作片"),
-        (Vec3::new(35.0, 8.0, -58.0), Color::srgb(0.2, 0.5, 1.0), "科幻片"),
-        (Vec3::new(45.0, 8.0, -58.0), Color::srgb(1.0, 0.8, 0.2), "喜劇片"),
-        (Vec3::new(55.0, 8.0, -58.0), Color::srgb(0.6, 0.1, 0.8), "恐怖片"),
+        (
+            Vec3::new(25.0, 8.0, -58.0),
+            Color::srgb(1.0, 0.3, 0.2),
+            "動作片",
+        ),
+        (
+            Vec3::new(35.0, 8.0, -58.0),
+            Color::srgb(0.2, 0.5, 1.0),
+            "科幻片",
+        ),
+        (
+            Vec3::new(45.0, 8.0, -58.0),
+            Color::srgb(1.0, 0.8, 0.2),
+            "喜劇片",
+        ),
+        (
+            Vec3::new(55.0, 8.0, -58.0),
+            Color::srgb(0.6, 0.1, 0.8),
+            "恐怖片",
+        ),
     ];
 
     for (pos, color, _genre) in billboard_configs {

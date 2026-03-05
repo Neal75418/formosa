@@ -1,8 +1,8 @@
 //! 通緝系統除錯可視化
 
-use bevy::prelude::*;
 use super::components::*;
 use crate::player::Player;
+use bevy::prelude::*;
 
 /// 可視化警察視線和 FOV
 pub fn debug_police_vision(

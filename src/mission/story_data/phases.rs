@@ -3,10 +3,10 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
+use super::{CutsceneId, DialogueId, FailCondition, MissionObjective, NpcId, StoryMissionType};
+use crate::combat::{EnemyType, WeaponType};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::combat::{EnemyType, WeaponType};
-use super::{DialogueId, CutsceneId, NpcId, StoryMissionType, MissionObjective, FailCondition};
 
 /// 敵人生成資料
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -144,6 +144,6 @@ impl MissionPhase {
         self.objectives
             .iter()
             .filter(|obj| !obj.is_optional)
-            .all(|obj| obj.check_completion())
+            .all(MissionObjective::check_completion)
     }
 }

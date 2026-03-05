@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
+#[allow(clippy::wildcard_imports)]
 use super::super::components::*;
+#[allow(clippy::wildcard_imports)]
 use super::super::events::*;
 
 // ============================================================================

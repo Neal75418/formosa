@@ -5,7 +5,6 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use std::collections::HashMap;
@@ -205,6 +204,7 @@ const JOINT_STIFFNESS: f32 = 0.0; // 無彈簧效果
 ///
 /// # Returns
 /// 新創建的布娃娃根實體（供 RagdollTracker 追蹤），若無身體部位則返回 None
+#[allow(clippy::too_many_lines)]
 pub fn convert_to_skeletal_ragdoll(
     commands: &mut Commands,
     parent_entity: Entity,
@@ -356,7 +356,7 @@ pub fn convert_to_skeletal_ragdoll(
 /// 創建身體部位間的關節約束
 fn create_skeletal_joints(commands: &mut Commands, parts: &[(BodyPartType, Entity)]) {
     // 使用 HashMap 預先索引，避免重複遍歷
-    let part_map: HashMap<BodyPartType, Entity> = parts.iter().cloned().collect();
+    let part_map: HashMap<BodyPartType, Entity> = parts.iter().copied().collect();
 
     // 找到軀幹實體（中心）
     let Some(&torso_entity) = part_map.get(&BodyPartType::Torso) else {

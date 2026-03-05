@@ -2,6 +2,7 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
+#![allow(clippy::items_after_statements)]
 
 use bevy::prelude::*;
 use std::collections::VecDeque;
@@ -30,10 +31,10 @@ pub struct PedestrianConfig {
 impl Default for PedestrianConfig {
     fn default() -> Self {
         Self {
-            max_count: 12,          // 減少：避免太多行人漫無目的
-            spawn_radius: 40.0,     // 縮小：只在玩家附近生成
-            despawn_radius: 60.0,   // 縮小：更快清除遠處行人
-            spawn_interval: 4.0,    // 增加：減緩生成速度
+            max_count: 12,        // 減少：避免太多行人漫無目的
+            spawn_radius: 40.0,   // 縮小：只在玩家附近生成
+            despawn_radius: 60.0, // 縮小：更快清除遠處行人
+            spawn_interval: 4.0,  // 增加：減緩生成速度
             spawn_timer: 0.0,
             walk_speed: 2.0,
             flee_speed: 5.0,
@@ -43,8 +44,7 @@ impl Default for PedestrianConfig {
 }
 
 /// 行人路徑資源
-#[derive(Resource)]
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct PedestrianPaths {
     /// 人行道路徑列表
     pub sidewalk_paths: Vec<SidewalkPath>,
@@ -75,7 +75,7 @@ impl SidewalkPath {
 /// 槍擊事件追蹤（用於行人反應）
 #[derive(Resource, Default)]
 pub struct GunshotTracker {
-    /// 最近的槍擊位置和時間（使用 VecDeque 以 O(1) 移除舊記錄）
+    /// 最近的槍擊位置和時間（使用 `VecDeque` 以 O(1) 移除舊記錄）
     pub recent_shots: VecDeque<(Vec3, f32)>,
 }
 
@@ -130,10 +130,8 @@ pub struct PedestrianVisuals {
 
 impl PedestrianVisuals {
     /// 建立新實例
-    pub fn new(
-        meshes: &mut Assets<Mesh>,
-        materials: &mut Assets<StandardMaterial>,
-    ) -> Self {
+    #[allow(clippy::too_many_lines)]
+    pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) -> Self {
         // 人體尺寸
         let head_radius = 0.12;
         let torso_height = 0.5;
@@ -150,63 +148,75 @@ impl PedestrianVisuals {
 
         // 預定義膚色
         let skin_tones = [0.65, 0.75, 0.85];
-        let skin_materials: Vec<_> = skin_tones.iter().map(|&tone| {
-            materials.add(StandardMaterial {
-                base_color: Color::srgb(tone, tone * 0.8, tone * 0.7),
-                perceptual_roughness: 0.8,
-                ..default()
+        let skin_materials: Vec<_> = skin_tones
+            .iter()
+            .map(|&tone| {
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(tone, tone * 0.8, tone * 0.7),
+                    perceptual_roughness: 0.8,
+                    ..default()
+                })
             })
-        }).collect();
+            .collect();
 
         // 預定義上衣顏色
         let shirt_colors = [
-            Color::srgb(0.2, 0.3, 0.6),   // 藍色
-            Color::srgb(0.6, 0.2, 0.2),   // 紅色
-            Color::srgb(0.2, 0.5, 0.3),   // 綠色
-            Color::srgb(0.8, 0.8, 0.8),   // 白色
-            Color::srgb(0.1, 0.1, 0.1),   // 黑色
-            Color::srgb(0.6, 0.5, 0.2),   // 黃褐色
-            Color::srgb(0.5, 0.3, 0.5),   // 紫色
-            Color::srgb(0.9, 0.9, 0.9),   // 白襯衫
-            Color::srgb(0.7, 0.8, 0.9),   // 淺藍
+            Color::srgb(0.2, 0.3, 0.6), // 藍色
+            Color::srgb(0.6, 0.2, 0.2), // 紅色
+            Color::srgb(0.2, 0.5, 0.3), // 綠色
+            Color::srgb(0.8, 0.8, 0.8), // 白色
+            Color::srgb(0.1, 0.1, 0.1), // 黑色
+            Color::srgb(0.6, 0.5, 0.2), // 黃褐色
+            Color::srgb(0.5, 0.3, 0.5), // 紫色
+            Color::srgb(0.9, 0.9, 0.9), // 白襯衫
+            Color::srgb(0.7, 0.8, 0.9), // 淺藍
         ];
-        let shirt_materials: Vec<_> = shirt_colors.iter().map(|&color| {
-            materials.add(StandardMaterial {
-                base_color: color,
-                perceptual_roughness: 0.7,
-                ..default()
+        let shirt_materials: Vec<_> = shirt_colors
+            .iter()
+            .map(|&color| {
+                materials.add(StandardMaterial {
+                    base_color: color,
+                    perceptual_roughness: 0.7,
+                    ..default()
+                })
             })
-        }).collect();
+            .collect();
 
         // 預定義褲子顏色
         let pants_colors = [
-            Color::srgb(0.1, 0.1, 0.2),   // 深藍牛仔
-            Color::srgb(0.1, 0.1, 0.1),   // 黑色
-            Color::srgb(0.4, 0.35, 0.3),  // 卡其色
-            Color::srgb(0.3, 0.3, 0.3),   // 灰色
-            Color::srgb(0.25, 0.25, 0.25),// 深灰
+            Color::srgb(0.1, 0.1, 0.2),    // 深藍牛仔
+            Color::srgb(0.1, 0.1, 0.1),    // 黑色
+            Color::srgb(0.4, 0.35, 0.3),   // 卡其色
+            Color::srgb(0.3, 0.3, 0.3),    // 灰色
+            Color::srgb(0.25, 0.25, 0.25), // 深灰
         ];
-        let pants_materials: Vec<_> = pants_colors.iter().map(|&color| {
-            materials.add(StandardMaterial {
-                base_color: color,
-                perceptual_roughness: 0.6,
-                ..default()
+        let pants_materials: Vec<_> = pants_colors
+            .iter()
+            .map(|&color| {
+                materials.add(StandardMaterial {
+                    base_color: color,
+                    perceptual_roughness: 0.6,
+                    ..default()
+                })
             })
-        }).collect();
+            .collect();
 
         // 預定義鞋子顏色
         let shoe_colors = [
-            Color::srgb(0.1, 0.1, 0.1),   // 黑色
-            Color::srgb(0.8, 0.8, 0.8),   // 白色
-            Color::srgb(0.4, 0.2, 0.1),   // 棕色
+            Color::srgb(0.1, 0.1, 0.1), // 黑色
+            Color::srgb(0.8, 0.8, 0.8), // 白色
+            Color::srgb(0.4, 0.2, 0.1), // 棕色
         ];
-        let shoe_materials: Vec<_> = shoe_colors.iter().map(|&color| {
-            materials.add(StandardMaterial {
-                base_color: color,
-                perceptual_roughness: 0.5,
-                ..default()
+        let shoe_materials: Vec<_> = shoe_colors
+            .iter()
+            .map(|&color| {
+                materials.add(StandardMaterial {
+                    base_color: color,
+                    perceptual_roughness: 0.5,
+                    ..default()
+                })
             })
-        }).collect();
+            .collect();
 
         // 預定義頭髮顏色
         let hair_colors = [
@@ -214,13 +224,16 @@ impl PedestrianVisuals {
             Color::srgb(0.2, 0.1, 0.05),   // 深棕
             Color::srgb(0.4, 0.3, 0.2),    // 棕色
         ];
-        let hair_materials: Vec<_> = hair_colors.iter().map(|&color| {
-            materials.add(StandardMaterial {
-                base_color: color,
-                perceptual_roughness: 0.9,
-                ..default()
+        let hair_materials: Vec<_> = hair_colors
+            .iter()
+            .map(|&color| {
+                materials.add(StandardMaterial {
+                    base_color: color,
+                    perceptual_roughness: 0.9,
+                    ..default()
+                })
             })
-        }).collect();
+            .collect();
 
         Self {
             head_mesh,
@@ -274,8 +287,12 @@ mod tests {
     fn gunshot_tracker_record_and_query() {
         let mut gt = GunshotTracker::default();
         gt.record_shot(Vec3::new(10.0, 0.0, 10.0), 1.0);
-        assert!(gt.has_nearby_shot(Vec3::new(11.0, 0.0, 10.0), 5.0, 2.0).is_some());
-        assert!(gt.has_nearby_shot(Vec3::new(100.0, 0.0, 100.0), 5.0, 2.0).is_none());
+        assert!(gt
+            .has_nearby_shot(Vec3::new(11.0, 0.0, 10.0), 5.0, 2.0)
+            .is_some());
+        assert!(gt
+            .has_nearby_shot(Vec3::new(100.0, 0.0, 100.0), 5.0, 2.0)
+            .is_none());
     }
 
     #[test]

@@ -1,15 +1,16 @@
 //! 直升機戰鬥、旋翼動畫、探照燈、傷害、清理系統
 
+use super::super::WantedLevel;
+#[allow(clippy::wildcard_imports)]
+use super::components::*;
+use crate::combat::{
+    spawn_bullet_tracer, spawn_muzzle_flash, CombatVisuals, DamageEvent, DamageSource, Health,
+    TracerStyle,
+};
+use crate::core::rapier_real_to_f32;
+use crate::player::Player;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
-use crate::core::rapier_real_to_f32;
-use crate::combat::{
-    DamageEvent, DamageSource, Health,
-    CombatVisuals, TracerStyle, spawn_bullet_tracer, spawn_muzzle_flash,
-};
-use crate::player::Player;
-use super::components::*;
-use super::super::WantedLevel;
 
 // ============================================================================
 // 戰鬥系統
@@ -39,11 +40,15 @@ pub fn helicopter_combat_system(
 ) {
     let dt = time.delta_secs();
 
-    let Ok((player_entity, player_transform)) = player_query.single() else { return; };
+    let Ok((player_entity, player_transform)) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
-    let Ok(rapier) = rapier_context.single() else { return; };
+    let Ok(rapier) = rapier_context.single() else {
+        return;
+    };
 
-    for (heli_entity, mut helicopter, transform) in helicopter_query.iter_mut() {
+    for (heli_entity, mut helicopter, transform) in &mut helicopter_query {
         helicopter.fire_cooldown = (helicopter.fire_cooldown - dt).max(0.0);
 
         let heli_pos = transform.translation;
@@ -62,15 +67,33 @@ pub fn helicopter_combat_system(
 
         // 計算子彈終點
         let tracer_end = rapier
-            .cast_ray(muzzle_pos, direction, HELICOPTER_ATTACK_RANGE as RapierReal, true, QueryFilter::default())
-            .map(|(_, toi)| muzzle_pos + direction * rapier_real_to_f32(toi))
-            .unwrap_or_else(|| muzzle_pos + direction * HELICOPTER_ATTACK_RANGE);
+            .cast_ray(
+                muzzle_pos,
+                direction,
+                HELICOPTER_ATTACK_RANGE as RapierReal,
+                true,
+                QueryFilter::default(),
+            )
+            .map_or_else(
+                || muzzle_pos + direction * HELICOPTER_ATTACK_RANGE,
+                |(_, toi)| muzzle_pos + direction * rapier_real_to_f32(toi),
+            );
 
-        spawn_bullet_tracer(&mut commands, &visuals, muzzle_pos, tracer_end, TracerStyle::SMG);
+        spawn_bullet_tracer(
+            &mut commands,
+            &visuals,
+            muzzle_pos,
+            tracer_end,
+            TracerStyle::SMG,
+        );
 
         // 傷害判定
         if let Some((hit_entity, _)) = rapier.cast_ray(
-            muzzle_pos, direction, distance as RapierReal, true, QueryFilter::default()
+            muzzle_pos,
+            direction,
+            distance as RapierReal,
+            true,
+            QueryFilter::default(),
         ) {
             if hit_entity == player_entity {
                 damage_events.write(DamageEvent {
@@ -101,7 +124,7 @@ pub fn rotor_animation_system(
 ) {
     let dt = time.delta_secs();
 
-    for (mut transform, rotor, parent) in rotor_query.iter_mut() {
+    for (mut transform, rotor, parent) in &mut rotor_query {
         // 檢查父直升機是否墜毀
         let is_crashing = helicopter_query
             .get(parent.0)
@@ -129,14 +152,21 @@ pub fn rotor_animation_system(
 pub fn spotlight_tracking_system(
     player_query: Query<&Transform, With<Player>>,
     helicopter_query: Query<(&Transform, &PoliceHelicopter), Without<Player>>,
-    mut spotlight_query: Query<(&mut Transform, &HelicopterSpotlight, &HelicopterParent), (Without<PoliceHelicopter>, Without<Player>)>,
+    mut spotlight_query: Query<
+        (&mut Transform, &HelicopterSpotlight, &HelicopterParent),
+        (Without<PoliceHelicopter>, Without<Player>),
+    >,
 ) {
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
-    for (mut spotlight_transform, _spotlight, parent) in spotlight_query.iter_mut() {
+    for (mut spotlight_transform, _spotlight, parent) in &mut spotlight_query {
         // 取得父直升機位置
-        let Ok((heli_transform, helicopter)) = helicopter_query.get(parent.0) else { continue };
+        let Ok((heli_transform, helicopter)) = helicopter_query.get(parent.0) else {
+            continue;
+        };
 
         // 墜毀時不追蹤
         if helicopter.state == HelicopterState::Crashing {
@@ -168,14 +198,17 @@ pub fn helicopter_damage_system(
 ) {
     let current_time = time.elapsed_secs();
 
-    for (entity, mut helicopter, health, transform) in helicopter_query.iter_mut() {
+    for (entity, mut helicopter, health, transform) in &mut helicopter_query {
         // 同步生命值
         if health.current < helicopter.health {
             let damage_taken = helicopter.health - health.current;
             helicopter.health = health.current;
             helicopter.last_hit_time = current_time;
 
-            info!("直升機受傷: -{:.0} HP, 剩餘: {:.0}", damage_taken, helicopter.health);
+            info!(
+                "直升機受傷: -{:.0} HP, 剩餘: {:.0}",
+                damage_taken, helicopter.health
+            );
         }
 
         // 檢查是否墜毀

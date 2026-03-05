@@ -31,13 +31,13 @@ pub struct CharacterSwitchResources<'w> {
 // 常數
 // ============================================================================
 
-/// ZoomOut 階段持續時間（秒）
+/// `ZoomOut` 階段持續時間（秒）
 const ZOOM_OUT_DURATION: f32 = 1.0;
-/// Hold 階段持續時間（秒）
+/// `Hold` 階段持續時間（秒）
 const HOLD_DURATION: f32 = 0.5;
-/// ZoomIn 階段持續時間（秒）
+/// `ZoomIn` 階段持續時間（秒）
 const ZOOM_IN_DURATION: f32 = 1.0;
-/// ZoomOut + Hold 結束時間
+/// `ZoomOut` + `Hold` 結束時間
 const ZOOM_IN_START: f32 = ZOOM_OUT_DURATION + HOLD_DURATION;
 /// 動畫總時長
 const TOTAL_DURATION: f32 = ZOOM_OUT_DURATION + HOLD_DURATION + ZOOM_IN_DURATION;
@@ -129,7 +129,9 @@ pub fn character_switch_input_system(
     screen_effect: Res<crate::ui::ScreenEffectState>,
 ) {
     // 動畫進行中、死亡中、WASTED/BUSTED 期間、車內不接受新輸入
-    if anim.is_active() || respawn_state.is_dead || screen_effect.is_active()
+    if anim.is_active()
+        || respawn_state.is_dead
+        || screen_effect.is_active()
         || game_state.player_in_vehicle
     {
         return;
@@ -175,8 +177,8 @@ pub fn character_switch_input_system(
 
 /// 角色切換攝影機動畫系統
 ///
-/// 動畫期間直接控制攝影機 Transform，覆蓋正常的 camera_follow。
-/// 在 Hold→ZoomIn 過渡時執行角色資料保存與傳送。
+/// 動畫期間直接控制攝影機 `Transform`，覆蓋正常的 `camera_follow`。
+/// 在 `Hold`→`ZoomIn` 過渡時執行角色資料保存與傳送。
 pub fn character_switch_camera_system(
     mut res: CharacterSwitchResources,
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
@@ -244,8 +246,8 @@ pub fn character_switch_camera_system(
             let eased = ease_out_quad(t);
             let dist = res.anim.original_distance
                 + (SATELLITE_DISTANCE - res.anim.original_distance) * eased;
-            let pitch = res.anim.original_pitch
-                + (SATELLITE_PITCH - res.anim.original_pitch) * eased;
+            let pitch =
+                res.anim.original_pitch + (SATELLITE_PITCH - res.anim.original_pitch) * eased;
             (dist, pitch, res.anim.origin_position)
         }
         SwitchPhase::Hold => {
@@ -259,10 +261,9 @@ pub fn character_switch_camera_system(
             let zoom_elapsed = res.anim.elapsed - ZOOM_IN_START;
             let t = (zoom_elapsed / ZOOM_IN_DURATION).min(1.0);
             let eased = ease_in_quad(t);
-            let dist = SATELLITE_DISTANCE
-                + (res.anim.original_distance - SATELLITE_DISTANCE) * eased;
-            let pitch = SATELLITE_PITCH
-                + (res.anim.original_pitch - SATELLITE_PITCH) * eased;
+            let dist =
+                SATELLITE_DISTANCE + (res.anim.original_distance - SATELLITE_DISTANCE) * eased;
+            let pitch = SATELLITE_PITCH + (res.anim.original_pitch - SATELLITE_PITCH) * eased;
             (dist, pitch, res.anim.target_position)
         }
         SwitchPhase::Inactive => unreachable!(),
@@ -302,10 +303,7 @@ fn teleport_to_target(
     };
     let current_pos = player_transform.translation;
     let (_, rotation_y, _) = player_transform.rotation.to_euler(EulerRot::YXZ);
-    let current_hp = health_query
-        .single()
-        .map(|h| h.current)
-        .unwrap_or(100.0);
+    let current_hp = health_query.single().map(|h| h.current).unwrap_or(100.0);
 
     // 保存當前角色狀態並切換
     let target_snapshot = manager.switch_to(
@@ -348,17 +346,15 @@ pub(super) struct CharacterSwitchAnimationPlugin;
 
 impl Plugin for CharacterSwitchAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CharacterSwitchAnimation>()
-            .add_systems(
-                Update,
-                (
-                    character_switch_input_system
-                        .before(crate::camera::camera_input),
-                    character_switch_camera_system
-                        .after(character_switch_input_system)
-                        .after(crate::camera::camera_auto_follow),
-                )
-                    .run_if(in_state(AppState::InGame)),
-            );
+        app.init_resource::<CharacterSwitchAnimation>().add_systems(
+            Update,
+            (
+                character_switch_input_system.before(crate::camera::camera_input),
+                character_switch_camera_system
+                    .after(character_switch_input_system)
+                    .after(crate::camera::camera_auto_follow),
+            )
+                .run_if(in_state(AppState::InGame)),
+        );
     }
 }

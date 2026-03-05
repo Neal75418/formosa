@@ -2,8 +2,6 @@
 //!
 //! 玩家角色和 AI 掩體點的生成
 
-use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
 use crate::ai::CoverPoint;
 use crate::combat::{
     Armor, Damageable, Health, HitReaction, PlayerArm, PlayerHand, Weapon, WeaponInventory,
@@ -11,12 +9,17 @@ use crate::combat::{
 };
 use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::player::{DodgeState, Player};
+use crate::world::constants::{
+    X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_WUCHANG,
+};
 use crate::world::PlayerInteriorState;
-use crate::world::constants::{X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_WUCHANG};
+use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 /// 生成程序化人形角色（台灣年輕人風格）
 /// 完整關節系統：肩關節、肘關節、髖關節、膝關節、腳踝
 /// 身高約 1.7 公尺（遊戲單位）
+#[allow(clippy::too_many_lines)]
 pub fn spawn_player_character(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -24,6 +27,17 @@ pub fn spawn_player_character(
     position: Vec3,
     player: Player,
 ) -> Entity {
+    // 碰撞體參數
+    const COLLIDER_HALF_HEIGHT: f32 = 0.45;
+    const COLLIDER_RADIUS: f32 = 0.25;
+
+    // 身體比例常數（相對於碰撞體中心）
+    const HEAD_Y: f32 = 0.58;
+    const NECK_Y: f32 = 0.42;
+    const CHEST_Y: f32 = 0.18;
+    const WAIST_Y: f32 = -0.02;
+    const HIP_Y: f32 = -0.10;
+
     // === 材質定義 ===
     let skin_color = Color::srgb(0.96, 0.80, 0.69); // 亞洲膚色
     let hair_color = Color::srgb(0.1, 0.08, 0.05); // 深黑髮
@@ -69,17 +83,6 @@ pub fn spawn_player_character(
         perceptual_roughness: 0.4,
         ..default()
     });
-
-    // 碰撞體參數
-    const COLLIDER_HALF_HEIGHT: f32 = 0.45;
-    const COLLIDER_RADIUS: f32 = 0.25;
-
-    // 身體比例常數（相對於碰撞體中心）
-    const HEAD_Y: f32 = 0.58;
-    const NECK_Y: f32 = 0.42;
-    const CHEST_Y: f32 = 0.18;
-    const WAIST_Y: f32 = -0.02;
-    const HIP_Y: f32 = -0.10;
 
     // 生成主體
     let collider_center_y = COLLIDER_HALF_HEIGHT + COLLIDER_RADIUS;
@@ -154,7 +157,8 @@ pub fn spawn_player_character(
             parent.spawn((
                 Mesh3d(meshes.add(Sphere::new(0.02))),
                 MeshMaterial3d(eye_white_mat.clone()),
-                Transform::from_xyz(-eye_spacing, eye_y, eye_z).with_scale(Vec3::new(1.2, 0.8, 0.5)),
+                Transform::from_xyz(-eye_spacing, eye_y, eye_z)
+                    .with_scale(Vec3::new(1.2, 0.8, 0.5)),
             ));
 
             // 瞳孔
@@ -212,7 +216,8 @@ pub fn spawn_player_character(
             parent.spawn((
                 Mesh3d(meshes.add(Sphere::new(head_radius * 1.12))),
                 MeshMaterial3d(hair_mat.clone()),
-                Transform::from_xyz(0.0, HEAD_Y + 0.05, -0.02).with_scale(Vec3::new(1.05, 0.5, 1.15)),
+                Transform::from_xyz(0.0, HEAD_Y + 0.05, -0.02)
+                    .with_scale(Vec3::new(1.05, 0.5, 1.15)),
             ));
             parent.spawn((
                 Mesh3d(meshes.add(Sphere::new(head_radius * 0.9))),
@@ -316,7 +321,11 @@ fn spawn_arm(
             Visibility::default(),
             InheritedVisibility::default(),
             ViewVisibility::default(),
-            if is_left { PlayerArm::left(arm_pos, arm_rot) } else { PlayerArm::right(arm_pos, arm_rot) },
+            if is_left {
+                PlayerArm::left(arm_pos, arm_rot)
+            } else {
+                PlayerArm::right(arm_pos, arm_rot)
+            },
             Name::new(if is_left { "LeftArm" } else { "RightArm" }),
         ))
         .with_children(|arm| {
@@ -450,14 +459,15 @@ fn spawn_cover_batch(
             Transform::from_translation(pos),
             GlobalTransform::default(),
             cover,
-            Name::new(format!("{}_{}", label, i)),
+            Name::new(format!("{label}_{i}")),
         ));
         count += 1;
     }
     count
 }
 
-/// 在世界中策略位置生成 CoverPoint 實體
+/// 在世界中策略位置生成 `CoverPoint` 實體
+#[allow(clippy::similar_names)]
 pub fn spawn_cover_points(commands: &mut Commands) {
     let mut cover_count = 0;
 
@@ -488,7 +498,12 @@ pub fn spawn_cover_points(commands: &mut Commands) {
         (X_KANGDING + 15.0, 45.0, Vec3::NEG_Z),
         (30.0, -5.0, Vec3::Z),
     ];
-    cover_count += spawn_cover_batch(commands, &building_corners, CoverKind::High, "Cover_Building");
+    cover_count += spawn_cover_batch(
+        commands,
+        &building_corners,
+        CoverKind::High,
+        "Cover_Building",
+    );
 
     // === 販賣機旁掩體點 (Low Cover) ===
     let vending_covers = [
@@ -540,7 +555,12 @@ pub fn spawn_cover_points(commands: &mut Commands) {
         (X_HAN + 10.0, Z_WUCHANG + 10.0, diag_nw),
         (X_HAN - 10.0, Z_WUCHANG + 10.0, diag_ne),
     ];
-    cover_count += spawn_cover_batch(commands, &corner_full_covers, CoverKind::Full, "Cover_Corner");
+    cover_count += spawn_cover_batch(
+        commands,
+        &corner_full_covers,
+        CoverKind::Full,
+        "Cover_Corner",
+    );
 
     info!("🛡️ 已生成 {} 個 AI 掩體點", cover_count);
 }

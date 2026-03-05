@@ -6,8 +6,6 @@
 //! - `street_elements` - 街道家具、斑馬線、特殊元素
 //! - `vehicles_spawn` - 玩家與車輛生成
 
-#![allow(clippy::too_many_arguments)]
-
 mod buildings_layout;
 mod roads_layout;
 mod street_elements;
@@ -29,8 +27,8 @@ use crate::core::COLLISION_GROUP_STATIC;
 // ============================================================================
 // 本模組 (super::)
 // ============================================================================
-use super::{Moon, Sun, WorldMaterials};
 use super::constants::BuildingTracker;
+use super::{Moon, Sun, WorldMaterials};
 
 /// 場景建構入口 — 依序初始化各子系統
 pub fn setup_world(
@@ -49,9 +47,19 @@ pub fn setup_world(
     setup_camera_and_lighting(&mut commands, &mut meshes, &mut materials);
     setup_ground(&mut commands, &mut meshes, &mut materials);
     roads_layout::setup_roads(&mut commands, &mut meshes, &mut materials, &asset_server);
-    buildings_layout::setup_buildings(&mut commands, &mut meshes, &mut materials, &mut building_tracker);
+    buildings_layout::setup_buildings(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &mut building_tracker,
+    );
     vehicles_spawn::setup_player_and_vehicles(&mut commands, &mut meshes, &mut materials);
-    buildings_layout::setup_neon_signs(&mut commands, &mut meshes, &mut materials, &building_tracker);
+    buildings_layout::setup_neon_signs(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &building_tracker,
+    );
     street_elements::setup_street_furniture(&mut commands, &mut meshes, &mut materials);
     street_elements::setup_zebra_crossings(&mut commands, &mut meshes, &world_mats);
     street_elements::setup_special_elements(&mut commands, &mut meshes, &mut materials);
@@ -164,10 +172,10 @@ fn setup_ground(
     // === 2. 隱形邊界牆（防止玩家和載具離開地圖）===
     let walls: &[(Vec3, Vec3)] = &[
         // (位置, 半尺寸) — 東西南北各一面
-        (Vec3::new(110.0, 10.0, -15.0), Vec3::new(0.5, 20.0, 100.0)),   // 東（中華路外）
-        (Vec3::new(-120.0, 10.0, -15.0), Vec3::new(0.5, 20.0, 100.0)),  // 西（康定路外）
-        (Vec3::new(-10.0, 10.0, 65.0), Vec3::new(130.0, 20.0, 0.5)),    // 南（成都路外）
-        (Vec3::new(-10.0, 10.0, -95.0), Vec3::new(130.0, 20.0, 0.5)),   // 北（漢口街外）
+        (Vec3::new(110.0, 10.0, -15.0), Vec3::new(0.5, 20.0, 100.0)), // 東（中華路外）
+        (Vec3::new(-120.0, 10.0, -15.0), Vec3::new(0.5, 20.0, 100.0)), // 西（康定路外）
+        (Vec3::new(-10.0, 10.0, 65.0), Vec3::new(130.0, 20.0, 0.5)),  // 南（成都路外）
+        (Vec3::new(-10.0, 10.0, -95.0), Vec3::new(130.0, 20.0, 0.5)), // 北（漢口街外）
     ];
 
     for &(pos, half_ext) in walls {

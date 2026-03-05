@@ -1,5 +1,7 @@
 //! 行人日常行為系統（逛街、看手機、拍照、躲雨）
 
+#![allow(clippy::needless_pass_by_value, clippy::similar_names)]
+
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -27,7 +29,7 @@ const SHELTER_ARRIVAL_SQ: f32 = 4.0;
 // 日常行為系統
 // ============================================================================
 
-/// 日常行為初始化系統（為新生成的行人添加 DailyBehavior 和 AStarPath）
+/// 日常行為初始化系統（為新生成的行人添加 `DailyBehavior` 和 `AStarPath`）
 pub fn daily_behavior_init_system(
     mut commands: Commands,
     pois: Option<Res<PointsOfInterest>>,
@@ -35,7 +37,7 @@ pub fn daily_behavior_init_system(
 ) {
     let mut rng = rand::rng();
 
-    for (entity, transform) in new_peds.iter() {
+    for (entity, transform) in &new_peds {
         // 添加日常行為組件
         commands.entity(entity).insert(DailyBehavior::default());
 
@@ -310,7 +312,7 @@ pub fn daily_behavior_update_system(
     let rain_intensity = if is_raining { weather.intensity } else { 0.0 };
 
     for (_entity, transform, state, mut behavior, mut shelter_seeker, mut astar_path) in
-        ped_query.iter_mut()
+        &mut ped_query
     {
         let pos = transform.translation;
 

@@ -3,6 +3,11 @@
 //! 從 data.rs 拆分，處理任務生成、餐廳/顧客/賽道資料。
 
 #![allow(dead_code)]
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use bevy::prelude::*;
 use rand::Rng;
@@ -141,12 +146,11 @@ impl MissionManager {
             DeliveryRating::FiveStars => 5.0,
         };
         self.average_rating = (self.average_rating * (self.total_deliveries - 1) as f32
-                               + rating_value) / self.total_deliveries as f32;
+            + rating_value)
+            / self.total_deliveries as f32;
 
         // 計算最終報酬（含連擊加成）
-        let base_reward = self.active_mission.as_ref()
-            .map(|m| m.data.reward)
-            .unwrap_or(0);
+        let base_reward = self.active_mission.as_ref().map_or(0, |m| m.data.reward);
 
         let bonus = rating.bonus_multiplier();
         let streak_bonus = 1.0 + (self.delivery_streak.min(10) as f32 * 0.05); // 每連續一單 +5%，最多 +50%
@@ -182,8 +186,8 @@ impl MissionManager {
         MissionData {
             id,
             mission_type: MissionType::Race,
-            title: format!("🏁 {}", name),
-            description: format!("通過所有檢查點！金牌: {:.1}秒", gold),
+            title: format!("🏁 {name}"),
+            description: format!("通過所有檢查點！金牌: {gold:.1}秒"),
             start_pos,
             end_pos,
             reward,
@@ -221,8 +225,8 @@ impl MissionManager {
         MissionData {
             id,
             mission_type: MissionType::Taxi,
-            title: format!("🚕 載客: {}", passenger_name),
-            description: format!("將 {} 送到 {}", passenger_name, dest_name),
+            title: format!("🚕 載客: {passenger_name}"),
+            description: format!("將 {passenger_name} 送到 {dest_name}"),
             start_pos: *pickup_pos,
             end_pos: *dest_pos,
             reward: base_reward,
@@ -264,7 +268,11 @@ fn create_restaurants() -> Vec<Restaurant> {
         Restaurant {
             name: "老天祿滷味".to_string(),
             position: Vec3::new(5.0, 0.5, -25.0),
-            food_types: vec!["滷鴨舌".to_string(), "滷豆干".to_string(), "滷雞翅".to_string()],
+            food_types: vec![
+                "滷鴨舌".to_string(),
+                "滷豆干".to_string(),
+                "滷雞翅".to_string(),
+            ],
         },
         Restaurant {
             name: "成都楊桃冰".to_string(),
@@ -274,7 +282,11 @@ fn create_restaurants() -> Vec<Restaurant> {
         Restaurant {
             name: "鴨肉扁".to_string(),
             position: Vec3::new(20.0, 0.5, -10.0),
-            food_types: vec!["鴨肉飯".to_string(), "鴨肉切盤".to_string(), "米粉湯".to_string()],
+            food_types: vec![
+                "鴨肉飯".to_string(),
+                "鴨肉切盤".to_string(),
+                "米粉湯".to_string(),
+            ],
         },
         Restaurant {
             name: "天天利美食坊".to_string(),
@@ -289,12 +301,20 @@ fn create_restaurants() -> Vec<Restaurant> {
         Restaurant {
             name: "50嵐".to_string(),
             position: Vec3::new(10.0, 0.5, 40.0),
-            food_types: vec!["珍珠奶茶".to_string(), "四季春".to_string(), "波霸鮮奶".to_string()],
+            food_types: vec![
+                "珍珠奶茶".to_string(),
+                "四季春".to_string(),
+                "波霸鮮奶".to_string(),
+            ],
         },
         Restaurant {
             name: "麥當勞西門店".to_string(),
             position: Vec3::new(45.0, 0.5, 35.0),
-            food_types: vec!["大麥克".to_string(), "麥香雞".to_string(), "薯條".to_string()],
+            food_types: vec![
+                "大麥克".to_string(),
+                "麥香雞".to_string(),
+                "薯條".to_string(),
+            ],
         },
     ]
 }
@@ -356,34 +376,40 @@ fn calculate_delivery_pay(distance: f32) -> u32 {
 fn create_default_missions() -> Vec<MissionData> {
     vec![
         MissionData {
-            id: 1, mission_type: MissionType::Delivery,
+            id: 1,
+            mission_type: MissionType::Delivery,
             title: "西門町送貨".to_string(),
             description: "將包裹從便利商店送到西門紅樓前".to_string(),
             start_pos: Vec3::new(-20.0, 0.5, 15.0),
             end_pos: Vec3::new(50.0, 0.5, 69.0),
-            reward: 500, time_limit: Some(60.0),
+            reward: 500,
+            time_limit: Some(60.0),
             delivery_order: None,
             race_data: None,
             taxi_data: None,
         },
         MissionData {
-            id: 2, mission_type: MissionType::Delivery,
+            id: 2,
+            mission_type: MissionType::Delivery,
             title: "便利商店補貨".to_string(),
             description: "將貨物從武昌街送到漢中街".to_string(),
             start_pos: Vec3::new(-40.0, 0.5, -80.0),
             end_pos: Vec3::new(-15.0, 0.5, -50.0),
-            reward: 600, time_limit: Some(90.0),
+            reward: 600,
+            time_limit: Some(90.0),
             delivery_order: None,
             race_data: None,
             taxi_data: None,
         },
         MissionData {
-            id: 3, mission_type: MissionType::Delivery,
+            id: 3,
+            mission_type: MissionType::Delivery,
             title: "緊急快遞".to_string(),
             description: "限時送達！從錢櫃送到誠品".to_string(),
             start_pos: Vec3::new(97.5, 0.5, 33.5),
             end_pos: Vec3::new(-13.5, 0.5, -13.5),
-            reward: 1000, time_limit: Some(45.0),
+            reward: 1000,
+            time_limit: Some(45.0),
             delivery_order: None,
             race_data: None,
             taxi_data: None,
@@ -403,67 +429,67 @@ fn create_race_courses() -> Vec<(String, Vec<Vec3>, f32, f32, f32, u32)> {
         (
             "西門環城賽".to_string(),
             vec![
-                Vec3::new(0.0, 0.5, 0.0),       // 起點：十字路口
-                Vec3::new(30.0, 0.5, 0.0),      // 東行
-                Vec3::new(50.0, 0.5, 30.0),     // 東北角
-                Vec3::new(30.0, 0.5, 60.0),     // 北行
-                Vec3::new(-30.0, 0.5, 60.0),    // 西北角
-                Vec3::new(-50.0, 0.5, 30.0),    // 西行
-                Vec3::new(-50.0, 0.5, -30.0),   // 西南角
-                Vec3::new(-20.0, 0.5, -50.0),   // 南行
-                Vec3::new(20.0, 0.5, -50.0),    // 東南角
-                Vec3::new(0.0, 0.5, 0.0),       // 終點
+                Vec3::new(0.0, 0.5, 0.0),     // 起點：十字路口
+                Vec3::new(30.0, 0.5, 0.0),    // 東行
+                Vec3::new(50.0, 0.5, 30.0),   // 東北角
+                Vec3::new(30.0, 0.5, 60.0),   // 北行
+                Vec3::new(-30.0, 0.5, 60.0),  // 西北角
+                Vec3::new(-50.0, 0.5, 30.0),  // 西行
+                Vec3::new(-50.0, 0.5, -30.0), // 西南角
+                Vec3::new(-20.0, 0.5, -50.0), // 南行
+                Vec3::new(20.0, 0.5, -50.0),  // 東南角
+                Vec3::new(0.0, 0.5, 0.0),     // 終點
             ],
-            45.0,  // 金牌
-            55.0,  // 銀牌
-            70.0,  // 銅牌
-            1500,  // 獎勵
+            45.0, // 金牌
+            55.0, // 銀牌
+            70.0, // 銅牌
+            1500, // 獎勵
         ),
         // 漢中街直線衝刺
         (
             "漢中街衝刺".to_string(),
             vec![
-                Vec3::new(0.0, 0.5, -60.0),     // 起點
-                Vec3::new(0.0, 0.5, -30.0),     // 檢查點 1
-                Vec3::new(0.0, 0.5, 0.0),       // 檢查點 2
-                Vec3::new(0.0, 0.5, 30.0),      // 檢查點 3
-                Vec3::new(0.0, 0.5, 60.0),      // 終點
+                Vec3::new(0.0, 0.5, -60.0), // 起點
+                Vec3::new(0.0, 0.5, -30.0), // 檢查點 1
+                Vec3::new(0.0, 0.5, 0.0),   // 檢查點 2
+                Vec3::new(0.0, 0.5, 30.0),  // 檢查點 3
+                Vec3::new(0.0, 0.5, 60.0),  // 終點
             ],
-            20.0,  // 金牌
-            25.0,  // 銀牌
-            35.0,  // 銅牌
-            800,   // 獎勵
+            20.0, // 金牌
+            25.0, // 銀牌
+            35.0, // 銅牌
+            800,  // 獎勵
         ),
         // 峨嵋街蛇形賽道
         (
             "峨嵋蛇行".to_string(),
             vec![
-                Vec3::new(-50.0, 0.5, 0.0),     // 起點
-                Vec3::new(-30.0, 0.5, 15.0),    // 左轉
-                Vec3::new(-10.0, 0.5, -10.0),   // 右轉
-                Vec3::new(10.0, 0.5, 15.0),     // 左轉
-                Vec3::new(30.0, 0.5, -10.0),    // 右轉
-                Vec3::new(50.0, 0.5, 0.0),      // 終點
+                Vec3::new(-50.0, 0.5, 0.0),   // 起點
+                Vec3::new(-30.0, 0.5, 15.0),  // 左轉
+                Vec3::new(-10.0, 0.5, -10.0), // 右轉
+                Vec3::new(10.0, 0.5, 15.0),   // 左轉
+                Vec3::new(30.0, 0.5, -10.0),  // 右轉
+                Vec3::new(50.0, 0.5, 0.0),    // 終點
             ],
-            30.0,  // 金牌
-            40.0,  // 銀牌
-            50.0,  // 銅牌
-            1000,  // 獎勵
+            30.0, // 金牌
+            40.0, // 銀牌
+            50.0, // 銅牌
+            1000, // 獎勵
         ),
         // 紅樓繞圈賽
         (
             "紅樓繞圈".to_string(),
             vec![
-                Vec3::new(40.0, 0.5, 50.0),     // 起點
-                Vec3::new(60.0, 0.5, 70.0),     // 檢查點 1
-                Vec3::new(40.0, 0.5, 90.0),     // 檢查點 2
-                Vec3::new(20.0, 0.5, 70.0),     // 檢查點 3
-                Vec3::new(40.0, 0.5, 50.0),     // 終點
+                Vec3::new(40.0, 0.5, 50.0), // 起點
+                Vec3::new(60.0, 0.5, 70.0), // 檢查點 1
+                Vec3::new(40.0, 0.5, 90.0), // 檢查點 2
+                Vec3::new(20.0, 0.5, 70.0), // 檢查點 3
+                Vec3::new(40.0, 0.5, 50.0), // 終點
             ],
-            25.0,  // 金牌
-            32.0,  // 銀牌
-            40.0,  // 銅牌
-            900,   // 獎勵
+            25.0, // 金牌
+            32.0, // 銀牌
+            40.0, // 銅牌
+            900,  // 獎勵
         ),
     ]
 }
@@ -475,28 +501,28 @@ fn create_race_courses() -> Vec<(String, Vec<Vec3>, f32, f32, f32, u32)> {
 /// 創建乘客列表（位置在人行道上，避開馬路中央）
 fn create_taxi_passengers() -> Vec<(String, Vec3)> {
     vec![
-        ("陳先生".to_string(), Vec3::new(-20.0, 0.5, 15.0)),   // 移離峨嵋街馬路
-        ("林小姐".to_string(), Vec3::new(15.0, 0.5, -35.0)),   // OK
-        ("王太太".to_string(), Vec3::new(-45.0, 0.5, 25.0)),   // OK
-        ("張同學".to_string(), Vec3::new(30.0, 0.5, 42.0)),    // 稍微調整
-        ("李伯伯".to_string(), Vec3::new(-15.0, 0.5, -55.0)),  // 移離武昌街馬路
-        ("劉小弟".to_string(), Vec3::new(50.0, 0.5, 20.0)),    // OK
-        ("黃阿姨".to_string(), Vec3::new(-60.0, 0.5, -20.0)),  // OK
-        ("趙經理".to_string(), Vec3::new(25.0, 0.5, 45.0)),    // 調整到地圖內
+        ("陳先生".to_string(), Vec3::new(-20.0, 0.5, 15.0)), // 移離峨嵋街馬路
+        ("林小姐".to_string(), Vec3::new(15.0, 0.5, -35.0)), // OK
+        ("王太太".to_string(), Vec3::new(-45.0, 0.5, 25.0)), // OK
+        ("張同學".to_string(), Vec3::new(30.0, 0.5, 42.0)),  // 稍微調整
+        ("李伯伯".to_string(), Vec3::new(-15.0, 0.5, -55.0)), // 移離武昌街馬路
+        ("劉小弟".to_string(), Vec3::new(50.0, 0.5, 20.0)),  // OK
+        ("黃阿姨".to_string(), Vec3::new(-60.0, 0.5, -20.0)), // OK
+        ("趙經理".to_string(), Vec3::new(25.0, 0.5, 45.0)),  // 調整到地圖內
     ]
 }
 
 /// 創建目的地列表（位置在地圖範圍內，靠近地標）
 fn create_taxi_destinations() -> Vec<(String, Vec3)> {
     vec![
-        ("西門紅樓".to_string(), Vec3::new(45.0, 0.5, 45.0)),     // 調整到地圖內
-        ("捷運西門站".to_string(), Vec3::new(55.0, 0.5, 36.0)),   // OK
+        ("西門紅樓".to_string(), Vec3::new(45.0, 0.5, 45.0)), // 調整到地圖內
+        ("捷運西門站".to_string(), Vec3::new(55.0, 0.5, 36.0)), // OK
         ("誠品西門店".to_string(), Vec3::new(-18.0, 0.5, -18.0)), // 移離馬路
-        ("萬年大樓".to_string(), Vec3::new(-68.0, 0.5, -15.0)),   // 稍微調整
+        ("萬年大樓".to_string(), Vec3::new(-68.0, 0.5, -15.0)), // 稍微調整
         ("獅子林大樓".to_string(), Vec3::new(-65.0, 0.5, -60.0)), // 稍微調整
-        ("錢櫃 KTV".to_string(), Vec3::new(70.0, 0.5, 30.0)),     // 調整到地圖內
-        ("電影公園".to_string(), Vec3::new(-65.0, 0.5, -40.0)),   // 稍微調整
-        ("成都路口".to_string(), Vec3::new(10.0, 0.5, 45.0)),     // 移離十字路口中央
+        ("錢櫃 KTV".to_string(), Vec3::new(70.0, 0.5, 30.0)), // 調整到地圖內
+        ("電影公園".to_string(), Vec3::new(-65.0, 0.5, -40.0)), // 稍微調整
+        ("成都路口".to_string(), Vec3::new(10.0, 0.5, 45.0)), // 移離十字路口中央
     ]
 }
 

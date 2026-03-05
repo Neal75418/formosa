@@ -7,7 +7,7 @@
 
 use bevy::prelude::*;
 
-use super::dialogue::*;
+use super::dialogue::{DialogueAction, DialogueDatabase, DialogueState};
 use super::story_data::DialogueId;
 
 // ============================================================================

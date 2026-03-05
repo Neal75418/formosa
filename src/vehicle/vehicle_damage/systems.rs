@@ -1,16 +1,16 @@
 //! 車輛損壞系統（碰撞、火焰、傷害事件處理）
 
-use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
 use super::super::{Vehicle, VehicleType};
-use super::health::{
-    BodyPartDamage, TireDamage, VehicleDamageState, VehicleHealth, DoorWindowState, WindowState,
-};
 use super::explosion::VehicleExplosion;
+use super::health::{
+    BodyPartDamage, DoorWindowState, TireDamage, VehicleDamageState, VehicleHealth, WindowState,
+};
 use super::visuals::VehicleDamageVisuals;
-use crate::audio::{AudioManager, VehicleSounds, play_collision_sound, play_explosion_sound};
+use crate::audio::{play_collision_sound, play_explosion_sound, AudioManager, VehicleSounds};
 use crate::combat::{DamageEvent, DamageSource};
 use crate::player::PlayerSkills;
+use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 /// 初始化車輛損壞視覺效果資源
 pub fn setup_vehicle_damage_effects(
@@ -57,7 +57,11 @@ pub fn vehicle_collision_damage_system(
     vehicle_sounds: Res<VehicleSounds>,
     skills: Res<PlayerSkills>,
     mut vehicle_query: Query<(
-        Entity, &Transform, &Vehicle, &mut VehicleHealth, Option<&mut BodyPartDamage>,
+        Entity,
+        &Transform,
+        &Vehicle,
+        &mut VehicleHealth,
+        Option<&mut BodyPartDamage>,
     )>,
 ) {
     let current_time = time.elapsed_secs();
@@ -66,7 +70,7 @@ pub fn vehicle_collision_damage_system(
         return;
     };
 
-    for (entity, transform, vehicle, mut health, body_parts) in vehicle_query.iter_mut() {
+    for (entity, transform, vehicle, mut health, body_parts) in &mut vehicle_query {
         // 已爆炸的車輛不處理
         if health.is_destroyed() {
             continue;
@@ -93,7 +97,8 @@ pub fn vehicle_collision_damage_system(
 
             // 傷害公式：(速度 - 門檻) * 倍率
             // 例如：30 m/s = (30-10) * 5 = 100 傷害
-            let mut damage = (speed - COLLISION_DAMAGE_SPEED_THRESHOLD) * COLLISION_DAMAGE_MULTIPLIER;
+            let mut damage =
+                (speed - COLLISION_DAMAGE_SPEED_THRESHOLD) * COLLISION_DAMAGE_MULTIPLIER;
             // 駕駛技能減免（等級 0→100 時減免 0→30%）
             damage *= 1.0 - skills.collision_damage_reduction();
             health.take_damage(damage, current_time);
@@ -106,7 +111,8 @@ pub fn vehicle_collision_damage_system(
             if let Some(mut bp) = body_parts {
                 // 簡化：使用車輛前進方向作為碰撞方向
                 let forward = transform.forward().as_vec3();
-                let local_dir = transform.rotation.inverse() * forward * vehicle.current_speed.signum();
+                let local_dir =
+                    transform.rotation.inverse() * forward * vehicle.current_speed.signum();
                 bp.apply_directional_damage(local_dir, damage);
             }
 
@@ -145,7 +151,7 @@ pub fn vehicle_fire_system(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, transform, vehicle, mut health) in vehicle_query.iter_mut() {
+    for (entity, transform, vehicle, mut health) in &mut vehicle_query {
         if health.is_destroyed() {
             continue;
         }
@@ -199,19 +205,23 @@ fn get_tire_local_positions(vehicle_type: VehicleType) -> [Vec3; 4] {
 }
 
 /// 車輛傷害事件處理系統
-/// 監聽 DamageEvent 並對車輛 VehicleHealth 造成傷害
+/// 監聽 `DamageEvent` 並對車輛 `VehicleHealth` 造成傷害
 /// 子彈命中輪胎附近時有機率爆胎
 pub fn vehicle_damage_event_system(
     time: Res<Time>,
     mut damage_events: MessageReader<DamageEvent>,
-    mut vehicle_query: Query<(&Transform, &Vehicle, &mut VehicleHealth, Option<&mut TireDamage>)>,
+    mut vehicle_query: Query<(
+        &Transform,
+        &Vehicle,
+        &mut VehicleHealth,
+        Option<&mut TireDamage>,
+    )>,
 ) {
     let current_time = time.elapsed_secs();
 
     for event in damage_events.read() {
         // 檢查目標是否是有 VehicleHealth 的車輛
-        let Ok((transform, vehicle, mut health, tire_damage)) =
-            vehicle_query.get_mut(event.target)
+        let Ok((transform, vehicle, mut health, tire_damage)) = vehicle_query.get_mut(event.target)
         else {
             continue;
         };
@@ -227,12 +237,7 @@ pub fn vehicle_damage_event_system(
         // 子彈命中時檢查輪胎爆胎（僅在實際造成傷害時才判定）
         if damage_dealt > 0.0 && event.source == DamageSource::Bullet {
             if let (Some(hit_pos), Some(mut td)) = (event.hit_position, tire_damage) {
-                try_pop_tire_at_hit(
-                    &mut td,
-                    hit_pos,
-                    transform,
-                    vehicle.vehicle_type,
-                );
+                try_pop_tire_at_hit(&mut td, hit_pos, transform, vehicle.vehicle_type);
             }
         }
     }
@@ -300,10 +305,7 @@ fn get_window_local_positions(vehicle_type: VehicleType) -> [Vec3; 4] {
 ///
 /// - 更新車門開關動畫進度
 /// - 高速行駛時開啟的門會被風撕斷
-pub fn door_animation_system(
-    time: Res<Time>,
-    mut query: Query<(&Vehicle, &mut DoorWindowState)>,
-) {
+pub fn door_animation_system(time: Res<Time>, mut query: Query<(&Vehicle, &mut DoorWindowState)>) {
     let dt = time.delta_secs();
 
     for (vehicle, mut dw) in &mut query {
@@ -355,7 +357,10 @@ pub fn collision_window_damage_system(
             }
 
             // 隨機選一扇完好的車窗造成損壞
-            let intact_indices: Vec<usize> = dw.windows.iter().enumerate()
+            let intact_indices: Vec<usize> = dw
+                .windows
+                .iter()
+                .enumerate()
                 .filter(|(_, w)| **w != WindowState::Broken)
                 .map(|(i, _)| i)
                 .collect();
@@ -374,7 +379,7 @@ pub fn collision_window_damage_system(
 
 /// 子彈命中車窗破碎判定
 ///
-/// 整合到現有 vehicle_damage_event_system，透過獨立系統處理
+/// 整合到現有 `vehicle_damage_event_system`，透過獨立系統處理
 pub fn bullet_window_damage_system(
     mut damage_events: MessageReader<DamageEvent>,
     mut vehicle_query: Query<(&Transform, &Vehicle, &mut DoorWindowState)>,
@@ -450,7 +455,12 @@ mod tests {
 
     #[test]
     fn tire_positions_all_types_have_four() {
-        for vt in [VehicleType::Scooter, VehicleType::Car, VehicleType::Taxi, VehicleType::Bus] {
+        for vt in [
+            VehicleType::Scooter,
+            VehicleType::Car,
+            VehicleType::Taxi,
+            VehicleType::Bus,
+        ] {
             let pos = get_tire_local_positions(vt);
             assert_eq!(pos.len(), 4);
         }
@@ -539,19 +549,29 @@ mod tests {
 
     #[test]
     fn explosion_radius_scales_with_vehicle_size() {
-        assert!(get_explosion_radius(VehicleType::Scooter) < get_explosion_radius(VehicleType::Car));
+        assert!(
+            get_explosion_radius(VehicleType::Scooter) < get_explosion_radius(VehicleType::Car)
+        );
         assert!(get_explosion_radius(VehicleType::Car) < get_explosion_radius(VehicleType::Bus));
     }
 
     #[test]
     fn explosion_damage_scales_with_vehicle_size() {
-        assert!(get_explosion_damage(VehicleType::Scooter) < get_explosion_damage(VehicleType::Car));
+        assert!(
+            get_explosion_damage(VehicleType::Scooter) < get_explosion_damage(VehicleType::Car)
+        );
         assert!(get_explosion_damage(VehicleType::Car) < get_explosion_damage(VehicleType::Bus));
     }
 
     #[test]
     fn taxi_matches_car_explosion() {
-        assert_eq!(get_explosion_radius(VehicleType::Taxi), get_explosion_radius(VehicleType::Car));
-        assert_eq!(get_explosion_damage(VehicleType::Taxi), get_explosion_damage(VehicleType::Car));
+        assert_eq!(
+            get_explosion_radius(VehicleType::Taxi),
+            get_explosion_radius(VehicleType::Car)
+        );
+        assert_eq!(
+            get_explosion_damage(VehicleType::Taxi),
+            get_explosion_damage(VehicleType::Car)
+        );
     }
 }

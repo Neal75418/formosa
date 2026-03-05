@@ -6,6 +6,7 @@
 use bevy::prelude::*;
 
 /// UI 遊戲狀態
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Resource)]
 pub struct UiState {
     pub paused: bool,

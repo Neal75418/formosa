@@ -2,9 +2,9 @@
 //!
 //! 便利商店、速食店、大創
 
-use bevy::prelude::*;
+use super::{spawn_building_base, BuildingMaterialConfig, BuildingParams};
 use crate::world::{Door, InteriorSpace};
-use super::{BuildingParams, BuildingMaterialConfig, spawn_building_base};
+use bevy::prelude::*;
 
 /// 速食店 (Fast Food) - 麥當勞/摩斯/肯德基
 pub fn spawn_fast_food(
@@ -83,7 +83,7 @@ pub fn spawn_convenience_store(
             Transform::from_translation(pos),
             GlobalTransform::default(),
             InteriorSpace::convenience_store(name, door_pos + Vec3::new(0.0, -1.25, 0.5)),
-            Name::new(format!("Interior_{}", name)),
+            Name::new(format!("Interior_{name}")),
         ))
         .id();
 
@@ -135,7 +135,7 @@ pub fn spawn_convenience_store(
             interact_radius: 2.5,
             ..default()
         },
-        Name::new(format!("Door_{}", name)),
+        Name::new(format!("Door_{name}")),
     ));
 }
 

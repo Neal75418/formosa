@@ -94,7 +94,8 @@ impl GpsNavigationState {
     /// 檢查是否到達目標
     pub fn is_at_destination(&self, current_pos: Vec3, threshold: f32) -> bool {
         if let Some(dest) = self.destination {
-            let dist_xz = ((current_pos.x - dest.x).powi(2) + (current_pos.z - dest.z).powi(2)).sqrt();
+            let dist_xz =
+                ((current_pos.x - dest.x).powi(2) + (current_pos.z - dest.z).powi(2)).sqrt();
             dist_xz < threshold
         } else {
             false

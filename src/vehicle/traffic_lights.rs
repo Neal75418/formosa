@@ -34,9 +34,9 @@ impl TrafficLightState {
     /// 取得狀態持續時間（秒）
     pub fn duration(&self) -> f32 {
         match self {
-            TrafficLightState::Green => 8.0,   // 綠燈 8 秒
-            TrafficLightState::Yellow => 2.0,  // 黃燈 2 秒
-            TrafficLightState::Red => 10.0,    // 紅燈 10 秒
+            TrafficLightState::Green => 8.0,  // 綠燈 8 秒
+            TrafficLightState::Yellow => 2.0, // 黃燈 2 秒
+            TrafficLightState::Red => 10.0,   // 紅燈 10 秒
         }
     }
 
@@ -80,7 +80,7 @@ impl Default for TrafficLight {
         Self {
             state: TrafficLightState::Green,
             timer: Timer::from_seconds(TrafficLightState::Green.duration(), TimerMode::Once),
-            control_direction: Vec3::NEG_Z,  // 默認面向 -Z
+            control_direction: Vec3::NEG_Z, // 默認面向 -Z
             detection_range: 15.0,
             is_primary: true,
         }
@@ -93,7 +93,7 @@ impl TrafficLight {
         let initial_state = if is_primary {
             TrafficLightState::Green
         } else {
-            TrafficLightState::Red  // 副燈初始為紅燈
+            TrafficLightState::Red // 副燈初始為紅燈
         };
         Self {
             state: initial_state,
@@ -113,7 +113,12 @@ impl TrafficLight {
     /// 檢查車輛是否應該停止
     /// - 車輛位置在偵測範圍內
     /// - 車輛行駛方向與控制方向大致相同
-    pub fn should_vehicle_stop(&self, vehicle_pos: Vec3, vehicle_forward: Vec3, light_pos: Vec3) -> bool {
+    pub fn should_vehicle_stop(
+        &self,
+        vehicle_pos: Vec3,
+        vehicle_forward: Vec3,
+        light_pos: Vec3,
+    ) -> bool {
         // 只有紅燈需要停止
         if self.state != TrafficLightState::Red {
             return false;
@@ -123,12 +128,13 @@ impl TrafficLight {
         let to_light = light_pos - vehicle_pos;
         let distance = to_light.length();
         if distance > self.detection_range || distance < 2.0 {
-            return false;  // 太遠或已經過燈
+            return false; // 太遠或已經過燈
         }
 
         // 檢查車輛是否面向燈（車輛往燈的方向行駛）
         let to_light_flat = Vec3::new(to_light.x, 0.0, to_light.z).normalize_or_zero();
-        let vehicle_forward_flat = Vec3::new(vehicle_forward.x, 0.0, vehicle_forward.z).normalize_or_zero();
+        let vehicle_forward_flat =
+            Vec3::new(vehicle_forward.x, 0.0, vehicle_forward.z).normalize_or_zero();
 
         // 車輛需要朝向燈的方向（點積 > 0.5，約 60 度內）
         let dot_to_light = vehicle_forward_flat.dot(to_light_flat);
@@ -227,12 +233,34 @@ impl TrafficLightVisuals {
     }
 
     /// 根據當前狀態取得燈泡材質
-    pub fn get_bulb_material(&self, bulb_type: TrafficLightState, current_state: TrafficLightState) -> Handle<StandardMaterial> {
+    pub fn get_bulb_material(
+        &self,
+        bulb_type: TrafficLightState,
+        current_state: TrafficLightState,
+    ) -> Handle<StandardMaterial> {
         let is_on = bulb_type == current_state;
         match bulb_type {
-            TrafficLightState::Red => if is_on { self.red_on_material.clone() } else { self.red_off_material.clone() },
-            TrafficLightState::Yellow => if is_on { self.yellow_on_material.clone() } else { self.yellow_off_material.clone() },
-            TrafficLightState::Green => if is_on { self.green_on_material.clone() } else { self.green_off_material.clone() },
+            TrafficLightState::Red => {
+                if is_on {
+                    self.red_on_material.clone()
+                } else {
+                    self.red_off_material.clone()
+                }
+            }
+            TrafficLightState::Yellow => {
+                if is_on {
+                    self.yellow_on_material.clone()
+                } else {
+                    self.yellow_off_material.clone()
+                }
+            }
+            TrafficLightState::Green => {
+                if is_on {
+                    self.green_on_material.clone()
+                } else {
+                    self.green_off_material.clone()
+                }
+            }
         }
     }
 }
@@ -261,7 +289,7 @@ pub fn traffic_light_cycle_system(
 ) {
     let Some(visuals) = visuals else { return };
 
-    for (_entity, mut light, children) in traffic_lights.iter_mut() {
+    for (_entity, mut light, children) in &mut traffic_lights {
         // 更新計時器
         light.timer.tick(time.delta());
 
@@ -364,8 +392,8 @@ pub fn spawn_traffic_light(
 }
 
 /// 生成交叉路口的紅綠燈組（4個方向）
-/// ns_road_width: 南北向道路寬度（X方向）
-/// ew_road_width: 東西向道路寬度（Z方向）
+/// `ns_road_width`: 南北向道路寬度（X方向）
+/// `ew_road_width`: 東西向道路寬度（Z方向）
 pub fn spawn_intersection_lights(
     commands: &mut Commands,
     visuals: &TrafficLightVisuals,
@@ -419,18 +447,11 @@ pub fn spawn_intersection_lights(
 }
 
 /// 在世界中生成紅綠燈（西門町主要路口）
-/// 此系統需要在 setup_traffic_lights 之後執行
+/// 此系統需要在 `setup_traffic_lights` 之後執行
 pub fn spawn_world_traffic_lights(
     mut commands: Commands,
     visuals: Option<Res<TrafficLightVisuals>>,
 ) {
-    let Some(visuals) = visuals else {
-        warn!("TrafficLightVisuals 資源不存在，無法生成紅綠燈");
-        return;
-    };
-
-    info!("🚦 正在生成交通燈...");
-
     // 道路常數（與 setup.rs 一致）
     // 南北向道路 X 位置
     const X_ZHONGHUA: f32 = 80.0; // 中華路
@@ -442,6 +463,13 @@ pub fn spawn_world_traffic_lights(
     const W_ZHONGHUA: f32 = 40.0; // 中華路寬度
     const W_MAIN: f32 = 16.0; // 成都路寬度
     const W_SECONDARY: f32 = 12.0; // 西寧路、漢口街寬度
+
+    let Some(visuals) = visuals else {
+        warn!("TrafficLightVisuals 資源不存在，無法生成紅綠燈");
+        return;
+    };
+
+    info!("🚦 正在生成交通燈...");
 
     // 主要路口：(位置, 南北道路寬度, 東西道路寬度)
     let intersections: [(Vec3, f32, f32); 4] = [
@@ -459,7 +487,7 @@ pub fn spawn_world_traffic_lights(
         ),
     ];
 
-    for (center, ns_width, ew_width) in intersections.iter() {
+    for (center, ns_width, ew_width) in &intersections {
         spawn_intersection_lights(&mut commands, &visuals, *center, *ns_width, *ew_width);
     }
 

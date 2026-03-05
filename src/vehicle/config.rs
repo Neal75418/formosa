@@ -13,7 +13,6 @@ pub struct VehicleConfig {
     pub npc: NpcDrivingConfig,
 }
 
-
 /// 天氣效果參數組（牽引力或操控力共用結構）
 #[derive(Debug, Clone)]
 pub struct WeatherFactorParams {
@@ -211,9 +210,9 @@ pub struct VehiclePhysicsConfig {
     pub friction_drag_coefficient: f32,
     /// 基礎減速率
     pub friction_base_decel: f32,
-    /// 扭力曲線低速區閾值（speed_ratio）
+    /// 扭力曲線低速區閾值（`speed_ratio`）
     pub torque_low_speed_ratio: f32,
-    /// 扭力曲線中速區閾值（speed_ratio）
+    /// 扭力曲線中速區閾值（`speed_ratio`）
     pub torque_mid_speed_ratio: f32,
     /// 車身側傾角度限制
     pub roll_angle_limit: f32,

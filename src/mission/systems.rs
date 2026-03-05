@@ -1,31 +1,38 @@
 //! 任務系統
 
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 
-use bevy::prelude::*;
 use super::{
-    MissionManager, MissionMarker, MissionStatus, ActiveMission, DeliveryRating,
-    MissionType, MissionData, RaceMedal, TaxiRating, CompletedMissionRecord,
+    ActiveMission, CompletedMissionRecord, DeliveryRating, MissionData, MissionManager,
+    MissionMarker, MissionStatus, MissionType, RaceMedal, TaxiRating,
 };
-use crate::player::Player;
 use crate::core::InteractionState;
 use crate::economy::PlayerWallet;
+use crate::player::Player;
 use crate::ui::NotificationQueue;
 use crate::vehicle::Vehicle;
+use bevy::prelude::*;
 
 // ============================================================================
 // 任務標記顏色常數
 // ============================================================================
-const MARKER_COLOR_START: Color = Color::srgba(0.9, 0.8, 0.2, 0.7);  // 黃色 - 起點/取餐點
-const MARKER_COLOR_END: Color = Color::srgba(0.2, 0.8, 0.2, 0.7);    // 綠色 - 終點/送達點
+const MARKER_COLOR_START: Color = Color::srgba(0.9, 0.8, 0.2, 0.7); // 黃色 - 起點/取餐點
+const MARKER_COLOR_END: Color = Color::srgba(0.2, 0.8, 0.2, 0.7); // 綠色 - 終點/送達點
 
 // ============================================================================
 // 任務互動距離常數 (使用平方距離優化)
 // ============================================================================
-const DELIVERY_INTERACT_DIST_SQ: f32 = 64.0;  // 8.0 * 8.0
-const MISSION_INTERACT_DIST_SQ: f32 = 25.0;   // 5.0 * 5.0
-const VEHICLE_INTERACT_DIST_SQ: f32 = 9.0;    // 3.0 * 3.0
+const DELIVERY_INTERACT_DIST_SQ: f32 = 64.0; // 8.0 * 8.0
+const MISSION_INTERACT_DIST_SQ: f32 = 25.0; // 5.0 * 5.0
+const VEHICLE_INTERACT_DIST_SQ: f32 = 9.0; // 3.0 * 3.0
 const CHECKPOINT_INTERACT_DIST_SQ: f32 = 64.0; // 8.0 * 8.0
-const TAXI_INTERACT_DIST_SQ: f32 = 36.0;      // 6.0 * 6.0
+const TAXI_INTERACT_DIST_SQ: f32 = 36.0; // 6.0 * 6.0
 
 /// 任務渲染上下文：整合 Commands 與 Mesh/Material Assets
 struct MissionRenderCtx<'a, 'w, 's> {
@@ -41,7 +48,11 @@ fn spawn_marker(
     mission_id: u32,
     is_start: bool,
 ) {
-    let color = if is_start { MARKER_COLOR_START } else { MARKER_COLOR_END };
+    let color = if is_start {
+        MARKER_COLOR_START
+    } else {
+        MARKER_COLOR_END
+    };
     ctx.commands.spawn((
         Mesh3d(ctx.meshes.add(Cylinder::new(2.0, 0.5))),
         MeshMaterial3d(ctx.materials.add(StandardMaterial {
@@ -51,7 +62,10 @@ fn spawn_marker(
         })),
         Transform::from_translation(position + Vec3::new(0.0, 0.3, 0.0)),
         GlobalTransform::default(),
-        MissionMarker { mission_id, is_start },
+        MissionMarker {
+            mission_id,
+            is_start,
+        },
     ));
 }
 
@@ -89,7 +103,7 @@ fn cleanup_mission_markers(
 enum MissionResult {
     None,
     Completed(DeliveryRating),
-    RaceCompleted(RaceMedal, f32),  // (獎章, 完成時間)
+    RaceCompleted(RaceMedal, f32), // (獎章, 完成時間)
     TaxiCompleted(TaxiRating),
     Failed,
 }
@@ -122,9 +136,15 @@ fn update_active_mission(
         MissionType::Race => {
             update_race_mission(active, player_pos, player_in_vehicle, ctx, notifications)
         }
-        MissionType::Taxi => {
-            update_taxi_mission(active, player_pos, player_in_vehicle, interaction, time_delta, ctx, notifications)
-        }
+        MissionType::Taxi => update_taxi_mission(
+            active,
+            player_pos,
+            player_in_vehicle,
+            interaction,
+            time_delta,
+            ctx,
+            notifications,
+        ),
         MissionType::Explore
         | MissionType::Assassination
         | MissionType::Escort
@@ -221,7 +241,7 @@ fn update_race_mission(
 
         if race_data.advance_checkpoint() {
             // 還有下一個檢查點
-            notifications.info(format!("🏁 檢查點 {}/{}", checkpoint_num, total));
+            notifications.info(format!("🏁 檢查點 {checkpoint_num}/{total}"));
 
             // 生成下一個檢查點標記
             if let Some(next_cp) = race_data.current_checkpoint_pos() {
@@ -256,8 +276,13 @@ fn spawn_checkpoint_marker(
         })),
         Transform::from_translation(position + Vec3::new(0.0, 0.2, 0.0)),
         GlobalTransform::default(),
-        MissionMarker { mission_id, is_start: false },
-        CheckpointMarker { index: checkpoint_index },
+        MissionMarker {
+            mission_id,
+            is_start: false,
+        },
+        CheckpointMarker {
+            index: checkpoint_index,
+        },
     ));
 }
 
@@ -303,8 +328,10 @@ fn update_taxi_mission(
         let distance_sq = player_pos.distance_squared(active.data.start_pos);
         if distance_sq < TAXI_INTERACT_DIST_SQ && interaction.can_interact() {
             taxi_data.passenger_picked_up = true;
-            notifications.success(format!("🚕 {} 已上車！前往 {}",
-                taxi_data.passenger_name, taxi_data.destination_name));
+            notifications.success(format!(
+                "🚕 {} 已上車！前往 {}",
+                taxi_data.passenger_name, taxi_data.destination_name
+            ));
 
             // 生成終點標記
             spawn_marker(ctx, active.data.end_pos, active.data.id, false);
@@ -341,7 +368,11 @@ fn reset_mission_markers(
 
     cleanup_mission_markers(ctx.commands, marker_query, id);
 
-    if let Some(mission_data) = mission_manager.available_missions.iter().find(|m| m.id == id) {
+    if let Some(mission_data) = mission_manager
+        .available_missions
+        .iter()
+        .find(|m| m.id == id)
+    {
         info!("🔄 任務重置：{}", mission_data.title);
         spawn_marker(ctx, mission_data.start_pos, id, true);
     }
@@ -357,9 +388,10 @@ fn handle_mission_completion(
     marker_query: &Query<(Entity, &MissionMarker)>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
-    let mission_title = mission_manager.active_mission.as_ref()
-        .map(|a| a.data.title.clone())
-        .unwrap_or_default();
+    let mission_title = mission_manager
+        .active_mission
+        .as_ref()
+        .map_or_else(String::new, |a| a.data.title.clone());
 
     // 計算獎勵
     let final_reward = mission_manager.complete_delivery(rating);
@@ -374,23 +406,26 @@ fn handle_mission_completion(
         DeliveryRating::FourStars => 4,
         DeliveryRating::FiveStars => 5,
     };
-    mission_manager.completed_missions.push(CompletedMissionRecord {
-        title: mission_title,
-        mission_type: MissionType::Delivery,
-        reward: final_reward,
-        stars: star_count,
-        rating_label: rating.stars().to_string(),
-    });
+    mission_manager
+        .completed_missions
+        .push(CompletedMissionRecord {
+            title: mission_title,
+            mission_type: MissionType::Delivery,
+            reward: final_reward,
+            stars: star_count,
+            rating_label: rating.stars().to_string(),
+        });
 
     // 顯示結果
     let streak_msg = if mission_manager.delivery_streak > 1 {
-        format!(" 🔥{}連擊！", mission_manager.delivery_streak)
+        let streak = mission_manager.delivery_streak;
+        format!(" 🔥{streak}連擊！")
     } else {
         String::new()
     };
     notifications.success(format!(
-        "✅ 外送完成！{} 獲得 ${}{}",
-        rating.stars(), final_reward, streak_msg
+        "✅ 外送完成！{} 獲得 ${final_reward}{streak_msg}",
+        rating.stars(),
     ));
 
     reset_mission_markers(mission_id, mission_manager, ctx, marker_query);
@@ -424,14 +459,16 @@ fn handle_race_completion(
     marker_query: &Query<(Entity, &MissionMarker)>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
-    let mission_title = mission_manager.active_mission.as_ref()
-        .map(|a| a.data.title.clone())
-        .unwrap_or_default();
+    let mission_title = mission_manager
+        .active_mission
+        .as_ref()
+        .map_or_else(String::new, |a| a.data.title.clone());
 
     // 計算獎勵
-    let base_reward = mission_manager.active_mission.as_ref()
-        .map(|m| m.data.reward)
-        .unwrap_or(0);
+    let base_reward = mission_manager
+        .active_mission
+        .as_ref()
+        .map_or(0, |m| m.data.reward);
     let final_reward = (base_reward as f32 * medal.bonus_multiplier()) as u32;
 
     wallet.add_cash(final_reward as i32);
@@ -445,28 +482,29 @@ fn handle_race_completion(
         RaceMedal::Bronze => 3,
         RaceMedal::None => 2,
     };
-    mission_manager.completed_missions.push(CompletedMissionRecord {
-        title: mission_title,
-        mission_type: MissionType::Race,
-        reward: final_reward,
-        stars: star_count,
-        rating_label: if medal != RaceMedal::None {
-            medal.emoji().to_string()
-        } else {
-            "完成".to_string()
-        },
-    });
+    mission_manager
+        .completed_missions
+        .push(CompletedMissionRecord {
+            title: mission_title,
+            mission_type: MissionType::Race,
+            reward: final_reward,
+            stars: star_count,
+            rating_label: if medal == RaceMedal::None {
+                "完成".to_string()
+            } else {
+                medal.emoji().to_string()
+            },
+        });
 
     // 顯示結果
-    let medal_text = if medal != RaceMedal::None {
-        format!("{} ", medal.emoji())
-    } else {
+    let medal_text = if medal == RaceMedal::None {
         String::new()
+    } else {
+        format!("{} ", medal.emoji())
     };
 
     notifications.success(format!(
-        "🏁 競速完成！{}時間 {:.2}秒 | 獲得 ${}",
-        medal_text, finish_time, final_reward
+        "🏁 競速完成！{medal_text}時間 {finish_time:.2}秒 | 獲得 ${final_reward}",
     ));
 
     // 清除標記
@@ -486,14 +524,16 @@ fn handle_taxi_completion(
     marker_query: &Query<(Entity, &MissionMarker)>,
 ) {
     let mission_id = mission_manager.active_mission.as_ref().map(|a| a.data.id);
-    let mission_title = mission_manager.active_mission.as_ref()
-        .map(|a| a.data.title.clone())
-        .unwrap_or_default();
+    let mission_title = mission_manager
+        .active_mission
+        .as_ref()
+        .map_or_else(String::new, |a| a.data.title.clone());
 
     // 計算車資和小費
-    let base_reward = mission_manager.active_mission.as_ref()
-        .map(|m| m.data.reward)
-        .unwrap_or(0);
+    let base_reward = mission_manager
+        .active_mission
+        .as_ref()
+        .map_or(0, |m| m.data.reward);
     let tip = (base_reward as f32 * rating.tip_multiplier() * 0.3) as u32;
     let final_reward = base_reward + tip;
 
@@ -509,24 +549,26 @@ fn handle_taxi_completion(
         TaxiRating::Poor => 2,
         TaxiRating::Terrible => 1,
     };
-    mission_manager.completed_missions.push(CompletedMissionRecord {
-        title: mission_title,
-        mission_type: MissionType::Taxi,
-        reward: final_reward,
-        stars: star_count,
-        rating_label: rating.emoji().to_string(),
-    });
+    mission_manager
+        .completed_missions
+        .push(CompletedMissionRecord {
+            title: mission_title,
+            mission_type: MissionType::Taxi,
+            reward: final_reward,
+            stars: star_count,
+            rating_label: rating.emoji().to_string(),
+        });
 
     // 顯示結果
     let tip_msg = if tip > 0 {
-        format!(" (+${} 小費)", tip)
+        format!(" (+${tip} 小費)")
     } else {
         String::new()
     };
 
     notifications.success(format!(
-        "🚕 載客完成！{} 獲得 ${}{}",
-        rating.emoji(), final_reward, tip_msg
+        "🚕 載客完成！{} 獲得 ${final_reward}{tip_msg}",
+        rating.emoji(),
     ));
 
     // 清除標記
@@ -537,11 +579,8 @@ fn handle_taxi_completion(
 }
 
 /// 尋找附近可接取的任務
-/// 使用 distance_squared 優化，避免不必要的 sqrt 運算
-fn find_nearby_mission(
-    mission_manager: &MissionManager,
-    player_pos: Vec3,
-) -> Option<MissionData> {
+/// 使用 `distance_squared` 優化，避免不必要的 `sqrt` 運算
+fn find_nearby_mission(mission_manager: &MissionManager, player_pos: Vec3) -> Option<MissionData> {
     // 先檢查外送訂單（較大範圍）
     for order in &mission_manager.delivery_orders {
         if player_pos.distance_squared(order.start_pos) < DELIVERY_INTERACT_DIST_SQ {
@@ -569,17 +608,22 @@ fn accept_mission(
     // 根據任務類型顯示不同資訊
     match mission.mission_type {
         MissionType::Delivery => {
-            let time_msg = mission.time_limit.map_or(String::new(), |limit| format!(" ⏱️{:.0}秒", limit));
+            let time_msg = mission
+                .time_limit
+                .map_or(String::new(), |limit| format!(" ⏱️{limit:.0}秒"));
             notifications.info(format!(
-                "📋 {} | ${}{} 📍先取餐",
-                mission.title, mission.reward, time_msg
+                "📋 {} | ${}{time_msg} 📍先取餐",
+                mission.title, mission.reward,
             ));
         }
         MissionType::Race => {
             if let Some(ref race_data) = mission.race_data {
                 notifications.info(format!(
                     "🏁 {} | 金牌 {:.1}秒 / 銀牌 {:.1}秒 / 銅牌 {:.1}秒",
-                    mission.title, race_data.gold_time, race_data.silver_time, race_data.bronze_time
+                    mission.title,
+                    race_data.gold_time,
+                    race_data.silver_time,
+                    race_data.bronze_time
                 ));
                 // 生成第一個檢查點標記
                 if let Some(first_cp) = race_data.checkpoints.get(1) {
@@ -607,17 +651,22 @@ fn accept_mission(
                 MissionType::Photography => "📷",
                 _ => "🔍",
             };
-            let time_msg = mission.time_limit.map_or(String::new(), |limit| format!(" ⏱️{:.0}秒", limit));
+            let time_msg = mission
+                .time_limit
+                .map_or(String::new(), |limit| format!(" ⏱️{limit:.0}秒"));
             notifications.info(format!(
-                "{} {} | ${}{}",
-                icon, mission.title, mission.reward, time_msg
+                "{icon} {} | ${}{time_msg}",
+                mission.title, mission.reward,
             ));
             spawn_marker(ctx, mission.end_pos, mission.id, false);
         }
     }
 
     // 判斷是否需要先取物
-    let needs_pickup = matches!(mission.mission_type, MissionType::Delivery | MissionType::Taxi);
+    let needs_pickup = matches!(
+        mission.mission_type,
+        MissionType::Delivery | MissionType::Taxi
+    );
 
     mission_manager.active_mission = Some(ActiveMission {
         data: mission,
@@ -643,14 +692,16 @@ pub fn mission_system(
     marker_query: Query<(Entity, &MissionMarker)>,
     time: Res<Time>,
 ) {
-    let Ok(player_transform) = player_query.single() else { return; };
+    let Ok(player_transform) = player_query.single() else {
+        return;
+    };
     let player_pos = player_transform.translation;
 
     // 檢查玩家是否在車上（簡化判斷：與任何車輛距離 < 3m）
     // 使用 distance_squared 優化避免 sqrt 運算
-    let player_in_vehicle = vehicle_query.iter().any(|vt| {
-        vt.translation.distance_squared(player_pos) < VEHICLE_INTERACT_DIST_SQ
-    });
+    let player_in_vehicle = vehicle_query
+        .iter()
+        .any(|vt| vt.translation.distance_squared(player_pos) < VEHICLE_INTERACT_DIST_SQ);
 
     let mut ctx = MissionRenderCtx {
         commands: &mut commands,
@@ -722,12 +773,7 @@ pub fn mission_system(
     // 接取新任務
     if interaction.can_interact() {
         if let Some(mission) = find_nearby_mission(&mission_manager, player_pos) {
-            accept_mission(
-                mission,
-                &mut mission_manager,
-                &mut notifications,
-                &mut ctx,
-            );
+            accept_mission(mission, &mut mission_manager, &mut notifications, &mut ctx);
             interaction.consume();
         }
     }
@@ -738,7 +784,7 @@ pub fn mission_marker_animation(
     time: Res<Time>,
     mut query: Query<&mut Transform, With<MissionMarker>>,
 ) {
-    for mut transform in query.iter_mut() {
+    for mut transform in &mut query {
         let t = time.elapsed_secs();
         transform.translation.y = 0.3 + (t * 2.0).sin() * 0.3;
         transform.rotate_y(time.delta_secs() * 1.5);

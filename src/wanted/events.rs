@@ -3,36 +3,21 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-
 use bevy::prelude::*;
 
 /// 犯罪事件
 #[derive(Message, Clone, Debug)]
 pub enum CrimeEvent {
     /// 開槍（位置、目擊者數量）
-    Shooting {
-        position: Vec3,
-        witness_count: u32,
-    },
+    Shooting { position: Vec3, witness_count: u32 },
     /// 搶車
-    VehicleTheft {
-        position: Vec3,
-    },
+    VehicleTheft { position: Vec3 },
     /// 攻擊行人
-    Assault {
-        victim: Entity,
-        position: Vec3,
-    },
+    Assault { victim: Entity, position: Vec3 },
     /// 殺死行人
-    Murder {
-        victim: Entity,
-        position: Vec3,
-    },
+    Murder { victim: Entity, position: Vec3 },
     /// 殺死警察（嚴重犯罪）
-    PoliceKilled {
-        victim: Entity,
-        position: Vec3,
-    },
+    PoliceKilled { victim: Entity, position: Vec3 },
     /// 撞擊行人（用車輛）
     VehicleHit {
         victim: Entity,
@@ -40,13 +25,12 @@ pub enum CrimeEvent {
         fatal: bool,
     },
     /// 搶劫商店
-    ShopRobbery {
-        position: Vec3,
-    },
+    ShopRobbery { position: Vec3 },
 }
 
 impl CrimeEvent {
     /// 獲取犯罪的熱度增加量
+    #[allow(clippy::cast_precision_loss)]
     pub fn heat_value(&self) -> f32 {
         match self {
             CrimeEvent::Shooting { witness_count, .. } => {
@@ -56,24 +40,27 @@ impl CrimeEvent {
             CrimeEvent::VehicleTheft { .. } => 15.0,
             CrimeEvent::Assault { .. } => 10.0,
             CrimeEvent::Murder { .. } => 25.0,
-            CrimeEvent::PoliceKilled { .. } => 40.0, // 殺警察是嚴重犯罪
+            CrimeEvent::PoliceKilled { .. } | CrimeEvent::ShopRobbery { .. } => 40.0,
             CrimeEvent::VehicleHit { fatal, .. } => {
-                if *fatal { 20.0 } else { 8.0 }
+                if *fatal {
+                    20.0
+                } else {
+                    8.0
+                }
             }
-            CrimeEvent::ShopRobbery { .. } => 40.0, // 搶劫商店 = +2★
         }
     }
 
     /// 獲取犯罪位置
     pub fn position(&self) -> Vec3 {
         match self {
-            CrimeEvent::Shooting { position, .. } => *position,
-            CrimeEvent::VehicleTheft { position } => *position,
-            CrimeEvent::Assault { position, .. } => *position,
-            CrimeEvent::Murder { position, .. } => *position,
-            CrimeEvent::PoliceKilled { position, .. } => *position,
-            CrimeEvent::VehicleHit { position, .. } => *position,
-            CrimeEvent::ShopRobbery { position } => *position,
+            CrimeEvent::Shooting { position, .. }
+            | CrimeEvent::VehicleTheft { position }
+            | CrimeEvent::Assault { position, .. }
+            | CrimeEvent::Murder { position, .. }
+            | CrimeEvent::PoliceKilled { position, .. }
+            | CrimeEvent::VehicleHit { position, .. }
+            | CrimeEvent::ShopRobbery { position } => *position,
         }
     }
 }
@@ -102,7 +89,7 @@ impl WantedLevelChanged {
 
 /// 目擊者報警完成事件
 /// 當行人完成報警電話時發送，用於增加通緝等級
-/// 與 CrimeEvent 分開，避免重複計算犯罪
+/// 與 `CrimeEvent` 分開，避免重複計算犯罪
 #[derive(Message, Clone, Debug)]
 pub struct WitnessReport {
     /// 報警位置

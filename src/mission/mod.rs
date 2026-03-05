@@ -23,17 +23,17 @@ mod dialogue_systems;
 mod dialogue_ui;
 mod economy;
 mod relationship;
+#[allow(dead_code)]
+mod side_dialogue_data;
+#[allow(dead_code)]
+mod side_dialogues;
+#[allow(dead_code)]
+mod side_missions;
 mod story_data;
 mod story_manager;
 mod story_manager_data;
 mod story_systems;
 mod trigger;
-#[allow(dead_code)]
-mod side_missions;
-#[allow(dead_code)]
-mod side_dialogue_data;
-#[allow(dead_code)]
-mod side_dialogues;
 mod unlocks;
 
 // 重新導出一般任務

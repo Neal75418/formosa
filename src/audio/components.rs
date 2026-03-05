@@ -98,9 +98,9 @@ impl EngineSound {
 /// 引擎類型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EngineType {
-    Scooter,  // 機車
-    Car,      // 汽車
-    Bus,      // 公車
+    Scooter, // 機車
+    Car,     // 汽車
+    Bus,     // 公車
 }
 
 /// 環境音效組件
@@ -173,13 +173,13 @@ impl AmbientSound {
 /// 環境音效類型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AmbientSoundType {
-    Crowd,       // 人群喧嘩
-    Traffic,     // 交通噪音
-    StoreMusic,  // 店家音樂
-    NightMarket, // 夜市叫賣
-    Construction,// 施工噪音
-    Birds,       // 鳥叫聲（日間）
-    Insects,     // 蟲鳴（夜間）
+    Crowd,        // 人群喧嘩
+    Traffic,      // 交通噪音
+    StoreMusic,   // 店家音樂
+    NightMarket,  // 夜市叫賣
+    Construction, // 施工噪音
+    Birds,        // 鳥叫聲（日間）
+    Insects,      // 蟲鳴（夜間）
 }
 
 /// 音效觸發器組件
@@ -580,10 +580,7 @@ pub enum RadioFadeState {
         next_station: RadioStation,
     },
     /// 淡入中（新電台開始播放後提升音量）
-    FadingIn {
-        elapsed: f32,
-        duration: f32,
-    },
+    FadingIn { elapsed: f32, duration: f32 },
 }
 
 /// 淡出持續時間（秒）
@@ -736,7 +733,10 @@ mod tests {
     fn radio_station_prev_cycles_backwards() {
         assert_eq!(RadioStation::IslandPop.prev(), RadioStation::Off);
         assert_eq!(RadioStation::Off.prev(), RadioStation::ElectroTechno);
-        assert_eq!(RadioStation::ElectroTechno.prev(), RadioStation::IndigenousBeats);
+        assert_eq!(
+            RadioStation::ElectroTechno.prev(),
+            RadioStation::IndigenousBeats
+        );
     }
 
     #[test]
@@ -762,7 +762,10 @@ mod tests {
     #[test]
     fn radio_stations_have_audio_paths() {
         for station in RadioStation::all_stations() {
-            assert!(station.audio_path().is_some(), "{:?} should have audio path", station);
+            assert!(
+                station.audio_path().is_some(),
+                "{station:?} should have audio path",
+            );
         }
     }
 
@@ -777,7 +780,10 @@ mod tests {
     #[test]
     fn radio_station_frequencies_not_empty() {
         for station in RadioStation::all_stations() {
-            assert!(!station.frequency().is_empty(), "{:?} should have frequency", station);
+            assert!(
+                !station.frequency().is_empty(),
+                "{station:?} should have frequency",
+            );
         }
         // Off 的頻率可以是空字串
         assert_eq!(RadioStation::Off.frequency(), "");
@@ -788,15 +794,21 @@ mod tests {
         // 所有可播放電台的頻率應該是 "FM XX.X" 格式
         for station in RadioStation::all_stations() {
             let freq = station.frequency();
-            assert!(freq.starts_with("FM "), "{:?} frequency should start with 'FM '", station);
-            assert!(freq.len() > 3, "{:?} frequency should have digits", station);
+            assert!(
+                freq.starts_with("FM "),
+                "{station:?} frequency should start with 'FM '",
+            );
+            assert!(freq.len() > 3, "{station:?} frequency should have digits");
         }
     }
 
     #[test]
     fn radio_station_descriptions_not_empty() {
         for station in RadioStation::all_stations() {
-            assert!(!station.description().is_empty(), "{:?} should have description", station);
+            assert!(
+                !station.description().is_empty(),
+                "{station:?} should have description",
+            );
         }
         assert!(!RadioStation::Off.description().is_empty());
     }
@@ -812,7 +824,9 @@ mod tests {
     fn radio_new_stations_have_culture_elements() {
         // 新增電台也應有台灣文化元素
         assert!(RadioStation::TaiwaneseOldies.description().contains("台語"));
-        assert!(RadioStation::IndigenousBeats.description().contains("原住民"));
+        assert!(RadioStation::IndigenousBeats
+            .description()
+            .contains("原住民"));
         assert!(RadioStation::ElectroTechno.description().contains("台北"));
     }
 
@@ -847,8 +861,9 @@ mod tests {
         for (i, a) in stations.iter().enumerate() {
             for b in stations.iter().skip(i + 1) {
                 assert_ne!(
-                    a.frequency(), b.frequency(),
-                    "{:?} and {:?} have same frequency", a, b
+                    a.frequency(),
+                    b.frequency(),
+                    "{a:?} and {b:?} have same frequency",
                 );
             }
         }
@@ -903,9 +918,18 @@ mod tests {
     #[test]
     fn ground_surface_to_footstep_surface() {
         use crate::audio::FootstepSurface;
-        assert_eq!(FootstepSurface::from(GroundSurface::Concrete), FootstepSurface::Concrete);
-        assert_eq!(FootstepSurface::from(GroundSurface::Grass), FootstepSurface::Grass);
-        assert_eq!(FootstepSurface::from(GroundSurface::Metal), FootstepSurface::Metal);
+        assert_eq!(
+            FootstepSurface::from(GroundSurface::Concrete),
+            FootstepSurface::Concrete
+        );
+        assert_eq!(
+            FootstepSurface::from(GroundSurface::Grass),
+            FootstepSurface::Grass
+        );
+        assert_eq!(
+            FootstepSurface::from(GroundSurface::Metal),
+            FootstepSurface::Metal
+        );
     }
 
     #[test]
@@ -938,8 +962,14 @@ mod tests {
             let (min, max) = PoliceRadioState::interval_for_stars(stars);
             for _ in 0..50 {
                 let interval = PoliceRadioState::random_interval(stars);
-                assert!(interval >= min, "stars={stars}, interval={interval} < min={min}");
-                assert!(interval <= max, "stars={stars}, interval={interval} > max={max}");
+                assert!(
+                    interval >= min,
+                    "stars={stars}, interval={interval} < min={min}"
+                );
+                assert!(
+                    interval <= max,
+                    "stars={stars}, interval={interval} > max={max}"
+                );
             }
         }
     }

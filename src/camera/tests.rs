@@ -1,12 +1,11 @@
 //! Camera 系統單元測試
 
-use bevy::prelude::*;
-use crate::core::CameraSettings;
 use super::constants::{
-    PITCH_MIN, PITCH_MAX_INPUT, PITCH_MAX_WITH_RECOIL,
-    DISTANCE_MIN, DISTANCE_MAX,
-    DISTANCE_MOUSE_FACTOR, DISTANCE_SCROLL_STEP,
+    DISTANCE_MAX, DISTANCE_MIN, DISTANCE_MOUSE_FACTOR, DISTANCE_SCROLL_STEP, PITCH_MAX_INPUT,
+    PITCH_MAX_WITH_RECOIL, PITCH_MIN,
 };
+use crate::core::CameraSettings;
+use bevy::prelude::*;
 
 // ============================================================================
 // Pitch 角度限制測試
@@ -191,7 +190,8 @@ fn angle_normalization_small_diff() {
     let mut angle_diff = target_yaw - current_yaw;
 
     // 正規化到 -PI ~ PI
-    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+        - std::f32::consts::PI;
 
     assert!((angle_diff - 0.2).abs() < 0.01);
 }
@@ -208,7 +208,8 @@ fn angle_normalization_wraps_positive() {
     assert!(angle_diff > 6.0);
 
     // 正規化後：應該是 -0.2（選擇短路徑）
-    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+        - std::f32::consts::PI;
 
     assert!((angle_diff + 0.2).abs() < 0.01);
 }
@@ -225,7 +226,8 @@ fn angle_normalization_wraps_negative() {
     assert!(angle_diff < -6.0);
 
     // 正規化後：應該是 +0.2（選擇短路徑）
-    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+        - std::f32::consts::PI;
 
     assert!((angle_diff - 0.2).abs() < 0.01);
 }
@@ -237,7 +239,8 @@ fn angle_normalization_exactly_pi() {
     let current_yaw = 0.0;
 
     let mut angle_diff = target_yaw - current_yaw;
-    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    angle_diff = (angle_diff + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+        - std::f32::consts::PI;
 
     // PI 應該被正規化為 -PI（在 -PI~PI 範圍的邊界）
     assert!((angle_diff.abs() - std::f32::consts::PI).abs() < 0.01);
@@ -288,7 +291,7 @@ fn aim_mode_shoulder_offset() {
 fn camera_offset_calculation() {
     let distance: f32 = 10.0;
     let pitch: f32 = 0.0; // 水平
-    let yaw: f32 = 0.0;   // 朝向 +Z
+    let yaw: f32 = 0.0; // 朝向 +Z
 
     // 計算偏移（與 camera_follow 系統中的公式一致）
     let offset = Vec3::new(
@@ -547,8 +550,8 @@ fn vehicle_interior_look_direction_left() {
 
 #[test]
 fn driver_eye_offset_per_vehicle_type() {
-    use crate::vehicle::VehicleType;
     use crate::camera::systems::driver_eye_offset;
+    use crate::vehicle::VehicleType;
 
     let scooter = driver_eye_offset(VehicleType::Scooter);
     let car = driver_eye_offset(VehicleType::Car);
@@ -570,7 +573,10 @@ fn driver_eye_offset_per_vehicle_type() {
 #[test]
 fn vehicle_interior_auto_exit_on_dismount() {
     use crate::core::CameraViewMode;
-    let mut settings = CameraSettings { view_mode: CameraViewMode::VehicleInterior, ..Default::default() };
+    let mut settings = CameraSettings {
+        view_mode: CameraViewMode::VehicleInterior,
+        ..Default::default()
+    };
 
     // 模擬下車：不在車上時應自動切回 TPS
     let player_in_vehicle = false;
@@ -605,7 +611,10 @@ fn cinematic_fov_wider_than_aim() {
 #[test]
 fn cinematic_toggle_via_c_key() {
     use crate::core::CameraViewMode;
-    let mut settings = CameraSettings { view_mode: CameraViewMode::Cinematic, ..Default::default() };
+    let mut settings = CameraSettings {
+        view_mode: CameraViewMode::Cinematic,
+        ..Default::default()
+    };
 
     // TPS → Cinematic (已設定)
     assert_eq!(settings.view_mode, CameraViewMode::Cinematic);
@@ -639,7 +648,10 @@ fn letterbox_progress_animation() {
 fn letterbox_progress_retract() {
     use crate::core::{CinematicState, LETTERBOX_ANIM_SPEED};
 
-    let mut state = CinematicState { letterbox_progress: 1.0, ..Default::default() };
+    let mut state = CinematicState {
+        letterbox_progress: 1.0,
+        ..Default::default()
+    };
     let dt = 1.0 / 60.0;
     let target = 0.0;
 

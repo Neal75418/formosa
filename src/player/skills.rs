@@ -54,6 +54,7 @@ impl SkillType {
 // ============================================================================
 
 /// 單一技能的等級和經驗值
+#[allow(clippy::struct_field_names)]
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Skill {
     /// 當前等級 (0-100)
@@ -82,6 +83,7 @@ impl Skill {
     }
 
     /// 升到下一級所需的 XP
+    #[allow(clippy::cast_precision_loss)]
     pub fn xp_to_next_level(&self) -> f32 {
         if self.level >= MAX_SKILL_LEVEL {
             return f32::MAX;
@@ -123,7 +125,7 @@ impl Skill {
     }
 
     /// 等級效果倍率 (0.0 → 1.0 隨等級線性成長)
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::cast_precision_loss)]
     pub fn effect_ratio(&self) -> f32 {
         self.level as f32 / MAX_SKILL_LEVEL as f32
     }
@@ -255,9 +257,7 @@ pub fn driving_skill_system(
     }
 
     // 確認有車輛且在移動中
-    let has_moving_vehicle = vehicle_query
-        .iter()
-        .any(|v| v.current_speed.abs() > 1.0);
+    let has_moving_vehicle = vehicle_query.iter().any(|v| v.current_speed.abs() > 1.0);
 
     if !has_moving_vehicle {
         return;
@@ -314,7 +314,12 @@ pub fn stealth_skill_system(
 
 /// 射擊技能 XP 獎勵（由戰鬥系統呼叫）
 pub fn award_shooting_xp(skills: &mut PlayerSkills, is_headshot: bool) {
-    let xp = SHOOTING_XP_PER_HIT + if is_headshot { SHOOTING_XP_HEADSHOT_BONUS } else { 0.0 };
+    let xp = SHOOTING_XP_PER_HIT
+        + if is_headshot {
+            SHOOTING_XP_HEADSHOT_BONUS
+        } else {
+            0.0
+        };
     skills.shooting.add_xp(xp);
 }
 
@@ -344,6 +349,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::similar_names)]
     fn skill_xp_to_next_level_scales() {
         let skill = Skill::new(SkillType::Driving);
         let xp_0 = skill.xp_to_next_level(); // base * (1 + 0) = 100

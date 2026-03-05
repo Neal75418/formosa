@@ -119,7 +119,7 @@ fn test_cooldown_duration() {
     assert_eq!(wanted_level_with_heat(20.0).cooldown_duration(), 10.0);
     assert_eq!(wanted_level_with_heat(40.0).cooldown_duration(), 15.0);
     assert_eq!(wanted_level_with_heat(60.0).cooldown_duration(), 20.0);
-    assert_eq!(wanted_level_with_heat(80.0).cooldown_duration(), 40.0);  // 4星：提高消退時間
+    assert_eq!(wanted_level_with_heat(80.0).cooldown_duration(), 40.0); // 4星：提高消退時間
     assert_eq!(wanted_level_with_heat(100.0).cooldown_duration(), 60.0); // 5星：提高消退時間
 }
 
@@ -386,7 +386,10 @@ fn test_military_stats_stronger_than_police() {
 
 #[test]
 fn test_military_officer_type() {
-    let officer = PoliceOfficer { officer_type: PoliceType::Military, ..Default::default() };
+    let officer = PoliceOfficer {
+        officer_type: PoliceType::Military,
+        ..Default::default()
+    };
     assert_eq!(officer.officer_type, PoliceType::Military);
     assert_ne!(officer.officer_type, PoliceType::Swat);
     assert_ne!(officer.officer_type, PoliceType::Patrol);

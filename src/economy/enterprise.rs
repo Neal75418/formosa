@@ -5,8 +5,14 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
+// 遊戲數學常用 f32/i32/u32 互轉，允許精度與截斷轉型
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
+// 小型 Copy 結構上的 &self 方法保留 Rust 慣用風格
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -89,8 +95,7 @@ impl EnterpriseType {
         match self {
             EnterpriseType::NightMarketStall => 0.30, // +30%/人
             EnterpriseType::ConvenienceStore => 0.20,
-            EnterpriseType::BubbleTeaShop => 0.25,
-            EnterpriseType::MotorcycleShop => 0.25,
+            EnterpriseType::BubbleTeaShop | EnterpriseType::MotorcycleShop => 0.25,
             EnterpriseType::Bar => 0.15,
             EnterpriseType::Nightclub => 0.12,
         }
@@ -142,9 +147,9 @@ impl UpgradeLevel {
         let base = enterprise_type.purchase_price();
         match self {
             UpgradeLevel::None => Some(base / 4),       // 25% 購買價
-            UpgradeLevel::Renovation => Some(base / 3),  // 33%
-            UpgradeLevel::Equipment => Some(base / 2),   // 50%
-            UpgradeLevel::Premium => None,               // 已滿級
+            UpgradeLevel::Renovation => Some(base / 3), // 33%
+            UpgradeLevel::Equipment => Some(base / 2),  // 50%
+            UpgradeLevel::Premium => None,              // 已滿級
         }
     }
 
@@ -161,6 +166,7 @@ impl UpgradeLevel {
 
 /// 單一企業狀態（附加到 Entity 上作為 Component）
 #[derive(Component, Clone, Debug, Serialize, Deserialize)]
+#[allow(clippy::struct_field_names)]
 pub struct Enterprise {
     /// 企業類型
     pub enterprise_type: EnterpriseType,
@@ -204,8 +210,8 @@ impl Enterprise {
         }
 
         let base = self.enterprise_type.base_daily_income() as f32;
-        let employee_bonus = 1.0
-            + self.employees as f32 * self.enterprise_type.employee_income_bonus();
+        let employee_bonus =
+            1.0 + self.employees as f32 * self.enterprise_type.employee_income_bonus();
         let upgrade_mult = self.upgrade_level.income_multiplier();
 
         (base * employee_bonus * upgrade_mult) as i32

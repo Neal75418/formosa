@@ -1,11 +1,12 @@
 //! UI 系統 - 共用輔助函數與主設置入口
 //!
-//! 各分區設置已移至 setup_hud、setup_map、setup_menu 子模組
+//! 各分區設置已移至 `setup_hud`、`setup_map`、`setup_menu` 子模組
 
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 
 use super::components::ChineseFont;
+#[allow(clippy::wildcard_imports)]
 use super::constants::*;
 
 // ============================================================================
@@ -89,7 +90,7 @@ pub(super) fn spawn_status_bar_label(
         });
 }
 
-/// 生成文字子節點（Text + TextFont + TextColor）
+/// 生成文字子節點（Text + `TextFont` + `TextColor`）
 pub(super) fn spawn_text_child(
     parent: &mut ChildSpawnerCommands,
     text: &str,

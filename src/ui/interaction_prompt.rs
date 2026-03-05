@@ -164,7 +164,7 @@ pub fn update_interaction_prompt_ui(
     mut text_query: Query<&mut Text, With<InteractionPromptText>>,
 ) {
     // 更新容器可見性
-    for mut visibility in container_query.iter_mut() {
+    for mut visibility in &mut container_query {
         let should_show = prompt_state.fade_progress > 0.01;
         let new_visibility = if should_show {
             Visibility::Visible
@@ -179,9 +179,9 @@ pub fn update_interaction_prompt_ui(
 
     // 只在狀態變更時更新文字內容
     if prompt_state.is_changed() {
-        for mut text in text_query.iter_mut() {
+        for mut text in &mut text_query {
             if **text != prompt_state.text {
-                **text = prompt_state.text.clone();
+                (**text).clone_from(&prompt_state.text);
             }
         }
     }
@@ -194,7 +194,10 @@ impl Plugin for InteractionPromptPlugin {
         app.add_systems(Startup, setup_interaction_prompt.in_set(super::UiSetup))
             .add_systems(
                 Update,
-                (update_interaction_prompt_state, update_interaction_prompt_ui)
+                (
+                    update_interaction_prompt_state,
+                    update_interaction_prompt_ui,
+                )
                     .in_set(super::UiActive),
             );
     }

@@ -95,9 +95,9 @@ impl AiCombat {
 /// 掩體類型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CoverType {
-    Low,    // 低掩體（蹲姿射擊）：汽車、矮牆
-    High,   // 高掩體（站姿射擊）：柱子、牆角
-    Full,   // 完全掩護（無法射擊）：大型障礙物
+    Low,  // 低掩體（蹲姿射擊）：汽車、矮牆
+    High, // 高掩體（站姿射擊）：柱子、牆角
+    Full, // 完全掩護（無法射擊）：大型障礙物
 }
 
 /// 掩體點組件

@@ -2,6 +2,12 @@
 //!
 //! 處理金錢同步、商店互動、ATM 操作
 
+// 遊戲數學常用 f32/i32/u32 互轉，允許精度與截斷轉型
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use bevy::prelude::*;
 
@@ -12,18 +18,22 @@ use crate::ui::{MoneyDisplay, NotificationQueue};
 use crate::wanted::CrimeEvent;
 use crate::world::Building;
 
-use super::components::*;
+use super::components::{
+    Atm, AtmMenuState, AtmMode, CashPickup, Interactable, InteractionType, ItemCategory,
+    MoneyChangeReason, MoneyChangedEvent, PlayerWallet, PropertyOwnership, RobberyState, Shop,
+    ShopInventory, ShopItem, ShopMenuState, TransactionEvent, TransactionType, ITEM_AMMO_PISTOL,
+    ITEM_AMMO_RIFLE, ITEM_AMMO_SHOTGUN, ITEM_AMMO_SMG, ITEM_WEAPON_PISTOL, ITEM_WEAPON_RIFLE,
+    ITEM_WEAPON_SHOTGUN, ITEM_WEAPON_SMG, PROPERTY_INTERACTION_DISTANCE, RENTAL_INCOME_HOUR,
+    ROBBERY_INTERACTION_DISTANCE, ROBBERY_MAX_AMOUNT, ROBBERY_MIN_AMOUNT,
+};
 
 // ============================================================================
 // 金錢同步系統
 // ============================================================================
 
-/// 同步金錢顯示（PlayerWallet -> PlayerStats）
+/// 同步金錢顯示（`PlayerWallet` -> `PlayerStats`）
 /// 確保所有金錢來源保持一致
-pub fn sync_money_display(
-    wallet: Res<PlayerWallet>,
-    mut player_stats: ResMut<PlayerStats>,
-) {
+pub fn sync_money_display(wallet: Res<PlayerWallet>, mut player_stats: ResMut<PlayerStats>) {
     if wallet.is_changed() {
         player_stats.money = wallet.cash as u32;
     }
@@ -38,10 +48,10 @@ pub fn update_money_ui(
         return;
     }
 
-    for mut text in money_query.iter_mut() {
+    for mut text in &mut money_query {
         // 格式化金錢顯示（加入千分位）
         let formatted = format_money(wallet.cash);
-        **text = format!("$ {}", formatted);
+        **text = format!("$ {formatted}");
     }
 }
 
@@ -59,7 +69,7 @@ fn format_money(amount: i32) -> String {
         .join(",");
 
     if amount < 0 {
-        format!("-{}", formatted)
+        format!("-{formatted}")
     } else {
         formatted
     }
@@ -78,12 +88,17 @@ pub fn handle_shop_interaction(
     mut menu_state: ResMut<ShopMenuState>,
     mut money_events: MessageWriter<MoneyChangedEvent>,
     shop_inventory: Res<ShopInventory>,
-    mut player_query: Query<(&Transform, &mut Health, &mut Armor, &mut WeaponInventory), With<Player>>,
+    mut player_query: Query<
+        (&Transform, &mut Health, &mut Armor, &mut WeaponInventory),
+        With<Player>,
+    >,
     shop_query: Query<(Entity, &Transform, &Shop, &Interactable)>,
     mut interaction: ResMut<InteractionState>,
     mut notifications: ResMut<NotificationQueue>,
 ) {
-    let Ok((player_transform, mut health, mut armor, mut weapon_inventory)) = player_query.single_mut() else {
+    let Ok((player_transform, mut health, mut armor, mut weapon_inventory)) =
+        player_query.single_mut()
+    else {
         return;
     };
     let player_pos = player_transform.translation;
@@ -104,7 +119,7 @@ pub fn handle_shop_interaction(
     }
 
     // 檢查是否有可互動的商店
-    for (entity, shop_transform, shop, interactable) in shop_query.iter() {
+    for (entity, shop_transform, shop, interactable) in &shop_query {
         if interactable.interaction_type != InteractionType::Shop {
             continue;
         }
@@ -141,9 +156,15 @@ pub fn handle_shop_interaction(
 // 商店選單輔助函數
 // ============================================================================
 /// 處理商店選單導航（上下選擇）
-fn handle_shop_navigation(keyboard: &ButtonInput<KeyCode>, selected_index: &mut usize, item_count: usize) {
-    let up_pressed = keyboard.just_pressed(KeyCode::KeyW) || keyboard.just_pressed(KeyCode::ArrowUp);
-    let down_pressed = keyboard.just_pressed(KeyCode::KeyS) || keyboard.just_pressed(KeyCode::ArrowDown);
+fn handle_shop_navigation(
+    keyboard: &ButtonInput<KeyCode>,
+    selected_index: &mut usize,
+    item_count: usize,
+) {
+    let up_pressed =
+        keyboard.just_pressed(KeyCode::KeyW) || keyboard.just_pressed(KeyCode::ArrowUp);
+    let down_pressed =
+        keyboard.just_pressed(KeyCode::KeyS) || keyboard.just_pressed(KeyCode::ArrowDown);
 
     if up_pressed && *selected_index > 0 {
         *selected_index -= 1;
@@ -171,7 +192,10 @@ fn try_purchase_item(
     match item.category {
         ItemCategory::Food | ItemCategory::Drink => {
             let healed = health.heal(item.effect_value);
-            info!("🛒 購買: {} (-${}), 回復 {} HP", item.name, item.price, healed);
+            info!(
+                "🛒 購買: {} (-${}), 回復 {} HP",
+                item.name, item.price, healed
+            );
         }
         ItemCategory::Armor => {
             let added = armor.add(item.effect_value);
@@ -192,7 +216,10 @@ fn try_purchase_item(
             if weapon_inventory.add_weapon(weapon) {
                 info!("🛒 購買: {} (-${})", item.name, item.price);
             } else {
-                info!("🛒 購買: {} (-${}), 已有此武器，補充彈藥", item.name, item.price);
+                info!(
+                    "🛒 購買: {} (-${}), 已有此武器，補充彈藥",
+                    item.name, item.price
+                );
             }
         }
         ItemCategory::Ammo => {
@@ -212,15 +239,22 @@ fn try_purchase_item(
             let mut found = false;
             for weapon in &mut weapon_inventory.weapons {
                 if weapon.stats.weapon_type == weapon_type {
-                    weapon.reserve_ammo = (weapon.reserve_ammo + ammo_added).min(weapon.stats.max_ammo);
+                    weapon.reserve_ammo =
+                        (weapon.reserve_ammo + ammo_added).min(weapon.stats.max_ammo);
                     found = true;
                     break;
                 }
             }
             if found {
-                info!("🛒 購買: {} (-${}), 彈藥 +{}", item.name, item.price, ammo_added);
+                info!(
+                    "🛒 購買: {} (-${}), 彈藥 +{}",
+                    item.name, item.price, ammo_added
+                );
             } else {
-                info!("🛒 購買: {} (-${}), 尚未擁有此武器，彈藥已儲存", item.name, item.price);
+                info!(
+                    "🛒 購買: {} (-${}), 尚未擁有此武器，彈藥已儲存",
+                    item.name, item.price
+                );
             }
         }
         ItemCategory::Clothing | ItemCategory::VehiclePart => {
@@ -252,9 +286,13 @@ fn handle_shop_menu_input(
         return;
     }
 
-    let Some(shop_type) = menu_state.shop_type else { return };
+    let Some(shop_type) = menu_state.shop_type else {
+        return;
+    };
     let items = shop_inventory.get_items(shop_type);
-    if items.is_empty() { return }
+    if items.is_empty() {
+        return;
+    }
 
     handle_shop_navigation(keyboard, &mut menu_state.selected_index, items.len());
 
@@ -287,17 +325,12 @@ pub fn handle_atm_interaction(
 
     // 如果 ATM 選單已開啟
     if menu_state.is_open {
-        handle_atm_menu_input(
-            &keyboard,
-            &mut wallet,
-            &mut menu_state,
-            &mut money_events,
-        );
+        handle_atm_menu_input(&keyboard, &mut wallet, &mut menu_state, &mut money_events);
         return;
     }
 
     // 檢查是否有可互動的 ATM
-    for (entity, atm_transform, atm, interactable) in atm_query.iter() {
+    for (entity, atm_transform, atm, interactable) in &atm_query {
         if interactable.interaction_type != InteractionType::Atm {
             continue;
         }
@@ -366,7 +399,9 @@ fn handle_atm_withdraw(
 ) {
     handle_amount_input(keyboard, &mut menu_state.input_amount);
 
-    if !keyboard.just_pressed(KeyCode::Enter) { return }
+    if !keyboard.just_pressed(KeyCode::Enter) {
+        return;
+    }
 
     let amount = menu_state.input_amount;
     if amount > 0 && wallet.withdraw(amount) {
@@ -392,7 +427,9 @@ fn handle_atm_deposit(
 ) {
     handle_amount_input(keyboard, &mut menu_state.input_amount);
 
-    if !keyboard.just_pressed(KeyCode::Enter) { return }
+    if !keyboard.just_pressed(KeyCode::Enter) {
+        return;
+    }
 
     let amount = menu_state.input_amount;
     if amount > 0 && wallet.deposit(amount) {
@@ -416,7 +453,9 @@ fn handle_atm_menu_input(
     menu_state: &mut AtmMenuState,
     money_events: &mut MessageWriter<MoneyChangedEvent>,
 ) {
-    if handle_atm_escape(keyboard, menu_state) { return }
+    if handle_atm_escape(keyboard, menu_state) {
+        return;
+    }
 
     match menu_state.mode {
         AtmMode::Main => handle_atm_main_menu(keyboard, menu_state),
@@ -516,14 +555,14 @@ pub fn update_cash_pickups(
     player_query: Query<&Transform, With<Player>>,
     mut pickup_query: Query<(Entity, &Transform, &mut CashPickup)>,
 ) {
+    const PICKUP_RANGE_SQ: f32 = 4.0; // 2m 撿取距離
+
     let Ok(player_transform) = player_query.single() else {
         return;
     };
     let player_pos = player_transform.translation;
 
-    const PICKUP_RANGE_SQ: f32 = 4.0; // 2m 撿取距離
-
-    for (entity, pickup_transform, mut pickup) in pickup_query.iter_mut() {
+    for (entity, pickup_transform, mut pickup) in &mut pickup_query {
         // 更新存在時間
         pickup.lifetime += time.delta_secs();
 
@@ -562,21 +601,23 @@ pub fn spawn_cash_pickup(
     position: Vec3,
     amount: i32,
 ) -> Entity {
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.3, 0.1, 0.2))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.2, 0.8, 0.2), // 綠色代表金錢
-            emissive: LinearRgba::rgb(0.1, 0.4, 0.1),
-            ..default()
-        })),
-        Transform::from_translation(position),
-        CashPickup::new(amount),
-        Interactable {
-            prompt: format!("${}", amount),
-            range: 2.0,
-            interaction_type: InteractionType::Pickup,
-        },
-    )).id()
+    commands
+        .spawn((
+            Mesh3d(meshes.add(Cuboid::new(0.3, 0.1, 0.2))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(0.2, 0.8, 0.2), // 綠色代表金錢
+                emissive: LinearRgba::rgb(0.1, 0.4, 0.1),
+                ..default()
+            })),
+            Transform::from_translation(position),
+            CashPickup::new(amount),
+            Interactable {
+                prompt: format!("${amount}"),
+                range: 2.0,
+                interaction_type: InteractionType::Pickup,
+            },
+        ))
+        .id()
 }
 
 // ============================================================================
@@ -603,7 +644,7 @@ pub fn property_purchase_system(
     let player_pos = player_transform.translation;
     let interact_dist_sq = PROPERTY_INTERACTION_DISTANCE * PROPERTY_INTERACTION_DISTANCE;
 
-    for (building_transform, building, mut property) in property_query.iter_mut() {
+    for (building_transform, building, mut property) in &mut property_query {
         if property.owned {
             continue;
         }
@@ -634,13 +675,9 @@ pub fn property_purchase_system(
                 building.name, property.purchase_price, property.daily_income
             );
             return; // 一次只能購買一棟
-        } else {
-            notifications.warning(format!(
-                "資金不足！需要 ${}",
-                property.purchase_price
-            ));
-            return;
         }
+        notifications.warning(format!("資金不足！需要 ${}", property.purchase_price));
+        return;
     }
 }
 
@@ -667,7 +704,7 @@ pub fn rental_income_system(
     let mut total_income = 0;
     let mut property_count = 0;
 
-    for (building, mut property) in property_query.iter_mut() {
+    for (building, mut property) in &mut property_query {
         let income = property.collect_income(game_day);
         if income > 0 {
             total_income += income;
@@ -685,12 +722,9 @@ pub fn rental_income_system(
             new_balance: wallet.cash,
         });
 
-        notifications.info(format!(
-            "租金收入 +${} ({} 物件)",
-            total_income, property_count
-        ));
+        notifications.info(format!("租金收入 +${total_income} ({property_count} 物件)"));
 
-        info!("每日租金收入: ${} ({} 物件)", total_income, property_count);
+        info!("每日租金收入: ${total_income} ({property_count} 物件)");
     }
 }
 
@@ -699,12 +733,9 @@ pub fn rental_income_system(
 // ============================================================================
 
 /// 搶劫冷卻更新系統
-pub fn robbery_cooldown_system(
-    time: Res<Time>,
-    mut robbery_query: Query<&mut RobberyState>,
-) {
+pub fn robbery_cooldown_system(time: Res<Time>, mut robbery_query: Query<&mut RobberyState>) {
     let dt = time.delta_secs();
-    for mut robbery in robbery_query.iter_mut() {
+    for mut robbery in &mut robbery_query {
         robbery.tick(dt);
     }
 }
@@ -737,7 +768,7 @@ pub fn store_robbery_system(
     let player_pos = player_transform.translation;
     let rob_dist_sq = ROBBERY_INTERACTION_DISTANCE * ROBBERY_INTERACTION_DISTANCE;
 
-    for (shop_transform, shop, mut robbery) in shop_query.iter_mut() {
+    for (shop_transform, shop, mut robbery) in &mut shop_query {
         let dist_sq = shop_transform.translation.distance_squared(player_pos);
         if dist_sq > rob_dist_sq {
             continue;
@@ -768,10 +799,7 @@ pub fn store_robbery_system(
             position: shop_transform.translation,
         });
 
-        notifications.warning(format!(
-            "搶劫 {} 得手 ${}！通緝上升！",
-            shop.name, amount
-        ));
+        notifications.warning(format!("搶劫 {} 得手 ${}！通緝上升！", shop.name, amount));
 
         info!(
             "搶劫商店: {} → +${} (位置: {:.1}, {:.1})",

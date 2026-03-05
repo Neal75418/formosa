@@ -3,12 +3,12 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
+use super::{
+    CutsceneId, Difficulty, MissionObjective, MissionPhase, MissionRewards, NpcId, StoryMissionId,
+    UnlockCondition,
+};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use super::{
-    StoryMissionId, CutsceneId, NpcId,
-    UnlockCondition, MissionPhase, MissionRewards, Difficulty, MissionObjective
-};
 
 /// 劇情任務定義（完整任務）
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -58,7 +58,11 @@ fn default_estimated_time() -> f32 {
 
 impl StoryMission {
     /// 創建新任務
-    pub fn new(id: StoryMissionId, title: impl Into<String>, description: impl Into<String>) -> Self {
+    pub fn new(
+        id: StoryMissionId,
+        title: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
         Self {
             id,
             title: title.into(),
@@ -109,13 +113,15 @@ impl StoryMission {
 
     /// 需要先完成其他任務
     pub fn requires_mission(mut self, mission_id: StoryMissionId) -> Self {
-        self.unlock_conditions.push(UnlockCondition::CompleteMission(mission_id));
+        self.unlock_conditions
+            .push(UnlockCondition::CompleteMission(mission_id));
         self
     }
 
     /// 需要劇情旗標
     pub fn requires_flag(mut self, flag: impl Into<String>) -> Self {
-        self.unlock_conditions.push(UnlockCondition::HasFlag(flag.into()));
+        self.unlock_conditions
+            .push(UnlockCondition::HasFlag(flag.into()));
         self
     }
 
@@ -185,7 +191,7 @@ impl ActiveStoryMission {
     pub fn advance_phase(&mut self, next_phase: &MissionPhase) {
         self.current_phase += 1;
         self.phase_timer = 0.0;
-        self.objectives = next_phase.objectives.clone();
+        self.objectives.clone_from(&next_phase.objectives);
     }
 
     /// 檢查當前階段是否完成
@@ -193,7 +199,7 @@ impl ActiveStoryMission {
         self.objectives
             .iter()
             .filter(|obj| !obj.is_optional)
-            .all(|obj| obj.check_completion())
+            .all(MissionObjective::check_completion)
     }
 
     /// 更新目標進度

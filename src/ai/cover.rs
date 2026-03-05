@@ -242,7 +242,7 @@ pub fn cover_release_system(
 
     // 清理：釋放佔用者已不存在的掩體
     // 這處理了死亡實體在查詢前已被移除的情況
-    for mut cover in cover_query.iter_mut() {
+    for mut cover in &mut cover_query {
         // 跳過未被佔用的掩體
         if !cover.occupied {
             continue;

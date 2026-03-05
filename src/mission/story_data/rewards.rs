@@ -3,10 +3,10 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
+use super::{AreaId, StoryMissionId};
 use crate::combat::WeaponType;
 use crate::vehicle::VehicleType;
-use super::{AreaId, StoryMissionId};
+use serde::{Deserialize, Serialize};
 
 /// 難度等級
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]

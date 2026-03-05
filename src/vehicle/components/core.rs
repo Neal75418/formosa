@@ -1,9 +1,8 @@
 //! 車輛核心類型、ID 和材質
 
-
-use bevy::prelude::*;
 use bevy::pbr::StandardMaterial;
-use serde::{Serialize, Deserialize};
+use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 // ============================================================================
@@ -34,7 +33,10 @@ impl VehicleId {
             if current > id {
                 break;
             }
-            if VEHICLE_ID_COUNTER.compare_exchange(current, id + 1, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            if VEHICLE_ID_COUNTER
+                .compare_exchange(current, id + 1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
                 break;
             }
         }
@@ -72,7 +74,7 @@ pub struct VehicleMaterials {
 }
 
 impl VehicleMaterials {
-    /// 初始化共享材質（在 setup_world 中調用一次）
+    /// 初始化共享材質（在 `setup_world` 中調用一次）
     pub fn new(materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
             black_plastic: materials.add(StandardMaterial {
@@ -114,10 +116,10 @@ impl VehicleMaterials {
 /// 載具類型
 #[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VehicleType {
-    Scooter,    // 機車
-    Car,        // 汽車
-    Taxi,       // 計程車
-    Bus,        // 公車
+    Scooter, // 機車
+    Car,     // 汽車
+    Taxi,    // 計程車
+    Bus,     // 公車
 }
 
 impl VehicleType {
@@ -142,6 +144,7 @@ pub enum VehiclePhysicsMode {
 }
 
 /// 載具核心組件（僅包含基本屬性，子系統拆分為獨立元件）
+#[allow(clippy::struct_field_names)]
 #[derive(Component)]
 pub struct Vehicle {
     pub vehicle_type: VehicleType,

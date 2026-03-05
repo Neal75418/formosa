@@ -5,8 +5,6 @@
 
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
 
 use bevy::prelude::*;
 
@@ -57,10 +55,10 @@ impl Default for NpcSwimming {
             state: SwimState::OnLand,
             stamina: 60.0,
             max_stamina: 60.0,
-            stamina_drain: 5.0,   // 每秒消耗 5 體力 → 12 秒耗盡
-            swim_speed: 2.0,       // 游泳較慢
+            stamina_drain: 5.0, // 每秒消耗 5 體力 → 12 秒耗盡
+            swim_speed: 2.0,    // 游泳較慢
             drown_timer: 0.0,
-            drown_time: 8.0,       // 溺水後 8 秒死亡
+            drown_time: 8.0, // 溺水後 8 秒死亡
             nearest_shore: None,
         }
     }
@@ -116,10 +114,7 @@ impl NpcSwimming {
 
     /// 是否在水中（游泳或溺水）
     pub fn is_in_water(&self) -> bool {
-        matches!(
-            self.state,
-            SwimState::Swimming | SwimState::Drowning
-        )
+        matches!(self.state, SwimState::Swimming | SwimState::Drowning)
     }
 
     /// 是否已死亡
@@ -165,9 +160,7 @@ pub fn find_nearest_shore(pos: Vec3) -> Vec3 {
 
 /// NPC 水中偵測系統
 /// 檢查 NPC 是否在水面以下，自動進入游泳狀態
-pub fn npc_water_detection_system(
-    mut query: Query<(&Transform, &mut NpcSwimming)>,
-) {
+pub fn npc_water_detection_system(mut query: Query<(&Transform, &mut NpcSwimming)>) {
     for (transform, mut swimming) in &mut query {
         let y = transform.translation.y;
 
@@ -181,10 +174,7 @@ pub fn npc_water_detection_system(
 }
 
 /// NPC 游泳物理系統
-pub fn npc_swim_system(
-    time: Res<Time>,
-    mut query: Query<(&mut Transform, &mut NpcSwimming)>,
-) {
+pub fn npc_swim_system(time: Res<Time>, mut query: Query<(&mut Transform, &mut NpcSwimming)>) {
     let dt = time.delta_secs();
 
     for (mut transform, mut swimming) in &mut query {
@@ -213,8 +203,7 @@ pub fn npc_swim_system(
                 transform.translation.y -= sink_speed * dt;
 
                 // 不要沉太深
-                transform.translation.y =
-                    transform.translation.y.max(WATER_LEVEL - 2.0);
+                transform.translation.y = transform.translation.y.max(WATER_LEVEL - 2.0);
             }
             _ => {}
         }
@@ -286,7 +275,10 @@ mod tests {
 
     #[test]
     fn land_recovers_stamina() {
-        let mut swim = NpcSwimming { stamina: 30.0, ..Default::default() };
+        let mut swim = NpcSwimming {
+            stamina: 30.0,
+            ..Default::default()
+        };
 
         swim.tick(1.0); // 陸地上恢復 10/秒
         assert!((swim.stamina - 40.0).abs() < f32::EPSILON);
@@ -326,7 +318,10 @@ mod tests {
 
     #[test]
     fn drowned_cannot_re_enter_water() {
-        let mut swim = NpcSwimming { state: SwimState::Drowned, ..Default::default() };
+        let mut swim = NpcSwimming {
+            state: SwimState::Drowned,
+            ..Default::default()
+        };
 
         swim.enter_water(); // 應該無效（only OnLand → Swimming）
         assert_eq!(swim.state, SwimState::Drowned);

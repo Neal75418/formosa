@@ -3,9 +3,6 @@
 //! 2-3 位可操作主角，各自有獨立技能、金錢、位置。
 //! 按數字鍵 5/6/7 切換角色（搭配衛星動畫）。
 
-// Bevy 系統需要 Res<T> 按值傳遞
-#![allow(clippy::needless_pass_by_value)]
-
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -82,9 +79,8 @@ impl CharacterId {
     #[allow(dead_code)] // 戰鬥系統整合預留
     pub fn combat_multiplier(&self) -> f32 {
         match self {
-            CharacterId::ALong => 1.3,   // 近戰 +30%
-            CharacterId::XiaoMei => 1.0,
-            CharacterId::ACai => 1.0,
+            CharacterId::ALong => 1.3, // 近戰 +30%
+            CharacterId::XiaoMei | CharacterId::ACai => 1.0,
         }
     }
 
@@ -92,9 +88,8 @@ impl CharacterId {
     #[allow(dead_code)] // 技能系統整合預留
     pub fn shooting_xp_multiplier(&self) -> f32 {
         match self {
-            CharacterId::ALong => 1.0,
+            CharacterId::ALong | CharacterId::ACai => 1.0,
             CharacterId::XiaoMei => 1.2, // +20%
-            CharacterId::ACai => 1.0,
         }
     }
 
@@ -102,9 +97,8 @@ impl CharacterId {
     #[allow(dead_code)] // 技能系統整合預留
     pub fn driving_xp_multiplier(&self) -> f32 {
         match self {
-            CharacterId::ALong => 1.0,
+            CharacterId::ALong | CharacterId::ACai => 1.0,
             CharacterId::XiaoMei => 1.2, // +20%
-            CharacterId::ACai => 1.0,
         }
     }
 }
@@ -154,9 +148,9 @@ impl CharacterId {
     /// 角色預設位置（各自的「家」）
     pub fn default_position(&self) -> Vec3 {
         match self {
-            CharacterId::ALong => Vec3::new(-20.0, 1.0, -30.0),  // 西門町巷弄
-            CharacterId::XiaoMei => Vec3::new(40.0, 1.0, 20.0),   // 警察局附近
-            CharacterId::ACai => Vec3::new(-50.0, 1.0, 10.0),     // 夜市入口
+            CharacterId::ALong => Vec3::new(-20.0, 1.0, -30.0), // 西門町巷弄
+            CharacterId::XiaoMei => Vec3::new(40.0, 1.0, 20.0), // 警察局附近
+            CharacterId::ACai => Vec3::new(-50.0, 1.0, 10.0),   // 夜市入口
         }
     }
 }
@@ -263,10 +257,7 @@ impl CharacterManager {
 // ============================================================================
 
 /// 角色切換冷卻計時系統
-pub fn character_switch_cooldown_system(
-    time: Res<Time>,
-    mut manager: ResMut<CharacterManager>,
-) {
+pub fn character_switch_cooldown_system(time: Res<Time>, mut manager: ResMut<CharacterManager>) {
     if manager.switch_cooldown > 0.0 {
         manager.switch_cooldown = (manager.switch_cooldown - time.delta_secs()).max(0.0);
     }
@@ -356,15 +347,7 @@ mod tests {
         manager.unlock(CharacterId::ACai);
 
         let skills = PlayerSkills::default();
-        manager.switch_to(
-            CharacterId::XiaoMei,
-            Vec3::ZERO,
-            0.0,
-            100.0,
-            0,
-            0,
-            &skills,
-        );
+        manager.switch_to(CharacterId::XiaoMei, Vec3::ZERO, 0.0, 100.0, 0, 0, &skills);
 
         // 冷卻中不能再切換
         assert!(!manager.can_switch_to(CharacterId::ACai));

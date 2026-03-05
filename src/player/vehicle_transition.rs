@@ -32,6 +32,7 @@ const WALK_AWAY_DISTANCE: f32 = 0.5;
 
 /// 車輛進出動畫更新系統
 /// 處理上下車動畫的位置插值和狀態轉換
+#[allow(clippy::too_many_lines)]
 pub fn vehicle_transition_animation_system(
     time: Res<Time>,
     mut commands: Commands,
@@ -88,12 +89,13 @@ pub fn vehicle_transition_animation_system(
             if to_vehicle_delta.length_squared() > MIN_DIRECTION_SQ {
                 let to_vehicle = to_vehicle_delta.normalize();
                 let target_rotation = Quat::from_rotation_y((-to_vehicle.x).atan2(-to_vehicle.z));
-                player_transform.rotation = player_transform.rotation.slerp(target_rotation, ROTATION_SMOOTHNESS);
+                player_transform.rotation = player_transform
+                    .rotation
+                    .slerp(target_rotation, ROTATION_SMOOTHNESS);
             }
         }
-        VehicleTransitionPhase::OpeningDoor => {
-            // 玩家停在門旁，門正在打開（視覺效果在其他系統處理）
-        }
+        // 玩家停在門旁，門正在打開（視覺效果在其他系統處理）
+        VehicleTransitionPhase::OpeningDoor | VehicleTransitionPhase::None => {}
         VehicleTransitionPhase::EnteringVehicle => {
             // 玩家從門旁移動到座位
             let new_pos = transition.target_position.lerp(vehicle_pos, progress);
@@ -142,7 +144,6 @@ pub fn vehicle_transition_animation_system(
             player_transform.translation = new_pos;
             player_transform.translation.y = ground_y;
         }
-        VehicleTransitionPhase::None => {}
     }
 
     // 切換到下一階段
@@ -201,9 +202,9 @@ fn has_witness_nearby(
     config: &PlayerConfig,
 ) -> bool {
     let witness_range_sq = config.interaction.witness_range * config.interaction.witness_range;
-    pedestrian_query
-        .iter()
-        .any(|ped_transform| ped_transform.translation.distance_squared(vehicle_pos) < witness_range_sq)
+    pedestrian_query.iter().any(|ped_transform| {
+        ped_transform.translation.distance_squared(vehicle_pos) < witness_range_sq
+    })
 }
 
 /// 處理上車動畫完成

@@ -146,9 +146,13 @@ fn has_line_of_sight(
     filter: QueryFilter,
     target: Entity,
 ) -> bool {
-    if let Some((hit_entity, _)) =
-        rapier.cast_ray(origin, direction, max_dist as bevy_rapier3d::prelude::Real, true, filter)
-    {
+    if let Some((hit_entity, _)) = rapier.cast_ray(
+        origin,
+        direction,
+        max_dist as bevy_rapier3d::prelude::Real,
+        true,
+        filter,
+    ) {
         hit_entity == target
     } else {
         true // 無遮擋
@@ -199,7 +203,14 @@ fn validate_locked_target(
     let direction = to_target / to_target_len;
     let filter = QueryFilter::default().exclude_collider(player_entity);
 
-    let has_los = has_line_of_sight(rapier, eye_pos, direction, to_target_len, filter, target_entity);
+    let has_los = has_line_of_sight(
+        rapier,
+        eye_pos,
+        direction,
+        to_target_len,
+        filter,
+        target_entity,
+    );
 
     if has_los {
         lock_on.los_lost_timer = 0.0;

@@ -28,10 +28,10 @@ pub struct CameraSettings {
     pub distance: f32,
     pub sensitivity: f32,
     // 瞄準模式參數
-    pub aim_shoulder_offset: f32,  // 過肩偏移（正值=右肩）
-    pub aim_distance: f32,         // 瞄準時攝影機距離
+    pub aim_shoulder_offset: f32, // 過肩偏移（正值=右肩）
+    pub aim_distance: f32,        // 瞄準時攝影機距離
     #[allow(dead_code)]
-    pub aim_pitch: f32,            // 瞄準時俯仰角
+    pub aim_pitch: f32, // 瞄準時俯仰角
     // 動態 FOV
     pub base_fov: f32,    // 預設 FOV（度）
     pub sprint_fov: f32,  // 衝刺 FOV（度）
@@ -62,13 +62,13 @@ impl Default for CameraSettings {
     fn default() -> Self {
         Self {
             yaw: 0.0,
-            pitch: 0.5,           // 初始俯視角度稍高
-            distance: 18.0,       // 距離稍近
-            sensitivity: 0.006,   // 提高靈敏度
+            pitch: 0.5,         // 初始俯視角度稍高
+            distance: 18.0,     // 距離稍近
+            sensitivity: 0.006, // 提高靈敏度
             // 瞄準模式
-            aim_shoulder_offset: 1.5,  // 向右肩偏移 1.5 公尺
-            aim_distance: 8.0,         // 瞄準時拉近攝影機
-            aim_pitch: 0.2,            // 瞄準時降低俯角
+            aim_shoulder_offset: 1.5, // 向右肩偏移 1.5 公尺
+            aim_distance: 8.0,        // 瞄準時拉近攝影機
+            aim_pitch: 0.2,           // 瞄準時降低俯角
             // 動態 FOV
             base_fov: 70.0,
             sprint_fov: 85.0,
@@ -114,7 +114,10 @@ impl RecoilState {
         self.current_offset.x += horizontal * h_dir;
         // 限制最大後座力
         self.current_offset.y = self.current_offset.y.min(Self::MAX_VERTICAL_RECOIL);
-        self.current_offset.x = self.current_offset.x.clamp(-Self::MAX_HORIZONTAL_RECOIL, Self::MAX_HORIZONTAL_RECOIL);
+        self.current_offset.x = self
+            .current_offset
+            .x
+            .clamp(-Self::MAX_HORIZONTAL_RECOIL, Self::MAX_HORIZONTAL_RECOIL);
         self.is_recovering = false;
     }
 

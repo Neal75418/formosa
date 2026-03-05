@@ -77,10 +77,9 @@ pub fn enemy_spawn_system(
     // 計算正確的生成高度（碰撞體中心高度 = half_height + radius）
     // 新的碰撞體參數：Gangster (0.45, 0.25), Thug (0.50, 0.28), Boss (0.55, 0.30)
     let spawn_height = match enemy_type {
-        EnemyType::Gangster => 0.45 + 0.25, // 0.70
-        EnemyType::Thug => 0.50 + 0.28,     // 0.78
-        EnemyType::Boss => 0.55 + 0.30,     // 0.85
-        EnemyType::Military => 0.50 + 0.28, // 與 Thug 相同體型
+        EnemyType::Gangster => 0.45 + 0.25,                   // 0.70
+        EnemyType::Thug | EnemyType::Military => 0.50 + 0.28, // 0.78（Military 與 Thug 相同體型）
+        EnemyType::Boss => 0.55 + 0.30,                       // 0.85
     };
 
     let spawn_pos = Vec3::new(
@@ -101,7 +100,10 @@ pub fn enemy_spawn_system(
 
     debug!(
         "生成敵人: {:?} 於 ({:.1}, {:.1})，目前數量: {}",
-        enemy_type, spawn_pos.x, spawn_pos.z, current_count + 1
+        enemy_type,
+        spawn_pos.x,
+        spawn_pos.z,
+        current_count + 1
     );
 }
 
@@ -128,7 +130,7 @@ fn spawn_enemy(
     let scale = match enemy_type {
         EnemyType::Gangster => 1.0,
         EnemyType::Thug | EnemyType::Military => 1.1, // 打手/軍人更壯
-        EnemyType::Boss => 1.05,                       // Boss 略高
+        EnemyType::Boss => 1.05,                      // Boss 略高
     };
 
     // 分批插入組件以避免 tuple 大小限制
@@ -311,8 +313,11 @@ fn spawn_head(
     parent.spawn((
         Mesh3d(v.head.clone()),
         MeshMaterial3d(app.skin.clone()),
-        Transform::from_xyz(0.0, head_y, 0.0)
-            .with_scale(Vec3::new(0.95 * scale, 1.0 * scale, 0.9 * scale)),
+        Transform::from_xyz(0.0, head_y, 0.0).with_scale(Vec3::new(
+            0.95 * scale,
+            1.0 * scale,
+            0.9 * scale,
+        )),
     ));
 
     // === 臉部細節 ===
@@ -325,28 +330,32 @@ fn spawn_head(
     parent.spawn((
         Mesh3d(v.eye_white.clone()),
         MeshMaterial3d(v.eye_white_mat.clone()),
-        Transform::from_xyz(eye_spacing, eye_y, eye_z)
-            .with_scale(Vec3::new(1.2 * scale, 0.8 * scale, 0.5 * scale)),
+        Transform::from_xyz(eye_spacing, eye_y, eye_z).with_scale(Vec3::new(
+            1.2 * scale,
+            0.8 * scale,
+            0.5 * scale,
+        )),
     ));
     parent.spawn((
         Mesh3d(v.eye_white.clone()),
         MeshMaterial3d(v.eye_white_mat.clone()),
-        Transform::from_xyz(-eye_spacing, eye_y, eye_z)
-            .with_scale(Vec3::new(1.2 * scale, 0.8 * scale, 0.5 * scale)),
+        Transform::from_xyz(-eye_spacing, eye_y, eye_z).with_scale(Vec3::new(
+            1.2 * scale,
+            0.8 * scale,
+            0.5 * scale,
+        )),
     ));
 
     // 瞳孔
     parent.spawn((
         Mesh3d(v.pupil.clone()),
         MeshMaterial3d(v.eye_iris_mat.clone()),
-        Transform::from_xyz(eye_spacing, eye_y, eye_z + 0.008)
-            .with_scale(Vec3::splat(scale)),
+        Transform::from_xyz(eye_spacing, eye_y, eye_z + 0.008).with_scale(Vec3::splat(scale)),
     ));
     parent.spawn((
         Mesh3d(v.pupil.clone()),
         MeshMaterial3d(v.eye_iris_mat.clone()),
-        Transform::from_xyz(-eye_spacing, eye_y, eye_z + 0.008)
-            .with_scale(Vec3::splat(scale)),
+        Transform::from_xyz(-eye_spacing, eye_y, eye_z + 0.008).with_scale(Vec3::splat(scale)),
     ));
 
     // 眉毛
@@ -385,14 +394,20 @@ fn spawn_head(
     parent.spawn((
         Mesh3d(v.ear.clone()),
         MeshMaterial3d(app.skin.clone()),
-        Transform::from_xyz(ear_x, ear_y, 0.0)
-            .with_scale(Vec3::new(0.4 * scale, 1.0 * scale, 0.7 * scale)),
+        Transform::from_xyz(ear_x, ear_y, 0.0).with_scale(Vec3::new(
+            0.4 * scale,
+            1.0 * scale,
+            0.7 * scale,
+        )),
     ));
     parent.spawn((
         Mesh3d(v.ear.clone()),
         MeshMaterial3d(app.skin.clone()),
-        Transform::from_xyz(-ear_x, ear_y, 0.0)
-            .with_scale(Vec3::new(0.4 * scale, 1.0 * scale, 0.7 * scale)),
+        Transform::from_xyz(-ear_x, ear_y, 0.0).with_scale(Vec3::new(
+            0.4 * scale,
+            1.0 * scale,
+            0.7 * scale,
+        )),
     ));
 
     // === 髮型（根據類型變化）===
@@ -612,8 +627,11 @@ fn spawn_leg(
     parent.spawn((
         Mesh3d(v.ankle_toe.clone()),
         MeshMaterial3d(app.shoes.clone()),
-        Transform::from_xyz(hip_x, foot_y, 0.065 * scale)
-            .with_scale(Vec3::new(1.0 * scale, 0.7 * scale, 1.2 * scale)),
+        Transform::from_xyz(hip_x, foot_y, 0.065 * scale).with_scale(Vec3::new(
+            1.0 * scale,
+            0.7 * scale,
+            1.2 * scale,
+        )),
     ));
 }
 

@@ -5,8 +5,8 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-use bevy::prelude::*;
 use crate::world::{W_MAIN, Z_CHENGDU};
+use bevy::prelude::*;
 
 // ============================================================================
 // 日常行為系統
@@ -40,7 +40,7 @@ impl Default for DailyBehavior {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum BehaviorType {
     #[default]
-    Walking,        // 正常行走
+    Walking, // 正常行走
     PhoneWatching,  // 看手機（原地站立，偶爾低頭）
     WindowShopping, // 逛櫥窗（緩慢移動，左右看）
     Chatting,       // 聊天（與另一行人面對面站立）
@@ -67,11 +67,11 @@ impl BehaviorType {
     pub fn speed_multiplier(&self) -> f32 {
         match self {
             BehaviorType::Walking => 1.0,
-            BehaviorType::PhoneWatching => 0.0,  // 原地不動
+            BehaviorType::PhoneWatching
+            | BehaviorType::Chatting
+            | BehaviorType::Resting
+            | BehaviorType::TakingPhoto => 0.0, // 原地不動
             BehaviorType::WindowShopping => 0.3, // 緩慢移動
-            BehaviorType::Chatting => 0.0,       // 原地不動
-            BehaviorType::Resting => 0.0,        // 原地不動
-            BehaviorType::TakingPhoto => 0.0,    // 原地不動
             BehaviorType::SeekingShelter => 2.0, // 快速奔跑
         }
     }
@@ -80,11 +80,11 @@ impl BehaviorType {
 /// 興趣點類型（用於日常行為）
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PointOfInterestType {
-    ShopWindow,     // 商店櫥窗
-    Bench,          // 長椅
-    PhotoSpot,      // 拍照點
-    Crosswalk,      // 斑馬線（等紅燈）
-    Shelter,        // 遮蔽處（躲雨用）
+    ShopWindow, // 商店櫥窗
+    Bench,      // 長椅
+    PhotoSpot,  // 拍照點
+    Crosswalk,  // 斑馬線（等紅燈）
+    Shelter,    // 遮蔽處（躲雨用）
 }
 
 /// 庇護點位置匹配容差
@@ -133,10 +133,10 @@ impl ShelterPoint {
 /// 庇護點類型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShelterType {
-    Awning,      // 遮雨棚
-    BusStop,     // 公車站
-    Building,    // 建築物入口
-    Overpass,    // 天橋下
+    Awning,   // 遮雨棚
+    BusStop,  // 公車站
+    Building, // 建築物入口
+    Overpass, // 天橋下
 }
 
 impl PointsOfInterest {
@@ -171,9 +171,9 @@ impl PointsOfInterest {
             ],
             // 拍照點（地標附近）
             photo_spots: vec![
-                Vec3::new(0.0, 0.25, 0.0),       // 徒步區中心
-                Vec3::new(-30.0, 0.25, -30.0),  // 紅樓附近
-                Vec3::new(25.0, 0.25, 25.0),    // 廣場
+                Vec3::new(0.0, 0.25, 0.0),     // 徒步區中心
+                Vec3::new(-30.0, 0.25, -30.0), // 紅樓附近
+                Vec3::new(25.0, 0.25, 25.0),   // 廣場
             ],
             // 庇護點（躲雨用）
             shelters: vec![
@@ -198,17 +198,27 @@ impl PointsOfInterest {
     }
 
     /// 找到最近的興趣點
-    pub fn find_nearest(&self, pos: Vec3, poi_type: PointOfInterestType, max_distance: f32) -> Option<Vec3> {
+    pub fn find_nearest(
+        &self,
+        pos: Vec3,
+        poi_type: PointOfInterestType,
+        max_distance: f32,
+    ) -> Option<Vec3> {
         match poi_type {
-            PointOfInterestType::ShopWindow => self.find_nearest_point(&self.shop_windows, pos, max_distance),
+            PointOfInterestType::ShopWindow => {
+                self.find_nearest_point(&self.shop_windows, pos, max_distance)
+            }
             PointOfInterestType::Bench => self.find_nearest_point(&self.benches, pos, max_distance),
-            PointOfInterestType::PhotoSpot => self.find_nearest_point(&self.photo_spots, pos, max_distance),
+            PointOfInterestType::PhotoSpot => {
+                self.find_nearest_point(&self.photo_spots, pos, max_distance)
+            }
             PointOfInterestType::Crosswalk => None, // 暫不實作
             PointOfInterestType::Shelter => self.find_nearest_shelter(pos, max_distance),
         }
     }
 
     /// 找到最近的點位
+    #[allow(clippy::unused_self)]
     fn find_nearest_point(&self, points: &[Vec3], pos: Vec3, max_distance: f32) -> Option<Vec3> {
         let max_distance_sq = max_distance * max_distance;
         points
@@ -233,9 +243,9 @@ impl PointsOfInterest {
 
     /// 佔用庇護點
     pub fn occupy_shelter(&mut self, pos: Vec3) -> bool {
-        if let Some(shelter) = self.shelters.iter_mut()
-            .find(|s| s.position.distance_squared(pos) < SHELTER_POSITION_TOLERANCE_SQ && s.has_space())
-        {
+        if let Some(shelter) = self.shelters.iter_mut().find(|s| {
+            s.position.distance_squared(pos) < SHELTER_POSITION_TOLERANCE_SQ && s.has_space()
+        }) {
             shelter.current_occupants += 1;
             true
         } else {
@@ -245,7 +255,9 @@ impl PointsOfInterest {
 
     /// 釋放庇護點
     pub fn release_shelter(&mut self, pos: Vec3) {
-        if let Some(shelter) = self.shelters.iter_mut()
+        if let Some(shelter) = self
+            .shelters
+            .iter_mut()
             .find(|s| s.position.distance_squared(pos) < SHELTER_POSITION_TOLERANCE_SQ)
         {
             shelter.current_occupants = shelter.current_occupants.saturating_sub(1);
@@ -342,8 +354,8 @@ mod tests {
         ];
         for b in &behaviors {
             let (min, max) = b.duration_range();
-            assert!(min > 0.0, "{:?} min duration should be > 0", b);
-            assert!(max > min, "{:?} max should be > min", b);
+            assert!(min > 0.0, "{b:?} min duration should be > 0");
+            assert!(max > min, "{b:?} max should be > min");
         }
     }
 
@@ -352,7 +364,8 @@ mod tests {
     #[test]
     fn shelter_has_space_and_occupy() {
         let mut poi = PointsOfInterest::default();
-        poi.shelters.push(ShelterPoint::new(Vec3::ZERO, ShelterType::Awning, 2));
+        poi.shelters
+            .push(ShelterPoint::new(Vec3::ZERO, ShelterType::Awning, 2));
         assert!(poi.shelters[0].has_space());
         assert!(poi.occupy_shelter(Vec3::ZERO));
         assert!(poi.occupy_shelter(Vec3::ZERO));
@@ -383,8 +396,16 @@ mod tests {
     #[test]
     fn find_nearest_shelter_with_space() {
         let mut poi = PointsOfInterest::default();
-        poi.shelters.push(ShelterPoint::new(Vec3::new(5.0, 0.0, 0.0), ShelterType::BusStop, 1));
-        poi.shelters.push(ShelterPoint::new(Vec3::new(10.0, 0.0, 0.0), ShelterType::Awning, 2));
+        poi.shelters.push(ShelterPoint::new(
+            Vec3::new(5.0, 0.0, 0.0),
+            ShelterType::BusStop,
+            1,
+        ));
+        poi.shelters.push(ShelterPoint::new(
+            Vec3::new(10.0, 0.0, 0.0),
+            ShelterType::Awning,
+            2,
+        ));
         // 佔滿第一個
         poi.occupy_shelter(Vec3::new(5.0, 0.0, 0.0));
         // 應該找到第二個

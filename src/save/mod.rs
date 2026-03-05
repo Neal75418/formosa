@@ -31,22 +31,26 @@ impl Plugin for SavePlugin {
             .add_message::<LoadGameEvent>()
             .add_message::<AutoSaveEvent>()
             // 系統
-            .add_systems(Update, (
-                // 自動存檔觸發（寫入 AutoSaveEvent）
-                mission_complete_auto_save_system,
-                safehouse_auto_save_system,
-                purchase_auto_save_system,
-                // 輸入與事件處理（讀取 AutoSaveEvent）
-                handle_save_input,
-                handle_save_events,
-                handle_load_events,
-                handle_auto_save,
-                // 非同步任務輪詢
-                poll_save_task,
-                poll_load_task,
-                apply_pending_load_data,
-                // 破壞持久化恢復（在 apply_pending_load_data 之後）
-                apply_pending_destruction_data,
-            ).chain());
+            .add_systems(
+                Update,
+                (
+                    // 自動存檔觸發（寫入 AutoSaveEvent）
+                    mission_complete_auto_save_system,
+                    safehouse_auto_save_system,
+                    purchase_auto_save_system,
+                    // 輸入與事件處理（讀取 AutoSaveEvent）
+                    handle_save_input,
+                    handle_save_events,
+                    handle_load_events,
+                    handle_auto_save,
+                    // 非同步任務輪詢
+                    poll_save_task,
+                    poll_load_task,
+                    apply_pending_load_data,
+                    // 破壞持久化恢復（在 apply_pending_load_data 之後）
+                    apply_pending_destruction_data,
+                )
+                    .chain(),
+            );
     }
 }

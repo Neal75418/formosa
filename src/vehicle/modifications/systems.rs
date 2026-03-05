@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
+#[allow(clippy::wildcard_imports)]
 use super::performance::*;
+#[allow(clippy::wildcard_imports)]
 use super::visuals::*;
 
 // ============================================================================
@@ -44,7 +46,10 @@ pub struct ModificationCompleteEvent {
 pub fn purchase_modification_system(
     mut events: MessageReader<PurchaseModificationEvent>,
     mut complete_events: MessageWriter<ModificationCompleteEvent>,
-    mut vehicle_query: Query<(&mut VehicleModifications, Option<&mut super::super::VehicleHealth>)>,
+    mut vehicle_query: Query<(
+        &mut VehicleModifications,
+        Option<&mut super::super::VehicleHealth>,
+    )>,
     mut wallet: ResMut<crate::economy::PlayerWallet>,
 ) {
     for event in events.read() {
@@ -158,8 +163,7 @@ pub fn nitro_boost_system(
     let dt = time.delta_secs();
 
     // Shift 鍵（左或右）啟動氮氣
-    let wants_boost = keyboard.pressed(KeyCode::ShiftLeft)
-        || keyboard.pressed(KeyCode::ShiftRight);
+    let wants_boost = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
 
     if wants_boost && mods.nitro_charge > 0.0 {
         nitro.is_active = true;
@@ -185,10 +189,7 @@ pub fn purchase_visual_mod_system(
 
         let price = event.modification.price();
         if !wallet.spend_cash(price) {
-            info!(
-                "餘額不足: 需要 ${}, 現有 ${}",
-                price, wallet.cash
-            );
+            info!("餘額不足: 需要 ${}, 現有 ${}", price, wallet.cash);
             continue;
         }
 
@@ -199,9 +200,6 @@ pub fn purchase_visual_mod_system(
             VisualModPurchase::Rims(rims) => visuals.rims = *rims,
         }
 
-        info!(
-            "視覺改裝完成: {} (${price})",
-            event.modification.name()
-        );
+        info!("視覺改裝完成: {} (${price})", event.modification.name());
     }
 }

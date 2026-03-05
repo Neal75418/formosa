@@ -50,7 +50,7 @@ pub fn update_fps_counter(
                     Color::srgb(1.0, 0.0, 0.0) // 紅色
                 };
 
-                **text = format!("FPS: {:.1}", value);
+                **text = format!("FPS: {value:.1}");
             }
         }
     }

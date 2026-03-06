@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/)
 [![Tests](https://img.shields.io/badge/Tests-817_passing-brightgreen?style=for-the-badge)](/)
-[![Lines](https://img.shields.io/badge/Code-84K+_lines-blue?style=for-the-badge)](/)
+[![Lines](https://img.shields.io/badge/Code-86K+_lines-blue?style=for-the-badge)](/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 
 </div>
@@ -48,7 +48,7 @@
 **📊 專案規模**
 
 - 📁 252 個 `.rs` 檔案
-- 📝 84,080 行代碼
+- 📝 86,729 行代碼
 - ✅ 817 個單元測試（100% 通過）
 - 🔍 0 clippy warnings
 
@@ -143,9 +143,14 @@ cargo clippy             # 靜態分析
 - [x] **Phase 6** — 代碼品質（模組拆分、複雜度優化、配置提取）
 - [x] **Phase 7** — 架構重構（God Module 拆分、元件分解、註解審查）
 - [x] **Phase 8** — 測試覆蓋（4 大核心模組新增 94 個單元測試）
+- [x] **Phase 9** — 代碼品質強化（壞氣味修復、pedantic lint 清理、死碼移除）
 
 ### 🆕 近期完成
 
+- [x] 全專案 clippy pedantic lint 清理（1,517 warnings → 0）
+- [x] 全 codebase 壞氣味修復（God Function 拆分、SystemParam 重構）
+- [x] 移除 31 個驗證過的死碼欄位與常數（-304 行）
+- [x] CI 條件式磁碟清理（空間不足 2GB 時自動 cargo clean）
 - [x] 狙擊槍 + RPG 武器（狙擊鏡 FOV、投射物飛行 + 碰撞爆炸）
 - [x] 隱匿擊殺系統（三階段動畫、背後判定、10 倍傷害）
 - [x] 玩家游泳系統（水中移動、潛水、憋氣、溺水）

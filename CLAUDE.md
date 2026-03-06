@@ -24,7 +24,7 @@ Claude Code 在此專案中的工作指引。
 | bevy_rapier3d    | 0.32         | 3D 物理引擎  |
 | serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：252 個 .rs 檔案、84,080 行代碼、817 個單元測試、0 clippy warnings
+**規模**：252 個 .rs 檔案、86,729 行代碼、817 個單元測試、0 clippy warnings
 
 ## 常用指令
 
@@ -506,7 +506,7 @@ let Ok(player) = player_query.single() else {
 
 <body>
 
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 ```
 
 **Type 類型**：
@@ -531,7 +531,7 @@ refactor(vehicle): split vehicle_damage.rs into 4 focused modules
 
 所有 41 個車輛測試通過 ✓
 
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 ```
 
 ### 測試覆蓋

@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Commits: [Conventiona
 
 ## [Unreleased]
 
+### Changed
+
+- **全專案 clippy pedantic lint 清理**：1,517 個 pedantic warnings → 0，222 個檔案（+7,470/-4,557 行）
+- **全 codebase 壞氣味修復**：God Function 拆分、SystemParam 重構、dead_code 清理
+- **移除 31 個驗證過的死碼欄位與常數**：37 個檔案，淨刪 304 行（逐一 grep 驗證非預留功能）
+- **CI 條件式磁碟清理**：self-hosted runner 空間不足 2GB 時自動執行 cargo clean
+
 ### Added
 
 - **狙擊槍 + RPG 武器系統**：SniperRifle（85 傷、200m 射程、狙擊鏡 FOV 15度）、RPG（投射物飛行 + 碰撞爆炸、80m/s 彈速、10m 爆炸半徑）

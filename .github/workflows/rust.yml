@@ -31,6 +31,14 @@ jobs:
         with:
           clean: false
 
+      - name: Cleanup disk space
+        run: |
+          echo "=== Disk usage before cleanup ==="
+          df -h /
+          cargo clean 2>/dev/null || true
+          echo "=== Disk usage after cleanup ==="
+          df -h /
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

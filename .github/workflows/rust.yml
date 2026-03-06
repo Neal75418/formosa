@@ -31,13 +31,17 @@ jobs:
         with:
           clean: false
 
-      - name: Cleanup disk space
+      - name: Cleanup disk space if low
         run: |
-          echo "=== Disk usage before cleanup ==="
-          df -h /
-          cargo clean 2>/dev/null || true
-          echo "=== Disk usage after cleanup ==="
-          df -h /
+          AVAIL_MB=$(df --output=avail -m / | tail -1 | tr -d ' ')
+          echo "Available disk: ${AVAIL_MB}MB"
+          if [ "$AVAIL_MB" -lt 2048 ]; then
+            echo "Disk below 2GB, running cargo clean..."
+            cargo clean 2>/dev/null || true
+            echo "After cleanup: $(df --output=avail -m / | tail -1 | tr -d ' ')MB"
+          else
+            echo "Disk OK, skipping cleanup"
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

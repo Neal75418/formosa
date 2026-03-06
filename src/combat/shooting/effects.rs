@@ -109,8 +109,6 @@ pub fn spawn_bullet_tracer(
             .with_rotation(rotation)
             .with_scale(Vec3::new(config.thickness, length, config.thickness)),
         BulletTracer {
-            start_pos: start,
-            end_pos: end,
             lifetime: config.lifetime,
         },
     ));

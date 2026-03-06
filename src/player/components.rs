@@ -10,8 +10,6 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct Player {
     pub speed: f32,
-    #[allow(dead_code)]
-    pub rotation_speed: f32,
     pub sprint_speed: f32,
     pub crouch_speed: f32,
     pub is_sprinting: bool,
@@ -44,8 +42,7 @@ impl Default for Player {
         );
 
         Self {
-            speed: 10.0, // 基礎走路速度
-            rotation_speed: 3.0,
+            speed: 10.0,        // 基礎走路速度
             sprint_speed: 18.0, // 衝刺速度
             crouch_speed: 4.0,  // 蹲伏速度
             is_sprinting: false,
@@ -350,9 +347,6 @@ pub struct VehicleTransitionState {
     pub start_position: Vec3,
     /// 動畫目標位置（門旁/座位/下車點）
     pub target_position: Vec3,
-    /// 門的位置（相對於車輛）
-    #[allow(dead_code)]
-    pub door_offset: Vec3,
     /// 是否從右側上車
     pub from_right_side: bool,
     /// 當前門開角度 (0.0 ~ 1.0)
@@ -478,20 +472,6 @@ impl VehicleTransitionState {
         self.target_vehicle = None;
         self.door_angle = 0.0;
     }
-}
-
-/// 車門組件標記
-#[derive(Component)]
-#[allow(dead_code)]
-pub struct VehicleDoor {
-    /// 所屬車輛
-    pub vehicle_entity: Entity,
-    /// 是否為右側門
-    pub is_right_side: bool,
-    /// 門軸心點（相對於車輛）
-    pub hinge_offset: Vec3,
-    /// 最大開門角度（弧度）
-    pub max_angle: f32,
 }
 
 // ============================================================================

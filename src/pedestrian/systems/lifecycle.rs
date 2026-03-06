@@ -17,8 +17,8 @@ use crate::core::COLLISION_GROUP_CHARACTER;
 use crate::pedestrian::behavior::{DailyBehavior, ShelterSeeker};
 use crate::pedestrian::components::{
     GunshotTracker, PedState, Pedestrian, PedestrianArm, PedestrianConfig, PedestrianLeg,
-    PedestrianPaths, PedestrianState, PedestrianType, PedestrianVisuals, SidewalkPath,
-    WalkingAnimation, WitnessState,
+    PedestrianPaths, PedestrianState, PedestrianVisuals, SidewalkPath, WalkingAnimation,
+    WitnessState,
 };
 use crate::pedestrian::panic::PanicState;
 use crate::pedestrian::pathfinding::AStarPath;
@@ -220,16 +220,6 @@ fn spawn_pedestrian(
     config: &PedestrianConfig,
     visuals: &PedestrianVisuals,
 ) {
-    use rand::Rng;
-    let mut rng = rand::rng();
-
-    // 隨機選擇行人類型
-    let ped_type = if rng.random_bool(0.3) {
-        PedestrianType::Business
-    } else {
-        PedestrianType::Casual
-    };
-
     // 使用預創建的材質（隨機選擇索引）
     let indices = visuals.random_indices();
 
@@ -261,7 +251,7 @@ fn spawn_pedestrian(
             InheritedVisibility::default(),
             ViewVisibility::default(),
             // 行人組件
-            Pedestrian { ped_type },
+            Pedestrian,
             PedestrianState::default(),
             WalkingAnimation::default(),
             WitnessState::default(),  // 目擊者狀態（GTA 5 風格報警系統）

@@ -28,88 +28,18 @@ pub struct Moon {
 /// 共用材質快取（減少重複材質創建）
 #[derive(Resource, Clone)]
 pub struct WorldMaterials {
-    // 基礎色
-    pub white: Handle<StandardMaterial>,
-    pub black: Handle<StandardMaterial>,
-    pub dark_gray: Handle<StandardMaterial>,
-    pub light_gray: Handle<StandardMaterial>,
-
     // 道路系統
-    pub road_asphalt: Handle<StandardMaterial>,
-    pub sidewalk: Handle<StandardMaterial>,
     pub zebra_white: Handle<StandardMaterial>,
-
-    // 玻璃材質
-    pub glass_dark: Handle<StandardMaterial>,
-    pub glass_tinted: Handle<StandardMaterial>,
-
-    // 金屬材質
-    pub metal_dark: Handle<StandardMaterial>,
-    pub metal_silver: Handle<StandardMaterial>,
 }
 
 impl WorldMaterials {
     /// 初始化共用材質
     pub fn new(materials: &mut Assets<StandardMaterial>) -> Self {
         Self {
-            // 基礎色
-            white: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.95, 0.95, 0.95),
-                ..default()
-            }),
-            black: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.05, 0.05, 0.05),
-                ..default()
-            }),
-            dark_gray: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.15, 0.15, 0.15),
-                ..default()
-            }),
-            light_gray: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.6, 0.6, 0.6),
-                ..default()
-            }),
-
             // 道路系統
-            road_asphalt: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.15, 0.15, 0.17),
-                perceptual_roughness: 0.95,
-                ..default()
-            }),
-            sidewalk: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.5, 0.48, 0.45),
-                perceptual_roughness: 0.9,
-                ..default()
-            }),
             zebra_white: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.95, 0.95, 0.95),
                 perceptual_roughness: 0.9,
-                ..default()
-            }),
-
-            // 玻璃材質
-            glass_dark: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.1, 0.1, 0.15, 0.7),
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            }),
-            glass_tinted: materials.add(StandardMaterial {
-                base_color: Color::srgba(0.2, 0.3, 0.4, 0.6),
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            }),
-
-            // 金屬材質
-            metal_dark: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.2, 0.2, 0.22),
-                metallic: 0.8,
-                perceptual_roughness: 0.4,
-                ..default()
-            }),
-            metal_silver: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.7, 0.7, 0.75),
-                metallic: 0.9,
-                perceptual_roughness: 0.3,
                 ..default()
             }),
         }
@@ -155,10 +85,7 @@ pub enum StreetFurnitureType {
 
 /// 街道家具組件
 #[derive(Component)]
-pub struct StreetFurniture {
-    pub furniture_type: StreetFurnitureType,
-    pub can_interact: bool,
-}
+pub struct StreetFurniture;
 
 /// 霓虹燈招牌
 #[derive(Component)]
@@ -341,8 +268,6 @@ pub struct Door {
     pub interior_entity: Option<Entity>,
     /// 互動半徑
     pub interact_radius: f32,
-    /// 是否需要鑰匙
-    pub requires_key: bool,
     /// 是否已上鎖
     pub is_locked: bool,
     /// 門當前狀態
@@ -364,7 +289,6 @@ impl Default for Door {
         Self {
             interior_entity: None,
             interact_radius: 2.0,
-            requires_key: false,
             is_locked: false,
             state: DoorState::Closed,
         }
@@ -379,8 +303,6 @@ pub struct PlayerInteriorState {
     pub is_inside: bool,
     /// 當前所在室內空間
     pub current_interior: Option<Entity>,
-    /// 進入時間
-    pub entered_time: f32,
 }
 
 /// 室內提示 UI 標記

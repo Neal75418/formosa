@@ -53,7 +53,7 @@ pub fn spawn_police_car_system(
         return;
     };
 
-    let Ok((player_entity, player_transform)) = player_query.single() else {
+    let Ok((_player_entity, player_transform)) = player_query.single() else {
         return;
     };
 
@@ -91,13 +91,7 @@ pub fn spawn_police_car_system(
     );
 
     // 生成警車
-    spawn_police_car(
-        &mut commands,
-        spawn_pos,
-        player_entity,
-        player_pos,
-        &visuals,
-    );
+    spawn_police_car(&mut commands, spawn_pos, player_pos, &visuals);
 
     info!(
         "生成警車 at ({:.1}, {:.1}) - 當前: {}/{}",
@@ -112,7 +106,6 @@ pub fn spawn_police_car_system(
 fn spawn_police_car(
     commands: &mut Commands,
     position: Vec3,
-    target: Entity,
     player_pos: Vec3,
     visuals: &PoliceCarVisuals,
 ) {
@@ -131,11 +124,7 @@ fn spawn_police_car(
             ViewVisibility::default(),
         ))
         .insert((
-            PoliceCar {
-                target: Some(target),
-                siren_active: true,
-                ..default()
-            },
+            PoliceCar::default(),
             VehiclePreset::car().into_components(),
             VehicleHealth::new(1500.0),      // 警車較耐打
             VehicleId::new(),                // 穩定識別碼（用於存檔）

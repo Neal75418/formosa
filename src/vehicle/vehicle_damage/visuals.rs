@@ -75,9 +75,6 @@ pub struct VehicleDamageSmoke {
     pub lifetime: f32,
     /// 最大生命時間
     pub max_lifetime: f32,
-    /// 是否為黑煙（嚴重損壞）
-    #[allow(dead_code)]
-    pub is_heavy: bool,
 }
 
 impl VehicleDamageSmoke {
@@ -87,7 +84,6 @@ impl VehicleDamageSmoke {
             velocity,
             lifetime: 0.0,
             max_lifetime: if is_heavy { 2.0 } else { 1.5 },
-            is_heavy,
         }
     }
 

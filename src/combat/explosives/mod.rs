@@ -304,8 +304,6 @@ impl Default for SmokeEmitter {
 pub struct ExplosionEffect {
     /// 爆炸半徑
     pub radius: f32,
-    /// 最大傷害
-    pub max_damage: f32,
     /// 生命時間
     pub lifetime: f32,
     /// 最大生命時間
@@ -314,10 +312,9 @@ pub struct ExplosionEffect {
 
 impl ExplosionEffect {
     /// 建立新實例
-    pub fn new(radius: f32, max_damage: f32, max_lifetime: f32) -> Self {
+    pub fn new(radius: f32, max_lifetime: f32) -> Self {
         Self {
             radius,
-            max_damage,
             lifetime: 0.0,
             max_lifetime,
         }

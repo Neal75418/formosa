@@ -42,9 +42,6 @@ pub struct PlayerCoverState {
     pub peek_state: PeekState,
     /// 探出計時器
     pub peek_timer: f32,
-    /// 掩體相對位置（沿掩體邊緣的偏移）
-    #[allow(dead_code)]
-    pub cover_offset: f32,
     /// 進入掩體的原始位置（用於平滑過渡）
     pub original_position: Vec3,
     /// 目標掩體位置

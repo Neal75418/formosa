@@ -137,7 +137,7 @@ fn spawn_enemy(
     let entity = commands
         .spawn((
             Name::new(format!("Enemy_{enemy_type:?}")),
-            Enemy { enemy_type },
+            Enemy,
             Damageable,
             Health::new(enemy_type.health()),
             Weapon::new(enemy_type.weapon()),

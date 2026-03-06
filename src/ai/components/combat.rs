@@ -104,8 +104,6 @@ pub enum CoverType {
 /// 標記世界中可以作為掩護的位置
 #[derive(Component, Debug)]
 pub struct CoverPoint {
-    /// 掩體類型
-    pub cover_type: CoverType,
     /// 掩護方向（敵人應該從這個方向躲在掩體後面）
     pub cover_direction: Vec3,
     /// 掩體高度
@@ -121,7 +119,6 @@ pub struct CoverPoint {
 impl Default for CoverPoint {
     fn default() -> Self {
         Self {
-            cover_type: CoverType::Low,
             cover_direction: Vec3::NEG_Z,
             height: 1.0,
             occupied: false,
@@ -135,7 +132,6 @@ impl CoverPoint {
     /// 創建低掩體
     pub fn low(direction: Vec3) -> Self {
         Self {
-            cover_type: CoverType::Low,
             cover_direction: direction.normalize_or_zero(),
             height: 0.8,
             damage_reduction: 0.5,
@@ -146,7 +142,6 @@ impl CoverPoint {
     /// 創建高掩體
     pub fn high(direction: Vec3) -> Self {
         Self {
-            cover_type: CoverType::High,
             cover_direction: direction.normalize_or_zero(),
             height: 1.8,
             damage_reduction: 0.7,
@@ -157,7 +152,6 @@ impl CoverPoint {
     /// 創建完全掩體
     pub fn full(direction: Vec3) -> Self {
         Self {
-            cover_type: CoverType::Full,
             cover_direction: direction.normalize_or_zero(),
             height: 2.5,
             damage_reduction: 1.0,

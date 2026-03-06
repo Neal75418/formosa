@@ -35,8 +35,6 @@ pub struct TireTrack {
     pub lifetime: f32,
     /// 最大生命時間（痕跡完全消失）
     pub max_lifetime: f32,
-    /// 痕跡點列表 (位置, 寬度)
-    pub points: Vec<(Vec3, f32)>,
 }
 
 impl Default for TireTrack {
@@ -44,20 +42,11 @@ impl Default for TireTrack {
         Self {
             lifetime: 0.0,
             max_lifetime: 10.0, // 10 秒後消失
-            points: Vec::new(),
         }
     }
 }
 
 impl TireTrack {
-    /// 建立新實例
-    pub fn new(points: Vec<(Vec3, f32)>) -> Self {
-        Self {
-            points,
-            ..Default::default()
-        }
-    }
-
     /// 計算當前透明度
     pub fn alpha(&self) -> f32 {
         lifetime_fade_alpha(self.lifetime, self.max_lifetime, 0.7)

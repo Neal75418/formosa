@@ -2,7 +2,7 @@
 //!
 //! 路燈、自動販賣機、垃圾桶、電影看板、塗鴉牆、停車場
 
-use crate::world::{Building, BuildingType, StreetFurniture, StreetFurnitureType, StreetLight};
+use crate::world::{Building, BuildingType, StreetFurniture, StreetLight};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -25,10 +25,7 @@ pub fn spawn_lamppost(
             Transform::from_translation(position),
             GlobalTransform::default(),
             Visibility::default(),
-            StreetFurniture {
-                furniture_type: StreetFurnitureType::Lamppost,
-                can_interact: false,
-            },
+            StreetFurniture,
             // 路燈柱碰撞體 (半徑 0.15, 高度 5.0)
             Collider::cylinder(2.5, 0.15),
             RigidBody::Fixed,
@@ -108,10 +105,7 @@ pub fn spawn_vending_machine(
             GlobalTransform::default(),
             Visibility::default(),
             Collider::cuboid(0.4, 0.9, 0.3),
-            StreetFurniture {
-                furniture_type: StreetFurnitureType::VendingMachine,
-                can_interact: true,
-            },
+            StreetFurniture,
         ))
         .with_children(|parent| {
             // 發光展示窗
@@ -159,10 +153,7 @@ pub fn spawn_trash_can(
             Transform::from_translation(position + Vec3::new(0.0, 0.4, 0.0)),
             GlobalTransform::default(),
             Collider::cylinder(0.4, 0.25),
-            StreetFurniture {
-                furniture_type: StreetFurnitureType::TrashCan,
-                can_interact: false,
-            },
+            StreetFurniture,
         ))
         .with_children(|parent| {
             // 垃圾桶蓋
@@ -213,10 +204,7 @@ pub fn spawn_movie_billboard(
             Transform::from_translation(position),
             GlobalTransform::default(),
             Visibility::default(),
-            StreetFurniture {
-                furniture_type: StreetFurnitureType::Billboard,
-                can_interact: false,
-            },
+            StreetFurniture,
         ))
         .with_children(|parent| {
             // 看板邊框

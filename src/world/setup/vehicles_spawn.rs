@@ -26,7 +26,6 @@ pub(super) fn setup_player_and_vehicles(
         start_pos,
         Player {
             speed: 8.0,
-            rotation_speed: 3.0,
             ..default()
         },
     );

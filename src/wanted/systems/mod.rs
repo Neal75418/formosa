@@ -50,12 +50,6 @@ pub fn setup_police_visuals(
         ..default()
     });
 
-    let badge_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.85, 0.65, 0.13),
-        metallic: 0.9,
-        ..default()
-    });
-
     commands.insert_resource(PoliceVisuals {
         body_mesh,
         head_mesh,
@@ -63,7 +57,6 @@ pub fn setup_police_visuals(
         leg_mesh,
         uniform_material,
         skin_material,
-        badge_material,
     });
 }
 

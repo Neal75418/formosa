@@ -67,7 +67,6 @@ impl VehiclePreset {
                 top_end_falloff: 0.7,
             },
             braking: VehicleBraking {
-                braking_power: 0.85,
                 brake_force: 25.0,
                 handbrake_force: 35.0,
             },
@@ -141,7 +140,6 @@ impl VehiclePreset {
                 top_end_falloff: 0.6,
             },
             braking: VehicleBraking {
-                braking_power: 0.75,
                 brake_force: 22.0,
                 handbrake_force: 38.0,
             },
@@ -178,7 +176,6 @@ impl VehiclePreset {
                 top_end_falloff: 0.3,
             },
             braking: VehicleBraking {
-                braking_power: 0.6,
                 brake_force: 15.0,
                 handbrake_force: 25.0,
             },

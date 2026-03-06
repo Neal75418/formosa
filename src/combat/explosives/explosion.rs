@@ -103,7 +103,7 @@ pub fn handle_explosion_event_system(
                 Mesh3d(visuals.explosion_mesh.clone()),
                 MeshMaterial3d(visuals.explosion_material.clone()),
                 Transform::from_translation(position),
-                ExplosionEffect::new(event.radius, event.max_damage, 0.5),
+                ExplosionEffect::new(event.radius, 0.5),
             ));
 
             // 生成衝擊波效果（GTA5 風格的擴散環）

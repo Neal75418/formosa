@@ -1,7 +1,5 @@
 //! 遊戲核心資源（狀態、互動、碰撞群組、工具函數）
 
-// 部分資源欄位為將來擴展預留，個別標記 #[allow(dead_code)]
-
 use bevy::prelude::*;
 
 /// 遊戲狀態
@@ -30,20 +28,12 @@ impl Default for WorldTime {
 /// 玩家狀態（HUD 顯示用）
 #[derive(Resource)]
 pub struct PlayerStats {
-    #[allow(dead_code)]
-    pub health: f32,
-    #[allow(dead_code)]
-    pub max_health: f32,
     pub money: u32,
 }
 
 impl Default for PlayerStats {
     fn default() -> Self {
-        Self {
-            health: 100.0,
-            max_health: 100.0,
-            money: 5000,
-        }
+        Self { money: 5000 }
     }
 }
 
@@ -112,10 +102,6 @@ pub const COLLISION_GROUP_VEHICLE: Group = Group::GROUP_2;
 
 /// 碰撞群組：靜態物體（建築、街道傢俱）
 pub const COLLISION_GROUP_STATIC: Group = Group::GROUP_3;
-
-/// 碰撞群組：子彈/投射物（預留）
-#[allow(dead_code)]
-pub const COLLISION_GROUP_PROJECTILE: Group = Group::GROUP_4;
 
 // ============================================================================
 // 通用工具函數

@@ -18,10 +18,6 @@ pub struct WeaponModel {
 /// 子彈拖尾效果標記
 #[derive(Component)]
 pub struct BulletTracer {
-    #[allow(dead_code)]
-    pub start_pos: Vec3,
-    #[allow(dead_code)]
-    pub end_pos: Vec3,
     pub lifetime: f32,
 }
 

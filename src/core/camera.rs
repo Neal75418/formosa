@@ -30,8 +30,6 @@ pub struct CameraSettings {
     // 瞄準模式參數
     pub aim_shoulder_offset: f32, // 過肩偏移（正值=右肩）
     pub aim_distance: f32,        // 瞄準時攝影機距離
-    #[allow(dead_code)]
-    pub aim_pitch: f32, // 瞄準時俯仰角
     // 動態 FOV
     pub base_fov: f32,    // 預設 FOV（度）
     pub sprint_fov: f32,  // 衝刺 FOV（度）
@@ -68,7 +66,6 @@ impl Default for CameraSettings {
             // 瞄準模式
             aim_shoulder_offset: 1.5, // 向右肩偏移 1.5 公尺
             aim_distance: 8.0,        // 瞄準時拉近攝影機
-            aim_pitch: 0.2,           // 瞄準時降低俯角
             // 動態 FOV
             base_fov: 70.0,
             sprint_fov: 85.0,

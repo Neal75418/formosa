@@ -250,8 +250,6 @@ pub struct DeathEvent {
 /// 護甲破碎事件
 #[derive(Message, Clone, Debug)]
 pub struct ArmorBreakEvent {
-    #[allow(dead_code)]
-    pub entity: Entity,
     /// 破碎位置
     pub position: Vec3,
     /// 是否完全破碎（護甲歸零）

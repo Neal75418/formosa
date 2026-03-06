@@ -222,7 +222,6 @@ pub struct PoliceVisuals {
     pub leg_mesh: Handle<Mesh>,
     pub uniform_material: Handle<StandardMaterial>,
     pub skin_material: Handle<StandardMaterial>,
-    pub badge_material: Handle<StandardMaterial>,
 }
 
 /// 搜索區域標記組件

@@ -115,7 +115,6 @@ fn send_armor_break_event(
     let hit_pos = hit_position
         .unwrap_or(target_transform.translation + Vec3::Y * DEFAULT_HIT_POSITION_Y_OFFSET);
     armor_break_events.write(ArmorBreakEvent {
-        entity: target,
         position: hit_pos,
         is_full_break: armor_result.was_broken,
     });

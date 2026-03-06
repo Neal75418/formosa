@@ -357,8 +357,6 @@ fn spawn_bullet_tracer(
             )),
         BulletTracer {
             lifetime: tracer_config.lifetime,
-            start_pos: start,
-            end_pos: end,
         },
     ));
 }

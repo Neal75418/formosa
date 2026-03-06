@@ -75,8 +75,6 @@ pub struct Destructible {
     pub material: DestructibleMaterial,
     /// 當前血量
     pub health: f32,
-    /// 最大血量
-    pub max_health: f32,
     /// 是否已破壞
     pub is_destroyed: bool,
     /// 原始尺寸（用於碎片生成）
@@ -90,7 +88,6 @@ impl Default for Destructible {
         Self {
             material: DestructibleMaterial::Glass,
             health: 10.0,
-            max_health: 10.0,
             is_destroyed: false,
             original_size: Vec3::ONE,
             last_damage_time: 0.0,
@@ -105,7 +102,6 @@ impl Destructible {
         Self {
             material,
             health: base_health,
-            max_health: base_health,
             original_size: size,
             ..default()
         }
@@ -244,8 +240,6 @@ impl Debris {
 /// 破壞事件
 #[derive(Clone, Debug, bevy::prelude::Message)]
 pub struct DestructionEvent {
-    /// 被破壞的實體
-    pub entity: Entity,
     /// 破壞位置
     pub position: Vec3,
     /// 材質類型
@@ -258,9 +252,8 @@ pub struct DestructionEvent {
 
 impl DestructionEvent {
     /// 建立新實例
-    pub fn new(entity: Entity, position: Vec3, material: DestructibleMaterial, size: Vec3) -> Self {
+    pub fn new(position: Vec3, material: DestructibleMaterial, size: Vec3) -> Self {
         Self {
-            entity,
             position,
             material,
             size,

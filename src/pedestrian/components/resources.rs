@@ -53,8 +53,6 @@ pub struct PedestrianPaths {
 /// 單條人行道路徑
 #[derive(Clone, Debug)]
 pub struct SidewalkPath {
-    /// 路徑名稱（用於調試）
-    pub name: String,
     /// 路點列表
     pub waypoints: Vec<Vec3>,
     /// 是否往返（否則循環）
@@ -63,9 +61,8 @@ pub struct SidewalkPath {
 
 impl SidewalkPath {
     /// 建立新實例
-    pub fn new(name: &str, waypoints: Vec<Vec3>, ping_pong: bool) -> Self {
+    pub fn new(_name: &str, waypoints: Vec<Vec3>, ping_pong: bool) -> Self {
         Self {
-            name: name.to_string(),
             waypoints,
             ping_pong,
         }

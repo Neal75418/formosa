@@ -72,8 +72,6 @@ impl Default for VehiclePowerBand {
 /// 煞車系統元件
 #[derive(Component)]
 pub struct VehicleBraking {
-    /// 煞車力道基礎值
-    pub braking_power: f32,
     /// 一般煞車力道
     pub brake_force: f32,
     /// 手煞車力道（漂移用）
@@ -83,7 +81,6 @@ pub struct VehicleBraking {
 impl Default for VehicleBraking {
     fn default() -> Self {
         Self {
-            braking_power: 0.7,
             brake_force: 20.0,
             handbrake_force: 30.0,
         }

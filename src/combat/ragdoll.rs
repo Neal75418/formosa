@@ -31,8 +31,6 @@ pub enum BodyPartType {
 #[derive(Component, Clone)]
 pub struct BodyPart {
     pub part_type: BodyPartType,
-    /// 相對於軀幹的連接點（本地座標）
-    pub attachment_point: Vec3,
     /// 碰撞器半徑
     pub collider_radius: f32,
     /// 碰撞器高度（膠囊）
@@ -46,7 +44,6 @@ impl BodyPart {
     pub fn head() -> Self {
         Self {
             part_type: BodyPartType::Head,
-            attachment_point: Vec3::new(0.0, 0.35, 0.0), // 脖子位置
             collider_radius: 0.12,
             collider_height: 0.0, // 球形
             mass: 4.5,            // 頭部約 4.5 kg
@@ -57,7 +54,6 @@ impl BodyPart {
     pub fn torso() -> Self {
         Self {
             part_type: BodyPartType::Torso,
-            attachment_point: Vec3::ZERO,
             collider_radius: 0.18,
             collider_height: 0.5,
             mass: 35.0, // 軀幹約 35 kg
@@ -68,7 +64,6 @@ impl BodyPart {
     pub fn left_arm() -> Self {
         Self {
             part_type: BodyPartType::LeftArm,
-            attachment_point: Vec3::new(-0.22, 0.2, 0.0), // 左肩
             collider_radius: 0.05,
             collider_height: 0.35,
             mass: 3.5,
@@ -79,7 +74,6 @@ impl BodyPart {
     pub fn right_arm() -> Self {
         Self {
             part_type: BodyPartType::RightArm,
-            attachment_point: Vec3::new(0.22, 0.2, 0.0), // 右肩
             collider_radius: 0.05,
             collider_height: 0.35,
             mass: 3.5,
@@ -90,7 +84,6 @@ impl BodyPart {
     pub fn left_leg() -> Self {
         Self {
             part_type: BodyPartType::LeftLeg,
-            attachment_point: Vec3::new(-0.08, -0.25, 0.0), // 左髖
             collider_radius: 0.07,
             collider_height: 0.45,
             mass: 10.0,
@@ -101,7 +94,6 @@ impl BodyPart {
     pub fn right_leg() -> Self {
         Self {
             part_type: BodyPartType::RightLeg,
-            attachment_point: Vec3::new(0.08, -0.25, 0.0), // 右髖
             collider_radius: 0.07,
             collider_height: 0.45,
             mass: 10.0,
@@ -112,7 +104,6 @@ impl BodyPart {
     pub fn left_foot() -> Self {
         Self {
             part_type: BodyPartType::LeftFoot,
-            attachment_point: Vec3::new(0.0, -0.45, 0.0), // 腳踝
             collider_radius: 0.04,
             collider_height: 0.1,
             mass: 1.0,
@@ -123,7 +114,6 @@ impl BodyPart {
     pub fn right_foot() -> Self {
         Self {
             part_type: BodyPartType::RightFoot,
-            attachment_point: Vec3::new(0.0, -0.45, 0.0), // 腳踝
             collider_radius: 0.04,
             collider_height: 0.1,
             mass: 1.0,
@@ -145,10 +135,6 @@ pub struct SkeletalRagdoll {
     pub max_lifetime: f32,
     /// 所有身體部位實體
     pub body_parts: Vec<Entity>,
-    /// 衝擊力方向
-    pub impulse_direction: Vec3,
-    /// 衝擊力強度
-    pub impulse_strength: f32,
 }
 
 impl Default for SkeletalRagdoll {
@@ -157,8 +143,6 @@ impl Default for SkeletalRagdoll {
             lifetime: 0.0,
             max_lifetime: 6.0, // 比單體布娃娃稍長
             body_parts: Vec::new(),
-            impulse_direction: Vec3::NEG_Z,
-            impulse_strength: 300.0,
         }
     }
 }
@@ -167,7 +151,6 @@ impl Default for SkeletalRagdoll {
 /// 標記已轉換為物理實體的身體部位
 #[derive(Component)]
 pub struct RagdollPart {
-    pub part_type: BodyPartType,
     /// 父布娃娃實體
     pub ragdoll_entity: Entity,
 }
@@ -301,7 +284,6 @@ pub fn convert_to_skeletal_ragdoll(
                 GlobalTransform::default(),
                 Visibility::default(),
                 RagdollPart {
-                    part_type: body_part.part_type,
                     ragdoll_entity: ragdoll_root,
                 },
             ))
@@ -342,8 +324,6 @@ pub fn convert_to_skeletal_ragdoll(
     let part_entities: Vec<Entity> = created_parts.iter().map(|(_, e)| *e).collect();
     commands.entity(ragdoll_root).insert(SkeletalRagdoll {
         body_parts: part_entities,
-        impulse_direction: impulse_dir,
-        impulse_strength,
         ..default()
     });
 

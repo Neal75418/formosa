@@ -150,24 +150,8 @@ impl HelicopterRotor {
 }
 
 /// 探照燈組件
-#[derive(Component)]
-pub struct HelicopterSpotlight {
-    /// 追蹤目標
-    #[allow(dead_code)]
-    pub target: Option<Entity>,
-    /// 光線強度
-    #[allow(dead_code)]
-    pub intensity: f32,
-}
-
-impl Default for HelicopterSpotlight {
-    fn default() -> Self {
-        Self {
-            target: None,
-            intensity: 100.0,
-        }
-    }
-}
+#[derive(Component, Default)]
+pub struct HelicopterSpotlight;
 
 /// 直升機父實體標記（用於查找子組件）
 #[derive(Component)]
@@ -193,9 +177,6 @@ pub struct HelicopterVisuals {
     pub body_material: Handle<StandardMaterial>,
     /// 旋翼材質
     pub rotor_material: Handle<StandardMaterial>,
-    /// 探照燈材質
-    #[allow(dead_code)]
-    pub spotlight_material: Handle<StandardMaterial>,
     /// 機身 mesh
     pub body_mesh: Handle<Mesh>,
     /// 主旋翼 mesh

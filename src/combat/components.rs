@@ -280,10 +280,7 @@ pub struct ShootingInput {
 
 /// 敵人標記
 #[derive(Component)]
-pub struct Enemy {
-    #[allow(dead_code)]
-    pub enemy_type: EnemyType,
-}
+pub struct Enemy;
 
 /// 敵人類型
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]

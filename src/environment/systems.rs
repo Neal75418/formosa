@@ -56,7 +56,6 @@ fn process_destructible_damage(
 
     // 發送破壞事件
     let mut destruction_event = DestructionEvent::new(
-        entity,
         transform.translation,
         destructible.material,
         destructible.original_size,
@@ -678,7 +677,6 @@ fn spawn_metal_object_cached(
         CollisionGroups::new(COLLISION_GROUP_STATIC, Group::ALL),
         Destructible {
             health: 80.0,
-            max_health: 80.0,
             material: DestructibleMaterial::Metal,
             original_size: size,
             is_destroyed: false,

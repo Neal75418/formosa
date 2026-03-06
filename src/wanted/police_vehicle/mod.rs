@@ -72,20 +72,11 @@ pub const FRONT_DOT_THRESHOLD: f32 = 0.7;
 pub struct PoliceCar {
     /// 警車 AI 狀態
     pub state: PoliceCarState,
-    /// 駕駛警察實體（可選）
-    #[allow(dead_code)]
-    pub driver: Option<Entity>,
-    /// 目標玩家實體
-    #[allow(dead_code)]
-    pub target: Option<Entity>,
     /// 追逐計時器
     #[allow(dead_code)]
     pub chase_timer: f32,
     /// PIT 機動冷卻
     pub pit_cooldown: f32,
-    /// 警笛是否啟動
-    #[allow(dead_code)]
-    pub siren_active: bool,
     /// 最後碰撞時間
     pub last_collision_time: f32,
 }
@@ -94,11 +85,8 @@ impl Default for PoliceCar {
     fn default() -> Self {
         Self {
             state: PoliceCarState::Responding,
-            driver: None,
-            target: None,
             chase_timer: 0.0,
             pit_cooldown: 0.0,
-            siren_active: true,
             last_collision_time: 0.0,
         }
     }

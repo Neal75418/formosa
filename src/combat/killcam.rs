@@ -86,8 +86,6 @@ pub struct KillCamState {
     pub elapsed: f32,
     /// 攝影機縮放目標
     pub camera_zoom: f32,
-    /// 原始攝影機距離（用於恢復）
-    pub original_camera_distance: f32,
     /// 連殺計數
     pub kill_streak: u8,
     /// 最後擊殺時間
@@ -108,7 +106,6 @@ impl Default for KillCamState {
             duration: 0.0,
             elapsed: 0.0,
             camera_zoom: 1.0,
-            original_camera_distance: 0.0,
             kill_streak: 0,
             last_kill_time: 0.0,
             kill_streak_window: 3.0, // 3 秒內連續擊殺算連殺

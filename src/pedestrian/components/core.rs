@@ -6,19 +6,8 @@
 use bevy::prelude::*;
 
 /// 行人標記組件
-#[derive(Component, Debug)]
-pub struct Pedestrian {
-    /// 行人類型
-    pub ped_type: PedestrianType,
-}
-
-impl Default for Pedestrian {
-    fn default() -> Self {
-        Self {
-            ped_type: PedestrianType::Casual,
-        }
-    }
-}
+#[derive(Component, Debug, Default)]
+pub struct Pedestrian;
 
 /// 行人類型
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]

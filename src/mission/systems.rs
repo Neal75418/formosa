@@ -245,7 +245,7 @@ fn update_race_mission(
 
             // 生成下一個檢查點標記
             if let Some(next_cp) = race_data.current_checkpoint_pos() {
-                spawn_checkpoint_marker(ctx, next_cp, active.data.id, race_data.current_checkpoint);
+                spawn_checkpoint_marker(ctx, next_cp, active.data.id);
             }
         } else {
             // 完成比賽！
@@ -262,7 +262,6 @@ fn spawn_checkpoint_marker(
     ctx: &mut MissionRenderCtx<'_, '_, '_>,
     position: Vec3,
     mission_id: u32,
-    checkpoint_index: usize,
 ) {
     // 使用橙色圓柱標記檢查點
     let color = Color::srgba(1.0, 0.6, 0.2, 0.8);
@@ -280,18 +279,13 @@ fn spawn_checkpoint_marker(
             mission_id,
             is_start: false,
         },
-        CheckpointMarker {
-            index: checkpoint_index,
-        },
+        CheckpointMarker,
     ));
 }
 
 /// 檢查點標記組件
 #[derive(Component)]
-pub struct CheckpointMarker {
-    #[allow(dead_code)]
-    pub index: usize,
-}
+pub struct CheckpointMarker;
 
 // ============================================================================
 // 計程車任務邏輯
@@ -627,7 +621,7 @@ fn accept_mission(
                 ));
                 // 生成第一個檢查點標記
                 if let Some(first_cp) = race_data.checkpoints.get(1) {
-                    spawn_checkpoint_marker(ctx, *first_cp, mission.id, 1);
+                    spawn_checkpoint_marker(ctx, *first_cp, mission.id);
                 }
             }
         }

@@ -33,13 +33,6 @@ pub fn setup_helicopter_visuals(
         ..default()
     });
 
-    // 探照燈材質（發光白色）
-    let spotlight_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(1.0, 1.0, 0.9),
-        emissive: LinearRgba::rgb(10.0, 10.0, 9.0),
-        ..default()
-    });
-
     // 機身 mesh（簡化橢圓體）
     let body_mesh = meshes.add(Capsule3d::new(1.5, 4.0));
 
@@ -52,7 +45,6 @@ pub fn setup_helicopter_visuals(
     commands.insert_resource(HelicopterVisuals {
         body_material,
         rotor_material,
-        spotlight_material,
         body_mesh,
         main_rotor_mesh,
         tail_rotor_mesh,
@@ -175,7 +167,7 @@ fn spawn_helicopter(
             },
             Transform::from_translation(Vec3::new(0.0, -1.5, 1.0))
                 .looking_at(Vec3::new(0.0, -10.0, 5.0), Vec3::Y),
-            HelicopterSpotlight::default(),
+            HelicopterSpotlight,
             HelicopterParent(helicopter_id),
             Name::new("Spotlight"),
         ))

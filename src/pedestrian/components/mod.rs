@@ -20,7 +20,7 @@ mod resources;
 mod witness;
 
 // 重新導出所有公開項目
-pub use self::core::{PedState, Pedestrian, PedestrianState, PedestrianType};
+pub use self::core::{PedState, Pedestrian, PedestrianState};
 pub use animation::{PedestrianArm, PedestrianLeg, WalkingAnimation};
 pub use collision::HitByVehicle;
 pub use resources::{

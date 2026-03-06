@@ -69,8 +69,6 @@ impl SquadRole {
 /// 小隊成員組件
 #[derive(Component, Debug)]
 pub struct SquadMember {
-    /// 小隊 ID（相同 ID 的敵人會協調行動）
-    pub squad_id: u32,
     /// 在小隊中的角色
     pub role: SquadRole,
     /// 包抄目標位置（由小隊協調系統計算）
@@ -86,7 +84,6 @@ pub struct SquadMember {
 impl Default for SquadMember {
     fn default() -> Self {
         Self {
-            squad_id: 0,
             role: SquadRole::Rusher,
             flank_target: None,
             is_flanking: false,
@@ -100,12 +97,6 @@ impl SquadMember {
     /// 創建指定角色的小隊成員
     pub fn with_role(role: SquadRole) -> Self {
         Self { role, ..default() }
-    }
-
-    /// 設定小隊 ID
-    pub fn in_squad(mut self, squad_id: u32) -> Self {
-        self.squad_id = squad_id;
-        self
     }
 
     /// 開始包抄

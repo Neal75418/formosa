@@ -22,47 +22,20 @@ env:
 jobs:
   ci:
     name: Clippy & Test
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          clean: false
-
-      - name: Cleanup disk space if low
-        run: |
-          AVAIL_MB=$(df --output=avail -m / | tail -1 | tr -d ' ')
-          echo "Available disk: ${AVAIL_MB}MB"
-          if [ "$AVAIL_MB" -lt 2048 ]; then
-            echo "Disk below 2GB, running cargo clean..."
-            cargo clean 2>/dev/null || true
-            echo "After cleanup: $(df --output=avail -m / | tail -1 | tr -d ' ')MB"
-          else
-            echo "Disk OK, skipping cleanup"
-          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
 
-      - name: Override opt-level for CI
-        run: |
-          mkdir -p .cargo
-          cat > .cargo/config.toml << 'TOML'
-          [profile.dev]
-          opt-level = 0
-
-          [profile.dev.package."*"]
-          opt-level = 0
-          TOML
-
       - name: Cache
         uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "ci-main"
 
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings

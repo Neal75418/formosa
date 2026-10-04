@@ -61,3 +61,20 @@ app.init_resource::<DebugState>()
 - **Inspector 中文亂碼**：預設字體不支援中文，實體命名使用英文
 - **Gizmos 性能**：預設每幀繪製，大量物件時用 `run_if` 條件執行或 F3 切換
 - **條件編譯**：所有 dev tools 模組需加 `#[cfg(all(debug_assertions, feature = "dev_tools"))]`
+
+## 遙控測試（BRP，`cargo brp`）
+
+條件編譯：`#[cfg(all(debug_assertions, feature = "brp"))]`；HTTP 只綁 `127.0.0.1:15702`，遊戲在背景、沒有焦點也收得到輸入。
+
+- ⚠️ 沒有驗證：本機任何程式、甚至瀏覽器裡的網頁（視瀏覽器而定）都可能對這個 port 送請求（`brp_extras/screenshot` 可在任意路徑建立或覆寫圖片檔，並建出中間目錄）→ 測完立刻 `brp_extras/shutdown`，不要長駐背景
+- 啟動時 port 已被占用（舊實例還在跑）會印錯誤並直接結束，避免請求打到舊 build；換 port 用環境變數 `BRP_EXTRAS_PORT`
+
+- 等載入：log 出現 `📦 載入完成，轉場至 InGame` 才送指令
+- 呼叫：`curl -s -X POST http://127.0.0.1:15702 -H 'Content-Type: application/json' -d '<JSON-RPC>'`
+- 按鍵：`"method":"brp_extras/send_keys","params":{"keys":["KeyW"],"duration_ms":2000}`（鍵名 PascalCase，上限 60000 ms）
+- 截圖：`brp_extras/screenshot`，`params: {"path": "<絕對路徑>.png"}`；非同步寫檔，回傳後要等檔案出現
+- 玩家座標：`world.query` 取 `bevy_ecs::name::Name` + `bevy_transform::components::transform::Transform`，找 Name 為 `"Player"`（`Player` 沒有 Reflect，不能當 filter）
+- 結束：`brp_extras/shutdown`
+- 0.17 版只有 send_keys／screenshot／shutdown／set_window_title，沒有滑鼠方法（README 列的 click_mouse 等是新版才有）
+- 存檔寫到 `$TMPDIR/IslandRampage-brp/saves`；一般模式每 300 秒自動存到 `dirs::data_dir()/IslandRampage/saves/autosave.json`
+- 比對前後畫面：玩家每次都從 (5, 0.7, -5) 出生，但 `world/buildings/generic.rs` 的建築顏色每次啟動都隨機，要比外觀先固定隨機種子

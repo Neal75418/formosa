@@ -24,6 +24,20 @@ fn test_save_manager_default() {
 }
 
 #[test]
+fn test_save_manager_save_directories() {
+    let player_saves = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("IslandRampage")
+        .join("saves");
+    assert_eq!(SaveManager::default().save_directory, player_saves);
+
+    // 遙控測試：寫到暫存目錄，不能碰玩家的存檔
+    let remote = SaveManager::for_remote_testing().save_directory;
+    assert!(remote.starts_with(std::env::temp_dir()));
+    assert!(!remote.starts_with(&player_saves));
+}
+
+#[test]
 fn test_save_manager_get_save_path() {
     let manager = SaveManager {
         save_directory: PathBuf::from("/test/saves"),

@@ -17,6 +17,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Commits: [Conventiona
 
 ### Added
 
+- **BRP 遙控測試模式**：`cargo brp`（`brp` feature，僅 Debug）開啟 Bevy Remote Protocol（localhost:15702），遊戲在背景也能送按鍵、截圖、查實體；存檔改寫到暫存目錄
 - **狙擊槍 + RPG 武器系統**：SniperRifle（85 傷、200m 射程、狙擊鏡 FOV 15度）、RPG（投射物飛行 + 碰撞爆炸、80m/s 彈速、10m 爆炸半徑）
 - **隱匿擊殺系統**：StealthTakedownPhase 三階段動畫（接近→執行→完成，共 1.0s）、背後條件判定、10 倍傷害加成、相機震動特寫
 - **玩家游泳系統**：水中 WASD 移動、Space 上浮/Ctrl 下潛、Shift 快游、體力消耗、憋氣計時、溺水自傷

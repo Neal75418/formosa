@@ -3,3 +3,4 @@
 dev = "run --features dev_tools"
 dev-check = "check --features dev_tools"
 dev-build = "build --features dev_tools"
+brp = "run --features brp"

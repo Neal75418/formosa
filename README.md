@@ -8,7 +8,7 @@
 
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/)
-[![Tests](https://img.shields.io/badge/Tests-817_passing-brightgreen?style=for-the-badge)](/)
+[![Tests](https://img.shields.io/badge/Tests-818_passing-brightgreen?style=for-the-badge)](/)
 [![Lines](https://img.shields.io/badge/Code-86K+_lines-blue?style=for-the-badge)](/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 
@@ -49,8 +49,8 @@
 
 - 📁 252 個 `.rs` 檔案
 - 📝 86,729 行代碼
-- ✅ 817 個單元測試（100% 通過）
-- 🔍 0 clippy warnings
+- ✅ 818 個單元測試（100% 通過）
+- 🔍 clippy：17 個 warnings（2026-10-04 用 Rust 1.98 實測）
 
 ## 🏗️ 架構
 
@@ -125,9 +125,10 @@ graph TD
 
 ```bash
 cargo dev                # 開發模式（含 World Inspector）
+cargo brp                # 遙控測試模式（BRP：外部用 HTTP 送按鍵、截圖；存檔寫到暫存目錄）
 cargo run                # 開發模式
 cargo run --release      # 發布模式（最佳效能）
-cargo test               # 執行 817 個單元測試
+cargo test               # 執行 818 個單元測試
 cargo clippy             # 靜態分析
 ```
 

@@ -24,16 +24,17 @@ Claude Code 在此專案中的工作指引。專題知識按需載入自 `.claud
 | bevy_rapier3d    | 0.32         | 3D 物理引擎  |
 | serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：252 個 .rs 檔案、86,729 行代碼、817 個單元測試、0 clippy warnings
+**規模**：252 個 .rs 檔案、86,729 行代碼、818 個單元測試；clippy 以 `cargo clippy` 實測為準（2026-10-04 用 Rust 1.98 有 17 個既有 warning）
 
 ## 常用指令
 
 ```bash
 cargo dev                    # 開發模式（含 dev_tools，見 .cargo/config.toml）
+cargo brp                    # 遙控測試：BRP 開在 localhost:15702、存檔寫到暫存目錄（用法見 .claude/rules/dev-tools.md）
 cargo run                    # 開發模式（不含 dev_tools）
 cargo run --release          # 發布模式（最佳效能，不含 dev_tools）
 cargo check                  # 編譯檢查
-cargo test                   # 執行 817 個單元測試
+cargo test                   # 執行 818 個單元測試
 cargo test economy::tests    # 特定模組測試
 cargo clippy                 # 靜態分析
 cargo fmt                    # 格式化
@@ -94,7 +95,7 @@ cargo fmt                    # 格式化
 cargo check && cargo test && cargo clippy
 ```
 
-817 個單元測試，修改後必跑（~0.01s）。建置時間：37-84 秒（動態連結）。
+818 個單元測試，修改後必跑（~0.01s）。建置時間：37-84 秒（動態連結）。
 
 ## 按需載入的規則（`.claude/rules/`）
 
@@ -103,6 +104,6 @@ cargo check && cargo test && cargo clippy
 | `architecture.md` | 3 個 Mermaid 架構圖（分層/執行順序/Plugin 列表） | `src/main.rs`、`src/*/mod.rs`、`src/lib.rs` |
 | `patterns.md` | 6 個關鍵模式（Message、空間哈希、物件池、距離平方、Query 衝突、SystemParam） | `src/**/*.rs` |
 | `code-quality.md` | 代碼質量完整規範含範例（檔案大小/dead_code/模組依賴/Clone/錯誤處理/提交格式） | `src/**/*.rs` |
-| `dev-tools.md` | Debug 工具表、Gizmos 可視化、開發工具 code pattern | `src/**/dev_tools*`、`src/**/debug*`、`src/**/fps*`、`src/**/inspector*` |
+| `dev-tools.md` | Debug 工具表、Gizmos 可視化、開發工具 code pattern、BRP 遙控測試 | `src/**/dev_tools*`、`src/**/debug*`、`src/**/fps*`、`src/**/inspector*` |
 | `controls.md` | 完整按鍵對應表（步行/駕駛/開發） | `src/player/**`、`src/vehicle/**`、`src/ui/**`、`src/camera/**` |
 | `test-coverage.md` | 15 模組測試分佈表 + 覆蓋率目標 | `src/**/*test*`、`src/**/tests.rs` |

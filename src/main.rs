@@ -65,6 +65,21 @@ fn main() {
         app.add_plugins(LogDiagnosticsPlugin::default()); // 在 console 顯示 FPS
     }
 
+    // === 🛰️ 遙控測試（僅 Debug + `brp` feature）===
+    // BRP 讓外部用 HTTP（預設 localhost:15702）送按鍵、截圖、查實體，遊戲在背景也收得到
+    #[cfg(all(debug_assertions, feature = "brp"))]
+    {
+        // bevy_remote 綁 port 失敗的錯誤會被吞掉，請求會打到還在背景跑的舊實例，所以先探測、被占用就結束
+        let (port, _) = bevy_brp_extras::BrpExtrasPlugin.get_effective_port();
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_err() {
+            error!("BRP port {port} 已被占用：另一個 `cargo brp` 還在跑？先關掉它");
+            std::process::exit(1);
+        }
+        app.add_plugins(bevy_brp_extras::BrpExtrasPlugin);
+        // 存檔改寫到暫存目錄，背景執行的遊戲不會蓋掉玩家的存檔（SavePlugin 用 init_resource，不會覆蓋）
+        app.insert_resource(save::SaveManager::for_remote_testing());
+    }
+
     app
         // === 戰鬥插件 ===
         .add_plugins(combat::CombatPlugin)

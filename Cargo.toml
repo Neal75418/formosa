@@ -13,6 +13,7 @@ bevy_rapier3d = "0.32"  # 對應 Bevy 0.17
 
 # === 開發工具（Debug 模式自動移除）===
 bevy-inspector-egui = { version = "0.35", optional = true }  # 即時編輯器
+bevy_brp_extras = { version = "0.17", optional = true }  # 對應 Bevy 0.17；BRP 遙控（按鍵、截圖）
 
 rand = "0.9"  # 隨機數生成
 serde = { version = "1.0", features = ["derive"] }  # 序列化（存檔系統）
@@ -25,6 +26,11 @@ futures-lite = "2.5"  # 非同步任務輪詢
 default = []  # Release 乾淨建置；開發時用 cargo run --features dev_tools
 dev_tools = [
     "bevy-inspector-egui",
+]
+# 遙控測試（`cargo brp`，僅 Debug 建置生效）：開 Bevy Remote Protocol 讓外部用 HTTP 送按鍵、截圖、查實體，存檔改寫到暫存目錄
+# ⚠️ BRP 沒有驗證，本機任何程式與網頁都可能連到 → 測完立刻關掉遊戲
+brp = [
+    "bevy_brp_extras",
 ]
 
 # 開發時的編譯優化（讓遊戲跑得動，但編譯較快）

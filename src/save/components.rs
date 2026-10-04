@@ -262,6 +262,14 @@ impl Default for SaveManager {
 }
 
 impl SaveManager {
+    /// 遙控測試（`cargo brp`）用：存檔寫到暫存目錄，背景執行的遊戲不會蓋掉玩家的存檔
+    pub fn for_remote_testing() -> Self {
+        Self {
+            save_directory: std::env::temp_dir().join("IslandRampage-brp").join("saves"),
+            ..Self::default()
+        }
+    }
+
     /// 取得存檔檔案路徑
     pub fn get_save_path(&self, slot: usize) -> PathBuf {
         self.save_directory.join(format!("save_{slot:02}.json"))

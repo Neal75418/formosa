@@ -2695,6 +2695,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "formosa"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "bevy_brp_extras",
+ "bevy_rapier3d",
+ "dirs",
+ "futures-lite",
+ "rand",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "futures-channel"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3371,21 +3386,6 @@ checksum = "617ee6cf8e3f66f3b4ea67a4058564628cde41901316e19f559e14c7c72c5e7b"
 dependencies = [
  "core-foundation-sys",
  "mach2",
-]
-
-[[package]]
-name = "island-rampage"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-inspector-egui",
- "bevy_brp_extras",
- "bevy_rapier3d",
- "dirs",
- "futures-lite",
- "rand",
- "serde",
- "serde_json",
 ]
 
 [[package]]

@@ -10,6 +10,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Commits: [Conventiona
 
 ### Changed
 
+- **專案更名為 formosa**：repo 與 Cargo 套件名改為 `formosa`；遊戲顯示名「島嶼狂飆」與存檔資料夾 `IslandRampage` 不變
+- **中文字型改用 Noto Sans TC Medium**（SIL OFL 1.1，授權檔 `assets/fonts/NotoSansTC-OFL.txt`），取代從 macOS 系統複製來的 STHeiti（系統字型不宜隨 repo 散布）
+- **移除未使用的貼圖** `assets/textures/roads/brick.jpg`
 - **修正新版 clippy 回報的 39 處警告**（Rust 1.98 回報 17 處；1.99 加上新的 assert_is_empty 共 39 處）：map_unwrap_or、manual_midpoint、collapsible_match、manual_is_variant_and、assert_is_empty；本機以 CI 同款指令（Rust 1.99、`-D warnings`）驗證為 0
 - **全專案 clippy pedantic lint 清理**：1,517 個 pedantic warnings → 0，222 個檔案（+7,470/-4,557 行）
 - **全 codebase 壞氣味修復**：God Function 拆分、SystemParam 重構、dead_code 清理

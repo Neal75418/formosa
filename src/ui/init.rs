@@ -11,7 +11,7 @@ use super::constants::BASE_RESOLUTION_HEIGHT;
 
 /// 載入中文字體
 pub fn setup_chinese_font(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let font = asset_server.load("fonts/STHeiti.ttc");
+    let font = asset_server.load("fonts/NotoSansTC-Medium.otf");
     commands.insert_resource(ChineseFont { font });
 }
 

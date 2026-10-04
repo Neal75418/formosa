@@ -16,4 +16,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. IN NO EVENT
 SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY DAMAGES ARISING FROM THE USE
 OF THIS SOFTWARE.
 
+THIRD-PARTY COMPONENTS:
+The following files are not covered by this license and remain under their
+own licenses:
+- assets/fonts/NotoSansTC-Medium.otf: Copyright 2014-2021 Adobe; Noto is a
+  trademark of Google Inc. Licensed under the SIL Open Font License,
+  Version 1.1. See assets/fonts/NotoSansTC-OFL.txt.
+
 For licensing inquiries: nealchen.tw@gmail.com

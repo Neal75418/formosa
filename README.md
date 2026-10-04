@@ -6,6 +6,8 @@
 
 *A GTA-style open-world action game set in Taiwan*
 
+repo 代號：`formosa`
+
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/)
 [![Tests](https://img.shields.io/badge/Tests-818_passing-brightgreen?style=for-the-badge)](/)
@@ -175,6 +177,8 @@ cargo clippy             # 靜態分析
 Copyright &copy; 2024-2026 Neal Chen. All Rights Reserved.
 
 本軟體為專有軟體，未經授權不得複製、修改或散布。
+
+例外：`assets/fonts/NotoSansTC-Medium.otf`（© 2014-2021 Adobe；Noto 為 Google 商標）依 SIL Open Font License 1.1 授權，全文見 `assets/fonts/NotoSansTC-OFL.txt`，不適用本專有授權。
 
 ---
 

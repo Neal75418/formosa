@@ -5,7 +5,7 @@ description: Expert guidance on Rust idioms, ownership, and performance
 
 # Rust Expert Guide (Game Dev Edition)
 
-本專案 (`island-rampage`) 使用 Rust 開發，效能與安全性是核心。
+本專案 (`formosa`) 使用 Rust 開發，效能與安全性是核心。
 
 ## 1. Zero-Cost Abstractions
 

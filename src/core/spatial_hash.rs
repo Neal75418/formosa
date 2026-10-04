@@ -17,7 +17,7 @@
 //!
 //! ```rust
 //! use bevy::prelude::*;
-//! use island_rampage::core::spatial_hash::SpatialHashGrid;
+//! use formosa::core::spatial_hash::SpatialHashGrid;
 //!
 //! // 1. 創建網格（網格大小應 >= 最大查詢半徑）
 //! let mut grid: SpatialHashGrid<Entity> = SpatialHashGrid::new(10.0);

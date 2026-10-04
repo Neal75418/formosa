@@ -174,7 +174,7 @@ pub fn setup_world_name_tags(
     vehicles: Query<(Entity, &GlobalTransform, &Vehicle), Added<Vehicle>>,
     missions: Query<(Entity, &GlobalTransform, &MissionMarker), Added<MissionMarker>>,
 ) {
-    let font = asset_server.load("fonts/STHeiti.ttc");
+    let font = asset_server.load("fonts/NotoSansTC-Medium.otf");
 
     // 建築物標籤 (白色)
     for (entity, _transform, building) in &buildings {

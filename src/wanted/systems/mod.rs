@@ -233,18 +233,15 @@ pub fn wanted_cooldown_system(
     };
     let player_pos = player_transform.translation;
 
-    let player_visible = rapier_context
-        .single()
-        .map(|rapier| {
-            update_police_vision(
-                player_pos,
-                &police_hash,
-                &mut police_query,
-                &rapier,
-                &config,
-            )
-        })
-        .unwrap_or(false);
+    let player_visible = rapier_context.single().is_ok_and(|rapier| {
+        update_police_vision(
+            player_pos,
+            &police_hash,
+            &mut police_query,
+            &rapier,
+            &config,
+        )
+    });
 
     wanted.player_visible = player_visible;
 

@@ -303,7 +303,7 @@ fn teleport_to_target(
     };
     let current_pos = player_transform.translation;
     let (_, rotation_y, _) = player_transform.rotation.to_euler(EulerRot::YXZ);
-    let current_hp = health_query.single().map(|h| h.current).unwrap_or(100.0);
+    let current_hp = health_query.single().map_or(100.0, |h| h.current);
 
     // 保存當前角色狀態並切換
     let target_snapshot = manager.switch_to(

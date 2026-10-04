@@ -394,7 +394,7 @@ fn wrap_animation_phase(phase: &mut f32) {
 
 /// 計算低血量發光強度
 fn calculate_low_health_glow_intensity(pulse_phase: f32, health_percent: f32) -> f32 {
-    let pulse = (pulse_phase.sin() + 1.0) * 0.5;
+    let pulse = f32::midpoint(pulse_phase.sin(), 1.0);
     let glow_intensity = LOW_HEALTH_GLOW_MIN + (LOW_HEALTH_GLOW_MAX - LOW_HEALTH_GLOW_MIN) * pulse;
     let health_factor = 1.0 - (health_percent / LOW_HEALTH_THRESHOLD);
     glow_intensity * health_factor
@@ -449,7 +449,7 @@ pub fn update_hud_animations(
     // === 玩家標記脈衝動畫 ===
     anim_state.player_marker_pulse_phase += PLAYER_MARKER_PULSE_SPEED * dt;
     wrap_animation_phase(&mut anim_state.player_marker_pulse_phase);
-    let marker_pulse = (anim_state.player_marker_pulse_phase.sin() + 1.0) * 0.5;
+    let marker_pulse = f32::midpoint(anim_state.player_marker_pulse_phase.sin(), 1.0);
     let marker_glow_alpha = 0.15 + marker_pulse * 0.2;
     for mut bg in &mut player_glow_query {
         *bg = BackgroundColor(Color::srgba(1.0, 1.0, 1.0, marker_glow_alpha));

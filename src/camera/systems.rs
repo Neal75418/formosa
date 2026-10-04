@@ -240,16 +240,12 @@ pub fn camera_follow(
         if let Some(vehicle_entity) = res.game_state.current_vehicle {
             vehicle_query
                 .get(vehicle_entity)
-                .map(|(t, _)| t.translation)
-                .unwrap_or(Vec3::ZERO)
+                .map_or(Vec3::ZERO, |(t, _)| t.translation)
         } else {
             return;
         }
     } else {
-        player_query
-            .single()
-            .map(|t| t.translation)
-            .unwrap_or(Vec3::ZERO)
+        player_query.single().map_or(Vec3::ZERO, |t| t.translation)
     };
 
     // ===== 車內視角 =====
@@ -438,8 +434,7 @@ pub fn dynamic_fov_system(
         camera_settings.aim_fov
     } else if sprint_query
         .single()
-        .ok()
-        .is_some_and(|s| s.state.is_sprint_related())
+        .is_ok_and(|s| s.state.is_sprint_related())
     {
         // 根據衝刺進度混合 FOV（加速中漸增、減速中漸減）
         let sprint_progress = sprint_query

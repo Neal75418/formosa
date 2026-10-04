@@ -185,7 +185,7 @@ fn test_world_save_data_default() {
     assert_eq!(world_data.world_hour, 8.0);
     assert_eq!(world_data.weather, WeatherType::Clear);
     assert_eq!(world_data.weather_intensity, 1.0);
-    assert!(!world_data.unlocked_safehouses.is_empty());
+    assert_ne!(world_data.unlocked_safehouses, [] as [String; 0]);
 }
 
 #[test]
@@ -224,9 +224,9 @@ fn test_world_save_data_with_vehicles() {
 fn test_mission_save_data_default() {
     let mission_data = MissionSaveData::default();
 
-    assert!(mission_data.completed_missions.is_empty());
+    assert_eq!(mission_data.completed_missions, [] as [String; 0]);
     assert!(mission_data.active_mission.is_none());
-    assert!(mission_data.unlocked_missions.is_empty());
+    assert_eq!(mission_data.unlocked_missions, [] as [String; 0]);
 }
 
 #[test]
@@ -388,7 +388,7 @@ fn test_auto_save_reason_debug() {
     ];
     for reason in &reasons {
         let debug_str = format!("{reason:?}");
-        assert!(!debug_str.is_empty());
+        assert_ne!(debug_str, "");
     }
 }
 
@@ -440,7 +440,7 @@ fn test_safehouse_component_fields() {
 #[test]
 fn test_world_save_data_destroyed_ids_default_empty() {
     let world_data = WorldSaveData::default();
-    assert!(world_data.destroyed_object_ids.is_empty());
+    assert_eq!(world_data.destroyed_object_ids, [] as [u32; 0]);
 }
 
 #[test]
@@ -461,7 +461,7 @@ fn test_world_save_data_destroyed_ids_backward_compat() {
     // 舊版存檔沒有 destroyed_object_ids 欄位，應預設為空
     let json = r#"{"world_hour":8.0,"weather":"Clear","weather_intensity":1.0,"unlocked_safehouses":[],"owned_vehicles":[],"vehicle_modifications":[]}"#;
     let loaded: WorldSaveData = serde_json::from_str(json).expect("Deserialization failed");
-    assert!(loaded.destroyed_object_ids.is_empty());
+    assert_eq!(loaded.destroyed_object_ids, [] as [u32; 0]);
 }
 
 #[test]

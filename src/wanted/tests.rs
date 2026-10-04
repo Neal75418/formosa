@@ -161,7 +161,7 @@ fn test_police_officer_default() {
     let officer = PoliceOfficer::default();
 
     assert_eq!(officer.state, PoliceState::Patrolling);
-    assert!(officer.patrol_route.is_empty());
+    assert_eq!(officer.patrol_route, [] as [Vec3; 0]);
     assert_eq!(officer.patrol_index, 0);
     assert!(!officer.target_player);
     assert_eq!(officer.search_timer, 0.0);

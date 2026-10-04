@@ -214,8 +214,7 @@ pub fn auto_attach_engine_sounds(
         // 檢查子實體是否已有引擎音效（避免重複附加）
         let has_engine_child = children_query
             .get(entity)
-            .map(|children| children.iter().any(|c| engine_query.contains(c)))
-            .unwrap_or(false);
+            .is_ok_and(|children| children.iter().any(|c| engine_query.contains(c)));
 
         if has_engine_child {
             continue;

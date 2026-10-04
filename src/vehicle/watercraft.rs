@@ -403,8 +403,8 @@ mod tests {
         let harbors = create_harbors();
         assert!(harbors.len() >= 3);
         for harbor in &harbors {
-            assert!(!harbor.name.is_empty());
-            assert!(!harbor.available_crafts.is_empty());
+            assert_ne!(harbor.name, "");
+            assert_ne!(harbor.available_crafts, [] as [WatercraftType; 0]);
         }
     }
 

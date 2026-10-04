@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn shore_positions_not_empty() {
         let shores = shore_positions();
-        assert!(!shores.is_empty());
+        assert_ne!(shores, [] as [Vec3; 0]);
         for shore in &shores {
             assert!(shore.y > 0.0, "Shore should be above water");
         }

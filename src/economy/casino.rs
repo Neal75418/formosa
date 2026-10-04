@@ -547,21 +547,19 @@ pub fn blackjack_play_system(
                 game.stand();
             }
         }
-        BlackjackPhase::Result => {
-            // 結算後按 Enter 領取獎金並重置
-            if input.just_pressed(KeyCode::Enter) {
-                let payout = game.payout();
-                if payout > 0 {
-                    // 贏：退回原始賭注 + 淨贏利
-                    wallet.add_cash(game.bet + payout);
-                } else if payout == 0 {
-                    // Push：退還賭注
-                    wallet.add_cash(game.bet);
-                }
-                // DealerWin (payout < 0)：賭注已扣，無需退還
-                game.phase = BlackjackPhase::Betting;
-                game.result = None;
+        // 結算後按 Enter 領取獎金並重置
+        BlackjackPhase::Result if input.just_pressed(KeyCode::Enter) => {
+            let payout = game.payout();
+            if payout > 0 {
+                // 贏：退回原始賭注 + 淨贏利
+                wallet.add_cash(game.bet + payout);
+            } else if payout == 0 {
+                // Push：退還賭注
+                wallet.add_cash(game.bet);
             }
+            // DealerWin (payout < 0)：賭注已扣，無需退還
+            game.phase = BlackjackPhase::Betting;
+            game.result = None;
         }
         _ => {}
     }

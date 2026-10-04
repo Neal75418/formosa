@@ -399,8 +399,7 @@ pub fn damage_system(
         let target_pos = queries
             .transforms
             .get(event.target)
-            .map(|t| t.translation)
-            .unwrap_or(Vec3::ZERO);
+            .map_or(Vec3::ZERO, |t| t.translation);
         let cover_reduction = calculate_cover_reduction(
             cover_seeker,
             &queries.cover_points,

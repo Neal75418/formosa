@@ -297,18 +297,16 @@ fn process_trigger_active(
                 }
             }
         }
-        TriggerType::OnStay { duration } => {
-            if !track.triggered {
-                track.timer += delta_ms;
-                if track.timer >= duration as f32 {
-                    track.triggered = true;
-                    trigger.triggered = trigger.one_shot;
-                    events.write(TriggerEvent::PlayerStayed {
-                        entity,
-                        trigger_type: event_type,
-                        duration: track.timer / 1000.0,
-                    });
-                }
+        TriggerType::OnStay { duration } if !track.triggered => {
+            track.timer += delta_ms;
+            if track.timer >= duration as f32 {
+                track.triggered = true;
+                trigger.triggered = trigger.one_shot;
+                events.write(TriggerEvent::PlayerStayed {
+                    entity,
+                    trigger_type: event_type,
+                    duration: track.timer / 1000.0,
+                });
             }
         }
         _ => {}

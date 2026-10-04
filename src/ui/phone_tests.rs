@@ -35,8 +35,8 @@ fn phone_ui_state_defaults() {
 #[test]
 fn phone_app_icon_not_empty() {
     for app in PhoneApp::all_apps() {
-        assert!(!app.icon().is_empty());
-        assert!(!app.label().is_empty());
+        assert_ne!(app.icon(), "");
+        assert_ne!(app.label(), "");
     }
 }
 

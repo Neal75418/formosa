@@ -409,11 +409,11 @@ fn gps_turn_direction_uturn() {
 #[test]
 fn gps_turn_direction_symbols() {
     use super::components::GpsTurnDirection;
-    assert!(!GpsTurnDirection::Straight.symbol().is_empty());
-    assert!(!GpsTurnDirection::Left.symbol().is_empty());
-    assert!(!GpsTurnDirection::Right.symbol().is_empty());
-    assert!(!GpsTurnDirection::UTurn.symbol().is_empty());
-    assert!(!GpsTurnDirection::Arrived.symbol().is_empty());
+    assert_ne!(GpsTurnDirection::Straight.symbol(), "");
+    assert_ne!(GpsTurnDirection::Left.symbol(), "");
+    assert_ne!(GpsTurnDirection::Right.symbol(), "");
+    assert_ne!(GpsTurnDirection::UTurn.symbol(), "");
+    assert_ne!(GpsTurnDirection::Arrived.symbol(), "");
 }
 
 #[test]

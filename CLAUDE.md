@@ -24,7 +24,7 @@ Claude Code 在此專案中的工作指引。專題知識按需載入自 `.claud
 | bevy_rapier3d    | 0.32         | 3D 物理引擎  |
 | serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：252 個 .rs 檔案、86,729 行代碼、818 個單元測試；clippy 以 `cargo clippy` 實測為準（2026-10-04 用 Rust 1.98 有 17 個既有 warning）
+**規模**：252 個 .rs 檔案、86,729 行代碼、818 個單元測試；clippy 以 CI 同款 `cargo clippy --all-targets --all-features -- -D warnings` 實測為準（2026-10-04 用 Rust 1.99：0 warning；CI 用最新 stable，新版 Rust 可能新增 lint）
 
 ## 常用指令
 

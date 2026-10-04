@@ -206,10 +206,7 @@ pub fn mission_phase_system(
 
     if let Some(next_phase) = mission.get_phase(next_phase_index) {
         // 階段轉換時自動保存檢查點
-        let player_pos = player_query
-            .single()
-            .map(|t| t.translation)
-            .unwrap_or(Vec3::ZERO);
+        let player_pos = player_query.single().map_or(Vec3::ZERO, |t| t.translation);
         manager.create_checkpoint(player_pos, next_phase_index as u32);
 
         // 重新取得 active（create_checkpoint 借用了 manager）

@@ -563,8 +563,7 @@ pub fn fire_weapon_system(
                     if target_unaware && from_behind {
                         let target_pos = transform_query
                             .get(target_entity)
-                            .map(|t| t.translation)
-                            .unwrap_or(muzzle_pos);
+                            .map_or(muzzle_pos, |t| t.translation);
                         stealth_target = Some((target_entity, target_pos));
                         STEALTH_KILL_MULTIPLIER
                     } else {

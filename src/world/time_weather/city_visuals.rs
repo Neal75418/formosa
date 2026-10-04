@@ -32,7 +32,7 @@ fn get_night_boost(hour: f32) -> f32 {
 /// 計算波形閃爍值
 #[inline]
 fn calculate_wave(t: f32, speed: f32, phase: f32) -> f32 {
-    ((t * speed + phase).sin() + 1.0) * 0.5
+    f32::midpoint((t * speed + phase).sin(), 1.0)
 }
 
 /// 計算故障燈隨機閃爍

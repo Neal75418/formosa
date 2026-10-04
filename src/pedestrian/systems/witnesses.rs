@@ -256,10 +256,9 @@ pub fn witness_visual_system(
 ) {
     // 移除不再需要的圖標
     for (icon_entity, icon) in &existing_icons {
-        let should_remove = ped_query
-            .get(icon.owner)
-            .map(|(_, _, state, _)| state.state != PedState::CallingPolice)
-            .unwrap_or(true);
+        let should_remove = ped_query.get(icon.owner).map_or(true, |(_, _, state, _)| {
+            state.state != PedState::CallingPolice
+        });
 
         if should_remove {
             commands.entity(icon_entity).despawn();

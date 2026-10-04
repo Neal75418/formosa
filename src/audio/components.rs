@@ -772,9 +772,9 @@ mod tests {
     #[test]
     fn radio_station_labels_not_empty() {
         for station in RadioStation::all_stations() {
-            assert!(!station.label().is_empty());
+            assert_ne!(station.label(), "");
         }
-        assert!(!RadioStation::Off.label().is_empty());
+        assert_ne!(RadioStation::Off.label(), "");
     }
 
     #[test]
@@ -810,7 +810,7 @@ mod tests {
                 "{station:?} should have description",
             );
         }
-        assert!(!RadioStation::Off.description().is_empty());
+        assert_ne!(RadioStation::Off.description(), "");
     }
 
     #[test]
@@ -982,9 +982,9 @@ mod tests {
 
     #[test]
     fn npc_dialogue_lines_not_empty() {
-        assert!(!NPC_DIALOGUE_LINES.is_empty());
+        assert_ne!(NPC_DIALOGUE_LINES, [] as [&str; 0]);
         for line in NPC_DIALOGUE_LINES {
-            assert!(!line.is_empty());
+            assert_ne!(*line, "");
         }
     }
 

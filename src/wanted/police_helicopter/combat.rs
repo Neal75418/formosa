@@ -128,8 +128,7 @@ pub fn rotor_animation_system(
         // 檢查父直升機是否墜毀
         let is_crashing = helicopter_query
             .get(parent.0)
-            .map(|h| h.state == HelicopterState::Crashing)
-            .unwrap_or(false);
+            .is_ok_and(|h| h.state == HelicopterState::Crashing);
 
         // 墜毀時旋翼逐漸減速
         let speed_mult = if is_crashing { 0.3 } else { 1.0 };

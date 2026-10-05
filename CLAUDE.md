@@ -26,7 +26,7 @@ repo／Cargo 套件名（執行檔、行程名）是 `formosa`；遊戲顯示名
 | bevy_rapier3d    | 0.32         | 3D 物理引擎  |
 | serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：253 個 .rs 檔案、87,479 行代碼、841 個單元測試；clippy 以 CI 同款 `cargo clippy --all-targets --all-features -- -D warnings` 實測為準（2026-10-04 用 Rust 1.99：0 warning；CI 用最新 stable，新版 Rust 可能新增 lint）
+**規模**：數字隨每次提交變動，需要時實測——檔案數 `find src -name '*.rs' | wc -l`、行數 `find src -name '*.rs' -exec cat {} + | wc -l`、測試數看 `cargo nextest run` 的 Summary；clippy 以 CI 同款 `cargo clippy --all-targets --all-features -- -D warnings` 實測為準（CI 用最新 stable，新版 Rust 可能新增 lint）
 
 ## 常用指令
 
@@ -36,7 +36,7 @@ cargo brp                    # 遙控測試：BRP 開在 localhost:15702、存�
 cargo run                    # 開發模式（不含 dev_tools）
 cargo run --release          # 發布模式（最佳效能，不含 dev_tools）
 cargo check                  # 編譯檢查
-cargo test                   # 執行 841 個單元測試
+cargo test                   # 執行全部單元測試
 cargo test economy::tests    # 特定模組測試
 cargo clippy                 # 靜態分析
 cargo fmt                    # 格式化
@@ -75,7 +75,8 @@ cargo fmt                    # 格式化
 | 恐慌系統    | `src/pedestrian/panic.rs`                                          |
 | 目擊者系統   | `src/pedestrian/systems/witnesses.rs`                              |
 | 世界生成    | `src/world/setup/`                                                 |
-| 天氣效果    | `src/world/time_weather/weather_effects.rs`                        |
+| 天氣效果    | `src/world/time_weather/weather_effects.rs`（雨、積水、閃電）              |
+| 天空與霧    | `src/world/time_weather/sky.rs`（天空盒、地平線同色的距離霧、月亮淡出）         |
 | 可破壞物件   | `src/environment/systems.rs`                                       |
 | 股票市場    | `src/economy/stock_market.rs`                                      |
 | 賭場      | `src/economy/casino.rs`                                            |
@@ -91,6 +92,8 @@ cargo fmt                    # 格式化
 - `on_timer()` 不存在 — 使用自訂 `Timer` resource + `run_if(|t: Res<T>| t.timer.just_finished())`
 - FPS 顯示 — `DiagnosticsStore` + `FrameTimeDiagnosticsPlugin::FPS`
 - Query 單一結果 — `query.single()` 取代 `get_single()`（Bevy 0.16 → 0.17）
+- 會持續修改的 `Image` 要 `RenderAssetUsages::MAIN_WORLD | RENDER_WORLD`——只標 `RENDER_WORLD` 送上 GPU 後會被移出 `Assets`，`get_mut` 拿不到（單元測試沒有 render app，測不到）
+- `unlit: true` 的 `StandardMaterial` 只輸出 `base_color`，`emissive` 沒有作用
 
 ## 驗證
 
@@ -98,7 +101,7 @@ cargo fmt                    # 格式化
 cargo check && cargo test && cargo clippy
 ```
 
-841 個單元測試，修改後必跑（~0.01s）。建置時間：37-84 秒（動態連結）。
+單元測試修改後必跑（~0.01s）。建置時間：37-84 秒（動態連結）。
 
 ## 按需載入的規則（`.claude/rules/`）
 

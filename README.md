@@ -10,8 +10,8 @@ repo 代號：`formosa`
 
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Bevy](https://img.shields.io/badge/Bevy_0.17-232326?style=for-the-badge&logo=bevy&logoColor=white)](https://bevyengine.org/)
-[![Tests](https://img.shields.io/badge/Tests-841_passing-brightgreen?style=for-the-badge)](/)
-[![Lines](https://img.shields.io/badge/Code-87K+_lines-blue?style=for-the-badge)](/)
+[![Tests](https://img.shields.io/badge/Tests-873_passing-brightgreen?style=for-the-badge)](/)
+[![Lines](https://img.shields.io/badge/Code-88K+_lines-blue?style=for-the-badge)](/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 
 </div>
@@ -49,9 +49,9 @@ repo 代號：`formosa`
 
 **📊 專案規模**
 
-- 📁 253 個 `.rs` 檔案
-- 📝 87,479 行代碼
-- ✅ 841 個單元測試（100% 通過）
+- 📁 254 個 `.rs` 檔案
+- 📝 88,371 行代碼
+- ✅ 873 個單元測試（100% 通過）
 - 🔍 0 clippy warnings（2026-10-04 用 Rust 1.99 實測）
 
 ## 🏗️ 架構
@@ -130,7 +130,7 @@ cargo dev                # 開發模式（含 World Inspector）
 cargo brp                # 遙控測試模式（BRP：外部用 HTTP 送按鍵、截圖；存檔寫到暫存目錄）
 cargo run                # 開發模式
 cargo run --release      # 發布模式（最佳效能）
-cargo test               # 執行 841 個單元測試
+cargo test               # 執行 873 個單元測試
 cargo clippy             # 靜態分析
 ```
 

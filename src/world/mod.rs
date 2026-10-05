@@ -68,6 +68,7 @@ impl Plugin for WorldPlugin {
             .init_resource::<LightningState>()
             .init_resource::<MapBounds>()
             .init_resource::<FacadeTextures>()
+            .init_resource::<SkyCubemap>()
             // Message
             .add_message::<RandomEventTriggered>()
             .add_message::<RandomEventCompleted>()
@@ -76,8 +77,8 @@ impl Plugin for WorldPlugin {
             .add_systems(Startup, setup_world)
             .add_systems(Startup, setup_random_events)
             .add_systems(Startup, setup_destructible_visuals)
-            // 外牆貼圖：不跟遊戲狀態綁定，建築一生成就套上
-            .add_systems(Update, apply_building_facades)
+            // 外牆貼圖、天空盒：不跟遊戲狀態綁定，建築／攝影機一生成就套上
+            .add_systems(Update, (apply_building_facades, attach_skybox))
             // Update（時間/光照）
             .add_systems(
                 Update,
@@ -93,7 +94,7 @@ impl Plugin for WorldPlugin {
             // Update（天氣：輸入和視覺）
             .add_systems(
                 Update,
-                (weather_input_system, update_sky_color, update_fog_effect).in_set(GameSet::World),
+                (weather_input_system, update_sky_and_fog).in_set(GameSet::World),
             )
             // Update（隨機事件）
             .add_systems(

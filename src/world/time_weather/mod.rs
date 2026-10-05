@@ -4,8 +4,10 @@
 
 mod city_visuals;
 mod lighting;
+mod sky;
 mod weather_effects;
 
 pub use city_visuals::*;
 pub use lighting::*;
+pub use sky::*;
 pub use weather_effects::*;

@@ -77,4 +77,6 @@ app.init_resource::<DebugState>()
 - 結束：`brp_extras/shutdown`
 - 0.17 版只有 send_keys／screenshot／shutdown／set_window_title，沒有滑鼠方法（README 列的 click_mouse 等是新版才有）
 - 存檔寫到 `$TMPDIR/IslandRampage-brp/saves`；一般模式每 300 秒自動存到 `dirs::data_dir()/IslandRampage/saves/autosave.json`
-- 比對前後畫面：玩家每次都從 (5, 0.7, -5) 出生，但 `world/buildings/generic.rs` 的建築顏色每次啟動都隨機，要比外觀先固定隨機種子
+- 比對前後畫面：玩家每次都從 (5, 0.7, -5) 出生、鏡頭相同；牆色與外型依店名固定，但夜間哪些窗戶亮（`BuildingWindow.lit_roll`）每次啟動隨機
+- 指定時段：`WorldTime`／`WeatherState` 沒有 Reflect，BRP 改不到 → 暫改 `WorldTime::default()` 的 `hour`，截完改回
+- 切天氣：`send_keys` 送 `F1`（晴→陰→雨→暴風雨→霧→沙塵）；過渡 5 秒、過渡中再按會被忽略，每按一次等 ≥6 秒

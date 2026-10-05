@@ -87,9 +87,9 @@ fn setup_camera_and_lighting(
         crate::camera::GameCamera,
         // 陰影過濾：Hardware2x2 提供基礎柔和陰影，效能佳
         ShadowFilteringMethod::Hardware2x2,
-        // 天氣系統：霧效果
+        // 距離霧：顏色與濃度由 update_sky_and_fog 依時間、天氣設定（天空盒由 attach_skybox 掛上）
         DistanceFog {
-            color: Color::srgba(0.5, 0.5, 0.6, 0.0), // 初始：無霧
+            color: Color::srgba(0.5, 0.5, 0.6, 0.0), // 第一次更新前先不起霧
             falloff: FogFalloff::Exponential { density: 0.0 },
             ..default()
         },
@@ -128,12 +128,7 @@ fn setup_camera_and_lighting(
 
     // 月亮 - 大型球體在遠處天空，夜間可見
     // 位置會由 sun_moon_rotation_system 根據時間更新（與太陽相對）
-    let moon_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.9, 0.9, 0.95),       // 淡黃白色
-        emissive: LinearRgba::new(0.8, 0.8, 0.9, 1.0), // 夜間發光
-        unlit: true,                                   // 不受光照影響，自發光
-        ..default()
-    });
+    let moon_material = materials.add(moon_material());
 
     commands.spawn((
         Name::new("Moon"),
@@ -149,6 +144,25 @@ fn setup_camera_and_lighting(
     info!("📷 攝影機與光源已設置");
 }
 
+/// 月亮材質：自發光、不受光照影響
+fn moon_material() -> StandardMaterial {
+    StandardMaterial {
+        base_color: Color::srgb(0.9, 0.9, 0.95),       // 淡黃白色
+        emissive: LinearRgba::new(0.8, 0.8, 0.9, 1.0), // 夜間發光
+        unlit: true,                                   // 不受光照影響，自發光
+        fog_enabled: false, // 掛在約 500 m 外，開霧的話會被晴天的薄霧整個蓋掉
+        alpha_mode: AlphaMode::Blend, // 改由 sun_moon_rotation_system 依天氣調 alpha 淡出
+        ..default()
+    }
+}
+
+/// 地面中心
+const GROUND_CENTER: Vec3 = Vec3::new(-10.0, 0.0, -15.0);
+
+/// 地面平板的邊長（只影響畫面，碰撞體另計）：
+/// 邊緣要遠到被霧完全蓋住，否則街道盡頭會看到地面在天空前截斷
+const GROUND_VISUAL_SIZE: f32 = 2000.0;
+
 /// 地面生成
 fn setup_ground(
     commands: &mut Commands,
@@ -158,13 +172,19 @@ fn setup_ground(
     // === 1. 地面 (擴大至完整西門町範圍) ===
     // 地圖範圍：X: -120 ~ +100, Z: -100 ~ +70
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(400.0, 400.0))),
+        Mesh3d(
+            meshes.add(
+                Plane3d::default()
+                    .mesh()
+                    .size(GROUND_VISUAL_SIZE, GROUND_VISUAL_SIZE),
+            ),
+        ),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.18, 0.18, 0.20), // 深色瀝青地面基底
             perceptual_roughness: 0.85,
             ..default()
         })),
-        Transform::from_xyz(-10.0, 0.0, -15.0), // 稍微偏移以覆蓋整個區域
+        Transform::from_translation(GROUND_CENTER), // 稍微偏移以覆蓋整個區域
         RigidBody::Fixed,
         Collider::cuboid(200.0, 0.1, 200.0),
     ));
@@ -185,5 +205,42 @@ fn setup_ground(
             Collider::cuboid(half_ext.x, half_ext.y, half_ext.z),
             CollisionGroups::new(COLLISION_GROUP_STATIC, Group::ALL),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::world::{MapBounds, CLEAR_FOG_VISIBILITY};
+
+    #[test]
+    fn moon_is_not_hidden_by_fog() {
+        // 月亮在約 500 m 外，晴天的霧在那裡已經完全不透明
+        assert!(!moon_material().fog_enabled);
+    }
+
+    #[test]
+    fn moon_can_fade_out() {
+        // 壞天氣時靠 base_color 的 alpha 淡出，材質要是半透明混合才有作用
+        assert_eq!(moon_material().alpha_mode, AlphaMode::Blend);
+    }
+
+    #[test]
+    fn ground_edge_hidden_by_fog_from_anywhere_on_map() {
+        // 從可活動範圍的任何一點看出去，地面邊緣都在晴天能見度兩倍以外（霧已完全不透明）
+        let bounds = MapBounds::default();
+        let half = GROUND_VISUAL_SIZE / 2.0;
+        let margin = [
+            (GROUND_CENTER.x + half) - bounds.max_x,
+            bounds.min_x - (GROUND_CENTER.x - half),
+            (GROUND_CENTER.z + half) - bounds.max_z,
+            bounds.min_z - (GROUND_CENTER.z - half),
+        ]
+        .into_iter()
+        .fold(f32::INFINITY, f32::min);
+        assert!(
+            margin >= 2.0 * CLEAR_FOG_VISIBILITY,
+            "地面邊緣離地圖邊界最近只有 {margin} m"
+        );
     }
 }

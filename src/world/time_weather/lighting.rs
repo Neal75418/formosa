@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 
+use super::sky::moon_clearness;
 use crate::core::{WeatherState, WeatherType, WorldTime};
 use crate::world::{Moon, StreetLight, Sun};
 
@@ -119,15 +120,16 @@ fn calculate_day_intensity(hour: f32) -> f32 {
 }
 
 /// 太陽/月亮軌跡系統
-/// 根據世界時間旋轉太陽（東升西落）和更新月亮位置
+/// 根據世界時間旋轉太陽和更新月亮位置
 ///
-/// 太陽軌跡：
-/// - 6:00 日出 (東方，+X)
-/// - 12:00 正午 (頭頂，-Y 方向)
-/// - 18:00 日落 (西方，-X)
+/// 太陽軌跡（指向太陽的方向）：
+/// - 6:00 日出：+Z 方向的地平線
+/// - 12:00 正午：最高（仰角約 69°，偏 +X）
+/// - 18:00 日落：-Z 方向的地平線
 pub fn sun_moon_rotation_system(
     time: Res<Time>,
     world_time: Res<WorldTime>,
+    weather: Res<WeatherState>,
     mut sun_query: Query<&mut Transform, With<Sun>>,
     mut moon_query: Query<(&mut Transform, &mut Moon), Without<Sun>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -155,6 +157,8 @@ pub fn sun_moon_rotation_system(
             if let Some(material) = materials.get_mut(&material_handle.0) {
                 let base_emissive = LinearRgba::new(0.8, 0.8, 0.9, 1.0);
                 material.emissive = base_emissive * night_intensity;
+                // 月亮不吃距離霧，改依天氣淡出
+                material.base_color.set_alpha(moon_clearness(&weather));
             }
         }
 
@@ -167,7 +171,7 @@ pub fn sun_moon_rotation_system(
 // 日月輔助函數
 // ============================================================================
 /// 計算太陽旋轉 (基於時間)
-fn calculate_sun_rotation(hour: f32) -> Quat {
+pub(super) fn calculate_sun_rotation(hour: f32) -> Quat {
     // 計算太陽高度角
     // 6:00 和 18:00 時在地平線，12:00 時在最高點
     let elevation = if (6.0..=18.0).contains(&hour) {
@@ -179,17 +183,25 @@ fn calculate_sun_rotation(hour: f32) -> Quat {
         -0.5 // 略低於地平線
     };
 
-    // 方位角：東（6:00）→ 南（12:00）→ 西（18:00）
+    // 方位角：日出方向（6:00）轉半圈到日落方向（18:00）
     // 只在白天計算有效方位角，夜間保持最後位置
     let azimuth = if (6.0..=18.0).contains(&hour) {
         (hour - 6.0) / 12.0 * std::f32::consts::PI
     } else if hour > 18.0 {
-        std::f32::consts::PI // 日落後固定在西方
+        std::f32::consts::PI // 日落後固定在日落方向
     } else {
-        0.0 // 日出前固定在東方
+        0.0 // 日出前固定在日出方向
     };
 
-    Quat::from_euler(EulerRot::XYZ, -elevation, azimuth, 0.0)
+    if (6.0..=18.0).contains(&hour) {
+        // 先抬仰角、再轉方位角：仰角才會一直是「離地平線的高度」
+        // （反過來用 XYZ 的話，過了中午太陽會轉到地平線下、從地底往上照）
+        Quat::from_euler(EulerRot::YXZ, azimuth, -elevation, 0.0)
+    } else {
+        // 夜間維持原本的旋轉（刻意不動）：入夜（18–24 時）這道光從上方斜照，夜景的基礎亮度靠它；
+        // 凌晨（0–6 時）其實是從地平線下往上照，屬既有行為
+        Quat::from_euler(EulerRot::XYZ, -elevation, azimuth, 0.0)
+    }
 }
 
 /// 計算月亮位置與高度角
@@ -328,6 +340,83 @@ mod tests {
             diff < 0.99,
             "noon and night rotations should differ, dot={diff}"
         );
+    }
+
+    /// 指向太陽的方向（Bevy 以 `transform.back()` 當作 `direction_to_light`）
+    fn sun_direction(hour: f32) -> Vec3 {
+        calculate_sun_rotation(hour) * Vec3::Z
+    }
+
+    #[test]
+    fn sun_above_horizon_all_day() {
+        // 6:00 到 18:00 之間（不含兩端的地平線），陽光都要從上往下照，下午也是
+        for i in 1..48 {
+            let hour = 6.0 + i as f32 * 0.25;
+            let y = sun_direction(hour).y;
+            assert!(y > 0.0, "{hour}:00 太陽在地平線下（y = {y}）");
+        }
+    }
+
+    #[test]
+    fn sun_highest_at_noon_and_symmetric() {
+        let morning = sun_direction(9.0).y;
+        let noon = sun_direction(12.0).y;
+        let afternoon = sun_direction(15.0).y;
+        assert!(
+            noon > morning && noon > afternoon,
+            "正午應最高：9h {morning}, 12h {noon}, 15h {afternoon}"
+        );
+        assert!(
+            (morning - afternoon).abs() < 1e-4,
+            "上下午應對稱：9h {morning}, 15h {afternoon}"
+        );
+    }
+
+    #[test]
+    fn night_sun_direction_unchanged() {
+        // 夜間沿用原本的旋轉，修白天時不能動到
+        let evening = Quat::from_euler(EulerRot::XYZ, 0.5, std::f32::consts::PI, 0.0) * Vec3::Z;
+        let before_dawn = Quat::from_euler(EulerRot::XYZ, 0.5, 0.0, 0.0) * Vec3::Z;
+        assert!(sun_direction(21.0).abs_diff_eq(evening, 1e-5));
+        assert!(sun_direction(3.0).abs_diff_eq(before_dawn, 1e-5));
+    }
+
+    #[test]
+    fn moon_fades_out_in_fog() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .insert_resource(WorldTime {
+                hour: 22.0,
+                ..default()
+            })
+            .insert_resource(WeatherState {
+                weather_type: WeatherType::Foggy,
+                target_weather: WeatherType::Foggy,
+                ..default()
+            })
+            .add_systems(Update, sun_moon_rotation_system);
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        app.world_mut().spawn((
+            Moon {
+                phase: 0.5,
+                emissive_intensity: 1.0,
+            },
+            Transform::default(),
+            MeshMaterial3d(material.clone()),
+        ));
+        app.update();
+        let alpha = app
+            .world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(&material)
+            .unwrap()
+            .base_color
+            .alpha();
+        assert_eq!(alpha, 0.0, "霧天看不到月亮");
     }
 
     // --- calculate_moon_position ---

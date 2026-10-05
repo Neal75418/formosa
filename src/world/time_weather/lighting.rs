@@ -171,37 +171,26 @@ pub fn sun_moon_rotation_system(
 // 日月輔助函數
 // ============================================================================
 /// 計算太陽旋轉 (基於時間)
+///
+/// 夜間這盞方向光當月光用，整晚固定一個方向
 pub(super) fn calculate_sun_rotation(hour: f32) -> Quat {
-    // 計算太陽高度角
-    // 6:00 和 18:00 時在地平線，12:00 時在最高點
-    let elevation = if (6.0..=18.0).contains(&hour) {
-        // 白天：正弦曲線從 0 到 π
-        let day_progress = (hour - 6.0) / 12.0;
-        (day_progress * std::f32::consts::PI).sin() * 1.2 // 1.2 rad ≈ 69° 最大仰角
-    } else {
-        // 夜晚：太陽在地平線下
-        -0.5 // 略低於地平線
-    };
-
-    // 方位角：日出方向（6:00）轉半圈到日落方向（18:00）
-    // 只在白天計算有效方位角，夜間保持最後位置
-    let azimuth = if (6.0..=18.0).contains(&hour) {
-        (hour - 6.0) / 12.0 * std::f32::consts::PI
-    } else if hour > 18.0 {
-        std::f32::consts::PI // 日落後固定在日落方向
-    } else {
-        0.0 // 日出前固定在日出方向
-    };
-
-    if (6.0..=18.0).contains(&hour) {
-        // 先抬仰角、再轉方位角：仰角才會一直是「離地平線的高度」
-        // （反過來用 XYZ 的話，過了中午太陽會轉到地平線下、從地底往上照）
-        Quat::from_euler(EulerRot::YXZ, azimuth, -elevation, 0.0)
-    } else {
-        // 夜間維持原本的旋轉（刻意不動）：入夜（18–24 時）這道光從上方斜照，夜景的基礎亮度靠它；
-        // 凌晨（0–6 時）其實是從地平線下往上照，屬既有行為
-        Quat::from_euler(EulerRot::XYZ, -elevation, azimuth, 0.0)
+    if !(6.0..=18.0).contains(&hour) {
+        // 夜間：從 -Z 側上方（仰角約 29°）沿著南北向的街道照，街面照得到，夜景的基礎亮度靠它。
+        // 不跟著月亮照：月亮的方位偏到街道側面（21:00 已偏 45°，仰角同樣約 29°），光斜著橫過街道，
+        // 兩旁的樓會把整條街遮進影子（實測 21:00 前景暗 84%）。
+        // 代價是 6:00 光會從這裡一下轉到日出方向，但遊戲時間與真實時間同速，很少剛好看到
+        return Quat::from_euler(EulerRot::XYZ, 0.5, std::f32::consts::PI, 0.0);
     }
+
+    // 白天：仰角是正弦曲線，6:00 和 18:00 在地平線，12:00 最高（1.2 rad ≈ 69°）
+    let day_progress = (hour - 6.0) / 12.0;
+    let elevation = (day_progress * std::f32::consts::PI).sin() * 1.2;
+    // 方位角：日出方向（6:00）轉半圈到日落方向（18:00）
+    let azimuth = day_progress * std::f32::consts::PI;
+
+    // 先抬仰角、再轉方位角：仰角才會一直是「離地平線的高度」
+    // （反過來用 XYZ 的話，過了中午太陽會轉到地平線下、從地底往上照）
+    Quat::from_euler(EulerRot::YXZ, azimuth, -elevation, 0.0)
 }
 
 /// 計算月亮位置與高度角
@@ -373,12 +362,33 @@ mod tests {
     }
 
     #[test]
-    fn night_sun_direction_unchanged() {
-        // 夜間沿用原本的旋轉，修白天時不能動到
+    fn night_light_from_above_all_night() {
+        // 18:00 之後到 6:00 之前（含凌晨），光都從上方照
+        for i in 1..48 {
+            let hour = (18.0 + i as f32 * 0.25) % 24.0;
+            let y = sun_direction(hour).y;
+            assert!(y > 0.0, "{hour}:00 夜間光從地平線下往上照（y = {y}）");
+        }
+    }
+
+    #[test]
+    fn sunrise_and_sunset_are_daytime_on_the_horizon() {
+        // 6:00、18:00 本身算白天：太陽剛好在日出／日落方向的地平線（晨昏光暈的方向也靠這兩點）
+        assert!(sun_direction(6.0).abs_diff_eq(Vec3::Z, 1e-5));
+        assert!(sun_direction(18.0).abs_diff_eq(Vec3::NEG_Z, 1e-5));
+    }
+
+    #[test]
+    fn night_light_keeps_the_evening_direction_all_night() {
+        // 整晚沿用原本入夜（18–24 時）的方向：從 -Z 側上方沿著街道照，街面照得到；凌晨跟入夜一樣亮
         let evening = Quat::from_euler(EulerRot::XYZ, 0.5, std::f32::consts::PI, 0.0) * Vec3::Z;
-        let before_dawn = Quat::from_euler(EulerRot::XYZ, 0.5, 0.0, 0.0) * Vec3::Z;
-        assert!(sun_direction(21.0).abs_diff_eq(evening, 1e-5));
-        assert!(sun_direction(3.0).abs_diff_eq(before_dawn, 1e-5));
+        for hour in [18.5, 21.0, 0.0, 3.0, 5.5] {
+            assert!(
+                sun_direction(hour).abs_diff_eq(evening, 1e-5),
+                "{hour}:00 光 {} 應與入夜方向 {evening} 相同",
+                sun_direction(hour)
+            );
+        }
     }
 
     #[test]

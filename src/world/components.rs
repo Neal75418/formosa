@@ -317,12 +317,14 @@ pub struct BuildingWindow {
     pub base_color: Color,      // 窗戶基礎顏色
     pub lit_emissive: f32,      // 點亮時發光強度
     pub is_shop: bool,          // 是否為商店（深夜會關燈）
+    pub lit_roll: f32,          // 固定骰子 (0.0 ~ 1.0)：只擲一次，時段不變就不會開開關關
 }
 
 impl Default for BuildingWindow {
     fn default() -> Self {
         Self {
             is_lit: false,
+            lit_roll: 0.5,
             light_probability: 0.5,
             base_color: Color::srgb(1.0, 0.95, 0.7), // 暖黃色
             lit_emissive: 3.0,
@@ -338,6 +340,7 @@ impl BuildingWindow {
         Self {
             is_lit: false,
             light_probability: rng.random_range(0.3..0.6),
+            lit_roll: rng.random(),
             base_color: Color::srgb(1.0, 0.95, 0.7),
             lit_emissive: 2.5,
             is_shop: false,
@@ -350,6 +353,7 @@ impl BuildingWindow {
         Self {
             is_lit: false,
             light_probability: rng.random_range(0.6..0.9),
+            lit_roll: rng.random(),
             base_color: Color::srgb(1.0, 1.0, 0.9),
             lit_emissive: 4.0,
             is_shop: true,
@@ -362,6 +366,7 @@ impl BuildingWindow {
         Self {
             is_lit: false,
             light_probability: rng.random_range(0.2..0.5),
+            lit_roll: rng.random(),
             base_color: Color::srgb(0.9, 0.95, 1.0),
             lit_emissive: 3.5,
             is_shop: false,

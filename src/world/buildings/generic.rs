@@ -2,9 +2,16 @@
 //!
 //! 用於無特定風格的建築物
 
-use crate::world::{Building, BuildingType, BuildingWindow};
+use super::{facade_palette_color, name_hash, FacadeShell};
+use crate::world::{Building, BuildingType};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
+
+/// 通用建築的外型（0: 方塊、1: 階梯、2: 雙塔），由店名決定，每次啟動都一樣
+pub fn generic_shape_for(name: &str) -> u32 {
+    // 取高位元：牆面顏色用的是低位元 (% 6)，同一段位元會讓外型被顏色決定
+    (name_hash(name) >> 16) % 3
+}
 
 /// 通用建築 (形狀變體)
 pub fn spawn_generic_building(
@@ -17,17 +24,11 @@ pub fn spawn_generic_building(
     d: f32,
     name: &str,
 ) {
-    use rand::Rng;
-    let mut rng = rand::rng();
-    let shape_type = rng.random_range(0..3); // 0: Box, 1: Stepped, 2: Twin
+    let shape_type = generic_shape_for(name);
 
-    let color = Color::srgb(
-        rng.random_range(0.2..0.5),
-        rng.random_range(0.2..0.5),
-        rng.random_range(0.2..0.5),
-    );
+    // 牆面顏色、窗戶貼圖由外牆系統依 FacadeShell 套上
     let main_mat = mats.add(StandardMaterial {
-        base_color: color,
+        base_color: facade_palette_color(name),
         perceptual_roughness: 0.8,
         ..default()
     });
@@ -49,6 +50,7 @@ pub fn spawn_generic_building(
                     name: name.to_string(),
                     building_type: BuildingType::Shop,
                 },
+                FacadeShell,
             ))
             .with_children(|parent| {
                 // 上層
@@ -76,6 +78,7 @@ pub fn spawn_generic_building(
                     name: name.to_string(),
                     building_type: BuildingType::Shop,
                 },
+                FacadeShell,
             ))
             .with_children(|parent| {
                 // 左塔
@@ -109,23 +112,66 @@ pub fn spawn_generic_building(
                     name: name.to_string(),
                     building_type: BuildingType::Shop,
                 },
-            ))
-            .with_children(|parent| {
-                // 隨機窗戶帶（加入日夜系統）
-                let win_mat = mats.add(StandardMaterial {
-                    base_color: Color::srgb(0.8, 0.8, 0.6), // 窗戶基礎色（關燈時）
-                    ..default()
-                });
-                for _ in 0..3 {
-                    parent.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(w + 0.1, 1.0, d + 0.1))),
-                        MeshMaterial3d(win_mat.clone()),
-                        Transform::from_xyz(0.0, rng.random_range(-h / 2.0..h / 2.0), 0.0),
-                        BuildingWindow::shop(), // 商店窗戶
-                        GlobalTransform::default(),
-                    ));
-                }
-            });
+                FacadeShell,
+            ));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generic_shape_is_stable_per_name_and_in_range() {
+        for name in ["阿宗麵線", "西門紅樓", "測試大樓"] {
+            let shape = generic_shape_for(name);
+            assert!(shape < 3, "{name} → {shape}");
+            assert_eq!(shape, generic_shape_for(name));
+        }
+    }
+
+    #[test]
+    fn generic_shape_not_tied_to_wall_color() {
+        // 色盤 6 色、外型 3 種：兩者都用 hash % n 的話，6 是 3 的倍數，外型會被顏色決定
+        let palette = crate::world::FACADE_PALETTE;
+        let mut shapes_per_color: Vec<Vec<u32>> = vec![Vec::new(); palette.len()];
+        for i in 0..60 {
+            let name = format!("店{i}");
+            let color = facade_palette_color(&name);
+            let idx = palette.iter().position(|c| *c == color).unwrap();
+            let shape = generic_shape_for(&name);
+            if !shapes_per_color[idx].contains(&shape) {
+                shapes_per_color[idx].push(shape);
+            }
+        }
+        assert!(
+            shapes_per_color.iter().any(|s| s.len() >= 2),
+            "每種顏色都只對應一種外型：{shapes_per_color:?}"
+        );
+    }
+
+    #[test]
+    fn generic_shapes_vary_across_names() {
+        let names = [
+            "阿宗麵線",
+            "西門紅樓",
+            "測試大樓",
+            "萬國戲院",
+            "老天祿",
+            "成都楊桃冰",
+            "蜂大咖啡",
+            "美觀園",
+        ];
+        let mut seen = [false; 3];
+        for n in names {
+            if let Some(s) = seen.get_mut(generic_shape_for(n) as usize) {
+                *s = true;
+            }
+        }
+        assert!(
+            seen.iter().filter(|s| **s).count() >= 2,
+            "8 個店名都是同一種外型"
+        );
     }
 }

@@ -4,11 +4,13 @@
 
 mod commercial;
 mod entertainment;
+mod facade;
 mod generic;
 mod services;
 
 pub use commercial::*;
 pub use entertainment::*;
+pub use facade::*;
 pub use generic::*;
 pub use services::*;
 
@@ -118,6 +120,7 @@ pub fn spawn_building_base<'a>(
             name: params.name.to_string(),
             building_type: BuildingType::Shop,
         },
+        FacadeShell,
     ))
 }
 

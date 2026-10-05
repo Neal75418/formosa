@@ -106,18 +106,13 @@ fn calculate_base_lit_chance(hour: f32) -> f32 {
 }
 
 /// 判斷窗戶是否應該點亮
+/// 用建立時就擲好的 `lit_roll` 比較，時段不變結果就不變（整棟樓不會每次更新都重抽、整片閃爍）
 #[inline]
-fn should_window_be_lit(
-    window: &BuildingWindow,
-    base_chance: f32,
-    shop_closed: bool,
-    rng: &mut impl rand::Rng,
-) -> bool {
+fn should_window_be_lit(window: &BuildingWindow, base_chance: f32, shop_closed: bool) -> bool {
     if window.is_shop && shop_closed {
         return false;
     }
-    let effective_chance = base_chance * window.light_probability;
-    rng.random::<f32>() < effective_chance
+    window.lit_roll < base_chance * window.light_probability
 }
 
 /// 設置窗戶發光材質
@@ -138,7 +133,7 @@ fn set_window_emissive(material: &mut StandardMaterial, window: &BuildingWindow,
 
 /// 更新建築窗戶燈光（根據時間變化）
 /// 日間窗戶暗淡，夜間隨機點亮
-/// 效能優化：每 5 秒更新一次（而非每幀）
+/// 效能優化：每 7 秒更新一次（而非每幀，見 `WindowUpdateTimer`）
 pub fn update_building_windows(
     time: Res<Time>,
     mut timer: ResMut<WindowUpdateTimer>,
@@ -155,10 +150,9 @@ pub fn update_building_windows(
     let hour = world_time.hour;
     let base_lit_chance = calculate_base_lit_chance(hour);
     let shop_closed = (0.0..6.0).contains(&hour);
-    let mut rng = rand::rng();
 
     for (mut window, material_handle) in &mut window_query {
-        let should_be_lit = should_window_be_lit(&window, base_lit_chance, shop_closed, &mut rng);
+        let should_be_lit = should_window_be_lit(&window, base_lit_chance, shop_closed);
 
         // 只在狀態改變時更新材質
         if window.is_lit != should_be_lit {
@@ -262,6 +256,48 @@ mod tests {
             let v = calculate_wave(t, 3.0, 0.5);
             assert!((0.0..=1.0).contains(&v), "wave({t}) = {v} out of [0,1]");
         }
+    }
+
+    /// 亮燈機率 0.5：門檻 = 時段機率 × 0.5，漏乘亮燈機率的話測試會抓到
+    fn window_with_roll(lit_roll: f32) -> BuildingWindow {
+        BuildingWindow {
+            lit_roll,
+            light_probability: 0.5,
+            ..default()
+        }
+    }
+
+    #[test]
+    fn window_lit_when_roll_below_threshold() {
+        // 門檻 0.4 × 0.5 = 0.2
+        assert!(should_window_be_lit(&window_with_roll(0.15), 0.4, false));
+    }
+
+    #[test]
+    fn window_unlit_when_roll_above_threshold() {
+        // 0.3 低於時段機率 0.4，但高於乘上亮燈機率後的門檻 0.2
+        assert!(!should_window_be_lit(&window_with_roll(0.3), 0.4, false));
+    }
+
+    #[test]
+    fn window_lighting_is_stable_across_ticks() {
+        // 同一棟樓、同一個時段，每次判斷結果都一樣，不會每 7 秒整片閃爍
+        for roll in [0.05, 0.3, 0.39, 0.41, 0.95] {
+            let w = window_with_roll(roll);
+            let first = should_window_be_lit(&w, 0.4, false);
+            for _ in 0..20 {
+                assert_eq!(should_window_be_lit(&w, 0.4, false), first, "roll {roll}");
+            }
+        }
+    }
+
+    #[test]
+    fn shop_windows_off_when_closed() {
+        let w = BuildingWindow {
+            is_shop: true,
+            ..window_with_roll(0.0)
+        };
+        assert!(!should_window_be_lit(&w, 0.4, true));
     }
 
     #[test]

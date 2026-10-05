@@ -67,6 +67,7 @@ impl Plugin for WorldPlugin {
             .init_resource::<WindowUpdateTimer>()
             .init_resource::<LightningState>()
             .init_resource::<MapBounds>()
+            .init_resource::<FacadeTextures>()
             // Message
             .add_message::<RandomEventTriggered>()
             .add_message::<RandomEventCompleted>()
@@ -75,6 +76,8 @@ impl Plugin for WorldPlugin {
             .add_systems(Startup, setup_world)
             .add_systems(Startup, setup_random_events)
             .add_systems(Startup, setup_destructible_visuals)
+            // 外牆貼圖：不跟遊戲狀態綁定，建築一生成就套上
+            .add_systems(Update, apply_building_facades)
             // Update（時間/光照）
             .add_systems(
                 Update,

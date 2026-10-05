@@ -21,6 +21,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Commits: [Conventiona
 
 ### Added
 
+- **建築外牆貼圖**：程式繪製 4×4 開間的窗戶圖集（窗框、玻璃、鐵窗、冷氣室外機，含 mip 鏈）與夜間發光遮罩，依牆面實際尺寸重複；牆面改用 6 色低飽和台北公寓色盤（依店名決定）；套用到 `spawn_building_base` 的 11 種風格與 generic 建築；夜間亮燈改成每棟樓只擲一次骰子，時段不變就不會每 7 秒整片開關
 - **BRP 遙控測試模式**：`cargo brp`（`brp` feature，僅 Debug）開啟 Bevy Remote Protocol（localhost:15702），遊戲在背景也能送按鍵、截圖、查實體；存檔改寫到暫存目錄
 - **狙擊槍 + RPG 武器系統**：SniperRifle（85 傷、200m 射程、狙擊鏡 FOV 15度）、RPG（投射物飛行 + 碰撞爆炸、80m/s 彈速、10m 爆炸半徑）
 - **隱匿擊殺系統**：StealthTakedownPhase 三階段動畫（接近→執行→完成，共 1.0s）、背後條件判定、10 倍傷害加成、相機震動特寫

@@ -26,7 +26,7 @@ repo／Cargo 套件名（執行檔、行程名）是 `formosa`；遊戲顯示名
 | bevy_rapier3d    | 0.32         | 3D 物理引擎  |
 | serde/serde_json | 1.0          | 存檔系統     |
 
-**規模**：252 個 .rs 檔案、86,729 行代碼、818 個單元測試；clippy 以 CI 同款 `cargo clippy --all-targets --all-features -- -D warnings` 實測為準（2026-10-04 用 Rust 1.99：0 warning；CI 用最新 stable，新版 Rust 可能新增 lint）
+**規模**：253 個 .rs 檔案、87,479 行代碼、841 個單元測試；clippy 以 CI 同款 `cargo clippy --all-targets --all-features -- -D warnings` 實測為準（2026-10-04 用 Rust 1.99：0 warning；CI 用最新 stable，新版 Rust 可能新增 lint）
 
 ## 常用指令
 
@@ -36,7 +36,7 @@ cargo brp                    # 遙控測試：BRP 開在 localhost:15702、存�
 cargo run                    # 開發模式（不含 dev_tools）
 cargo run --release          # 發布模式（最佳效能，不含 dev_tools）
 cargo check                  # 編譯檢查
-cargo test                   # 執行 818 個單元測試
+cargo test                   # 執行 841 個單元測試
 cargo test economy::tests    # 特定模組測試
 cargo clippy                 # 靜態分析
 cargo fmt                    # 格式化
@@ -84,6 +84,7 @@ cargo fmt                    # 格式化
 | 車內電台    | `src/audio/integration.rs`, `src/audio/components.rs`              |
 | 玩家游泳    | `src/player/swimming.rs`                                           |
 | 載具變形    | `src/vehicle/vehicle_damage/visuals.rs`                            |
+| 建築外牆    | `src/world/buildings/facade.rs`（窗戶貼圖、色盤、FacadeShell）           |
 
 ## Bevy 0.17 注意事項
 
@@ -97,7 +98,7 @@ cargo fmt                    # 格式化
 cargo check && cargo test && cargo clippy
 ```
 
-818 個單元測試，修改後必跑（~0.01s）。建置時間：37-84 秒（動態連結）。
+841 個單元測試，修改後必跑（~0.01s）。建置時間：37-84 秒（動態連結）。
 
 ## 按需載入的規則（`.claude/rules/`）
 

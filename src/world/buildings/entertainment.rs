@@ -103,7 +103,7 @@ pub fn spawn_donki(
         ..default()
     };
     spawn_building_base(cmd, meshes, mats, &params, config).with_children(|parent| {
-        use rand::Rng;
+        use rand::{Rng, SeedableRng};
 
         // 生成大量隨機突出的招牌
         let sign_mat_1 = mats.add(StandardMaterial {
@@ -117,7 +117,8 @@ pub fn spawn_donki(
             ..default()
         });
 
-        let mut rng = rand::rng();
+        // 以店名雜湊當種子：招牌排列每次啟動都一樣
+        let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(super::name_hash(name)));
 
         for i in 0..10 {
             let sx = rng.random_range(1.0..3.0);
@@ -269,7 +270,7 @@ pub fn spawn_claw_machine(
         ..default()
     };
     spawn_building_base(cmd, meshes, mats, &params, config).with_children(|parent| {
-        use rand::Rng;
+        use rand::{Rng, SeedableRng};
 
         // 彩色閃爍燈
         let colors = [
@@ -279,7 +280,8 @@ pub fn spawn_claw_machine(
             Color::srgb(1.0, 1.0, 0.2),
         ];
 
-        let mut rng = rand::rng();
+        // 以店名雜湊當種子：燈球排列每次啟動都一樣
+        let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(super::name_hash(name)));
 
         for i in 0..8 {
             let color = colors[i % 4];
@@ -310,4 +312,95 @@ pub fn spawn_claw_machine(
             GlobalTransform::default(),
         ));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::camera::primitives::MeshAabb;
+
+    /// 生成一棟樓，回傳所有子實體的位置、旋轉、縮放、mesh 外框與底色（排序後的文字）
+    fn child_parts(
+        spawn: impl Fn(&mut Commands, &mut ResMut<Assets<Mesh>>, &mut ResMut<Assets<StandardMaterial>>)
+            + Send
+            + Sync
+            + 'static,
+    ) -> Vec<String> {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Mesh>()
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Image>()
+            .add_systems(
+                Startup,
+                move |mut commands: Commands,
+                      mut meshes: ResMut<Assets<Mesh>>,
+                      mut materials: ResMut<Assets<StandardMaterial>>| {
+                    spawn(&mut commands, &mut meshes, &mut materials);
+                },
+            );
+        app.update();
+        let world = app.world_mut();
+        let parts: Vec<(
+            Transform,
+            Option<Handle<Mesh>>,
+            Option<Handle<StandardMaterial>>,
+        )> = world
+            .query_filtered::<(
+                &Transform,
+                Option<&Mesh3d>,
+                Option<&MeshMaterial3d<StandardMaterial>>,
+            ), With<ChildOf>>()
+            .iter(world)
+            .map(|(t, mesh, material)| {
+                (*t, mesh.map(|m| m.0.clone()), material.map(|m| m.0.clone()))
+            })
+            .collect();
+        let meshes = world.resource::<Assets<Mesh>>();
+        let materials = world.resource::<Assets<StandardMaterial>>();
+        let mut out: Vec<String> = parts
+            .iter()
+            .map(|(t, mesh, material)| {
+                let half_extents = mesh
+                    .as_ref()
+                    .and_then(|h| meshes.get(h))
+                    .and_then(MeshAabb::compute_aabb)
+                    .map(|aabb| aabb.half_extents);
+                let color = material
+                    .as_ref()
+                    .and_then(|h| materials.get(h))
+                    .map(|m| m.base_color);
+                format!(
+                    "{:?}",
+                    (t.translation, t.rotation, t.scale, half_extents, color)
+                )
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn donki_signs_same_every_launch() {
+        let donki = || {
+            child_parts(|c, m, s| {
+                spawn_donki(c, m, s, Vec3::ZERO, 28.0, 35.0, 22.0, "Don Don Donki");
+            })
+        };
+        let first = donki();
+        assert_eq!(first.len(), 11, "招牌 10 個＋企鵝球 1 個");
+        assert_eq!(first, donki());
+    }
+
+    #[test]
+    fn claw_machine_lights_same_every_launch() {
+        let claw = || {
+            child_parts(|c, m, s| {
+                spawn_claw_machine(c, m, s, Vec3::ZERO, 8.0, 10.0, 8.0, "夾娃娃機");
+            })
+        };
+        let first = claw();
+        assert_eq!(first.len(), 9, "燈球 8 個＋招牌 1 個");
+        assert_eq!(first, claw());
+    }
 }

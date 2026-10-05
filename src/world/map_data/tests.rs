@@ -119,3 +119,140 @@ fn rejects_unknown_field() {
     let errors = load_map(&text).unwrap_err();
     assert!(errors[0].0.contains("spwan"), "{errors:?}");
 }
+
+#[test]
+fn road_segments_from_file() {
+    let layout = ximending_layout();
+    assert_eq!(layout.segments.len(), 12);
+    let han = &layout.segments[3];
+    assert_eq!(
+        (han.street.as_str(), han.at, han.width, han.from, han.to),
+        ("漢中街", 0.0, 15.0, -42.5, 42.5)
+    );
+    let emei: Vec<(f32, f32)> = layout
+        .segments
+        .iter()
+        .filter(|s| s.street == "峨嵋街")
+        .map(|s| (s.from, s.to))
+        .collect();
+    assert_eq!(emei, [(-49.0, -7.5), (7.5, 60.0)]);
+}
+
+#[test]
+fn streets_merge_segments_of_same_name() {
+    let layout = ximending_layout();
+    assert_eq!(layout.streets().len(), 9);
+    assert_eq!(
+        *layout.street("峨嵋街"),
+        Street {
+            name: "峨嵋街".to_string(),
+            axis: RoadAxis::EastWest,
+            at: 0.0,
+            width: 15.0
+        }
+    );
+}
+
+#[test]
+#[should_panic(expected = "地圖沒有「峨眉街」這條路")]
+fn street_lookup_panics_on_unknown_name() {
+    ximending_layout().street("峨眉街");
+}
+
+#[test]
+fn rejects_segment_whose_start_is_not_before_end() {
+    let mut file = real_file();
+    file.roads[3].from = 50.0;
+    assert_error(&file, "路段 #3（漢中街）：起點 50 必須小於終點 42.5");
+}
+
+#[test]
+fn rejects_segment_without_width() {
+    let mut file = real_file();
+    file.roads[0].width = 0.0;
+    assert_error(&file, "路段 #0（中華路）：寬度必須大於 0");
+}
+
+#[test]
+fn rejects_street_outside_bounds() {
+    let mut file = real_file();
+    file.roads[0].at = 150.0;
+    assert_error(&file, "路段 #0（中華路）：位置 150 在邊界外");
+}
+
+#[test]
+fn rejects_segments_of_same_street_that_disagree() {
+    // Street 只記一個方向、位置、寬度，所以同名路段三者都要一致
+    let mut file = real_file();
+    file.roads[11].at = 1.0;
+    assert_error(
+        &file,
+        "路段 #11（峨嵋街）：和同名路段的方向、位置或寬度不一致",
+    );
+}
+
+#[test]
+fn rejects_east_west_street_outside_z_bounds() {
+    // 100 在 X 範圍內、Z 範圍外：東西向的路要用 Z 邊界檢查
+    let mut file = real_file();
+    file.roads[4].at = 100.0;
+    assert_error(&file, "路段 #4（漢口街）：位置 100 在邊界外");
+}
+
+#[test]
+fn street_on_the_boundary_is_allowed() {
+    let mut file = real_file();
+    file.roads[0].at = 109.0;
+    assert_eq!(errors_of(&file), Vec::<String>::new());
+}
+
+#[test]
+fn rejects_same_street_with_different_width_or_axis() {
+    let mut file = real_file();
+    file.roads[11].width = 8.0;
+    assert_error(&file, "路段 #11（峨嵋街）：和同名路段");
+    let mut file = real_file();
+    file.roads[11].axis = RoadAxis::NorthSouth;
+    assert_error(&file, "路段 #11（峨嵋街）：和同名路段");
+}
+
+#[test]
+fn same_street_is_compared_with_its_first_segment() {
+    // 第三段和第一段一致時不該被報，只報真正不一致的那段
+    let mut file = real_file();
+    let mut third = file.roads[10].clone();
+    third.from = 61.0;
+    third.to = 70.0;
+    file.roads.push(third);
+    file.roads[11].at = 1.0;
+    let errors = errors_of(&file);
+    assert!(errors.iter().any(|e| e.contains("路段 #11")), "{errors:?}");
+    assert!(!errors.iter().any(|e| e.contains("路段 #12")), "{errors:?}");
+}
+
+#[test]
+fn rejects_asphalt_narrower_than_both_sidewalks() {
+    // 柏油路扣掉兩側各 4 m 人行道後車道寬會變負的
+    let mut file = real_file();
+    file.roads[4].width = 6.0;
+    assert_error(&file, "路段 #4（漢口街）：柏油路寬 6 要大於兩側人行道 8");
+}
+
+#[test]
+fn inverted_bounds_do_not_cascade_into_segment_errors() {
+    // 邊界本身錯了就不再拿它檢查路段，免得列出一串其實沒錯的路段
+    let mut file = real_file();
+    file.bounds.min_x = 200.0;
+    assert_eq!(errors_of(&file).len(), 1, "{:?}", errors_of(&file));
+}
+
+#[test]
+fn rejects_unknown_field_in_segment() {
+    let text = super::XIMENDING_RON.replacen(
+        "(street: \"中華路\", axis:",
+        "(street: \"中華路\", lenght: 1.0, axis:",
+        1,
+    );
+    let errors = load_map(&text).unwrap_err();
+    assert!(errors[0].0.contains("lenght"), "{errors:?}");
+}

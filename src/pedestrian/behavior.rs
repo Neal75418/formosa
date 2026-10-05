@@ -5,7 +5,7 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
-use crate::world::{W_MAIN, Z_CHENGDU};
+use crate::world::{SIDEWALK_WIDTH, W_MAIN, Z_CHENGDU};
 use bevy::prelude::*;
 
 // ============================================================================
@@ -142,7 +142,6 @@ pub enum ShelterType {
 impl PointsOfInterest {
     /// 設定西門町行人生成區域
     pub fn setup_ximending() -> Self {
-        const SIDEWALK_WIDTH: f32 = 4.0;
         let bus_stop_z = Z_CHENGDU - (W_MAIN / 2.0 - SIDEWALK_WIDTH / 2.0);
 
         Self {

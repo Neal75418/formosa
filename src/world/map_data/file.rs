@@ -14,6 +14,8 @@ pub struct MapFile {
     pub spawn: (f32, f32),
     pub ground: GroundSpec,
     pub walls: WallSpec,
+    /// 路網：每一段路（同一條路可以分好幾段），順序就是生成順序
+    pub roads: Vec<RoadSegmentSpec>,
 }
 
 /// 可活動範圍（XZ 平面）
@@ -46,4 +48,35 @@ pub struct WallSpec {
     pub along_z_half_length: f32,
     /// 南、北兩面牆（沿 X 延伸）的半長
     pub along_x_half_length: f32,
+}
+
+/// 道路方向
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoadAxis {
+    /// 南北向：位置是 X，起訖是 Z
+    NorthSouth,
+    /// 東西向：位置是 Z，起訖是 X
+    EastWest,
+}
+
+/// 路面種類
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoadKind {
+    /// 柏油車行道（兩側有人行道、中央雙黃線）
+    Asphalt,
+    /// 徒步區鋪面
+    Pedestrian,
+}
+
+/// 一段路：`at` 是中線位置，`from`／`to` 是沿路方向的起訖
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct RoadSegmentSpec {
+    pub street: String,
+    pub axis: RoadAxis,
+    pub at: f32,
+    pub width: f32,
+    pub from: f32,
+    pub to: f32,
+    pub kind: RoadKind,
 }

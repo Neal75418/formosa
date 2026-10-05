@@ -16,4 +16,23 @@
         along_z_half_length: 100.0,
         along_x_half_length: 130.0,
     ),
+    // 路網：每一段路。at 是中線位置（南北向是 X、東西向是 Z），from／to 是沿路方向的起訖
+    roads: [
+        // 南北向車行道
+        (street: "中華路", axis: NorthSouth, at: 80.0, width: 40.0, from: -105.0, to: 75.0, kind: Asphalt),
+        (street: "西寧南路", axis: NorthSouth, at: -55.0, width: 12.0, from: -105.0, to: 75.0, kind: Asphalt),
+        (street: "康定路", axis: NorthSouth, at: -100.0, width: 16.0, from: -105.0, to: 75.0, kind: Asphalt),
+        // 漢中街徒步區：北端是武昌街路緣，南端伸進成都路 0.5 m
+        (street: "漢中街", axis: NorthSouth, at: 0.0, width: 15.0, from: -42.5, to: 42.5, kind: Pedestrian),
+        // 東西向車行道
+        (street: "漢口街", axis: EastWest, at: -80.0, width: 12.0, from: -110.0, to: 90.0, kind: Asphalt),
+        (street: "成都路", axis: EastWest, at: 50.0, width: 16.0, from: -110.0, to: 90.0, kind: Asphalt),
+        // 東西向徒步區：西寧南路東緣到中華路西緣，避開漢中街分兩段
+        (street: "武昌街", axis: EastWest, at: -50.0, width: 15.0, from: -49.0, to: -7.5, kind: Pedestrian),
+        (street: "武昌街", axis: EastWest, at: -50.0, width: 15.0, from: 7.5, to: 60.0, kind: Pedestrian),
+        (street: "昆明街", axis: EastWest, at: -25.0, width: 8.0, from: -49.0, to: -7.5, kind: Pedestrian),
+        (street: "昆明街", axis: EastWest, at: -25.0, width: 8.0, from: 7.5, to: 60.0, kind: Pedestrian),
+        (street: "峨嵋街", axis: EastWest, at: 0.0, width: 15.0, from: -49.0, to: -7.5, kind: Pedestrian),
+        (street: "峨嵋街", axis: EastWest, at: 0.0, width: 15.0, from: 7.5, to: 60.0, kind: Pedestrian),
+    ],
 )

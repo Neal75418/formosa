@@ -5,6 +5,8 @@
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 
+use super::map_data::{RoadAxis, SIDEWALK_WIDTH};
+
 // ============================================================================
 // 道路系統輔助結構
 // ============================================================================
@@ -23,9 +25,9 @@ pub struct RoadLayout {
 }
 
 impl RoadLayout {
-    /// 建立新實例
-    pub fn new(width_x: f32, width_z: f32) -> Self {
-        let is_horizontal = width_x > width_z;
+    /// 建立新實例：方向照地圖資料，不從長寬比推（比路寬還短的路段會推錯）
+    pub fn new(width_x: f32, width_z: f32, axis: RoadAxis) -> Self {
+        let is_horizontal = axis == RoadAxis::EastWest;
         let (road_len, total_width) = if is_horizontal {
             (width_x, width_z)
         } else {
@@ -118,8 +120,6 @@ pub fn spawn_sidewalks(
     layout: &RoadLayout,
     drive_width: f32,
 ) {
-    const SIDEWALK_WIDTH: f32 = 4.0;
-
     let sidewalk_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.55, 0.45, 0.4),
         perceptual_roughness: 0.85,
@@ -160,6 +160,7 @@ pub fn spawn_road_segment(
     pos: Vec3,
     width_x: f32,
     width_z: f32,
+    axis: RoadAxis,
     road_type: RoadType,
 ) {
     if road_type == RoadType::Pedestrian {
@@ -168,9 +169,8 @@ pub fn spawn_road_segment(
     }
 
     // 車行道 (Asphalt)
-    let layout = RoadLayout::new(width_x, width_z);
-    let sidewalk_width = 4.0;
-    let drive_width = layout.total_width - sidewalk_width * 2.0;
+    let layout = RoadLayout::new(width_x, width_z, axis);
+    let drive_width = layout.total_width - SIDEWALK_WIDTH * 2.0;
 
     let (drive_x, drive_z) = if layout.is_horizontal {
         (layout.road_len, drive_width)
@@ -232,5 +232,20 @@ pub fn spawn_zebra_crossing(
             Transform::from_xyz(x, center.y + 0.02, z),
             GlobalTransform::default(),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn road_layout_follows_axis_not_proportions() {
+        // 寬 40、長 30 的南北向路段：方向照資料，不從長寬比推（短路段會推錯）
+        let layout = RoadLayout::new(40.0, 30.0, RoadAxis::NorthSouth);
+        assert!(!layout.is_horizontal);
+        assert_eq!((layout.road_len, layout.total_width), (30.0, 40.0));
+        let layout = RoadLayout::new(16.0, 16.0, RoadAxis::EastWest);
+        assert!(layout.is_horizontal);
     }
 }

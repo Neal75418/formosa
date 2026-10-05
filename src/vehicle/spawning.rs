@@ -6,7 +6,8 @@ use super::*;
 use crate::core::math::look_rotation_y_flat;
 use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::world::{
-    W_MAIN, W_SECONDARY, W_ZHONGHUA, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU, Z_HANKOU,
+    SIDEWALK_WIDTH, W_MAIN, W_SECONDARY, W_ZHONGHUA, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU,
+    Z_HANKOU,
 };
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -444,12 +445,9 @@ pub fn spawn_npc_vehicle(
         });
 }
 
-/// 道路人行道寬度（需與 world/setup.rs 一致）
-const ROAD_SIDEWALK_WIDTH: f32 = 4.0;
-
 /// 計算雙向車道中心偏移（以道路總寬度為基準）
 fn lane_offset(total_width: f32) -> f32 {
-    let drive_width = (total_width - ROAD_SIDEWALK_WIDTH * 2.0).max(0.0);
+    let drive_width = (total_width - SIDEWALK_WIDTH * 2.0).max(0.0);
     drive_width * 0.25
 }
 

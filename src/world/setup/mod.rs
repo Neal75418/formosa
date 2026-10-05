@@ -47,7 +47,13 @@ pub fn setup_world(
 
     setup_camera_and_lighting(&mut commands, &mut meshes, &mut materials);
     setup_ground(&mut commands, &mut meshes, &mut materials, &layout);
-    roads_layout::setup_roads(&mut commands, &mut meshes, &mut materials, &asset_server);
+    roads_layout::setup_roads(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &asset_server,
+        &layout,
+    );
     buildings_layout::setup_buildings(
         &mut commands,
         &mut meshes,

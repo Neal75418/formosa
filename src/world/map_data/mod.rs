@@ -2,13 +2,16 @@
 //!
 //! - `file`：資料檔格式
 //! - `layout`：檢查、解析、查詢
+//! - `geometry`：從路網推算位置的規則
 
 mod file;
+mod geometry;
 mod layout;
 #[cfg(test)]
 mod tests;
 
 pub use file::*;
+pub use geometry::*;
 pub use layout::*;
 
 use bevy::prelude::*;

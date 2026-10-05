@@ -28,7 +28,7 @@ use crate::core::COLLISION_GROUP_STATIC;
 // 本模組 (super::)
 // ============================================================================
 use super::constants::BuildingTracker;
-use super::{Moon, Sun, WorldMaterials};
+use super::{MapLayout, Moon, Sun, WorldMaterials};
 
 /// 場景建構入口 — 依序初始化各子系統
 pub fn setup_world(
@@ -36,6 +36,7 @@ pub fn setup_world(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
+    layout: Res<MapLayout>,
 ) {
     // === 初始化共用材質快取 ===
     let world_mats = WorldMaterials::new(&mut materials);
@@ -45,7 +46,7 @@ pub fn setup_world(
     let mut building_tracker = BuildingTracker::new();
 
     setup_camera_and_lighting(&mut commands, &mut meshes, &mut materials);
-    setup_ground(&mut commands, &mut meshes, &mut materials);
+    setup_ground(&mut commands, &mut meshes, &mut materials, &layout);
     roads_layout::setup_roads(&mut commands, &mut meshes, &mut materials, &asset_server);
     buildings_layout::setup_buildings(
         &mut commands,
@@ -53,7 +54,7 @@ pub fn setup_world(
         &mut materials,
         &mut building_tracker,
     );
-    vehicles_spawn::setup_player_and_vehicles(&mut commands, &mut meshes, &mut materials);
+    vehicles_spawn::setup_player_and_vehicles(&mut commands, &mut meshes, &mut materials, &layout);
     buildings_layout::setup_neon_signs(
         &mut commands,
         &mut meshes,
@@ -156,9 +157,6 @@ fn moon_material() -> StandardMaterial {
     }
 }
 
-/// 地面中心
-const GROUND_CENTER: Vec3 = Vec3::new(-10.0, 0.0, -15.0);
-
 /// 地面平板的邊長（只影響畫面，碰撞體另計）：
 /// 邊緣要遠到被霧完全蓋住，否則街道盡頭會看到地面在天空前截斷
 const GROUND_VISUAL_SIZE: f32 = 2000.0;
@@ -168,9 +166,9 @@ fn setup_ground(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    layout: &MapLayout,
 ) {
-    // === 1. 地面 (擴大至完整西門町範圍) ===
-    // 地圖範圍：X: -120 ~ +100, Z: -100 ~ +70
+    // === 1. 地面：中心與碰撞體取自地圖資料 ===
     commands.spawn((
         Mesh3d(
             meshes.add(
@@ -184,25 +182,25 @@ fn setup_ground(
             perceptual_roughness: 0.85,
             ..default()
         })),
-        Transform::from_translation(GROUND_CENTER), // 稍微偏移以覆蓋整個區域
+        Transform::from_translation(layout.ground_center),
         RigidBody::Fixed,
-        Collider::cuboid(200.0, 0.1, 200.0),
+        Collider::cuboid(
+            layout.ground_collider_half_extents.x,
+            layout.ground_collider_half_extents.y,
+            layout.ground_collider_half_extents.z,
+        ),
     ));
 
-    // === 2. 隱形邊界牆（防止玩家和載具離開地圖）===
-    let walls: &[(Vec3, Vec3)] = &[
-        // (位置, 半尺寸) — 東西南北各一面
-        (Vec3::new(110.0, 10.0, -15.0), Vec3::new(0.5, 20.0, 100.0)), // 東（中華路外）
-        (Vec3::new(-120.0, 10.0, -15.0), Vec3::new(0.5, 20.0, 100.0)), // 西（康定路外）
-        (Vec3::new(-10.0, 10.0, 65.0), Vec3::new(130.0, 20.0, 0.5)),  // 南（成都路外）
-        (Vec3::new(-10.0, 10.0, -95.0), Vec3::new(130.0, 20.0, 0.5)), // 北（漢口街外）
-    ];
-
-    for &(pos, half_ext) in walls {
+    // === 2. 隱形邊界牆（防止玩家和載具離開地圖）：東、西、南、北，由地圖資料推算 ===
+    for wall in &layout.walls {
         commands.spawn((
-            Transform::from_translation(pos),
+            Transform::from_translation(wall.center),
             RigidBody::Fixed,
-            Collider::cuboid(half_ext.x, half_ext.y, half_ext.z),
+            Collider::cuboid(
+                wall.half_extents.x,
+                wall.half_extents.y,
+                wall.half_extents.z,
+            ),
             CollisionGroups::new(COLLISION_GROUP_STATIC, Group::ALL),
         ));
     }
@@ -211,7 +209,7 @@ fn setup_ground(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::{MapBounds, CLEAR_FOG_VISIBILITY};
+    use crate::world::CLEAR_FOG_VISIBILITY;
 
     #[test]
     fn moon_is_not_hidden_by_fog() {
@@ -228,13 +226,14 @@ mod tests {
     #[test]
     fn ground_edge_hidden_by_fog_from_anywhere_on_map() {
         // 從可活動範圍的任何一點看出去，地面邊緣都在晴天能見度兩倍以外（霧已完全不透明）
-        let bounds = MapBounds::default();
+        let layout = crate::world::ximending_layout();
+        let bounds = &layout.bounds;
         let half = GROUND_VISUAL_SIZE / 2.0;
         let margin = [
-            (GROUND_CENTER.x + half) - bounds.max_x,
-            bounds.min_x - (GROUND_CENTER.x - half),
-            (GROUND_CENTER.z + half) - bounds.max_z,
-            bounds.min_z - (GROUND_CENTER.z - half),
+            (layout.ground_center.x + half) - bounds.max_x,
+            bounds.min_x - (layout.ground_center.x - half),
+            (layout.ground_center.z + half) - bounds.max_z,
+            bounds.min_z - (layout.ground_center.z - half),
         ]
         .into_iter()
         .fold(f32::INFINITY, f32::min);

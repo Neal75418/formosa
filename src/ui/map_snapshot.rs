@@ -38,11 +38,11 @@ fn spawn_map_huds(mut commands: Commands) {
 /// 不開視窗的 App：照遊戲的順序跑地圖相關的啟動系統一次
 fn snapshot_app() -> App {
     let mut app = App::new();
-    app.add_plugins((MinimalPlugins, AssetPlugin::default(), TransformPlugin))
-        .init_asset::<Mesh>()
+    app.add_plugins((MinimalPlugins, AssetPlugin::default(), TransformPlugin));
+    crate::world::install_map(&mut app);
+    app.init_asset::<Mesh>()
         .init_asset::<StandardMaterial>()
         .init_asset::<Image>()
-        .init_resource::<MapBounds>()
         .add_systems(
             Startup,
             (

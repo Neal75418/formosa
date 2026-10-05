@@ -7,6 +7,7 @@ mod constants;
 mod destructible;
 mod destruction_effects;
 mod interior;
+mod map_data;
 mod random_events;
 mod roads;
 mod setup;
@@ -25,6 +26,7 @@ pub use components::*;
 pub use constants::*;
 pub use destructible::*;
 pub use interior::*;
+pub use map_data::*;
 pub use random_events::*;
 #[allow(unused_imports)] // re-export: public API for road segment types and spawning
 pub use roads::*;
@@ -60,13 +62,14 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
+        // 地圖資料：其他外掛的系統也會讀；在 build() 就插入，任何系統第一次執行時都拿得到
+        map_data::install_map(app);
         app
             // Resource
             .insert_resource(crate::core::WorldTime::default())
             .insert_resource(crate::core::WeatherState::default())
             .init_resource::<WindowUpdateTimer>()
             .init_resource::<LightningState>()
-            .init_resource::<MapBounds>()
             .init_resource::<FacadeTextures>()
             .init_resource::<SkyCubemap>()
             // Message

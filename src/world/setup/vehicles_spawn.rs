@@ -7,17 +7,19 @@ use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_G
 use crate::player::Player;
 use crate::vehicle::{spawn_scooter, VehicleModifications, VehiclePreset};
 use crate::world::characters::spawn_player_character;
-use crate::world::constants::{PLAYER_SPAWN_X, PLAYER_SPAWN_Z, X_KANGDING, Z_EMEI};
+use crate::world::constants::{X_KANGDING, Z_EMEI};
 use crate::world::street_furniture::spawn_parking_garage;
+use crate::world::MapLayout;
 
 /// 玩家、停車場、載具生成
 pub(super) fn setup_player_and_vehicles(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    layout: &MapLayout,
 ) {
-    // 玩家生成：漢中街徒步區中央
-    let start_pos = Vec3::new(PLAYER_SPAWN_X, 0.0, PLAYER_SPAWN_Z);
+    // 玩家生成：地圖資料的出生點
+    let start_pos = Vec3::new(layout.spawn.x, 0.0, layout.spawn.y);
 
     spawn_player_character(
         commands,

@@ -540,9 +540,9 @@ mod tests {
     #[test]
     fn npc_vehicles_clamped_to_map_bounds() {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .init_resource::<MapBounds>()
-            .init_resource::<WeatherState>()
+        app.add_plugins(MinimalPlugins);
+        crate::world::install_map(&mut app);
+        app.init_resource::<WeatherState>()
             .init_resource::<VehicleConfig>()
             .add_systems(Update, npc_vehicle_motion_system);
         let starts = [

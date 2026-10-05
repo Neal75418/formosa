@@ -49,11 +49,7 @@ pub const W_ALLEY: f32 = 8.0; // 昆明街 (小巷)
 /// 建築物與道路之間的緩衝距離（公尺）
 pub const BUILDING_ROAD_BUFFER: f32 = 1.5;
 
-// 玩家出生/重生位置（漢中街與峨嵋街交叉口）
-/// 玩家出生 X 座標
-pub const PLAYER_SPAWN_X: f32 = 5.0;
-/// 玩家出生 Z 座標
-pub const PLAYER_SPAWN_Z: f32 = -5.0;
+// 玩家重生（出生點在地圖資料檔）
 /// 重生時角色 Y 軸高度（含角色自身高度偏移）
 pub const PLAYER_RESPAWN_Y: f32 = 0.7;
 
@@ -63,7 +59,7 @@ pub const ZEBRA_CROSSING_OFFSET: f32 = 2.5;
 /// 路面標線 Y 軸偏移（避免 Z-fighting）
 pub const ROAD_MARKING_Y_OFFSET: f32 = 0.01;
 
-/// 地圖邊界（XZ 平面），用於限制 NPC/車輛不駛出地圖
+/// 地圖邊界（XZ 平面），由地圖資料檔決定；用於限制 NPC／車輛不駛出地圖
 /// 值略小於邊界牆位置，確保實體在可見區域內
 #[derive(Resource, Clone, Debug)]
 pub struct MapBounds {
@@ -71,17 +67,6 @@ pub struct MapBounds {
     pub max_x: f32,
     pub min_z: f32,
     pub max_z: f32,
-}
-
-impl Default for MapBounds {
-    fn default() -> Self {
-        Self {
-            min_x: -119.0, // 康定路外側
-            max_x: 109.0,  // 中華路外側
-            min_z: -94.0,  // 漢口街外側
-            max_z: 64.0,   // 成都路外側
-        }
-    }
 }
 
 impl MapBounds {

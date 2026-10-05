@@ -1,0 +1,19 @@
+// 西門町地圖資料（手做的地圖，不含 OSM 資料）
+// 座標：+X 東、+Z 南，單位公尺。只存「決定」，能推算的交給 src/world/map_data
+(
+    // 可活動範圍（NPC 車夾在這裡面）
+    bounds: (min_x: -119.0, max_x: 109.0, min_z: -94.0, max_z: 64.0),
+    // 玩家出生點 (x, z)：漢中街與峨嵋街口
+    spawn: (5.0, -5.0),
+    // 地面平板的中心 (x, z) 與碰撞體半長；視覺尺寸由程式決定
+    ground: (center: (-10.0, -15.0), collider_half_extents: (200.0, 0.1, 200.0)),
+    // 隱形邊界牆：中心離邊界 offset 公尺；沿牆方向的中心取地面中心
+    walls: (
+        offset: 1.0,
+        half_thickness: 0.5,
+        half_height: 20.0,
+        center_y: 10.0,
+        along_z_half_length: 100.0,
+        along_x_half_length: 130.0,
+    ),
+)

@@ -41,7 +41,7 @@ use crate::pedestrian::Pedestrian;
 use crate::player::{Player, Stamina};
 use crate::ui::{ChineseFont, DamageIndicatorState, FloatingDamageTracker, NotificationQueue};
 use crate::wanted::PoliceOfficer;
-use crate::world::{PLAYER_RESPAWN_Y, PLAYER_SPAWN_X, PLAYER_SPAWN_Z};
+use crate::world::{MapLayout, PLAYER_RESPAWN_Y};
 
 /// 傷害系統資源參數包（解決 Bevy 16 參數限制）
 #[derive(SystemParam)]
@@ -122,5 +122,7 @@ pub struct RespawnState {
     pub death_position: Vec3,
 }
 
-/// 重生位置（西門町漢中街起點）
-pub const RESPAWN_POSITION: Vec3 = Vec3::new(PLAYER_SPAWN_X, PLAYER_RESPAWN_Y, PLAYER_SPAWN_Z);
+/// 重生位置：地圖資料的出生點
+pub fn respawn_position(layout: &MapLayout) -> Vec3 {
+    Vec3::new(layout.spawn.x, PLAYER_RESPAWN_Y, layout.spawn.y)
+}

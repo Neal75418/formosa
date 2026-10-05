@@ -7,7 +7,7 @@ use bevy_rapier3d::prelude::*;
 use rand::Rng;
 
 use super::effects::spawn_blood_particles;
-use super::{DeathSystemQueries, DeathSystemResources, RespawnState, RESPAWN_POSITION};
+use super::{respawn_position, DeathSystemQueries, DeathSystemResources, RespawnState};
 use crate::ai::{AiBehavior, AiCombat, AiMovement, AiPerception};
 use crate::combat::components::*;
 use crate::combat::health::*;
@@ -439,6 +439,7 @@ pub fn player_respawn_system(
     screen_effect: Res<crate::ui::ScreenEffectState>,
     mut player_query: Query<(&mut Transform, &mut Health, Option<&mut Armor>), With<Player>>,
     mut notifications: ResMut<NotificationQueue>,
+    layout: Res<crate::world::MapLayout>,
 ) {
     if !respawn_state.is_dead {
         return;
@@ -456,7 +457,7 @@ pub fn player_respawn_system(
         // 重生玩家
         for (mut transform, mut health, armor) in &mut player_query {
             // 重置位置
-            transform.translation = RESPAWN_POSITION;
+            transform.translation = respawn_position(&layout);
 
             // 重置生命值
             health.current = health.max;
@@ -574,15 +575,16 @@ mod tests {
     #[test]
     fn respawn_puts_player_at_spawn_point() {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .insert_resource(RespawnState {
-                is_dead: true,
-                respawn_timer: -1.0,
-                death_position: Vec3::ZERO,
-            })
-            .init_resource::<crate::ui::ScreenEffectState>()
-            .init_resource::<crate::ui::NotificationQueue>()
-            .add_systems(Update, player_respawn_system);
+        app.add_plugins(MinimalPlugins);
+        crate::world::install_map(&mut app);
+        app.insert_resource(RespawnState {
+            is_dead: true,
+            respawn_timer: -1.0,
+            death_position: Vec3::ZERO,
+        })
+        .init_resource::<crate::ui::ScreenEffectState>()
+        .init_resource::<crate::ui::NotificationQueue>()
+        .add_systems(Update, player_respawn_system);
         let player = app
             .world_mut()
             .spawn((

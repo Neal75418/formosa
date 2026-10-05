@@ -23,6 +23,7 @@ use crate::pedestrian::components::{
 use crate::pedestrian::panic::PanicState;
 use crate::pedestrian::pathfinding::AStarPath;
 use crate::player::Player;
+use crate::world::MapLayout;
 
 /// 最小生成距離平方 (15.0²)
 const MIN_SPAWN_DISTANCE_SQ: f32 = 225.0;
@@ -389,17 +390,17 @@ fn get_movement_target(
     state: &PedestrianState,
     current_pos: Vec3,
     patrol: &PatrolPath,
+    flee: Rect,
 ) -> Option<Vec3> {
     if state.state == PedState::Fleeing {
         if let Some(threat_pos) = state.last_threat_pos {
             let away_dir = (current_pos - threat_pos).normalize_or_zero();
             let flee_target = current_pos + away_dir * 20.0;
-            // 將逃跑目標限制在市區範圍內
-            // 地圖邊界：X: -100 ~ 80, Z: -80 ~ 50
+            // 逃跑目標限制在最外圍道路內縮 5 m 的範圍
             let clamped = Vec3::new(
-                flee_target.x.clamp(-95.0, 75.0), // 留5公尺邊界緩衝
+                flee_target.x.clamp(flee.min.x, flee.max.x),
                 flee_target.y,
-                flee_target.z.clamp(-75.0, 45.0), // 留5公尺邊界緩衝
+                flee_target.z.clamp(flee.min.y, flee.max.y),
             );
             return Some(clamped);
         }
@@ -426,8 +427,10 @@ pub fn pedestrian_movement_system(
         ),
         Without<AStarPath>,
     >,
+    layout: Res<MapLayout>,
 ) {
     let dt = time.delta_secs();
+    let flee = layout.flee_area();
 
     for (_ped, state, mut transform, mut patrol, movement, mut controller, daily_behavior) in
         &mut ped_query
@@ -446,7 +449,7 @@ pub fn pedestrian_movement_system(
         }
 
         let current_pos = transform.translation;
-        let Some(target_pos) = get_movement_target(state, current_pos, &patrol) else {
+        let Some(target_pos) = get_movement_target(state, current_pos, &patrol, flee) else {
             continue;
         };
 
@@ -490,6 +493,7 @@ pub fn pedestrian_despawn_system(
     config: Res<PedestrianConfig>,
     player_query: Query<&Transform, With<Player>>,
     mut ped_query: Query<(Entity, &Transform, &mut PedestrianState), With<Pedestrian>>,
+    layout: Res<MapLayout>,
 ) {
     let Ok(player_transform) = player_query.single() else {
         return;
@@ -497,11 +501,8 @@ pub fn pedestrian_despawn_system(
     let player_pos = player_transform.translation;
     let dt = time.delta_secs();
 
-    // 地圖邊界常數（與 setup.rs 一致）
-    const MAP_MIN_X: f32 = -100.0; // X_KANGDING
-    const MAP_MAX_X: f32 = 80.0; // X_ZHONGHUA
-    const MAP_MIN_Z: f32 = -80.0; // Z_HANKOU
-    const MAP_MAX_Z: f32 = 50.0; // Z_CHENGDU
+    // 越界即移除的範圍（地圖資料推算）
+    let area = layout.pedestrian_area();
 
     // 使用 distance_squared 避免 sqrt
     let despawn_radius_sq = config.despawn_radius * config.despawn_radius;
@@ -509,10 +510,10 @@ pub fn pedestrian_despawn_system(
         let current_pos = transform.translation;
 
         // 超出地圖邊界，立即移除
-        if current_pos.x < MAP_MIN_X
-            || current_pos.x > MAP_MAX_X
-            || current_pos.z < MAP_MIN_Z
-            || current_pos.z > MAP_MAX_Z
+        if current_pos.x < area.min.x
+            || current_pos.x > area.max.x
+            || current_pos.z < area.min.y
+            || current_pos.z > area.max.y
         {
             commands.entity(entity).despawn();
             continue;
@@ -549,8 +550,9 @@ mod tests {
     /// 只跑行人消失系統：玩家站在 player，回傳每個行人跑完一次後還在不在
     fn despawn_survivors(player: Vec3, peds: &[Vec3]) -> Vec<bool> {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .init_resource::<PedestrianConfig>()
+        app.add_plugins(MinimalPlugins);
+        crate::world::install_map(&mut app);
+        app.init_resource::<PedestrianConfig>()
             .add_systems(Update, pedestrian_despawn_system);
         app.world_mut()
             .spawn((Player::default(), Transform::from_translation(player)));
@@ -618,8 +620,9 @@ mod tests {
     fn flee_target_stays_5m_inside_outer_roads() {
         // 背對威脅逃 20 m 的目標，超出範圍時被夾回；沒超出範圍的照原值
         let patrol = PatrolPath::new(Vec::new());
+        let flee = crate::world::ximending_layout().flee_area();
         let target = |pos: Vec3, threat: Vec3| {
-            get_movement_target(&fleeing_from(threat), pos, &patrol).expect("逃跑一定有目標")
+            get_movement_target(&fleeing_from(threat), pos, &patrol, flee).expect("逃跑一定有目標")
         };
         assert_eq!(
             target(Vec3::new(74.0, 0.0, 0.0), Vec3::new(64.0, 0.0, 0.0)).x,
@@ -641,5 +644,66 @@ mod tests {
             target(Vec3::new(50.0, 0.0, 0.0), Vec3::new(40.0, 0.0, 0.0)).x,
             70.0
         );
+    }
+
+    /// 沒有 A* 路徑的逃跑行人（位置, 威脅位置）跑兩次 update（第一次的 dt 是 0），回傳控制器這一幀的水平位移
+    fn patrol_flee_steps(peds: &[(Vec3, Vec3)]) -> Vec<Vec3> {
+        use bevy::time::TimeUpdateStrategy;
+        use std::time::Duration;
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        crate::world::install_map(&mut app);
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+            1.0 / 60.0,
+        )))
+        .init_resource::<PedestrianConfig>()
+        .add_systems(Update, pedestrian_movement_system);
+        let ids: Vec<Entity> = peds
+            .iter()
+            .map(|&(pos, threat)| {
+                app.world_mut()
+                    .spawn((
+                        Pedestrian,
+                        fleeing_from(threat),
+                        Transform::from_translation(pos),
+                        PatrolPath::new(Vec::new()),
+                        AiMovement::default(),
+                        KinematicCharacterController::default(),
+                    ))
+                    .id()
+            })
+            .collect();
+        app.update();
+        app.update();
+        ids.iter()
+            .map(|e| {
+                let t = app
+                    .world()
+                    .get::<KinematicCharacterController>(*e)
+                    .and_then(|c| c.translation)
+                    .unwrap_or(Vec3::ZERO);
+                Vec3::new(t.x, 0.0, t.z)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn patrol_flee_direction_clamped_5m_inside_outer_roads() {
+        // 移動系統把逃跑範圍傳給 get_movement_target：每邊兩個往外逃的行人，界外 0.5 m 的被夾回、方向反轉，界內 0.5 m 的照樣往外
+        let s = patrol_flee_steps(&[
+            (Vec3::new(75.5, 0.0, 0.0), Vec3::new(65.5, 0.0, 0.0)),
+            (Vec3::new(74.5, 0.0, 0.0), Vec3::new(64.5, 0.0, 0.0)),
+            (Vec3::new(-95.5, 0.0, 0.0), Vec3::new(-85.5, 0.0, 0.0)),
+            (Vec3::new(-94.5, 0.0, 0.0), Vec3::new(-84.5, 0.0, 0.0)),
+            (Vec3::new(0.0, 0.0, 45.5), Vec3::new(0.0, 0.0, 35.5)),
+            (Vec3::new(0.0, 0.0, 44.5), Vec3::new(0.0, 0.0, 34.5)),
+            (Vec3::new(0.0, 0.0, -75.5), Vec3::new(0.0, 0.0, -65.5)),
+            (Vec3::new(0.0, 0.0, -74.5), Vec3::new(0.0, 0.0, -64.5)),
+        ]);
+        assert!(s[0].x < 0.0 && s[1].x > 0.0, "東：{s:?}");
+        assert!(s[2].x > 0.0 && s[3].x < 0.0, "西：{s:?}");
+        assert!(s[4].z < 0.0 && s[5].z > 0.0, "南：{s:?}");
+        assert!(s[6].z > 0.0 && s[7].z < 0.0, "北：{s:?}");
     }
 }

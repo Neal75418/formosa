@@ -35,4 +35,6 @@
         (street: "峨嵋街", axis: EastWest, at: 0.0, width: 15.0, from: -49.0, to: -7.5, kind: Pedestrian),
         (street: "峨嵋街", axis: EastWest, at: 0.0, width: 15.0, from: 7.5, to: 60.0, kind: Pedestrian),
     ],
+    // 行人 A* 網格：原點 (x, z)、格數、每格大小（找不到能剛好算出它的規則，照原樣存）
+    pathfinding_grid: (origin: (-110.0, -90.0), width: 106, height: 75, cell_size: 2.0),
 )

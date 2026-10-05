@@ -14,10 +14,7 @@ use bevy_rapier3d::prelude::*;
 use crate::pedestrian::behavior::{DailyBehavior, PointsOfInterest};
 use crate::pedestrian::components::{PedState, Pedestrian, PedestrianConfig, PedestrianState};
 use crate::pedestrian::pathfinding::{AStarPath, PathfindingGrid};
-use crate::world::{
-    W_ALLEY, W_MAIN, W_PEDESTRIAN, W_SECONDARY, W_ZHONGHUA, X_HAN, X_KANGDING, X_XINING,
-    X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
-};
+use crate::world::{MapLayout, RoadAxis};
 
 // ============================================================================
 // 尋路網格輔助函數
@@ -59,39 +56,26 @@ fn mark_ew_road(grid: &mut PathfindingGrid, center_z: f32, road_width: f32) {
     mark_rect_walkable(grid, x_min, x_max, z_min, z_max);
 }
 
-/// 初始化 A* 尋路網格 — 使用 `world::constants` 道路常數動態生成
-pub fn setup_pathfinding_grid(mut commands: Commands) {
-    // 網格覆蓋完整西門町地圖區域：
-    // X: -110 to +102 (康定路西側 → 中華路東側)
-    // Z:  -90 to +60  (漢口街北側 → 成都路南側)
-    let cell_size = 2.0_f32;
-    let origin = Vec3::new(-110.0, 0.0, -90.0);
-    let width = 106; // 212m / 2m
-    let height = 75; // 150m / 2m
-
+/// 初始化 A* 尋路網格：範圍取自地圖資料，每條路只用位置與寬度、延伸滿整個網格
+pub fn setup_pathfinding_grid(mut commands: Commands, layout: Res<MapLayout>) {
+    let spec = layout.grid;
     let mut grid = PathfindingGrid {
-        origin,
-        width,
-        height,
-        cell_size,
-        walkable: vec![false; width * height], // 預設全部不可通行
+        origin: Vec3::new(spec.origin.0, 0.0, spec.origin.1),
+        width: spec.width,
+        height: spec.height,
+        cell_size: spec.cell_size,
+        walkable: vec![false; spec.width * spec.height], // 預設全部不可通行
     };
-
-    // --- 南北向道路（固定 X，沿 Z 軸延伸）---
-    mark_ns_road(&mut grid, X_ZHONGHUA, W_ZHONGHUA); // 中華路
-    mark_ns_road(&mut grid, X_HAN, W_PEDESTRIAN); // 漢中街（徒步區）
-    mark_ns_road(&mut grid, X_XINING, W_SECONDARY); // 西寧南路
-    mark_ns_road(&mut grid, X_KANGDING, W_MAIN); // 康定路
-
-    // --- 東西向道路（固定 Z，沿 X 軸延伸）---
-    mark_ew_road(&mut grid, Z_HANKOU, W_SECONDARY); // 漢口街
-    mark_ew_road(&mut grid, Z_WUCHANG, W_PEDESTRIAN); // 武昌街
-    mark_ew_road(&mut grid, Z_KUNMING, W_ALLEY); // 昆明街
-    mark_ew_road(&mut grid, Z_EMEI, W_PEDESTRIAN); // 峨嵋街
-    mark_ew_road(&mut grid, Z_CHENGDU, W_MAIN); // 成都路
-
+    for street in layout.streets() {
+        match street.axis {
+            RoadAxis::NorthSouth => mark_ns_road(&mut grid, street.at, street.width),
+            RoadAxis::EastWest => mark_ew_road(&mut grid, street.at, street.width),
+        }
+    }
     commands.insert_resource(grid);
-    commands.insert_resource(PointsOfInterest::setup_ximending());
+    commands.insert_resource(PointsOfInterest::setup_ximending(
+        layout.north_sidewalk_z("成都路"),
+    ));
 }
 
 /// A* 路徑計算系統
@@ -150,8 +134,10 @@ pub fn astar_movement_system(
         ),
         With<Pedestrian>,
     >,
+    layout: Res<MapLayout>,
 ) {
     let dt = time.delta_secs();
+    let flee = layout.flee_area();
 
     for (state, behavior, mut transform, mut path, mut controller) in &mut ped_query {
         // 逃跑時不使用 A* 路徑，改用逃離方向
@@ -161,11 +147,11 @@ pub fn astar_movement_system(
                 let current_pos = transform.translation;
                 let away_dir = (current_pos - threat_pos).normalize_or_zero();
                 let flee_target = current_pos + away_dir * 20.0;
-                // 將逃跑目標限制在市區範圍內
+                // 逃跑目標限制在最外圍道路內縮 5 m 的範圍
                 let clamped = Vec3::new(
-                    flee_target.x.clamp(-95.0, 75.0),
+                    flee_target.x.clamp(flee.min.x, flee.max.x),
                     flee_target.y,
-                    flee_target.z.clamp(-75.0, 45.0),
+                    flee_target.z.clamp(flee.min.y, flee.max.y),
                 );
                 let direction = (clamped - current_pos).normalize_or_zero();
                 let flat_dir = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
@@ -227,12 +213,13 @@ mod tests {
     /// 逃跑中的行人（位置, 威脅位置）跑兩次 update（第一次的 dt 是 0），回傳控制器這一幀的水平位移
     fn flee_steps(peds: &[(Vec3, Vec3)]) -> Vec<Vec3> {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
-                1.0 / 60.0,
-            )))
-            .init_resource::<PedestrianConfig>()
-            .add_systems(Update, astar_movement_system);
+        app.add_plugins(MinimalPlugins);
+        crate::world::install_map(&mut app);
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+            1.0 / 60.0,
+        )))
+        .init_resource::<PedestrianConfig>()
+        .add_systems(Update, astar_movement_system);
         let ids: Vec<Entity> = peds
             .iter()
             .map(|&(pos, threat)| {

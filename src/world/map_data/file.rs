@@ -16,6 +16,8 @@ pub struct MapFile {
     pub walls: WallSpec,
     /// 路網：每一段路（同一條路可以分好幾段），順序就是生成順序
     pub roads: Vec<RoadSegmentSpec>,
+    /// 行人 A* 網格的範圍（找不到規則，照原樣存）
+    pub pathfinding_grid: GridSpec,
 }
 
 /// 可活動範圍（XZ 平面）
@@ -79,4 +81,14 @@ pub struct RoadSegmentSpec {
     pub from: f32,
     pub to: f32,
     pub kind: RoadKind,
+}
+
+/// 行人 A* 網格：原點 (x, z)、格數、每格大小
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct GridSpec {
+    pub origin: (f32, f32),
+    pub width: usize,
+    pub height: usize,
+    pub cell_size: f32,
 }

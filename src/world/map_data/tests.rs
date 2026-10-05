@@ -256,3 +256,54 @@ fn rejects_unknown_field_in_segment() {
     let errors = load_map(&text).unwrap_err();
     assert!(errors[0].0.contains("lenght"), "{errors:?}");
 }
+
+#[test]
+fn pathfinding_grid_from_file() {
+    assert_eq!(
+        ximending_layout().grid,
+        GridSpec {
+            origin: (-110.0, -90.0),
+            width: 106,
+            height: 75,
+            cell_size: 2.0
+        }
+    );
+}
+
+#[test]
+fn pedestrian_area_is_outer_road_centerlines() {
+    // 康定路到中華路、漢口街到成都路的中線
+    let area = ximending_layout().pedestrian_area();
+    assert_eq!(
+        (area.min, area.max),
+        (Vec2::new(-100.0, -80.0), Vec2::new(80.0, 50.0))
+    );
+}
+
+#[test]
+fn flee_area_is_5m_inside_outer_roads() {
+    let area = ximending_layout().flee_area();
+    assert_eq!(
+        (area.min, area.max),
+        (Vec2::new(-95.0, -75.0), Vec2::new(75.0, 45.0))
+    );
+}
+
+#[test]
+fn bus_stop_on_chengdu_north_sidewalk() {
+    // 成都路中線 50，往北半寬 8 再退回人行道一半 2
+    assert_eq!(ximending_layout().north_sidewalk_z("成都路"), 44.0);
+}
+
+#[test]
+fn rejects_degenerate_pathfinding_grid() {
+    // 格子大小是除數：0、負數、NaN 會讓網格全通或全不通
+    for cell_size in [0.0, -2.0, f32::NAN] {
+        let mut file = real_file();
+        file.pathfinding_grid.cell_size = cell_size;
+        assert_error(&file, "A* 網格：格子大小要大於 0");
+    }
+    let mut file = real_file();
+    file.pathfinding_grid.width = 0;
+    assert_error(&file, "A* 網格：格數要大於 0");
+}

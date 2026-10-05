@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 
-use super::file::{MapFile, RoadAxis, RoadKind, RoadSegmentSpec};
-use super::geometry::SIDEWALK_WIDTH;
+use super::file::{GridSpec, MapFile, RoadAxis, RoadKind, RoadSegmentSpec};
+use super::geometry::{FLEE_INSET, SIDEWALK_WIDTH};
 use crate::world::MapBounds;
 
 /// 資料檔的一筆錯誤（訊息指出是哪一筆）
@@ -45,11 +45,9 @@ pub struct MapLayout {
     /// 路網的每一段，順序同資料檔
     pub segments: Vec<RoadSegmentSpec>,
     /// 同名路段合併成的路，順序依第一次出現
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "A* 網格與小地圖接上路網後才會用到")
-    )]
     streets: Vec<Street>,
+    /// 行人 A* 網格的範圍
+    pub grid: GridSpec,
 }
 
 impl MapLayout {
@@ -58,6 +56,7 @@ impl MapLayout {
         let mut errors = Vec::new();
         let bounds_ok = check_bounds_and_spawn(file, &mut errors);
         check_segments(file, bounds_ok, &mut errors);
+        check_grid(file, &mut errors);
         if !errors.is_empty() {
             return Err(errors);
         }
@@ -102,34 +101,58 @@ impl MapLayout {
             ],
             segments: file.roads.clone(),
             streets: build_streets(&file.roads),
+            grid: file.pathfinding_grid,
         }
     }
 
     /// 所有的路
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "A* 網格與小地圖接上路網後才會用到")
-    )]
     pub fn streets(&self) -> &[Street] {
         &self.streets
     }
 
     /// 依路名取路。路名寫在程式裡（例如「漢中街 + 8」），打錯字時快照測試會在這裡 panic
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "A* 網格與小地圖接上路網後才會用到")
-    )]
     pub fn street(&self, name: &str) -> &Street {
         self.find_street(name)
             .unwrap_or_else(|| panic!("地圖沒有「{name}」這條路"))
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "A* 網格與小地圖接上路網後才會用到")
-    )]
     fn find_street(&self, name: &str) -> Option<&Street> {
         self.streets.iter().find(|s| s.name == name)
+    }
+
+    /// 最外圍南北向、東西向道路的中線圍出的矩形（x 是世界 X、y 是世界 Z）
+    pub fn outer_road_area(&self) -> Rect {
+        let mut min = Vec2::splat(f32::INFINITY);
+        let mut max = Vec2::splat(f32::NEG_INFINITY);
+        for s in &self.streets {
+            match s.axis {
+                RoadAxis::NorthSouth => {
+                    min.x = min.x.min(s.at);
+                    max.x = max.x.max(s.at);
+                }
+                RoadAxis::EastWest => {
+                    min.y = min.y.min(s.at);
+                    max.y = max.y.max(s.at);
+                }
+            }
+        }
+        Rect { min, max }
+    }
+
+    /// 行人越界即移除的範圍
+    pub fn pedestrian_area(&self) -> Rect {
+        self.outer_road_area()
+    }
+
+    /// 行人逃跑目標的範圍：最外圍道路中線再內縮 FLEE_INSET
+    pub fn flee_area(&self) -> Rect {
+        self.outer_road_area().inflate(-FLEE_INSET)
+    }
+
+    /// 路北側（−Z）人行道的中線 Z
+    pub fn north_sidewalk_z(&self, name: &str) -> f32 {
+        let s = self.street(name);
+        s.at - (s.width / 2.0 - SIDEWALK_WIDTH / 2.0)
     }
 }
 
@@ -182,6 +205,23 @@ fn check_segments(file: &MapFile, bounds_ok: bool, errors: &mut Vec<MapError>) {
                 "{tag}：和同名路段的方向、位置或寬度不一致"
             )));
         }
+    }
+}
+
+/// A* 網格：格子大小是除數，要是有限的正數；格數要大於 0
+fn check_grid(file: &MapFile, errors: &mut Vec<MapError>) {
+    let g = file.pathfinding_grid;
+    if !g.cell_size.is_finite() || g.cell_size <= 0.0 {
+        errors.push(MapError(format!(
+            "A* 網格：格子大小要大於 0（{}）",
+            g.cell_size
+        )));
+    }
+    if g.width == 0 || g.height == 0 {
+        errors.push(MapError(format!(
+            "A* 網格：格數要大於 0（{}×{}）",
+            g.width, g.height
+        )));
     }
 }
 

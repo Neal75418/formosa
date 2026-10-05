@@ -34,6 +34,8 @@ mod weather_hud;
 mod fps_counter;
 
 #[cfg(test)]
+mod map_snapshot;
+#[cfg(test)]
 mod phone_tests;
 #[cfg(test)]
 mod tests;

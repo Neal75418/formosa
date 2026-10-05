@@ -217,3 +217,71 @@ pub fn astar_movement_system(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::time::TimeUpdateStrategy;
+    use std::time::Duration;
+
+    /// 逃跑中的行人（位置, 威脅位置）跑兩次 update（第一次的 dt 是 0），回傳控制器這一幀的水平位移
+    fn flee_steps(peds: &[(Vec3, Vec3)]) -> Vec<Vec3> {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+                1.0 / 60.0,
+            )))
+            .init_resource::<PedestrianConfig>()
+            .add_systems(Update, astar_movement_system);
+        let ids: Vec<Entity> = peds
+            .iter()
+            .map(|&(pos, threat)| {
+                app.world_mut()
+                    .spawn((
+                        Pedestrian,
+                        PedestrianState {
+                            state: PedState::Fleeing,
+                            last_threat_pos: Some(threat),
+                            ..default()
+                        },
+                        DailyBehavior::default(),
+                        Transform::from_translation(pos),
+                        AStarPath::new(Vec3::ZERO),
+                        KinematicCharacterController::default(),
+                    ))
+                    .id()
+            })
+            .collect();
+        app.update();
+        app.update();
+        ids.iter()
+            .map(|e| {
+                let t = app
+                    .world()
+                    .get::<KinematicCharacterController>(*e)
+                    .and_then(|c| c.translation)
+                    .unwrap_or(Vec3::ZERO);
+                Vec3::new(t.x, 0.0, t.z)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn flee_direction_clamped_5m_inside_outer_roads() {
+        // 每邊兩個往外逃的行人：界外 0.5 m 的目標被夾回、方向反轉；界內 0.5 m 的照樣往外
+        let s = flee_steps(&[
+            (Vec3::new(75.5, 0.0, 0.0), Vec3::new(65.5, 0.0, 0.0)),
+            (Vec3::new(74.5, 0.0, 0.0), Vec3::new(64.5, 0.0, 0.0)),
+            (Vec3::new(-95.5, 0.0, 0.0), Vec3::new(-85.5, 0.0, 0.0)),
+            (Vec3::new(-94.5, 0.0, 0.0), Vec3::new(-84.5, 0.0, 0.0)),
+            (Vec3::new(0.0, 0.0, 45.5), Vec3::new(0.0, 0.0, 35.5)),
+            (Vec3::new(0.0, 0.0, 44.5), Vec3::new(0.0, 0.0, 34.5)),
+            (Vec3::new(0.0, 0.0, -75.5), Vec3::new(0.0, 0.0, -65.5)),
+            (Vec3::new(0.0, 0.0, -74.5), Vec3::new(0.0, 0.0, -64.5)),
+        ]);
+        assert!(s[0].x < 0.0 && s[1].x > 0.0, "東：{s:?}");
+        assert!(s[2].x > 0.0 && s[3].x < 0.0, "西：{s:?}");
+        assert!(s[4].z < 0.0 && s[5].z > 0.0, "南：{s:?}");
+        assert!(s[6].z > 0.0 && s[7].z < 0.0, "北：{s:?}");
+    }
+}

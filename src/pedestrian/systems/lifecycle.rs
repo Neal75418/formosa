@@ -541,3 +541,105 @@ pub fn pedestrian_despawn_system(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 只跑行人消失系統：玩家站在 player，回傳每個行人跑完一次後還在不在
+    fn despawn_survivors(player: Vec3, peds: &[Vec3]) -> Vec<bool> {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<PedestrianConfig>()
+            .add_systems(Update, pedestrian_despawn_system);
+        app.world_mut()
+            .spawn((Player::default(), Transform::from_translation(player)));
+        let ids: Vec<Entity> = peds
+            .iter()
+            .map(|p| {
+                app.world_mut()
+                    .spawn((
+                        Pedestrian,
+                        PedestrianState::default(),
+                        Transform::from_translation(*p),
+                    ))
+                    .id()
+            })
+            .collect();
+        app.update();
+        ids.iter()
+            .map(|e| app.world().get_entity(*e).is_ok())
+            .collect()
+    }
+
+    #[test]
+    fn pedestrians_beyond_outer_road_centerlines_are_removed() {
+        // 界線內 0.5 m 留下、界線外 0.5 m 移除；玩家站在界線上，兩個行人都在 60 m 的消失半徑內
+        let cases = [
+            (
+                Vec3::new(-100.0, 0.0, 0.0),
+                Vec3::new(-99.5, 0.0, 0.0),
+                Vec3::new(-100.5, 0.0, 0.0),
+            ),
+            (
+                Vec3::new(80.0, 0.0, 0.0),
+                Vec3::new(79.5, 0.0, 0.0),
+                Vec3::new(80.5, 0.0, 0.0),
+            ),
+            (
+                Vec3::new(0.0, 0.0, -80.0),
+                Vec3::new(0.0, 0.0, -79.5),
+                Vec3::new(0.0, 0.0, -80.5),
+            ),
+            (
+                Vec3::new(0.0, 0.0, 50.0),
+                Vec3::new(0.0, 0.0, 49.5),
+                Vec3::new(0.0, 0.0, 50.5),
+            ),
+        ];
+        for (player, inside, outside) in cases {
+            assert_eq!(
+                despawn_survivors(player, &[inside, outside]),
+                [true, false],
+                "{player}"
+            );
+        }
+    }
+
+    fn fleeing_from(threat: Vec3) -> PedestrianState {
+        PedestrianState {
+            state: PedState::Fleeing,
+            last_threat_pos: Some(threat),
+            ..default()
+        }
+    }
+
+    #[test]
+    fn flee_target_stays_5m_inside_outer_roads() {
+        // 背對威脅逃 20 m 的目標，超出範圍時被夾回；沒超出範圍的照原值
+        let patrol = PatrolPath::new(Vec::new());
+        let target = |pos: Vec3, threat: Vec3| {
+            get_movement_target(&fleeing_from(threat), pos, &patrol).expect("逃跑一定有目標")
+        };
+        assert_eq!(
+            target(Vec3::new(74.0, 0.0, 0.0), Vec3::new(64.0, 0.0, 0.0)).x,
+            75.0
+        );
+        assert_eq!(
+            target(Vec3::new(-90.0, 0.0, 0.0), Vec3::new(-80.0, 0.0, 0.0)).x,
+            -95.0
+        );
+        assert_eq!(
+            target(Vec3::new(0.0, 0.0, 40.0), Vec3::new(0.0, 0.0, 30.0)).z,
+            45.0
+        );
+        assert_eq!(
+            target(Vec3::new(0.0, 0.0, -70.0), Vec3::new(0.0, 0.0, -60.0)).z,
+            -75.0
+        );
+        assert_eq!(
+            target(Vec3::new(50.0, 0.0, 0.0), Vec3::new(40.0, 0.0, 0.0)).x,
+            70.0
+        );
+    }
+}

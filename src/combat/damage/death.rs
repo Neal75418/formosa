@@ -566,3 +566,35 @@ pub fn ragdoll_visual_system(
         set_children_visibility(children, visible, &mut material_query);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn respawn_puts_player_at_spawn_point() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(RespawnState {
+                is_dead: true,
+                respawn_timer: -1.0,
+                death_position: Vec3::ZERO,
+            })
+            .init_resource::<crate::ui::ScreenEffectState>()
+            .init_resource::<crate::ui::NotificationQueue>()
+            .add_systems(Update, player_respawn_system);
+        let player = app
+            .world_mut()
+            .spawn((
+                Player::default(),
+                Transform::from_xyz(50.0, 3.0, 50.0),
+                Health::new(100.0),
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Transform>(player).unwrap().translation,
+            Vec3::new(5.0, 0.7, -5.0)
+        );
+    }
+}

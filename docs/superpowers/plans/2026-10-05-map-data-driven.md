@@ -1104,14 +1104,14 @@ rpc '{"jsonrpc":"2.0","id":1,"method":"brp_extras/screenshot","params":{"path":"
 rpc '{"jsonrpc":"2.0","id":2,"method":"brp_extras/send_keys","params":{"keys":["KeyM"],"duration_ms":100}}'
 rpc '{"jsonrpc":"2.0","id":3,"method":"brp_extras/screenshot","params":{"path":"'"$SHOTS"'/0800-fullmap.png"}}'
 rpc '{"jsonrpc":"2.0","id":4,"method":"brp_extras/send_keys","params":{"keys":["KeyM"],"duration_ms":100}}'
-rpc '{"jsonrpc":"2.0","id":5,"method":"brp_extras/send_keys","params":{"keys":["KeyD"],"duration_ms":1500}}'
+rpc '{"jsonrpc":"2.0","id":5,"method":"brp_extras/send_keys","params":{"keys":["KeyW","KeyD"],"duration_ms":2000}}'
 rpc '{"jsonrpc":"2.0","id":6,"method":"brp_extras/screenshot","params":{"path":"'"$SHOTS"'/0800-turned.png"}}'
 rpc '{"jsonrpc":"2.0","id":7,"method":"brp_extras/shutdown"}'
 ```
 
 每張截圖回傳後要等檔案出現再送下一個指令。21:00 那組：暫改 `src/core/resources.rs` `WorldTime::default()` 的 `hour: 8.0` 為 `21.0`，重跑同一段（檔名改 `2100-*`），截完改回 `8.0`。
 
-看 `0800-turned.png`：玩家往右走之後，小地圖箭頭有沒有轉（spec 判斷它不會轉，Task 15 修）。觀察結果記進 spec 第四節 Bug 2 的第一點。
+看 `0800-turned.png`：按住 W+D 讓玩家轉向之後（只按 D 是平移、角色不會轉向），小地圖箭頭有沒有轉（spec 判斷它不會轉，Task 15 修）。觀察結果記進 spec 第四節 Bug 2 的第一點。
 
 - [ ] **Step 10：全套驗證、送審、等 user 說「提交」**
 
@@ -3763,7 +3763,7 @@ fn marker_heading(forward: Dir3) -> Rot2 {
 
 - [ ] **Step 4：全套**：`cargo test && cargo clippy --all-targets --all-features -- -D warnings && cargo fmt --check`
 
-- [ ] **Step 5：開遊戲確認**：照 Task 3 Step 9，送 `KeyD` 1500 ms 後截小地圖，箭頭朝右；開大地圖再截一次。
+- [ ] **Step 5：開遊戲確認**：照 Task 3 Step 9，按住 `KeyW`＋`KeyD` 2000 ms（只按 D 是平移、角色不會轉向）後截小地圖，箭頭要指向玩家面向（和鏡頭轉過去的方向一致）；開大地圖再截一次。
 
 - [ ] **Step 6：CHANGELOG**（`### Fixed` 底下加一行）
 

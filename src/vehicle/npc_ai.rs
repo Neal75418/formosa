@@ -531,3 +531,43 @@ fn apply_npc_steering(
 
     transform.rotate_y(yaw_rate * dt);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vehicle::{NpcVehicle, VehiclePreset};
+
+    #[test]
+    fn npc_vehicles_clamped_to_map_bounds() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<MapBounds>()
+            .init_resource::<WeatherState>()
+            .init_resource::<VehicleConfig>()
+            .add_systems(Update, npc_vehicle_motion_system);
+        let starts = [
+            Vec3::new(109.5, 0.5, 0.0),
+            Vec3::new(-119.5, 0.5, 0.0),
+            Vec3::new(0.0, 0.5, 64.5),
+            Vec3::new(0.0, 0.5, -94.5),
+        ];
+        let ids: Vec<Entity> = starts
+            .iter()
+            .map(|p| {
+                app.world_mut()
+                    .spawn((
+                        Transform::from_translation(*p),
+                        VehiclePreset::car().into_components(),
+                        NpcVehicle::default(),
+                    ))
+                    .id()
+            })
+            .collect();
+        app.update();
+        let pos = |e: Entity| app.world().get::<Transform>(e).unwrap().translation;
+        assert_eq!(pos(ids[0]).x, 109.0);
+        assert_eq!(pos(ids[1]).x, -119.0);
+        assert_eq!(pos(ids[2]).z, 64.0);
+        assert_eq!(pos(ids[3]).z, -94.0);
+    }
+}

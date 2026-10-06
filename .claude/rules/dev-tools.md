@@ -74,6 +74,8 @@ app.init_resource::<DebugState>()
 - 按鍵：`"method":"brp_extras/send_keys","params":{"keys":["KeyW"],"duration_ms":2000}`（鍵名 PascalCase，上限 60000 ms）
 - 截圖：`brp_extras/screenshot`，`params: {"path": "<絕對路徑>.png"}`；非同步寫檔，回傳後要等檔案出現
 - 玩家座標：`world.query` 取 `bevy_ecs::name::Name` + `bevy_transform::components::transform::Transform`，找 Name 為 `"Player"`（`Player` 沒有 Reflect，不能當 filter）
+- 停放的玩家汽車與機車、行人、建築的 `Name` 要 `dev_tools` feature 才會加（`cargo run --features "brp dev_tools"`，汽車叫 `"Player Car"`）；NPC 車（`NpcVehicle_<型別>`）、警察（`PoliceOfficer`；路障的叫 `RoadblockPolice`／`RoadblockMilitary`）、警車（`PoliceCar`）、紅綠燈（`TrafficLight`）、掩體點（`Cover_*`）生成時就有名字
+- 用 `world.insert_components` 改玩家 `Transform` 傳送後，曾觀察到 Space 不跳、Shift+W 不動（同一輪不傳送時 Space 會跳；原因沒查）；走向跟鏡頭 yaw、不跟玩家 rotation，用 BRP 設面向不會改變走向。位置相關的行為讓角色自己走過去再測
 - 結束：`brp_extras/shutdown`
 - 0.17 版只有 send_keys／screenshot／shutdown／set_window_title，沒有滑鼠方法（README 列的 click_mouse 等是新版才有）
 - 存檔寫到 `$TMPDIR/IslandRampage-brp/saves`；一般模式每 300 秒自動存到 `dirs::data_dir()/IslandRampage/saves/autosave.json`

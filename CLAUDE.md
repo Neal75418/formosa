@@ -75,6 +75,7 @@ cargo fmt                    # 格式化
 | 恐慌系統    | `src/pedestrian/panic.rs`                                          |
 | 目擊者系統   | `src/pedestrian/systems/witnesses.rs`                              |
 | 世界生成    | `src/world/setup/`                                                 |
+| 地圖資料    | `src/world/map_data/`（資料檔 `assets/levels/ximending.ron`；快照 `cargo test map_snapshot`；診斷 `cargo test map_diagnostics_report -- --ignored --nocapture`） |
 | 天氣效果    | `src/world/time_weather/weather_effects.rs`（雨、積水、閃電）              |
 | 天空與霧    | `src/world/time_weather/sky.rs`（天空盒、地平線同色的距離霧、月亮淡出）         |
 | 可破壞物件   | `src/environment/systems.rs`                                       |
@@ -94,6 +95,8 @@ cargo fmt                    # 格式化
 - Query 單一結果 — `query.single()` 取代 `get_single()`（Bevy 0.16 → 0.17）
 - 會持續修改的 `Image` 要 `RenderAssetUsages::MAIN_WORLD | RENDER_WORLD`——只標 `RENDER_WORLD` 送上 GPU 後會被移出 `Assets`，`get_mut` 拿不到（單元測試沒有 render app，測不到）
 - `unlit: true` 的 `StandardMaterial` 只輸出 `base_color`，`emissive` 沒有作用
+- UI 節點的旋轉／縮放寫 `UiTransform`（`rotation` 是 `Rot2`、順時針為正、繞節點中心轉）；寫 3D `Transform` 沒有作用，`Node` 也不帶 `Transform`，UI query 要 `&mut Transform` 會查不到
+- 角色模型正面是本地 +Z：玩家面向用 `Player::facing(&transform)`，不要用 `forward()`（−Z，剛好相反）
 
 ## 驗證
 
@@ -112,4 +115,4 @@ cargo check && cargo test && cargo clippy
 | `code-quality.md` | 代碼質量完整規範含範例（檔案大小/dead_code/模組依賴/Clone/錯誤處理/提交格式） | `src/**/*.rs` |
 | `dev-tools.md` | Debug 工具表、Gizmos 可視化、開發工具 code pattern、BRP 遙控測試 | `src/**/dev_tools*`、`src/**/debug*`、`src/**/fps*`、`src/**/inspector*` |
 | `controls.md` | 完整按鍵對應表（步行/駕駛/開發） | `src/player/**`、`src/vehicle/**`、`src/ui/**`、`src/camera/**` |
-| `test-coverage.md` | 15 模組測試分佈表 + 覆蓋率目標 | `src/**/*test*`、`src/**/tests.rs` |
+| `test-coverage.md` | 測試數查法 + 各模組涵蓋範圍 + 覆蓋率目標 | `src/**/*test*`、`src/**/tests.rs` |

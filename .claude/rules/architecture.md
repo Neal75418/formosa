@@ -12,7 +12,7 @@ paths:
 ```mermaid
 graph TD
     subgraph L5["<b>Presentation</b>"]
-        ui["ui — HUD · 小地圖 · 武器輪盤 · GPS<br><small>39 個檔案</small>"]
+        ui["ui — HUD · 小地圖 · 武器輪盤 · GPS<br><small>43 個檔案</small>"]
         audio["audio — BGM · 引擎聲 · 3D 音效"]
         camera["camera — 跟隨 · 震動 · 後座力"]
     end
@@ -33,7 +33,7 @@ graph TD
     end
 
     subgraph L2["<b>World</b>"]
-        world["world — 西門町 · 建築 · 天氣 · 隨機事件<br><small>25 個檔案</small>"]
+        world["world — 西門町 · 建築 · 天氣 · 隨機事件<br><small>32 個檔案</small>"]
     end
 
     subgraph L1["<b>Core</b>"]

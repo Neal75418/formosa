@@ -10,6 +10,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Commits: [Conventiona
 
 ### Changed
 
+- **地圖改由資料檔驅動**：道路、斑馬線、號誌、NPC 車路線、建築、行人網格、小地圖道路與邊界改讀 `assets/levels/ximending.ron`，程式從路網推算位置；讀檔時檢查路名與交會，寫錯時啟動直接報錯並指出是哪一筆
 - **專案更名為 formosa**：repo 與 Cargo 套件名改為 `formosa`；遊戲顯示名「島嶼狂飆」與存檔資料夾 `IslandRampage` 不變
 - **中文字型改用 Noto Sans TC Medium**（SIL OFL 1.1，授權檔 `assets/fonts/NotoSansTC-OFL.txt`），取代從 macOS 系統複製來的 STHeiti（系統字型不宜隨 repo 散布）
 - **移除未使用的貼圖** `assets/textures/roads/brick.jpg`

@@ -49,9 +49,9 @@ repo 代號：`formosa`
 
 **📊 專案規模**
 
-- 📁 254 個 `.rs` 檔案
-- 📝 88,381 行代碼
-- ✅ 875 個單元測試（100% 通過）
+- 📁 262 個 `.rs` 檔案
+- 📝 90,781 行代碼
+- ✅ 983 個單元測試（100% 通過）
 - 🔍 0 clippy warnings（2026-10-04 用 Rust 1.99 實測）
 
 ## 🏗️ 架構
@@ -130,7 +130,7 @@ cargo dev                # 開發模式（含 World Inspector）
 cargo brp                # 遙控測試模式（BRP：外部用 HTTP 送按鍵、截圖；存檔寫到暫存目錄）
 cargo run                # 開發模式
 cargo run --release      # 發布模式（最佳效能）
-cargo test               # 執行 875 個單元測試
+cargo test               # 執行 983 個單元測試
 cargo clippy             # 靜態分析
 ```
 

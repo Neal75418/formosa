@@ -60,6 +60,8 @@ pub struct MapLayout {
     pub minimap_roads: Vec<MinimapRoadSpec>,
     /// 有斑馬線的路口
     pub crosswalks: Vec<Junction>,
+    /// 有號誌的路口
+    pub signals: Vec<Junction>,
 }
 
 impl MapLayout {
@@ -76,6 +78,7 @@ impl MapLayout {
         let mut layout = Self::base(file);
         layout.check_minimap_roads(&mut errors);
         layout.crosswalks = layout.resolve_junctions("斑馬線", &file.crosswalks, &mut errors);
+        layout.signals = layout.resolve_junctions("號誌", &file.signals, &mut errors);
         if errors.is_empty() {
             Ok(layout)
         } else {
@@ -124,6 +127,7 @@ impl MapLayout {
             grid: file.pathfinding_grid,
             minimap_roads: file.minimap_roads.clone(),
             crosswalks: Vec::new(),
+            signals: Vec::new(),
         }
     }
 

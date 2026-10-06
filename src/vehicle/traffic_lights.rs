@@ -5,6 +5,8 @@
 
 use bevy::prelude::*;
 
+use crate::world::MapLayout;
+
 // ============================================================================
 // 紅綠燈類型定義
 // ============================================================================
@@ -446,55 +448,32 @@ pub fn spawn_intersection_lights(
     );
 }
 
-/// 在世界中生成紅綠燈（西門町主要路口）
+/// 在世界中生成紅綠燈：資料檔指定的每個路口四支
 /// 此系統需要在 `setup_traffic_lights` 之後執行
 pub fn spawn_world_traffic_lights(
     mut commands: Commands,
     visuals: Option<Res<TrafficLightVisuals>>,
+    layout: Res<MapLayout>,
 ) {
-    // 道路常數（與 setup.rs 一致）
-    // 南北向道路 X 位置
-    const X_ZHONGHUA: f32 = 80.0; // 中華路
-    const X_XINING: f32 = -55.0; // 西寧南路
-                                 // 東西向道路 Z 位置
-    const Z_HANKOU: f32 = -80.0; // 漢口街
-    const Z_CHENGDU: f32 = 50.0; // 成都路
-                                 // 道路寬度
-    const W_ZHONGHUA: f32 = 40.0; // 中華路寬度
-    const W_MAIN: f32 = 16.0; // 成都路寬度
-    const W_SECONDARY: f32 = 12.0; // 西寧路、漢口街寬度
-
     let Some(visuals) = visuals else {
         warn!("TrafficLightVisuals 資源不存在，無法生成紅綠燈");
         return;
     };
 
     info!("🚦 正在生成交通燈...");
-
-    // 主要路口：(位置, 南北道路寬度, 東西道路寬度)
-    let intersections: [(Vec3, f32, f32); 4] = [
-        // 西寧路/成都路交叉口
-        (Vec3::new(X_XINING, 0.0, Z_CHENGDU), W_SECONDARY, W_MAIN),
-        // 中華路/成都路交叉口
-        (Vec3::new(X_ZHONGHUA, 0.0, Z_CHENGDU), W_ZHONGHUA, W_MAIN),
-        // 西寧路/漢口街交叉口
-        (Vec3::new(X_XINING, 0.0, Z_HANKOU), W_SECONDARY, W_SECONDARY),
-        // 中華路/漢口街交叉口
-        (
-            Vec3::new(X_ZHONGHUA, 0.0, Z_HANKOU),
-            W_ZHONGHUA,
-            W_SECONDARY,
-        ),
-    ];
-
-    for (center, ns_width, ew_width) in &intersections {
-        spawn_intersection_lights(&mut commands, &visuals, *center, *ns_width, *ew_width);
+    for junction in &layout.signals {
+        spawn_intersection_lights(
+            &mut commands,
+            &visuals,
+            junction.center,
+            junction.ns_width,
+            junction.ew_width,
+        );
     }
-
     info!(
         "✅ 已生成 {} 組交通燈（共 {} 個）",
-        intersections.len(),
-        intersections.len() * 4
+        layout.signals.len(),
+        layout.signals.len() * 4
     );
 }
 

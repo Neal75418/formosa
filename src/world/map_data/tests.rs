@@ -458,3 +458,25 @@ fn rejects_duplicate_crosswalk_junction() {
         .push(("峨嵋街".to_string(), "漢中街".to_string()));
     assert_error(&file, "斑馬線 #6（峨嵋街×漢中街）：和 #0 是同一個路口");
 }
+
+#[test]
+fn signals_resolve_to_junctions() {
+    let layout = ximending_layout();
+    assert_eq!(layout.signals.len(), 4);
+    assert_eq!(
+        layout.signals[3],
+        Junction {
+            center: Vec3::new(80.0, 0.0, -80.0),
+            ns_width: 40.0,
+            ew_width: 12.0
+        }
+    );
+}
+
+#[test]
+fn rejects_signal_with_unknown_street() {
+    let mut file = real_file();
+    file.signals
+        .push(("中華路".to_string(), "峨眉街".to_string()));
+    assert_error(&file, "號誌 #4（中華路×峨眉街）：沒有「峨眉街」這條路");
+}

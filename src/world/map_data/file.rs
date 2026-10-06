@@ -22,6 +22,8 @@ pub struct MapFile {
     pub minimap_roads: Vec<MinimapRoadSpec>,
     /// 有斑馬線的路口：兩條路名（一南北、一東西，順序不拘）
     pub crosswalks: Vec<(String, String)>,
+    /// 有號誌的路口：兩條路名（一南北、一東西，順序不拘）
+    pub signals: Vec<(String, String)>,
 }
 
 /// 可活動範圍（XZ 平面）

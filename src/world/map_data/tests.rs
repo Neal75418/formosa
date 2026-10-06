@@ -271,21 +271,21 @@ fn pathfinding_grid_from_file() {
 }
 
 #[test]
-fn pedestrian_area_is_outer_road_centerlines() {
-    // 康定路到中華路、漢口街到成都路的中線
+fn pedestrian_area_is_map_bounds() {
     let area = ximending_layout().pedestrian_area();
     assert_eq!(
         (area.min, area.max),
-        (Vec2::new(-100.0, -80.0), Vec2::new(80.0, 50.0))
+        (Vec2::new(-119.0, -94.0), Vec2::new(109.0, 64.0))
     );
 }
 
 #[test]
-fn flee_area_is_5m_inside_outer_roads() {
+fn flee_area_is_5m_inside_map_bounds() {
+    // 越界線（地圖邊界 X −119〜109、Z −94〜64）再往內 5 m
     let area = ximending_layout().flee_area();
     assert_eq!(
         (area.min, area.max),
-        (Vec2::new(-95.0, -75.0), Vec2::new(75.0, 45.0))
+        (Vec2::new(-114.0, -89.0), Vec2::new(104.0, 59.0))
     );
 }
 

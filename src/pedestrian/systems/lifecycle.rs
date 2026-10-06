@@ -396,7 +396,7 @@ fn get_movement_target(
         if let Some(threat_pos) = state.last_threat_pos {
             let away_dir = (current_pos - threat_pos).normalize_or_zero();
             let flee_target = current_pos + away_dir * 20.0;
-            // 逃跑目標限制在最外圍道路內縮 5 m 的範圍
+            // 逃跑目標限制在越界線內縮 5 m 的範圍
             let clamped = Vec3::new(
                 flee_target.x.clamp(flee.min.x, flee.max.x),
                 flee_target.y,
@@ -501,7 +501,7 @@ pub fn pedestrian_despawn_system(
     let player_pos = player_transform.translation;
     let dt = time.delta_secs();
 
-    // 越界即移除的範圍（地圖資料推算）
+    // 越界即移除的範圍：地圖邊界
     let area = layout.pedestrian_area();
 
     // 使用 distance_squared 避免 sqrt
@@ -575,28 +575,28 @@ mod tests {
     }
 
     #[test]
-    fn pedestrians_beyond_outer_road_centerlines_are_removed() {
-        // 界線內 0.5 m 留下、界線外 0.5 m 移除；玩家站在界線上，兩個行人都在 60 m 的消失半徑內
+    fn pedestrians_beyond_map_bounds_are_removed() {
+        // 越界線是地圖邊界：界線內 0.5 m 留下、界線外 0.5 m 移除；玩家站在界線上，兩個行人都在 60 m 的消失半徑內
         let cases = [
             (
-                Vec3::new(-100.0, 0.0, 0.0),
-                Vec3::new(-99.5, 0.0, 0.0),
-                Vec3::new(-100.5, 0.0, 0.0),
+                Vec3::new(-119.0, 0.0, 0.0),
+                Vec3::new(-118.5, 0.0, 0.0),
+                Vec3::new(-119.5, 0.0, 0.0),
             ),
             (
-                Vec3::new(80.0, 0.0, 0.0),
-                Vec3::new(79.5, 0.0, 0.0),
-                Vec3::new(80.5, 0.0, 0.0),
+                Vec3::new(109.0, 0.0, 0.0),
+                Vec3::new(108.5, 0.0, 0.0),
+                Vec3::new(109.5, 0.0, 0.0),
             ),
             (
-                Vec3::new(0.0, 0.0, -80.0),
-                Vec3::new(0.0, 0.0, -79.5),
-                Vec3::new(0.0, 0.0, -80.5),
+                Vec3::new(0.0, 0.0, -94.0),
+                Vec3::new(0.0, 0.0, -93.5),
+                Vec3::new(0.0, 0.0, -94.5),
             ),
             (
-                Vec3::new(0.0, 0.0, 50.0),
-                Vec3::new(0.0, 0.0, 49.5),
-                Vec3::new(0.0, 0.0, 50.5),
+                Vec3::new(0.0, 0.0, 64.0),
+                Vec3::new(0.0, 0.0, 63.5),
+                Vec3::new(0.0, 0.0, 64.5),
             ),
         ];
         for (player, inside, outside) in cases {
@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn flee_target_stays_5m_inside_outer_roads() {
+    fn flee_target_stays_5m_inside_map_bounds() {
         // 背對威脅逃 20 m 的目標，超出範圍時被夾回；沒超出範圍的照原值
         let patrol = PatrolPath::new(Vec::new());
         let flee = crate::world::ximending_layout().flee_area();
@@ -625,20 +625,20 @@ mod tests {
             get_movement_target(&fleeing_from(threat), pos, &patrol, flee).expect("逃跑一定有目標")
         };
         assert_eq!(
-            target(Vec3::new(74.0, 0.0, 0.0), Vec3::new(64.0, 0.0, 0.0)).x,
-            75.0
+            target(Vec3::new(103.0, 0.0, 0.0), Vec3::new(93.0, 0.0, 0.0)).x,
+            104.0
         );
         assert_eq!(
-            target(Vec3::new(-90.0, 0.0, 0.0), Vec3::new(-80.0, 0.0, 0.0)).x,
-            -95.0
+            target(Vec3::new(-109.0, 0.0, 0.0), Vec3::new(-99.0, 0.0, 0.0)).x,
+            -114.0
         );
         assert_eq!(
-            target(Vec3::new(0.0, 0.0, 40.0), Vec3::new(0.0, 0.0, 30.0)).z,
-            45.0
+            target(Vec3::new(0.0, 0.0, 54.0), Vec3::new(0.0, 0.0, 44.0)).z,
+            59.0
         );
         assert_eq!(
-            target(Vec3::new(0.0, 0.0, -70.0), Vec3::new(0.0, 0.0, -60.0)).z,
-            -75.0
+            target(Vec3::new(0.0, 0.0, -84.0), Vec3::new(0.0, 0.0, -74.0)).z,
+            -89.0
         );
         assert_eq!(
             target(Vec3::new(50.0, 0.0, 0.0), Vec3::new(40.0, 0.0, 0.0)).x,
@@ -689,17 +689,17 @@ mod tests {
     }
 
     #[test]
-    fn patrol_flee_direction_clamped_5m_inside_outer_roads() {
+    fn patrol_flee_direction_clamped_5m_inside_map_bounds() {
         // 移動系統把逃跑範圍傳給 get_movement_target：每邊兩個往外逃的行人，界外 0.5 m 的被夾回、方向反轉，界內 0.5 m 的照樣往外
         let s = patrol_flee_steps(&[
-            (Vec3::new(75.5, 0.0, 0.0), Vec3::new(65.5, 0.0, 0.0)),
-            (Vec3::new(74.5, 0.0, 0.0), Vec3::new(64.5, 0.0, 0.0)),
-            (Vec3::new(-95.5, 0.0, 0.0), Vec3::new(-85.5, 0.0, 0.0)),
-            (Vec3::new(-94.5, 0.0, 0.0), Vec3::new(-84.5, 0.0, 0.0)),
-            (Vec3::new(0.0, 0.0, 45.5), Vec3::new(0.0, 0.0, 35.5)),
-            (Vec3::new(0.0, 0.0, 44.5), Vec3::new(0.0, 0.0, 34.5)),
-            (Vec3::new(0.0, 0.0, -75.5), Vec3::new(0.0, 0.0, -65.5)),
-            (Vec3::new(0.0, 0.0, -74.5), Vec3::new(0.0, 0.0, -64.5)),
+            (Vec3::new(104.5, 0.0, 0.0), Vec3::new(94.5, 0.0, 0.0)),
+            (Vec3::new(103.5, 0.0, 0.0), Vec3::new(93.5, 0.0, 0.0)),
+            (Vec3::new(-114.5, 0.0, 0.0), Vec3::new(-104.5, 0.0, 0.0)),
+            (Vec3::new(-113.5, 0.0, 0.0), Vec3::new(-103.5, 0.0, 0.0)),
+            (Vec3::new(0.0, 0.0, 59.5), Vec3::new(0.0, 0.0, 49.5)),
+            (Vec3::new(0.0, 0.0, 58.5), Vec3::new(0.0, 0.0, 48.5)),
+            (Vec3::new(0.0, 0.0, -89.5), Vec3::new(0.0, 0.0, -79.5)),
+            (Vec3::new(0.0, 0.0, -88.5), Vec3::new(0.0, 0.0, -78.5)),
         ]);
         assert!(s[0].x < 0.0 && s[1].x > 0.0, "東：{s:?}");
         assert!(s[2].x > 0.0 && s[3].x < 0.0, "西：{s:?}");

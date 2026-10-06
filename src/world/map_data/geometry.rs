@@ -7,7 +7,7 @@ use super::layout::{Junction, Street};
 /// 車行道兩側人行道的寬度（全路網共用一個值）
 pub const SIDEWALK_WIDTH: f32 = 4.0;
 
-/// 行人逃跑目標離最外圍道路中線的距離
+/// 行人逃跑目標離越界線（地圖邊界）的距離
 pub const FLEE_INSET: f32 = 5.0;
 
 /// 斑馬線中心離交會路路緣的距離

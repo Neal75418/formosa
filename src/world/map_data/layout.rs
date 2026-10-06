@@ -174,33 +174,15 @@ impl MapLayout {
         self.streets.iter().find(|s| s.name == name)
     }
 
-    /// 最外圍南北向、東西向道路的中線圍出的矩形（x 是世界 X、y 是世界 Z）
-    pub fn outer_road_area(&self) -> Rect {
-        let mut min = Vec2::splat(f32::INFINITY);
-        let mut max = Vec2::splat(f32::NEG_INFINITY);
-        for s in &self.streets {
-            match s.axis {
-                RoadAxis::NorthSouth => {
-                    min.x = min.x.min(s.at);
-                    max.x = max.x.max(s.at);
-                }
-                RoadAxis::EastWest => {
-                    min.y = min.y.min(s.at);
-                    max.y = max.y.max(s.at);
-                }
-            }
-        }
-        Rect { min, max }
-    }
-
-    /// 行人越界即移除的範圍
+    /// 行人越界即移除的範圍：地圖邊界（x 是世界 X、y 是世界 Z）
     pub fn pedestrian_area(&self) -> Rect {
-        self.outer_road_area()
+        let b = &self.bounds;
+        Rect::new(b.min_x, b.min_z, b.max_x, b.max_z)
     }
 
-    /// 行人逃跑目標的範圍：最外圍道路中線再內縮 FLEE_INSET
+    /// 行人逃跑目標的範圍：越界線再內縮 FLEE_INSET，逃跑目標離越界線留這段緩衝（恐慌逃跑不經過這裡）
     pub fn flee_area(&self) -> Rect {
-        self.outer_road_area().inflate(-FLEE_INSET)
+        self.pedestrian_area().inflate(-FLEE_INSET)
     }
 
     /// 路北側（−Z）人行道的中線 Z

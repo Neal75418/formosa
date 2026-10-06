@@ -4,8 +4,8 @@ use bevy::prelude::*;
 
 use crate::world::characters::spawn_cover_points;
 use crate::world::constants::{
-    ROAD_MARKING_Y_OFFSET, ROAD_Y, W_MAIN, W_PEDESTRIAN, W_SECONDARY, X_HAN, X_KANGDING, X_XINING,
-    X_ZHONGHUA, ZEBRA_CROSSING_OFFSET, Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_WUCHANG,
+    ROAD_MARKING_Y_OFFSET, ROAD_Y, W_MAIN, X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU,
+    Z_EMEI, Z_HANKOU,
 };
 use crate::world::roads::spawn_zebra_crossing;
 use crate::world::street_furniture::{
@@ -13,6 +13,7 @@ use crate::world::street_furniture::{
     spawn_vending_machine,
 };
 use crate::world::WorldMaterials;
+use crate::world::{zebra_crossings, MapLayout};
 
 /// 路燈、自動販賣機、垃圾桶生成
 pub(super) fn setup_street_furniture(
@@ -93,83 +94,24 @@ pub(super) fn setup_street_furniture(
     info!("🗑️ 已生成 {} 個垃圾桶", trash_positions.len());
 }
 
-/// 斑馬線生成
+/// 斑馬線生成：資料檔指定的每個路口四邊各一條
 pub(super) fn setup_zebra_crossings(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     world_mats: &WorldMaterials,
+    layout: &MapLayout,
 ) {
     let zebra_mat = world_mats.zebra_white.clone();
-
-    let intersections = [
-        (X_HAN, Z_EMEI, W_PEDESTRIAN, W_PEDESTRIAN, "漢中/峨嵋"),
-        (X_HAN, Z_WUCHANG, W_PEDESTRIAN, W_PEDESTRIAN, "漢中/武昌"),
-        (X_HAN, Z_CHENGDU, W_PEDESTRIAN, W_MAIN, "漢中/成都"),
-        (X_XINING, Z_EMEI, W_SECONDARY, W_PEDESTRIAN, "西寧/峨嵋"),
-        (X_XINING, Z_WUCHANG, W_SECONDARY, W_PEDESTRIAN, "西寧/武昌"),
-        (X_XINING, Z_CHENGDU, W_SECONDARY, W_MAIN, "西寧/成都"),
-    ];
-
-    let mut zebra_count = 0;
-    for (cx, cz, road_ns_w, road_ew_w, _name) in intersections {
-        // 北側
-        spawn_zebra_crossing(
-            commands,
-            meshes,
-            &zebra_mat,
-            Vec3::new(
-                cx,
-                ROAD_Y + ROAD_MARKING_Y_OFFSET,
-                cz - road_ew_w / 2.0 - ZEBRA_CROSSING_OFFSET,
-            ),
-            road_ns_w,
-            true,
-        );
-        // 南側
-        spawn_zebra_crossing(
-            commands,
-            meshes,
-            &zebra_mat,
-            Vec3::new(
-                cx,
-                ROAD_Y + ROAD_MARKING_Y_OFFSET,
-                cz + road_ew_w / 2.0 + ZEBRA_CROSSING_OFFSET,
-            ),
-            road_ns_w,
-            true,
-        );
-        // 西側
-        spawn_zebra_crossing(
-            commands,
-            meshes,
-            &zebra_mat,
-            Vec3::new(
-                cx - road_ns_w / 2.0 - ZEBRA_CROSSING_OFFSET,
-                ROAD_Y + ROAD_MARKING_Y_OFFSET,
-                cz,
-            ),
-            road_ew_w,
-            false,
-        );
-        // 東側
-        spawn_zebra_crossing(
-            commands,
-            meshes,
-            &zebra_mat,
-            Vec3::new(
-                cx + road_ns_w / 2.0 + ZEBRA_CROSSING_OFFSET,
-                ROAD_Y + ROAD_MARKING_Y_OFFSET,
-                cz,
-            ),
-            road_ew_w,
-            false,
-        );
-        zebra_count += 4;
+    let y = ROAD_Y + ROAD_MARKING_Y_OFFSET;
+    for junction in &layout.crosswalks {
+        for (center, length, is_east_west) in zebra_crossings(junction, y) {
+            spawn_zebra_crossing(commands, meshes, &zebra_mat, center, length, is_east_west);
+        }
     }
     info!(
         "🦓 已生成 {} 條斑馬線於 {} 個交叉口",
-        zebra_count,
-        intersections.len()
+        layout.crosswalks.len() * 4,
+        layout.crosswalks.len()
     );
 }
 

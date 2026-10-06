@@ -53,9 +53,7 @@ pub const BUILDING_ROAD_BUFFER: f32 = 1.5;
 /// 重生時角色 Y 軸高度（含角色自身高度偏移）
 pub const PLAYER_RESPAWN_Y: f32 = 0.7;
 
-// 斑馬線
-/// 斑馬線與道路中心線的偏移距離（公尺）
-pub const ZEBRA_CROSSING_OFFSET: f32 = 2.5;
+// 路面標線
 /// 路面標線 Y 軸偏移（避免 Z-fighting）
 pub const ROAD_MARKING_Y_OFFSET: f32 = 0.01;
 

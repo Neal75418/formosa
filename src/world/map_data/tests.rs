@@ -345,3 +345,116 @@ fn rejects_unknown_field_in_minimap_road() {
     let errors = load_map(&text).unwrap_err();
     assert!(errors[0].0.contains("lenght"), "{errors:?}");
 }
+
+#[test]
+fn crosswalks_resolve_to_junctions() {
+    let layout = ximending_layout();
+    assert_eq!(layout.crosswalks.len(), 6);
+    assert_eq!(
+        layout.crosswalks[2],
+        Junction {
+            center: Vec3::new(0.0, 0.0, 50.0),
+            ns_width: 15.0,
+            ew_width: 16.0
+        }
+    );
+}
+
+#[test]
+fn zebra_crossings_sit_2_5m_outside_the_junction() {
+    // 西寧南路×成都路：X、Z 都不是 0，寬度也不同，中心與兩條路寬各自對到正確的軸
+    let j = Junction {
+        center: Vec3::new(-55.0, 0.0, 50.0),
+        ns_width: 12.0,
+        ew_width: 16.0,
+    };
+    assert_eq!(
+        zebra_crossings(&j, 0.06),
+        [
+            (Vec3::new(-55.0, 0.06, 39.5), 12.0, true),
+            (Vec3::new(-55.0, 0.06, 60.5), 12.0, true),
+            (Vec3::new(-63.5, 0.06, 50.0), 16.0, false),
+            (Vec3::new(-46.5, 0.06, 50.0), 16.0, false),
+        ]
+    );
+}
+
+#[test]
+fn junction_accepts_exact_half_width_and_rejects_beyond() {
+    // 漢中街北端 −42.5 加武昌街半寬 7.5 剛好到武昌街中線 −50：通過
+    assert!(ximending_layout().junction("漢中街", "武昌街").is_ok());
+    // 北端退到 −42.4，差 0.1 m（超過 0.01 m 的浮點容差）：報錯
+    let mut file = real_file();
+    file.roads[3].from = -42.4;
+    assert_error(
+        &file,
+        "斑馬線 #1（漢中街×武昌街）：「漢中街」和「武昌街」沒有交會",
+    );
+}
+
+#[test]
+fn rejects_crosswalk_where_east_west_street_stops_short() {
+    // 峨嵋街西段從 X −49 起，到不了康定路（X −100，半寬 8）
+    let mut file = real_file();
+    file.crosswalks
+        .push(("康定路".to_string(), "峨嵋街".to_string()));
+    assert_error(
+        &file,
+        "斑馬線 #6（康定路×峨嵋街）：「康定路」和「峨嵋街」沒有交會",
+    );
+}
+
+#[test]
+fn rejects_crosswalk_with_parallel_streets() {
+    let mut file = real_file();
+    file.crosswalks
+        .push(("漢中街".to_string(), "西寧南路".to_string()));
+    assert_error(
+        &file,
+        "斑馬線 #6（漢中街×西寧南路）：「漢中街」和「西寧南路」不是一南北、一東西",
+    );
+}
+
+#[test]
+fn rejects_crosswalk_with_unknown_street() {
+    let mut file = real_file();
+    file.crosswalks
+        .push(("漢中街".to_string(), "峨眉街".to_string()));
+    assert_error(&file, "斑馬線 #6（漢中街×峨眉街）：沒有「峨眉街」這條路");
+}
+
+#[test]
+fn crosswalk_junction_has_both_streets_on_their_own_axes() {
+    let expected = Junction {
+        center: Vec3::new(-55.0, 0.0, 50.0),
+        ns_width: 12.0,
+        ew_width: 16.0,
+    };
+    let layout = ximending_layout();
+    assert_eq!(layout.crosswalks[5], expected);
+    // 順序不拘：東西向寫在前也是同一個路口
+    assert_eq!(layout.junction("西寧南路", "成都路"), Ok(expected));
+    assert_eq!(layout.junction("成都路", "西寧南路"), Ok(expected));
+}
+
+#[test]
+fn junction_slack_is_the_other_streets_half_width() {
+    // 昆明街寬 8、停在 X ±7.5：等於漢中街的半寬（通過），但大於昆明街自己的半寬 4
+    assert!(ximending_layout().junction("漢中街", "昆明街").is_ok());
+}
+
+#[test]
+fn segment_reaches_tolerates_float_error_at_the_curb() {
+    // OSM 那種小數：實數上剛好碰到路緣，f32 下差 1 ulp，要靠 0.01 m 的容差
+    assert!(segment_reaches(0.15, 30.0, -8.0, 16.3 / 2.0));
+    assert!(segment_reaches(-100.0, -64.05, -60.0, 8.1 / 2.0));
+}
+
+#[test]
+fn rejects_duplicate_crosswalk_junction() {
+    // 順序對調也是同一個路口；號誌共用這段解析，重複的話會多蓋一組燈
+    let mut file = real_file();
+    file.crosswalks
+        .push(("峨嵋街".to_string(), "漢中街".to_string()));
+    assert_error(&file, "斑馬線 #6（峨嵋街×漢中街）：和 #0 是同一個路口");
+}

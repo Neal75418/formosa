@@ -20,6 +20,8 @@ pub struct MapFile {
     pub pathfinding_grid: GridSpec,
     /// 小地圖的道路方塊（自成一套，和世界的路段不同；照原樣存）
     pub minimap_roads: Vec<MinimapRoadSpec>,
+    /// 有斑馬線的路口：兩條路名（一南北、一東西，順序不拘）
+    pub crosswalks: Vec<(String, String)>,
 }
 
 /// 可活動範圍（XZ 平面）

@@ -3891,6 +3891,182 @@ git commit -F <訊息檔> -- src/world/map_data src/pedestrian/systems/lifecycle
 
 ---
 
+### Task 16A：Bug 4——斑馬線條紋轉了 90°
+
+**Files:**
+- Modify: `src/world/roads.rs`（`spawn_zebra_crossing` 抽出純函式 `zebra_stripes`、修正方向；測試加在檔尾既有的 `mod tests`）
+- Modify: `src/world/snapshots/ximending_world.txt`（重新產生）、`CHANGELOG.md`
+
+**Interfaces:**
+- Produces: `pub fn zebra_stripes(center: Vec3, length: f32, is_east_west: bool) -> Vec<(Vec3, Vec3)>`（每條條紋的中心與尺寸）
+
+- [ ] **Step 1：寫失敗的測試**（`roads.rs` 的 `mod tests`）
+
+```rust
+    #[test]
+    fn east_west_crossing_stripes_span_the_road_along_x() {
+        // 沿 X 延伸的斑馬線（橫跨南北向的路）：條紋 X 0.5 × Z 5，沿 X 排開
+        let stripes = zebra_stripes(Vec3::new(0.0, 0.06, -10.0), 15.0, true);
+        assert_eq!(stripes.len(), 15);
+        assert_eq!(stripes[0], (Vec3::new(-7.5, 0.08, -10.0), Vec3::new(0.5, 0.02, 5.0)));
+        assert_eq!(stripes[14], (Vec3::new(6.5, 0.08, -10.0), Vec3::new(0.5, 0.02, 5.0)));
+    }
+
+    #[test]
+    fn north_south_crossing_stripes_span_the_road_along_z() {
+        let stripes = zebra_stripes(Vec3::new(-10.0, 0.06, 50.0), 16.0, false);
+        assert_eq!(stripes.len(), 16);
+        assert_eq!(stripes[0], (Vec3::new(-10.0, 0.08, 42.0), Vec3::new(5.0, 0.02, 0.5)));
+    }
+```
+
+Run: `cargo test roads::tests` → Expected: 編譯失敗（`zebra_stripes` 不存在）
+
+- [ ] **Step 2：抽出純函式並修正方向**
+
+```rust
+/// 斑馬線每條條紋的中心與尺寸：條紋沿斑馬線延伸的方向排開、橫跨整條路，每條沿行人行走方向長 5 m
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+pub fn zebra_stripes(center: Vec3, length: f32, is_east_west: bool) -> Vec<(Vec3, Vec3)> {
+    // 斑馬線規格：寬 5m，白線寬 0.5m，間隔 0.5m
+    let stripe_width = 0.5;
+    let stripe_gap = 0.5;
+    let crossing_width = 5.0; // 行人穿越區域寬度
+    let stripe_count = (length / (stripe_width + stripe_gap)) as i32;
+    (0..stripe_count)
+        .map(|i| {
+            let offset = (i as f32 - stripe_count as f32 / 2.0) * (stripe_width + stripe_gap);
+            let (x, z, sx, sz) = if is_east_west {
+                // 沿 X 延伸：條紋沿 X 排開，每條沿 Z 長 5 m
+                (center.x + offset, center.z, stripe_width, crossing_width)
+            } else {
+                // 沿 Z 延伸：條紋沿 Z 排開，每條沿 X 長 5 m
+                (center.x, center.z + offset, crossing_width, stripe_width)
+            };
+            (Vec3::new(x, center.y + 0.02, z), Vec3::new(sx, 0.02, sz))
+        })
+        .collect()
+}
+```
+
+`spawn_zebra_crossing` 的迴圈改成：
+
+```rust
+    for (pos, size) in zebra_stripes(center, length, is_east_west) {
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
+            MeshMaterial3d(material.clone()),
+            Transform::from_translation(pos),
+            GlobalTransform::default(),
+        ));
+    }
+```
+
+（`spawn_zebra_crossing` 上的 `#[allow(...)]` 移到 `zebra_stripes`；參數說明維持「true = 東西向 (X方向)」。）
+
+- [ ] **Step 3**：`cargo test roads::tests` → PASS
+
+- [ ] **Step 4：重新產生快照並逐行檢查**：`UPDATE_SNAPSHOTS=1 cargo test map_snapshot_matches_golden`（刻意失敗）→ `git diff --stat src/world/snapshots/`。變的只能是斑馬線條紋的行（`pos(...,0.080,...)` 且 mesh 半長 `(0.250,0.010,2.500)`／`(2.500,0.010,0.250)`），行數不變；抽查漢中街×峨嵋街北側：條紋改在 z −10、x 從 −7.5 排到 6.5
+
+- [ ] **Step 5**：全套驗證；開遊戲截一張路口近照確認條紋橫跨整條路；CHANGELOG `### Fixed` 加「**斑馬線條紋方向錯了 90°**：條紋改成橫跨整條路，不再只蓋住路中間、伸進路口」
+
+- [ ] **Step 6：送審、等 user 說「提交」**
+
+```
+fix(world): 斑馬線條紋方向錯了 90°
+
+- 條紋沿斑馬線延伸方向排開、橫跨整條路；抽出 zebra_stripes 純函式並加測試
+```
+
+---
+
+### Task 16B：Bug 5——T 字路口在沒有路的那一邊也畫斑馬線
+
+**Files:**
+- Modify: `src/world/map_data/layout.rs`（`Junction` 加 `arms`、`junction()` 算出來）、`src/world/map_data/geometry.rs`（`zebra_crossings` 只回傳有路的那幾邊）、`src/world/map_data/tests.rs`（含既有 `Junction { .. }` 字面值補上 `arms`）
+- Modify: `src/world/snapshots/ximending_world.txt`、`CHANGELOG.md`
+
+**Interfaces:**
+- Produces: `Junction.arms: [bool; 4]`（北、南、西、東：那一側真的有路伸出交會路的路緣）；`zebra_crossings(junction, y) -> Vec<(Vec3, f32, bool)>`
+
+- [ ] **Step 1：寫失敗的測試**
+
+```rust
+#[test]
+fn junction_arms_follow_the_road_network() {
+    let layout = ximending_layout();
+    let arms = |a: &str, b: &str| layout.junction(a, b).unwrap().arms;
+    // 北、南、西、東
+    assert_eq!(arms("漢中街", "峨嵋街"), [true, true, true, true]);
+    assert_eq!(arms("漢中街", "武昌街"), [false, true, true, true]);
+    assert_eq!(arms("漢中街", "成都路"), [true, false, true, true]);
+    assert_eq!(arms("西寧南路", "峨嵋街"), [true, true, false, true]);
+    assert_eq!(arms("西寧南路", "成都路"), [true, true, true, true]);
+}
+
+#[test]
+fn zebra_crossings_skip_sides_without_a_road() {
+    // T 字路口：漢中街×武昌街北邊沒有漢中街，只畫南、西、東
+    let j = ximending_layout().junction("漢中街", "武昌街").unwrap();
+    let crossings = zebra_crossings(&j, 0.06);
+    assert_eq!(crossings.len(), 3);
+    assert!(crossings.iter().all(|(c, _, _)| c.z > -60.0), "{crossings:?}");
+}
+```
+
+Run: `cargo test map_data` → Expected: 編譯失敗（`arms` 不存在）
+
+- [ ] **Step 2：算出路口有路的那幾邊**（`layout.rs`）
+
+`Junction` 加欄位：
+
+```rust
+    /// 北、南、西、東：那一側真的有路伸出交會路的路緣
+    pub arms: [bool; 4],
+```
+
+`junction()` 在 `Ok(Junction { .. })` 之前算：
+
+```rust
+            let ns_segments: Vec<&RoadSegmentSpec> = self.segments_of(&ns.name).collect();
+            let ew_segments: Vec<&RoadSegmentSpec> = self.segments_of(&ew.name).collect();
+            let arms = [
+                ns_segments.iter().any(|s| s.from < ew.at - ew.width / 2.0),
+                ns_segments.iter().any(|s| s.to > ew.at + ew.width / 2.0),
+                ew_segments.iter().any(|s| s.from < ns.at - ns.width / 2.0),
+                ew_segments.iter().any(|s| s.to > ns.at + ns.width / 2.0),
+            ];
+```
+
+並放進回傳的 `Junction`。既有測試裡的 `Junction { center, ns_width, ew_width }` 字面值補上對應的 `arms`。
+
+- [ ] **Step 3：只畫有路的那幾邊**（`geometry.rs`）
+
+`zebra_crossings` 回傳型別改成 `Vec<(Vec3, f32, bool)>`，在原本的四邊陣列後面：
+
+```rust
+    .into_iter()
+    .zip(junction.arms)
+    .filter_map(|(crossing, has_road)| has_road.then_some(crossing))
+    .collect()
+```
+
+`zebra_crossings_sit_2_5m_outside_the_junction` 的期望值改成 `vec![...]`（西寧南路×成都路四邊都有路，內容不變）；`setup_zebra_crossings` 的 log 改成實際條數。
+
+- [ ] **Step 4**：`cargo test map_data` → PASS；`UPDATE_SNAPSHOTS=1 cargo test map_snapshot_matches_golden` 後檢查 `git diff`：只有被刪掉的行（4 條斑馬線的條紋），沒有新增或改動的行
+
+- [ ] **Step 5**：全套驗證；CHANGELOG `### Fixed` 加「**T 字路口在沒有路的那一邊也畫了斑馬線**：斑馬線只畫在真的有路的那幾邊」
+
+- [ ] **Step 6：送審、等 user 說「提交」**
+
+```
+fix(world): T 字路口在沒有路的那一邊也畫了斑馬線
+
+- 路口解析算出哪幾邊真的有路（Junction.arms），斑馬線只畫在那幾邊
+```
+
+---
+
 ### Task 17：文件同步
 
 **Files:**

@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use super::file::{GridSpec, MapFile, MinimapRoadSpec, RoadAxis, RoadKind, RoadSegmentSpec};
-use super::geometry::{FLEE_INSET, SIDEWALK_WIDTH};
+use super::geometry::{segment_reaches, FLEE_INSET, SIDEWALK_WIDTH};
 use crate::world::MapBounds;
 
 /// 資料檔的一筆錯誤（訊息指出是哪一筆）
@@ -32,6 +32,14 @@ pub struct Street {
     pub width: f32,
 }
 
+/// 路口：中心（南北向路的 X、東西向路的 Z）與兩條路的寬度
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Junction {
+    pub center: Vec3,
+    pub ns_width: f32,
+    pub ew_width: f32,
+}
+
 /// 解析後的地圖：路名都已換成座標，系統只負責生成
 #[derive(Resource, Debug, Clone)]
 pub struct MapLayout {
@@ -50,6 +58,8 @@ pub struct MapLayout {
     pub grid: GridSpec,
     /// 小地圖的道路方塊
     pub minimap_roads: Vec<MinimapRoadSpec>,
+    /// 有斑馬線的路口
+    pub crosswalks: Vec<Junction>,
 }
 
 impl MapLayout {
@@ -63,8 +73,9 @@ impl MapLayout {
         if !errors.is_empty() {
             return Err(errors);
         }
-        let layout = Self::base(file);
+        let mut layout = Self::base(file);
         layout.check_minimap_roads(&mut errors);
+        layout.crosswalks = layout.resolve_junctions("斑馬線", &file.crosswalks, &mut errors);
         if errors.is_empty() {
             Ok(layout)
         } else {
@@ -112,6 +123,7 @@ impl MapLayout {
             streets: build_streets(&file.roads),
             grid: file.pathfinding_grid,
             minimap_roads: file.minimap_roads.clone(),
+            crosswalks: Vec::new(),
         }
     }
 
@@ -180,6 +192,63 @@ impl MapLayout {
                 )));
             }
         }
+    }
+
+    /// 兩條路（一南北、一東西，順序不拘）的路口。交點要落在雙方各自某一段的範圍內，
+    /// 或離段端不超過另一條路的半寬
+    pub fn junction(&self, a: &str, b: &str) -> Result<Junction, String> {
+        let first = self
+            .find_street(a)
+            .ok_or_else(|| format!("沒有「{a}」這條路"))?;
+        let second = self
+            .find_street(b)
+            .ok_or_else(|| format!("沒有「{b}」這條路"))?;
+        let (ns, ew) = match (first.axis, second.axis) {
+            (RoadAxis::NorthSouth, RoadAxis::EastWest) => (first, second),
+            (RoadAxis::EastWest, RoadAxis::NorthSouth) => (second, first),
+            _ => return Err(format!("「{a}」和「{b}」不是一南北、一東西")),
+        };
+        let ns_reaches = self
+            .segments_of(&ns.name)
+            .any(|s| segment_reaches(s.from, s.to, ew.at, ew.width / 2.0));
+        let ew_reaches = self
+            .segments_of(&ew.name)
+            .any(|s| segment_reaches(s.from, s.to, ns.at, ns.width / 2.0));
+        if ns_reaches && ew_reaches {
+            Ok(Junction {
+                center: Vec3::new(ns.at, 0.0, ew.at),
+                ns_width: ns.width,
+                ew_width: ew.width,
+            })
+        } else {
+            Err(format!("「{}」和「{}」沒有交會", ns.name, ew.name))
+        }
+    }
+
+    fn segments_of<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a RoadSegmentSpec> + 'a {
+        self.segments.iter().filter(move |s| s.street == name)
+    }
+
+    /// 一串「兩條路名」解析成路口；解析不了或重複的記成錯誤（例如「斑馬線 #2（中華路×成都路）：…」）
+    fn resolve_junctions(
+        &self,
+        kind: &str,
+        pairs: &[(String, String)],
+        errors: &mut Vec<MapError>,
+    ) -> Vec<Junction> {
+        let mut junctions: Vec<(usize, Junction)> = Vec::new();
+        for (i, (a, b)) in pairs.iter().enumerate() {
+            match self.junction(a, b) {
+                Ok(j) => match junctions.iter().find(|(_, seen)| seen.center == j.center) {
+                    Some((first, _)) => errors.push(MapError(format!(
+                        "{kind} #{i}（{a}×{b}）：和 #{first} 是同一個路口"
+                    ))),
+                    None => junctions.push((i, j)),
+                },
+                Err(reason) => errors.push(MapError(format!("{kind} #{i}（{a}×{b}）：{reason}"))),
+            }
+        }
+        junctions.into_iter().map(|(_, j)| j).collect()
     }
 }
 

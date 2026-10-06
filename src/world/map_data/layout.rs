@@ -214,6 +214,12 @@ impl MapLayout {
         self.street(name).at
     }
 
+    /// 路緣：side = −1 是西側／北側，+1 是東側／南側
+    pub fn edge(&self, name: &str, side: f32) -> f32 {
+        let street = self.street(name);
+        street.at + side * street.width / 2.0
+    }
+
     /// 小地圖的路要對得到路網
     fn check_minimap_roads(&self, errors: &mut Vec<MapError>) {
         for (i, road) in self.minimap_roads.iter().enumerate() {

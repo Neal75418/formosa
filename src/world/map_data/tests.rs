@@ -666,3 +666,13 @@ fn rejects_unknown_field_in_building() {
     let errors = load_map(&text).unwrap_err();
     assert!(errors[0].0.contains("hight"), "{errors:?}");
 }
+
+#[test]
+fn edge_is_curb_on_given_side() {
+    let layout = ximending_layout();
+    assert_eq!(layout.edge("康定路", -1.0), -108.0);
+    assert_eq!(layout.edge("成都路", 1.0), 58.0);
+    // 寬度要取自那條路本身（中華路 40 m），兩側都要對
+    assert_eq!(layout.edge("中華路", -1.0), 60.0);
+    assert_eq!(layout.edge("中華路", 1.0), 100.0);
+}

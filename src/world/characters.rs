@@ -9,10 +9,7 @@ use crate::combat::{
 };
 use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::player::{DodgeState, Player};
-use crate::world::constants::{
-    X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_WUCHANG,
-};
-use crate::world::PlayerInteriorState;
+use crate::world::{MapLayout, PlayerInteriorState};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -468,7 +465,8 @@ fn spawn_cover_batch(
 
 /// 在世界中策略位置生成 `CoverPoint` 實體
 #[allow(clippy::similar_names)]
-pub fn spawn_cover_points(commands: &mut Commands) {
+pub fn spawn_cover_points(commands: &mut Commands, layout: &MapLayout) {
+    let at = |name: &str| layout.at(name);
     let mut cover_count = 0;
 
     // === 建築角落掩體點 (High Cover) ===
@@ -492,10 +490,10 @@ pub fn spawn_cover_points(commands: &mut Commands) {
         (-25.0, 38.0, Vec3::NEG_Z),
         (15.0, 38.0, Vec3::NEG_Z),
         (28.0, 38.0, Vec3::NEG_Z),
-        (X_KANGDING + 15.0, -60.0, Vec3::Z),
-        (X_KANGDING + 15.0, -20.0, Vec3::Z),
-        (X_KANGDING + 15.0, 20.0, Vec3::NEG_Z),
-        (X_KANGDING + 15.0, 45.0, Vec3::NEG_Z),
+        (at("康定路") + 15.0, -60.0, Vec3::Z),
+        (at("康定路") + 15.0, -20.0, Vec3::Z),
+        (at("康定路") + 15.0, 20.0, Vec3::NEG_Z),
+        (at("康定路") + 15.0, 45.0, Vec3::NEG_Z),
         (30.0, -5.0, Vec3::Z),
     ];
     cover_count += spawn_cover_batch(
@@ -530,12 +528,12 @@ pub fn spawn_cover_points(commands: &mut Commands) {
     let vehicle_covers = [
         (13.0, -8.0, Vec3::NEG_X),
         (13.0, -5.0, Vec3::NEG_X),
-        (X_ZHONGHUA - 29.0, Z_CHENGDU + 12.0, Vec3::Z),
-        (X_ZHONGHUA - 33.0, Z_CHENGDU + 12.0, Vec3::Z),
-        (X_XINING + 3.0, Z_EMEI + 8.0, Vec3::NEG_Z),
-        (X_XINING + 5.0, Z_EMEI + 8.0, Vec3::NEG_Z),
-        (X_KANGDING + 20.0, Z_EMEI + 30.0, Vec3::Z),
-        (X_KANGDING + 30.0, Z_EMEI + 30.0, Vec3::Z),
+        (at("中華路") - 29.0, at("成都路") + 12.0, Vec3::Z),
+        (at("中華路") - 33.0, at("成都路") + 12.0, Vec3::Z),
+        (at("西寧南路") + 3.0, at("峨嵋街") + 8.0, Vec3::NEG_Z),
+        (at("西寧南路") + 5.0, at("峨嵋街") + 8.0, Vec3::NEG_Z),
+        (at("康定路") + 20.0, at("峨嵋街") + 30.0, Vec3::Z),
+        (at("康定路") + 30.0, at("峨嵋街") + 30.0, Vec3::Z),
     ];
     cover_count += spawn_cover_batch(commands, &vehicle_covers, CoverKind::Low, "Cover_Vehicle");
 
@@ -546,14 +544,14 @@ pub fn spawn_cover_points(commands: &mut Commands) {
     let diag_sw = Vec3::new(-1.0, 0.0, 1.0).normalize();
 
     let corner_full_covers = [
-        (X_HAN + 10.0, Z_EMEI - 10.0, diag_sw),
-        (X_HAN - 10.0, Z_EMEI - 10.0, diag_se),
-        (X_HAN + 10.0, Z_EMEI + 10.0, diag_nw),
-        (X_HAN - 10.0, Z_EMEI + 10.0, diag_ne),
-        (X_HAN + 10.0, Z_WUCHANG - 10.0, diag_sw),
-        (X_HAN - 10.0, Z_WUCHANG - 10.0, diag_se),
-        (X_HAN + 10.0, Z_WUCHANG + 10.0, diag_nw),
-        (X_HAN - 10.0, Z_WUCHANG + 10.0, diag_ne),
+        (at("漢中街") + 10.0, at("峨嵋街") - 10.0, diag_sw),
+        (at("漢中街") - 10.0, at("峨嵋街") - 10.0, diag_se),
+        (at("漢中街") + 10.0, at("峨嵋街") + 10.0, diag_nw),
+        (at("漢中街") - 10.0, at("峨嵋街") + 10.0, diag_ne),
+        (at("漢中街") + 10.0, at("武昌街") - 10.0, diag_sw),
+        (at("漢中街") - 10.0, at("武昌街") - 10.0, diag_se),
+        (at("漢中街") + 10.0, at("武昌街") + 10.0, diag_nw),
+        (at("漢中街") - 10.0, at("武昌街") + 10.0, diag_ne),
     ];
     cover_count += spawn_cover_batch(
         commands,

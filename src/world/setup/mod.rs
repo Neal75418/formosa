@@ -68,9 +68,9 @@ pub fn setup_world(
         &mut materials,
         &building_tracker,
     );
-    street_elements::setup_street_furniture(&mut commands, &mut meshes, &mut materials);
+    street_elements::setup_street_furniture(&mut commands, &mut meshes, &mut materials, &layout);
     street_elements::setup_zebra_crossings(&mut commands, &mut meshes, &world_mats, &layout);
-    street_elements::setup_special_elements(&mut commands, &mut meshes, &mut materials);
+    street_elements::setup_special_elements(&mut commands, &mut meshes, &mut materials, &layout);
 
     info!("✅ 西門町 (重構版) 載入完成！");
 }

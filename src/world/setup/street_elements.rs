@@ -3,10 +3,7 @@
 use bevy::prelude::*;
 
 use crate::world::characters::spawn_cover_points;
-use crate::world::constants::{
-    ROAD_MARKING_Y_OFFSET, ROAD_Y, W_MAIN, X_HAN, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU,
-    Z_EMEI, Z_HANKOU,
-};
+use crate::world::constants::{ROAD_MARKING_Y_OFFSET, ROAD_Y};
 use crate::world::roads::spawn_zebra_crossing;
 use crate::world::street_furniture::{
     spawn_graffiti_wall, spawn_lamppost, spawn_movie_billboard, spawn_trash_can,
@@ -20,43 +17,45 @@ pub(super) fn setup_street_furniture(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    layout: &MapLayout,
 ) {
+    let at = |name: &str| layout.at(name);
     // 路燈 (間隔約 25-30 米)
     let lamppost_positions = [
         // === 漢中街兩側 (徒步區主軸) ===
-        Vec3::new(X_HAN + 8.0, 0.0, -35.0),
-        Vec3::new(X_HAN + 8.0, 0.0, -10.0),
-        Vec3::new(X_HAN + 8.0, 0.0, 15.0),
-        Vec3::new(X_HAN + 8.0, 0.0, 40.0),
-        Vec3::new(X_HAN - 8.0, 0.0, -35.0),
-        Vec3::new(X_HAN - 8.0, 0.0, -10.0),
-        Vec3::new(X_HAN - 8.0, 0.0, 15.0),
-        Vec3::new(X_HAN - 8.0, 0.0, 40.0),
+        Vec3::new(at("漢中街") + 8.0, 0.0, -35.0),
+        Vec3::new(at("漢中街") + 8.0, 0.0, -10.0),
+        Vec3::new(at("漢中街") + 8.0, 0.0, 15.0),
+        Vec3::new(at("漢中街") + 8.0, 0.0, 40.0),
+        Vec3::new(at("漢中街") - 8.0, 0.0, -35.0),
+        Vec3::new(at("漢中街") - 8.0, 0.0, -10.0),
+        Vec3::new(at("漢中街") - 8.0, 0.0, 15.0),
+        Vec3::new(at("漢中街") - 8.0, 0.0, 40.0),
         // === 峨嵋街沿線 ===
-        Vec3::new(-25.0, 0.0, Z_EMEI + 8.0),
-        Vec3::new(25.0, 0.0, Z_EMEI + 8.0),
-        Vec3::new(45.0, 0.0, Z_EMEI + 8.0),
+        Vec3::new(-25.0, 0.0, at("峨嵋街") + 8.0),
+        Vec3::new(25.0, 0.0, at("峨嵋街") + 8.0),
+        Vec3::new(45.0, 0.0, at("峨嵋街") + 8.0),
         // === 中華路西側 ===
-        Vec3::new(X_ZHONGHUA - 25.0, 0.0, -60.0),
-        Vec3::new(X_ZHONGHUA - 25.0, 0.0, -25.0),
-        Vec3::new(X_ZHONGHUA - 25.0, 0.0, 10.0),
-        Vec3::new(X_ZHONGHUA - 25.0, 0.0, 40.0),
+        Vec3::new(at("中華路") - 25.0, 0.0, -60.0),
+        Vec3::new(at("中華路") - 25.0, 0.0, -25.0),
+        Vec3::new(at("中華路") - 25.0, 0.0, 10.0),
+        Vec3::new(at("中華路") - 25.0, 0.0, 40.0),
         // === 西寧路東側 ===
-        Vec3::new(X_XINING + 8.0, 0.0, -55.0),
-        Vec3::new(X_XINING + 8.0, 0.0, -15.0),
-        Vec3::new(X_XINING + 8.0, 0.0, 25.0),
+        Vec3::new(at("西寧南路") + 8.0, 0.0, -55.0),
+        Vec3::new(at("西寧南路") + 8.0, 0.0, -15.0),
+        Vec3::new(at("西寧南路") + 8.0, 0.0, 25.0),
         // === 漢口街沿線 ===
-        Vec3::new(-60.0, 0.0, Z_HANKOU + 8.0),
-        Vec3::new(-20.0, 0.0, Z_HANKOU + 8.0),
-        Vec3::new(35.0, 0.0, Z_HANKOU + 8.0),
+        Vec3::new(-60.0, 0.0, at("漢口街") + 8.0),
+        Vec3::new(-20.0, 0.0, at("漢口街") + 8.0),
+        Vec3::new(35.0, 0.0, at("漢口街") + 8.0),
         // === 成都路沿線 ===
-        Vec3::new(-60.0, 0.0, Z_CHENGDU - 10.0),
-        Vec3::new(-20.0, 0.0, Z_CHENGDU - 10.0),
-        Vec3::new(35.0, 0.0, Z_CHENGDU - 10.0),
+        Vec3::new(-60.0, 0.0, at("成都路") - 10.0),
+        Vec3::new(-20.0, 0.0, at("成都路") - 10.0),
+        Vec3::new(35.0, 0.0, at("成都路") - 10.0),
         // === 康定路東側 ===
-        Vec3::new(X_KANGDING + 12.0, 0.0, -50.0),
-        Vec3::new(X_KANGDING + 12.0, 0.0, -5.0),
-        Vec3::new(X_KANGDING + 12.0, 0.0, 35.0),
+        Vec3::new(at("康定路") + 12.0, 0.0, -50.0),
+        Vec3::new(at("康定路") + 12.0, 0.0, -5.0),
+        Vec3::new(at("康定路") + 12.0, 0.0, 35.0),
     ];
 
     for pos in lamppost_positions {
@@ -120,6 +119,7 @@ pub(super) fn setup_special_elements(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    layout: &MapLayout,
 ) {
     // 電影看板
     let billboard_configs = [
@@ -150,10 +150,14 @@ pub(super) fn setup_special_elements(
     }
     info!("🎬 已生成 {} 個電影看板", billboard_configs.len());
 
-    // 塗鴉牆
-    let graffiti_pos = Vec3::new(X_KANGDING - W_MAIN / 2.0 - 7.5 - 2.0, 2.5, Z_EMEI + 18.0);
+    // 塗鴉牆：康定路西側路緣再往西 9.5 m
+    let graffiti_pos = Vec3::new(
+        layout.edge("康定路", -1.0) - 9.5,
+        2.5,
+        layout.at("峨嵋街") + 18.0,
+    );
     spawn_graffiti_wall(commands, meshes, materials, graffiti_pos);
 
     // AI 掩體點
-    spawn_cover_points(commands);
+    spawn_cover_points(commands, layout);
 }

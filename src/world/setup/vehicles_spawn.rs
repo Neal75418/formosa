@@ -7,7 +7,6 @@ use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_G
 use crate::player::Player;
 use crate::vehicle::{spawn_scooter, VehicleModifications, VehiclePreset};
 use crate::world::characters::spawn_player_character;
-use crate::world::constants::{X_KANGDING, Z_EMEI};
 use crate::world::street_furniture::spawn_parking_garage;
 use crate::world::MapLayout;
 
@@ -37,7 +36,7 @@ pub(super) fn setup_player_and_vehicles(
         commands,
         meshes,
         materials,
-        Vec3::new(X_KANGDING + 25.0, 10.0, Z_EMEI + 20.0),
+        Vec3::new(layout.at("康定路") + 25.0, 10.0, layout.at("峨嵋街") + 20.0),
         22.0,
         22.0,
         32.0,

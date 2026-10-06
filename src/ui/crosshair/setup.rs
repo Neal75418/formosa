@@ -1,6 +1,7 @@
 //! 準星與武器 HUD 設置系統
 
 use bevy::prelude::*;
+use bevy::ui::UiTransform;
 
 use crate::ui::components::{
     AmmoBulletIcon, AmmoVisualGrid, ChineseFont, Crosshair, CrosshairDirection, CrosshairDot,
@@ -111,9 +112,10 @@ fn spawn_crosshair_line(parent: &mut ChildSpawnerCommands, direction: CrosshairD
     ));
 }
 
+/// `clockwise`：直的線條順時針轉幾弧度（UI 只讀 UiTransform）
 fn spawn_hit_marker_line(
     parent: &mut ChildSpawnerCommands,
-    rotation_z: f32,
+    clockwise: f32,
     top: Val,
     bottom: Val,
     left: Val,
@@ -132,7 +134,7 @@ fn spawn_hit_marker_line(
         },
         BackgroundColor(HIT_MARKER_COLOR),
         BorderRadius::all(Val::Px(1.0)),
-        Transform::from_rotation(Quat::from_rotation_z(rotation_z)),
+        UiTransform::from_rotation(Rot2::radians(clockwise)),
         HitMarkerLine,
     ));
 }
@@ -202,23 +204,19 @@ fn spawn_crosshair_center(commands: &mut Commands) {
                 align_items: AlignItems::Center,
                 ..default()
             },
-            GlobalTransform::default(), // B0004: 後代有 Transform（命中標記旋轉）
             Crosshair,
         ))
         .with_children(|parent| {
             // 準星容器（增加尺寸以容納外圈）
             parent
-                .spawn((
-                    Node {
-                        width: Val::Px(60.0),
-                        height: Val::Px(60.0),
-                        position_type: PositionType::Relative,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    GlobalTransform::default(), // B0004: 後代有 Transform（命中標記旋轉）
-                ))
+                .spawn(Node {
+                    width: Val::Px(60.0),
+                    height: Val::Px(60.0),
+                    position_type: PositionType::Relative,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
                 .with_children(|crosshair| {
                     // 外圈（動態擴散時使用）
                     crosshair.spawn((
@@ -277,17 +275,16 @@ fn spawn_crosshair_center(commands: &mut Commands) {
                                 ..default()
                             },
                             Visibility::Hidden,
-                            GlobalTransform::default(), // B0004: 子實體需要 GlobalTransform
                             CrosshairHitMarker,
                         ))
                         .with_children(|hit_marker| {
-                            // X 的四條線（斜向）- 左上、右上、左下、右下
+                            // X 的四條線（斜向，順時針角度）：左上、右下是「\」，右上、左下是「/」
                             let f = std::f32::consts::FRAC_PI_4;
                             let lines = [
-                                (f, Val::Px(0.0), Val::Auto, Val::Px(3.0), Val::Auto), // 左上
-                                (-f, Val::Px(0.0), Val::Auto, Val::Auto, Val::Px(3.0)), // 右上
-                                (-f, Val::Auto, Val::Px(0.0), Val::Px(3.0), Val::Auto), // 左下
-                                (f, Val::Auto, Val::Px(0.0), Val::Auto, Val::Px(3.0)), // 右下
+                                (-f, Val::Px(0.0), Val::Auto, Val::Px(3.0), Val::Auto), // 左上
+                                (f, Val::Px(0.0), Val::Auto, Val::Auto, Val::Px(3.0)),  // 右上
+                                (f, Val::Auto, Val::Px(0.0), Val::Px(3.0), Val::Auto),  // 左下
+                                (-f, Val::Auto, Val::Px(0.0), Val::Auto, Val::Px(3.0)), // 右下
                             ];
                             for (rot, top, bottom, left, right) in lines {
                                 spawn_hit_marker_line(hit_marker, rot, top, bottom, left, right);
@@ -507,4 +504,58 @@ fn spawn_weapon_hud(commands: &mut Commands, font: Handle<Font>) {
                     });
             });
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f32::consts::FRAC_PI_4;
+
+    use bevy::ui::UiTransform;
+
+    use super::*;
+
+    /// 命中標記容器是 20×20；Auto 的那一邊用另一邊換算
+    fn center_in_box(start: Val, end: Val, size: f32) -> f32 {
+        match (start, end) {
+            (Val::Px(s), _) => s + size / 2.0,
+            (_, Val::Px(e)) => 20.0 - e - size / 2.0,
+            other => panic!("預期一邊是 px，實際 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn hit_marker_lines_form_an_x() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_systems(Startup, |mut commands: Commands| {
+                spawn_crosshair_center(&mut commands);
+            });
+        app.update();
+        let world = app.world_mut();
+        let lines: Vec<(Node, UiTransform)> = world
+            .query_filtered::<(&Node, &UiTransform), With<HitMarkerLine>>()
+            .iter(world)
+            .map(|(n, t)| (n.clone(), *t))
+            .collect();
+        assert_eq!(lines.len(), 4);
+        for (node, transform) in lines {
+            // 每一筆都在一個象限，沿那個象限的對角線斜 45°：左上、右下是「\」，右上、左下是「/」
+            let Val::Px(w) = node.width else { panic!() };
+            let Val::Px(h) = node.height else { panic!() };
+            let offset = Vec2::new(
+                center_in_box(node.left, node.right, w),
+                center_in_box(node.top, node.bottom, h),
+            ) - Vec2::splat(10.0);
+            let axis = transform.rotation * Vec2::Y;
+            assert!(
+                (transform.rotation.as_radians().abs() - FRAC_PI_4).abs() < 1e-4,
+                "offset={offset} rotation={}",
+                transform.rotation.as_radians()
+            );
+            assert!(
+                (axis.x * axis.y).signum() == (offset.x * offset.y).signum(),
+                "offset={offset} axis={axis}"
+            );
+        }
+    }
 }

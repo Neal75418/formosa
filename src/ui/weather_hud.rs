@@ -4,6 +4,7 @@
 
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
+use bevy::ui::UiTransform;
 
 use super::components::{
     ChineseFont, RainDropIcon, SunRay, WeatherHudContainer, WeatherIconContainer,
@@ -46,7 +47,6 @@ pub fn setup_weather_hud(mut commands: Commands, chinese_font: Res<ChineseFont>)
             BackgroundColor(WEATHER_HUD_BG),
             BorderColor::all(WEATHER_HUD_BORDER),
             BorderRadius::all(Val::Px(8.0)),
-            GlobalTransform::default(), // B0004: 後代有 Transform（太陽光芒旋轉）
             WeatherHudContainer,
         ))
         .with_children(|parent| {
@@ -60,7 +60,6 @@ pub fn setup_weather_hud(mut commands: Commands, chinese_font: Res<ChineseFont>)
                         align_items: AlignItems::Center,
                         ..default()
                     },
-                    GlobalTransform::default(), // B0004: 後代有 Transform（太陽光芒旋轉）
                     WeatherIconContainer,
                 ))
                 .with_children(|icon_parent| {
@@ -76,14 +75,11 @@ pub fn setup_weather_hud(mut commands: Commands, chinese_font: Res<ChineseFont>)
 
             // 天氣名稱和按鍵提示
             parent
-                .spawn((
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(4.0),
-                        ..default()
-                    },
-                    GlobalTransform::default(), // B0004: Text 子實體可能需要
-                ))
+                .spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0),
+                    ..default()
+                })
                 .with_children(|col| {
                     // 天氣名稱
                     col.spawn((
@@ -186,7 +182,6 @@ fn spawn_weather_icon_container<'a>(
         } else {
             Visibility::Hidden
         },
-        GlobalTransform::default(), // B0004: 子實體需要 GlobalTransform
         WeatherIconElement { weather_type: ty },
     ))
 }
@@ -229,7 +224,8 @@ fn spawn_sun_icon(parent: &mut ChildSpawnerCommands) {
                 },
                 BackgroundColor(SUN_COLOR),
                 BorderRadius::all(Val::Px(1.5)),
-                Transform::from_rotation(Quat::from_rotation_z(-angle)),
+                // 沿半徑往外：直的長條順時針轉 angle + 90°（UI 只讀 UiTransform）
+                UiTransform::from_rotation(Rot2::radians(angle + std::f32::consts::FRAC_PI_2)),
                 SunRay { index: i },
             ));
         }
@@ -398,5 +394,51 @@ impl Plugin for WeatherHudPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_weather_hud.in_set(super::UiSetup))
             .add_systems(Update, update_weather_hud.in_set(super::UiActive));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::ui::UiTransform;
+
+    use super::*;
+
+    fn px(v: Val) -> f32 {
+        match v {
+            Val::Px(p) => p,
+            other => panic!("預期 px，實際 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sun_rays_point_away_from_the_center() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_systems(Startup, |mut commands: Commands| {
+                commands
+                    .spawn(Node::default())
+                    .with_children(spawn_sun_icon);
+            });
+        app.update();
+        let world = app.world_mut();
+        let rays: Vec<(Node, UiTransform)> = world
+            .query_filtered::<(&Node, &UiTransform), With<SunRay>>()
+            .iter(world)
+            .map(|(n, t)| (n.clone(), *t))
+            .collect();
+        assert_eq!(rays.len(), 8);
+        for (node, transform) in rays {
+            // 光芒中心到太陽中心 (20, 20) 的方向，要和旋轉後的長軸（未旋轉時是直的）平行
+            let center = Vec2::new(
+                px(node.left) + px(node.width) / 2.0,
+                px(node.top) + px(node.height) / 2.0,
+            );
+            let radial = (center - Vec2::splat(20.0)).normalize();
+            let axis = transform.rotation * Vec2::Y;
+            assert!(
+                axis.perp_dot(radial).abs() < 1e-4,
+                "center={center} axis={axis} radial={radial}"
+            );
+        }
     }
 }

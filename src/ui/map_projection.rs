@@ -22,11 +22,11 @@ pub(crate) const FULLMAP: MapProjection = MapProjection {
 };
 
 impl MapProjection {
-    /// 世界 (x, z) → UI 座標（x 往右、y 往下）；Z 取負號
+    /// 世界 (x, z) → UI 座標（x 往右、y 往下）：北（−Z）在上、東（+X）在右
     pub(crate) fn project(self, x: f32, z: f32) -> Vec2 {
         Vec2::new(
             x * self.scale + self.offset.x,
-            -z * self.scale + self.offset.y,
+            z * self.scale + self.offset.y,
         )
     }
 
@@ -44,6 +44,13 @@ mod tests {
     fn origin_projects_to_map_center() {
         assert_eq!(MINIMAP.project(0.0, 0.0), Vec2::new(150.0, 150.0));
         assert_eq!(FULLMAP.project(0.0, 0.0), Vec2::new(600.0, 400.0));
+    }
+
+    #[test]
+    fn north_is_up() {
+        // 漢口街（Z −80，北）要畫在成都路（Z 50，南）上方：UI 的 y 越小越上面
+        assert!(MINIMAP.project(0.0, -80.0).y < MINIMAP.project(0.0, 50.0).y);
+        assert!(FULLMAP.project(0.0, -80.0).y < FULLMAP.project(0.0, 50.0).y);
     }
 
     #[test]

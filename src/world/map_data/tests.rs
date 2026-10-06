@@ -355,7 +355,9 @@ fn crosswalks_resolve_to_junctions() {
         Junction {
             center: Vec3::new(0.0, 0.0, 50.0),
             ns_width: 15.0,
-            ew_width: 16.0
+            ew_width: 16.0,
+            // 漢中街到成都路就停了，南邊沒有路
+            arms: [true, false, true, true],
         }
     );
 }
@@ -367,10 +369,11 @@ fn zebra_crossings_sit_2_5m_outside_the_junction() {
         center: Vec3::new(-55.0, 0.0, 50.0),
         ns_width: 12.0,
         ew_width: 16.0,
+        arms: [true; 4],
     };
     assert_eq!(
         zebra_crossings(&j, 0.06),
-        [
+        vec![
             (Vec3::new(-55.0, 0.06, 39.5), 12.0, true),
             (Vec3::new(-55.0, 0.06, 60.5), 12.0, true),
             (Vec3::new(-63.5, 0.06, 50.0), 16.0, false),
@@ -429,6 +432,7 @@ fn crosswalk_junction_has_both_streets_on_their_own_axes() {
         center: Vec3::new(-55.0, 0.0, 50.0),
         ns_width: 12.0,
         ew_width: 16.0,
+        arms: [true; 4],
     };
     let layout = ximending_layout();
     assert_eq!(layout.crosswalks[5], expected);
@@ -468,7 +472,9 @@ fn signals_resolve_to_junctions() {
         Junction {
             center: Vec3::new(80.0, 0.0, -80.0),
             ns_width: 40.0,
-            ew_width: 12.0
+            ew_width: 12.0,
+            // 漢口街東端 X 90 沒超過中華路東側路緣 X 100
+            arms: [true, true, true, false],
         }
     );
 }
@@ -675,4 +681,88 @@ fn edge_is_curb_on_given_side() {
     // 寬度要取自那條路本身（中華路 40 m），兩側都要對
     assert_eq!(layout.edge("中華路", -1.0), 60.0);
     assert_eq!(layout.edge("中華路", 1.0), 100.0);
+}
+
+#[test]
+fn junction_arms_follow_the_road_network() {
+    let layout = ximending_layout();
+    let arms = |a: &str, b: &str| layout.junction(a, b).unwrap().arms;
+    // 北、南、西、東：那一側有沒有路伸出交會路的路緣
+    assert_eq!(arms("漢中街", "峨嵋街"), [true, true, true, true]);
+    assert_eq!(arms("漢中街", "武昌街"), [false, true, true, true]);
+    assert_eq!(arms("漢中街", "成都路"), [true, false, true, true]);
+    assert_eq!(arms("西寧南路", "峨嵋街"), [true, true, false, true]);
+    assert_eq!(arms("西寧南路", "成都路"), [true, true, true, true]);
+}
+
+#[test]
+fn zebra_crossings_skip_sides_without_a_road() {
+    // T 字路口：漢中街×武昌街北邊沒有漢中街，只畫南、西、東
+    let j = ximending_layout().junction("漢中街", "武昌街").unwrap();
+    let crossings = zebra_crossings(&j, 0.06);
+    assert_eq!(crossings.len(), 3);
+    assert!(
+        crossings.iter().all(|(c, _, _)| c.z > -60.0),
+        "{crossings:?}"
+    );
+}
+
+#[test]
+fn junction_arm_ignores_float_overshoot_at_the_far_curb() {
+    // 路段剛好停在交會路的遠側路緣：多出 0.005 m 的浮點誤差不算那一側有路（容差 0.01 m），四個方向各一例
+    let cases: [(usize, f32, bool, (&str, &str), [bool; 4]); 4] = [
+        // 漢中街北端伸到武昌街北側路緣 −57.5 再多一點
+        (
+            3,
+            -57.505,
+            true,
+            ("漢中街", "武昌街"),
+            [false, true, true, true],
+        ),
+        // 漢中街南端停在成都路南側路緣 58 再多一點
+        (
+            3,
+            58.005,
+            false,
+            ("漢中街", "成都路"),
+            [true, false, true, true],
+        ),
+        // 武昌街西段西端停在西寧南路西側路緣 −61 再多一點
+        (
+            6,
+            -61.005,
+            true,
+            ("西寧南路", "武昌街"),
+            [true, true, false, true],
+        ),
+        // 漢口街東端停在中華路東側路緣 100 再多一點
+        (
+            4,
+            100.005,
+            false,
+            ("中華路", "漢口街"),
+            [true, true, true, false],
+        ),
+    ];
+    for (road, value, is_from, (a, b), expected) in cases {
+        let mut file = real_file();
+        if is_from {
+            file.roads[road].from = value;
+        } else {
+            file.roads[road].to = value;
+        }
+        let layout = MapLayout::from_file(&file).unwrap();
+        assert_eq!(layout.junction(a, b).unwrap().arms, expected, "{a}×{b}");
+    }
+}
+
+#[test]
+fn junction_arm_needs_a_segment_that_reaches_the_junction() {
+    // 峨嵋街東段改從 X 30 起：漢中街東側路緣（X 7.5）到 30 之間沒有路，遠處那一段不算東邊有路
+    let mut file = real_file();
+    file.roads[11].from = 30.0;
+    let layout = MapLayout::from_file(&file).unwrap();
+    let j = layout.junction("漢中街", "峨嵋街").unwrap();
+    assert_eq!(j.arms, [true, true, true, false]);
+    assert_eq!(zebra_crossings(&j, 0.06).len(), 3);
 }

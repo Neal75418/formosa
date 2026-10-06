@@ -8,7 +8,7 @@ use super::file::{
 };
 use super::geometry::{
     along_building_pos, corner_building_pos, lane_offset, segment_reaches, ALONG_BUILDING_HEIGHT,
-    FLEE_INSET, SIDEWALK_WIDTH,
+    FLEE_INSET, JUNCTION_EPSILON, SIDEWALK_WIDTH,
 };
 use crate::world::MapBounds;
 
@@ -44,6 +44,8 @@ pub struct Junction {
     pub center: Vec3,
     pub ns_width: f32,
     pub ew_width: f32,
+    /// 北、南、西、東：那一側真的有路伸出交會路的路緣（T 字路口有一側是 false）
+    pub arms: [bool; 4],
 }
 
 /// NPC 車路線：依序經過的點
@@ -228,17 +230,36 @@ impl MapLayout {
             (RoadAxis::EastWest, RoadAxis::NorthSouth) => (second, first),
             _ => return Err(format!("「{a}」和「{b}」不是一南北、一東西")),
         };
-        let ns_reaches = self
+        // 只看搆得到這個路口的路段：同名路在別處的另一段不算
+        let ns_segments: Vec<&RoadSegmentSpec> = self
             .segments_of(&ns.name)
-            .any(|s| segment_reaches(s.from, s.to, ew.at, ew.width / 2.0));
-        let ew_reaches = self
+            .filter(|s| segment_reaches(s.from, s.to, ew.at, ew.width / 2.0))
+            .collect();
+        let ew_segments: Vec<&RoadSegmentSpec> = self
             .segments_of(&ew.name)
-            .any(|s| segment_reaches(s.from, s.to, ns.at, ns.width / 2.0));
-        if ns_reaches && ew_reaches {
+            .filter(|s| segment_reaches(s.from, s.to, ns.at, ns.width / 2.0))
+            .collect();
+        if !ns_segments.is_empty() && !ew_segments.is_empty() {
+            // 那一側有路：某一段伸出交會路的路緣超過浮點容差
+            let arms = [
+                ns_segments
+                    .iter()
+                    .any(|s| s.from < ew.at - ew.width / 2.0 - JUNCTION_EPSILON),
+                ns_segments
+                    .iter()
+                    .any(|s| s.to > ew.at + ew.width / 2.0 + JUNCTION_EPSILON),
+                ew_segments
+                    .iter()
+                    .any(|s| s.from < ns.at - ns.width / 2.0 - JUNCTION_EPSILON),
+                ew_segments
+                    .iter()
+                    .any(|s| s.to > ns.at + ns.width / 2.0 + JUNCTION_EPSILON),
+            ];
             Ok(Junction {
                 center: Vec3::new(ns.at, 0.0, ew.at),
                 ns_width: ns.width,
                 ew_width: ew.width,
+                arms,
             })
         } else {
             Err(format!("「{}」和「{}」沒有交會", ns.name, ew.name))

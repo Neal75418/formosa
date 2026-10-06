@@ -28,8 +28,8 @@ pub fn segment_reaches(from: f32, to: f32, t: f32, slack: f32) -> bool {
     t >= from - slack - JUNCTION_EPSILON && t <= to + slack + JUNCTION_EPSILON
 }
 
-/// 一個路口四邊的斑馬線：(中心, 長度, 是否東西向)，順序北、南、西、東
-pub fn zebra_crossings(junction: &Junction, y: f32) -> [(Vec3, f32, bool); 4] {
+/// 一個路口有路的那幾邊的斑馬線：(中心, 長度, 是否東西向)，順序北、南、西、東
+pub fn zebra_crossings(junction: &Junction, y: f32) -> Vec<(Vec3, f32, bool)> {
     let c = junction.center;
     let (ns, ew) = (junction.ns_width, junction.ew_width);
     [
@@ -54,6 +54,10 @@ pub fn zebra_crossings(junction: &Junction, y: f32) -> [(Vec3, f32, bool); 4] {
             false,
         ),
     ]
+    .into_iter()
+    .zip(junction.arms)
+    .filter_map(|(crossing, has_road)| has_road.then_some(crossing))
+    .collect()
 }
 
 /// 雙向車道的中心離道路中線的距離：扣掉兩側人行道後車行道寬的 1/4

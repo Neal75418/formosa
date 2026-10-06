@@ -93,7 +93,7 @@ pub(super) fn setup_street_furniture(
     info!("🗑️ 已生成 {} 個垃圾桶", trash_positions.len());
 }
 
-/// 斑馬線生成：資料檔指定的每個路口四邊各一條
+/// 斑馬線生成：資料檔指定的每個路口，有路的那幾邊各一條
 pub(super) fn setup_zebra_crossings(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -102,14 +102,16 @@ pub(super) fn setup_zebra_crossings(
 ) {
     let zebra_mat = world_mats.zebra_white.clone();
     let y = ROAD_Y + ROAD_MARKING_Y_OFFSET;
+    let mut count = 0;
     for junction in &layout.crosswalks {
         for (center, length, is_east_west) in zebra_crossings(junction, y) {
             spawn_zebra_crossing(commands, meshes, &zebra_mat, center, length, is_east_west);
+            count += 1;
         }
     }
     info!(
         "🦓 已生成 {} 條斑馬線於 {} 個交叉口",
-        layout.crosswalks.len() * 4,
+        count,
         layout.crosswalks.len()
     );
 }

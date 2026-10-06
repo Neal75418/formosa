@@ -3,9 +3,13 @@
 use bevy::prelude::*;
 
 use super::file::{
-    GridSpec, MapFile, MinimapRoadSpec, RoadAxis, RoadKind, RoadSegmentSpec, RouteSpec,
+    BuildingEntry, GridSpec, MapFile, MinimapRoadSpec, RoadAxis, RoadKind, RoadSegmentSpec,
+    RouteSpec,
 };
-use super::geometry::{lane_offset, segment_reaches, FLEE_INSET, SIDEWALK_WIDTH};
+use super::geometry::{
+    along_building_pos, corner_building_pos, lane_offset, segment_reaches, ALONG_BUILDING_HEIGHT,
+    FLEE_INSET, SIDEWALK_WIDTH,
+};
 use crate::world::MapBounds;
 
 /// 資料檔的一筆錯誤（訊息指出是哪一筆）
@@ -49,6 +53,14 @@ pub struct NpcRoute {
     pub points: Vec<Vec3>,
 }
 
+/// 擺好位置的建築：中心與 (寬, 高, 深)
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlacedBuilding {
+    pub name: String,
+    pub pos: Vec3,
+    pub size: Vec3,
+}
+
 /// 解析後的地圖：路名都已換成座標，系統只負責生成
 #[derive(Resource, Debug, Clone)]
 pub struct MapLayout {
@@ -73,6 +85,7 @@ pub struct MapLayout {
     pub signals: Vec<Junction>,
     /// NPC 車路線
     pub routes: Vec<NpcRoute>,
+    pub buildings: Vec<PlacedBuilding>,
 }
 
 impl MapLayout {
@@ -91,6 +104,7 @@ impl MapLayout {
         layout.crosswalks = layout.resolve_junctions("斑馬線", &file.crosswalks, &mut errors);
         layout.signals = layout.resolve_junctions("號誌", &file.signals, &mut errors);
         layout.routes = layout.resolve_routes(&file.npc_routes, &mut errors);
+        layout.buildings = layout.resolve_buildings(&file.buildings, &mut errors);
         if errors.is_empty() {
             Ok(layout)
         } else {
@@ -141,6 +155,7 @@ impl MapLayout {
             crosswalks: Vec::new(),
             signals: Vec::new(),
             routes: Vec::new(),
+            buildings: Vec::new(),
         }
     }
 
@@ -318,6 +333,72 @@ impl MapLayout {
             });
         }
         routes
+    }
+
+    fn resolve_buildings(
+        &self,
+        entries: &[BuildingEntry],
+        errors: &mut Vec<MapError>,
+    ) -> Vec<PlacedBuilding> {
+        let mut placed = Vec::new();
+        for (i, entry) in entries.iter().enumerate() {
+            match self.place_building(entry) {
+                Ok(b) => placed.push(b),
+                Err(reason) => {
+                    errors.push(MapError(format!("建築 #{i}（{}）：{reason}", entry.name())));
+                }
+            }
+        }
+        placed
+    }
+
+    fn place_building(&self, entry: &BuildingEntry) -> Result<PlacedBuilding, String> {
+        match entry {
+            BuildingEntry::Corner {
+                name,
+                ns,
+                ns_side,
+                ew,
+                ew_side,
+                size,
+            } => {
+                let ns = self.street_on(ns, RoadAxis::NorthSouth)?;
+                let ew = self.street_on(ew, RoadAxis::EastWest)?;
+                let size = Vec3::new(size.0, size.1, size.2);
+                Ok(PlacedBuilding {
+                    name: name.clone(),
+                    pos: corner_building_pos(ns, *ns_side, ew, *ew_side, size),
+                    size,
+                })
+            }
+            BuildingEntry::Along {
+                name,
+                street,
+                side,
+                between,
+                size,
+            } => {
+                let main = self
+                    .find_street(street)
+                    .ok_or_else(|| format!("沒有「{street}」這條路"))?;
+                let from = self.junction(street, &between.0)?;
+                let to = self.junction(street, &between.1)?;
+                let (from_at, to_at) = match main.axis {
+                    RoadAxis::NorthSouth => (from.center.z, to.center.z),
+                    RoadAxis::EastWest => (from.center.x, to.center.x),
+                };
+                Ok(PlacedBuilding {
+                    name: name.clone(),
+                    pos: along_building_pos(main, *side, from_at, to_at, size.0),
+                    size: Vec3::new(size.0, ALONG_BUILDING_HEIGHT, size.1),
+                })
+            }
+            BuildingEntry::At { name, pos, size } => Ok(PlacedBuilding {
+                name: name.clone(),
+                pos: Vec3::new(pos.0, pos.1, pos.2),
+                size: Vec3::new(size.0, size.1, size.2),
+            }),
+        }
     }
 
     /// 取指定方向的路；名稱不存在或方向不對時回傳原因

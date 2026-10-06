@@ -26,6 +26,7 @@ pub struct MapFile {
     pub signals: Vec<(String, String)>,
     /// NPC 車路線
     pub npc_routes: Vec<RouteSpec>,
+    pub buildings: Vec<BuildingEntry>,
 }
 
 /// 可活動範圍（XZ 平面）
@@ -126,4 +127,42 @@ pub struct CornerSpec {
     pub ns_lane: f32,
     pub ew: String,
     pub ew_lane: f32,
+}
+
+/// 一棟建築的擺法
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub enum BuildingEntry {
+    /// 路口建築：貼兩條路的路緣放在指定的角（−1 西／北，+1 東／南）；size 是 (寬, 高, 深)
+    Corner {
+        name: String,
+        ns: String,
+        ns_side: f32,
+        ew: String,
+        ew_side: f32,
+        size: (f32, f32, f32),
+    },
+    /// 沿街建築：沿著 street 放在兩條橫路中間；size 是 (寬, 深)，高度固定
+    Along {
+        name: String,
+        street: String,
+        side: f32,
+        between: (String, String),
+        size: (f32, f32),
+    },
+    /// 直接給中心座標；size 是 (寬, 高, 深)
+    At {
+        name: String,
+        pos: (f32, f32, f32),
+        size: (f32, f32, f32),
+    },
+}
+
+impl BuildingEntry {
+    /// 建築名稱
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Corner { name, .. } | Self::Along { name, .. } | Self::At { name, .. } => name,
+        }
+    }
 }

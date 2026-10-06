@@ -577,3 +577,92 @@ fn duplicate_route_still_checks_its_corners() {
         "NPC 路線 #1「外圈」轉角 #0（無名街×成都路）：沒有「無名街」這條路",
     );
 }
+
+#[test]
+fn corner_building_hugs_both_curbs() {
+    // 萬年大樓：西寧南路西側、峨嵋街北側，各留 1.5 m
+    let b = &ximending_layout().buildings[0];
+    assert_eq!(
+        (b.name.as_str(), b.pos, b.size),
+        (
+            "萬年大樓",
+            Vec3::new(-72.5, 14.0, -16.5),
+            Vec3::new(20.0, 28.0, 15.0)
+        )
+    );
+}
+
+#[test]
+fn along_building_keeps_current_axis_mixup() {
+    // 已知問題（尚未修）：沿東西向成都路的阿宗麵線被放到 (36.5, −27.5)，成都路的位置被當成 X
+    let layout = ximending_layout();
+    let b = layout
+        .buildings
+        .iter()
+        .find(|b| b.name == "阿宗麵線")
+        .unwrap();
+    assert_eq!(
+        (b.pos, b.size),
+        (Vec3::new(36.5, 10.0, -27.5), Vec3::new(8.0, 20.0, 6.0))
+    );
+}
+
+#[test]
+fn buildings_keep_generation_order() {
+    let names: Vec<String> = ximending_layout()
+        .buildings
+        .into_iter()
+        .map(|b| b.name)
+        .collect();
+    assert_eq!(names.len(), 38);
+    assert_eq!(
+        [
+            names[0].as_str(),
+            names[21].as_str(),
+            names[22].as_str(),
+            names[25].as_str(),
+            names[37].as_str()
+        ],
+        ["萬年大樓", "彈珠台", "阿宗麵線", "統一元氣館", "潮流刺青"]
+    );
+}
+
+#[test]
+fn rejects_corner_building_with_swapped_axes() {
+    let mut file = real_file();
+    if let BuildingEntry::Corner { ns, ew, .. } = &mut file.buildings[0] {
+        std::mem::swap(ns, ew);
+    }
+    assert_error(&file, "建築 #0（萬年大樓）：「峨嵋街」的方向不對");
+}
+
+#[test]
+fn rejects_corner_building_whose_ew_street_runs_north_south() {
+    // 只換 ew：ns 檢查會過，要靠 ew 自己的方向檢查擋下（否則漢中街的 X 會被當成 Z）
+    let mut file = real_file();
+    if let BuildingEntry::Corner { ew, .. } = &mut file.buildings[0] {
+        *ew = "漢中街".to_string();
+    }
+    assert_error(&file, "建築 #0（萬年大樓）：「漢中街」的方向不對");
+}
+
+#[test]
+fn rejects_along_building_whose_cross_street_does_not_meet() {
+    // 小吃街沿峨嵋街；峨嵋街西段從 X −49 起，到不了康定路
+    let mut file = real_file();
+    if let BuildingEntry::Along { between, .. } = &mut file.buildings[24] {
+        between.0 = "康定路".to_string();
+    }
+    assert_error(&file, "建築 #24（小吃街）：「康定路」和「峨嵋街」沒有交會");
+}
+
+#[test]
+fn rejects_unknown_field_in_building() {
+    let text = super::XIMENDING_RON.replacen(
+        "Corner(name: \"萬年大樓\", ns:",
+        "Corner(name: \"萬年大樓\", hight: 1.0, ns:",
+        1,
+    );
+    let errors = load_map(&text).unwrap_err();
+    assert!(errors[0].0.contains("hight"), "{errors:?}");
+}

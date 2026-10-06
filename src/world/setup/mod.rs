@@ -59,6 +59,7 @@ pub fn setup_world(
         &mut meshes,
         &mut materials,
         &mut building_tracker,
+        &layout,
     );
     vehicles_spawn::setup_player_and_vehicles(&mut commands, &mut meshes, &mut materials, &layout);
     buildings_layout::setup_neon_signs(

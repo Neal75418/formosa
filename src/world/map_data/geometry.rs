@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use super::layout::Junction;
+use super::layout::{Junction, Street};
 
 /// 車行道兩側人行道的寬度（全路網共用一個值）
 pub const SIDEWALK_WIDTH: f32 = 4.0;
@@ -15,6 +15,12 @@ pub const ZEBRA_CROSSING_OFFSET: f32 = 2.5;
 
 /// 判斷交會時的浮點容差（公尺）
 pub const JUNCTION_EPSILON: f32 = 0.01;
+
+/// 建築與路緣之間的緩衝距離
+pub const BUILDING_ROAD_BUFFER: f32 = 1.5;
+
+/// 沿街建築的固定高度
+pub const ALONG_BUILDING_HEIGHT: f32 = 20.0;
 
 /// 路段 [from, to] 是否涵蓋 t；兩端各容許 slack。呼叫端傳另一條路的半寬：
 /// 等同兩條路的路面矩形相接（含剛好碰到路緣）
@@ -54,4 +60,33 @@ pub fn zebra_crossings(junction: &Junction, y: f32) -> [(Vec3, f32, bool); 4] {
 pub fn lane_offset(total_width: f32) -> f32 {
     let drive_width = (total_width - SIDEWALK_WIDTH * 2.0).max(0.0);
     drive_width * 0.25
+}
+
+/// 路口建築：貼著兩條路的路緣（加緩衝）放在指定的角；size 是 (寬, 高, 深)
+pub fn corner_building_pos(
+    ns: &Street,
+    ns_side: f32,
+    ew: &Street,
+    ew_side: f32,
+    size: Vec3,
+) -> Vec3 {
+    let x = ns.at + ns_side * (ns.width / 2.0 + size.x / 2.0 + BUILDING_ROAD_BUFFER);
+    let z = ew.at + ew_side * (ew.width / 2.0 + size.z / 2.0 + BUILDING_ROAD_BUFFER);
+    Vec3::new(x, size.y / 2.0, z)
+}
+
+/// 沿街建築：沿著 street 放在兩條橫路中間
+///
+/// 已知問題：不分道路方向，一律把 street 的位置當 X、兩條橫路當 Z 範圍，沿東西向道路的建築
+/// 因此放錯軸；改用建築錨點後整條規則刪除
+pub fn along_building_pos(
+    street: &Street,
+    side: f32,
+    from_at: f32,
+    to_at: f32,
+    width: f32,
+) -> Vec3 {
+    let x = street.at + side * (street.width / 2.0 + width / 2.0 + BUILDING_ROAD_BUFFER);
+    let z = f32::midpoint(from_at, to_at);
+    Vec3::new(x, ALONG_BUILDING_HEIGHT / 2.0, z)
 }

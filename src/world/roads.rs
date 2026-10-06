@@ -198,8 +198,32 @@ pub fn spawn_road_segment(
     spawn_sidewalks(commands, meshes, materials, pos, &layout, drive_width);
 }
 
-/// 生成斑馬線
+/// 斑馬線每條條紋的中心與尺寸：條紋沿斑馬線延伸的方向（行人行走方向）排開、橫跨整條路；
+/// 每條沿車流方向長 5 m、沿行人行走方向寬 0.5 m
 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+pub fn zebra_stripes(center: Vec3, length: f32, is_east_west: bool) -> Vec<(Vec3, Vec3)> {
+    // 斑馬線規格：寬 5m，白線寬 0.5m，間隔 0.5m
+    let stripe_width = 0.5;
+    let stripe_gap = 0.5;
+    let crossing_width = 5.0; // 行人穿越區域寬度
+    let stripe_count = (length / (stripe_width + stripe_gap)) as i32;
+    (0..stripe_count)
+        .map(|i| {
+            // 以中心對稱：第一條和最後一條離中心一樣遠
+            let offset = (i as f32 - (stripe_count - 1) as f32 / 2.0) * (stripe_width + stripe_gap);
+            let (x, z, sx, sz) = if is_east_west {
+                // 沿 X 延伸：條紋沿 X 排開，每條沿 Z 長 5 m
+                (center.x + offset, center.z, stripe_width, crossing_width)
+            } else {
+                // 沿 Z 延伸：條紋沿 Z 排開，每條沿 X 長 5 m
+                (center.x, center.z + offset, crossing_width, stripe_width)
+            };
+            (Vec3::new(x, center.y + 0.02, z), Vec3::new(sx, 0.02, sz))
+        })
+        .collect()
+}
+
+/// 生成斑馬線
 pub fn spawn_zebra_crossing(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -208,28 +232,11 @@ pub fn spawn_zebra_crossing(
     length: f32,        // 斑馬線總長度
     is_east_west: bool, // true = 東西向 (X方向), false = 南北向 (Z方向)
 ) {
-    // 斑馬線規格：寬 5m，白線寬 0.5m，間隔 0.5m
-    let stripe_width = 0.5;
-    let stripe_gap = 0.5;
-    let crossing_width = 5.0; // 行人穿越區域寬度
-
-    let stripe_count = (length / (stripe_width + stripe_gap)) as i32;
-
-    for i in 0..stripe_count {
-        let offset = (i as f32 - stripe_count as f32 / 2.0) * (stripe_width + stripe_gap);
-
-        let (x, z, sx, sz) = if is_east_west {
-            // 東西向斑馬線：X 方向延伸，Z 方向排列條紋
-            (center.x, center.z + offset, crossing_width, stripe_width)
-        } else {
-            // 南北向斑馬線：Z 方向延伸，X 方向排列條紋
-            (center.x + offset, center.z, stripe_width, crossing_width)
-        };
-
+    for (pos, size) in zebra_stripes(center, length, is_east_west) {
         commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(sx, 0.02, sz))),
+            Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
             MeshMaterial3d(material.clone()),
-            Transform::from_xyz(x, center.y + 0.02, z),
+            Transform::from_translation(pos),
             GlobalTransform::default(),
         ));
     }
@@ -238,6 +245,35 @@ pub fn spawn_zebra_crossing(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn east_west_crossing_stripes_span_the_road_along_x() {
+        // 沿 X 延伸的斑馬線（橫跨南北向的路）：條紋 X 0.5 × Z 5，沿 X 排開、以中心對稱
+        let stripes = zebra_stripes(Vec3::new(0.0, 0.06, -10.0), 15.0, true);
+        assert_eq!(stripes.len(), 15);
+        assert_eq!(
+            stripes[0],
+            (Vec3::new(-7.0, 0.08, -10.0), Vec3::new(0.5, 0.02, 5.0))
+        );
+        assert_eq!(
+            stripes[14],
+            (Vec3::new(7.0, 0.08, -10.0), Vec3::new(0.5, 0.02, 5.0))
+        );
+    }
+
+    #[test]
+    fn north_south_crossing_stripes_span_the_road_along_z() {
+        let stripes = zebra_stripes(Vec3::new(-10.0, 0.06, 50.0), 16.0, false);
+        assert_eq!(stripes.len(), 16);
+        assert_eq!(
+            stripes[0],
+            (Vec3::new(-10.0, 0.08, 42.5), Vec3::new(5.0, 0.02, 0.5))
+        );
+        assert_eq!(
+            stripes[15],
+            (Vec3::new(-10.0, 0.08, 57.5), Vec3::new(5.0, 0.02, 0.5))
+        );
+    }
 
     #[test]
     fn road_layout_follows_axis_not_proportions() {

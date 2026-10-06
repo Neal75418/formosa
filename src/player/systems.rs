@@ -693,3 +693,22 @@ pub fn stealth_noise_system(
         NoiseLevel::Silent
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn facing_is_the_forward_walk_direction() {
+        // 往前走時角色轉向移動方向；小地圖箭頭、GPS 讀的 Player::facing 要和這裡一致
+        for direction in [Vec3::NEG_Z, Vec3::X, Vec3::new(-0.6, 0.0, 0.8)] {
+            let mut transform = Transform::default();
+            update_character_rotation(&mut transform, direction, 0.0, false, true, 1.0, 100.0);
+            let facing = Player::facing(&transform);
+            assert!(
+                facing.distance(direction) < 1e-4,
+                "direction={direction} facing={facing}"
+            );
+        }
+    }
+}

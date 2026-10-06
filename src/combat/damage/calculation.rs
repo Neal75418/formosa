@@ -200,33 +200,35 @@ fn calculate_damage_direction(
     attacker: Option<Entity>,
     transform_query: &Query<&Transform>,
 ) -> Option<Vec2> {
+    let attacker_entity = attacker?;
+    let target_transform = transform_query.get(target).ok()?;
+    let attacker_transform = transform_query.get(attacker_entity).ok()?;
+    screen_direction(target_transform, attacker_transform.translation)
+}
+
+/// 攻擊者在玩家的哪個方向，換成受傷指示器用的螢幕方向
+fn screen_direction(target_transform: &Transform, attacker_pos: Vec3) -> Option<Vec2> {
     // 距離太近時無法判斷方向（避免除以零和不穩定的方向）
     // 閾值 0.25 = 0.5m 距離的平方，近戰/爆炸時返回 None
     const MIN_DIRECTION_DISTANCE_SQ: f32 = 0.25;
 
-    let attacker_entity = attacker?;
-    let target_transform = transform_query.get(target).ok()?;
-    let attacker_transform = transform_query.get(attacker_entity).ok()?;
-
     // 世界座標方向（XZ 平面）
-    let world_dir = attacker_transform.translation - target_transform.translation;
+    let world_dir = attacker_pos - target_transform.translation;
     let world_dir_2d = Vec2::new(world_dir.x, world_dir.z);
 
     if world_dir_2d.length_squared() < MIN_DIRECTION_DISTANCE_SQ {
         return None;
     }
 
-    // 轉換為相對於玩家朝向的方向
-    // 玩家 forward 是 -Z，所以要相對於玩家的旋轉來計算
-    let player_forward = target_transform.forward();
-    let player_right = target_transform.right();
+    // 轉換為相對於玩家面向的方向（角色模型正面是本地 +Z，不是 Bevy 的 forward）
+    let player_forward = Player::facing(target_transform);
+    let player_right = player_forward.cross(Vec3::Y);
 
     // 投影到玩家的前後左右
     let forward_component = world_dir.x * player_forward.x + world_dir.z * player_forward.z;
     let right_component = world_dir.x * player_right.x + world_dir.z * player_right.z;
 
-    // 螢幕座標：X 正向是右，Y 正向是上
-    // forward（前方）= 上，right（右方）= 右
+    // 螢幕座標 y 往下：前方是 −y（亮上緣）、右方是 +x（亮右緣）
     let screen_dir = Vec2::new(right_component, -forward_component).normalize_or_zero();
 
     Some(screen_dir)
@@ -492,5 +494,23 @@ pub fn damage_system(
                 hit_direction,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f32::consts::PI;
+
+    use super::*;
+
+    #[test]
+    fn damage_direction_is_relative_to_player_facing() {
+        // 玩家面向北（角色模型正面是本地 +Z，見 update_character_rotation）；
+        // 受傷指示器：y 負的亮上緣、x 正的亮右緣
+        let player = Transform::from_rotation(Quat::from_rotation_y(PI));
+        let front = screen_direction(&player, Vec3::new(0.0, 0.0, -10.0)).unwrap();
+        assert!(front.distance(Vec2::NEG_Y) < 1e-4, "正前方 {front}");
+        let right = screen_direction(&player, Vec3::new(10.0, 0.0, 0.0)).unwrap();
+        assert!(right.distance(Vec2::X) < 1e-4, "右邊 {right}");
     }
 }

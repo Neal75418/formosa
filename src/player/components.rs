@@ -28,6 +28,13 @@ pub struct Player {
     pub last_movement_direction: Vec3,
 }
 
+impl Player {
+    /// 玩家面向：角色模型的正面是本地 +Z，和 Bevy 的 `forward()`（−Z）相反
+    pub fn facing(transform: &Transform) -> Vec3 {
+        transform.rotation * Vec3::Z
+    }
+}
+
 impl Default for Player {
     fn default() -> Self {
         let acceleration_time = 0.3; // 0.3 秒從靜止到全速

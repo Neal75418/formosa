@@ -1,6 +1,11 @@
 //! 小地圖、大地圖、GPS 標記的投影（期望值一律寫字面數字）
 
+use std::f32::consts::{FRAC_PI_2, PI};
+use std::time::Duration;
+
 use bevy::prelude::*;
+use bevy::time::TimeUpdateStrategy;
+use bevy::ui::UiTransform;
 
 use super::components::{
     FullMapPlayerMarker, GpsNavigationState, MinimapContainer, MinimapGpsMarker,
@@ -125,4 +130,48 @@ fn gps_marker_projection() {
         approx(m[0].0, -3.0) && approx(m[0].1, -3.0) && approx(m[1].0, 1.0) && approx(m[1].1, 1.0),
         "{m:?}"
     );
+}
+
+/// 玩家旋轉 rotation，跑兩次 update（第一次 dt 是 0；第二次 0.1 s，插值係數 min(10·dt, 1) = 1），回傳箭頭的順時針角度
+fn arrow_heading(fullmap: bool, rotation: Quat) -> f32 {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+            100,
+        )));
+    app.world_mut()
+        .spawn((Player::default(), Transform::from_rotation(rotation)));
+    let marker = if fullmap {
+        app.add_systems(Update, update_fullmap);
+        app.world_mut()
+            .spawn((Node::default(), Transform::default(), FullMapPlayerMarker))
+            .id()
+    } else {
+        app.add_systems(Update, update_minimap);
+        app.world_mut()
+            .spawn((Node::default(), Transform::default(), MinimapPlayerMarker))
+            .id()
+    };
+    app.update();
+    app.update();
+    app.world()
+        .get::<UiTransform>(marker)
+        .unwrap()
+        .rotation
+        .as_radians()
+}
+
+#[test]
+fn player_arrow_turns_with_player() {
+    // 角色模型正面是本地 +Z（見 update_character_rotation）：往北走時玩家的旋轉是 yaw 180°，箭頭朝上；
+    // yaw 90° 面向東，箭頭朝右（順時針 90°）
+    for fullmap in [false, true] {
+        let north = arrow_heading(fullmap, Quat::from_rotation_y(PI));
+        assert!(north.abs() < 1e-3, "fullmap={fullmap} north={north}");
+        let east = arrow_heading(fullmap, Quat::from_rotation_y(FRAC_PI_2));
+        assert!(
+            (east - FRAC_PI_2).abs() < 1e-3,
+            "fullmap={fullmap} east={east}"
+        );
+    }
 }

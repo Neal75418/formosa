@@ -3,12 +3,13 @@
 //! 提供導航方向指示和距離顯示
 
 use bevy::prelude::*;
+use bevy::ui::UiTransform;
 
 use super::components::{
     ChineseFont, GpsDirectionArrow, GpsDistanceDisplay, GpsNavigationState, GpsTurnDirection,
     GpsTurnIndicator, MinimapContainer, MinimapGpsMarker,
 };
-use super::map_projection::MINIMAP;
+use super::map_projection::{heading, MINIMAP};
 use crate::mission::{MissionManager, MissionType};
 use crate::player::Player;
 
@@ -128,12 +129,9 @@ pub fn setup_gps_ui(mut commands: Commands, font: Option<Res<ChineseFont>>) {
         });
 }
 
-/// 計算玩家面向方向與目標方向的夾角
-fn calculate_gps_direction_angle(player_forward: Vec3, to_dest: Vec3) -> f32 {
-    let to_dest_normalized = Vec3::new(to_dest.x, 0.0, to_dest.z).normalize_or_zero();
-    let player_forward_xz = Vec3::new(player_forward.x, 0.0, player_forward.z).normalize_or_zero();
-    player_forward_xz.x.atan2(player_forward_xz.z)
-        - to_dest_normalized.x.atan2(to_dest_normalized.z)
+/// 目的地在玩家面向的哪一側：順時針角度，範圍 (−π, π]（正的在右、負的在左）
+fn calculate_gps_direction_angle(facing: Vec3, to_dest: Vec3) -> f32 {
+    (heading(to_dest) * heading(facing).inverse()).as_radians()
 }
 
 /// 格式化 GPS 距離顯示
@@ -152,7 +150,7 @@ pub fn update_gps_navigation(
     mut gps: ResMut<GpsNavigationState>,
     player_query: Query<&Transform, With<Player>>,
     mut arrow_query: Query<
-        (&mut Visibility, &mut Transform, &Children),
+        (&mut Visibility, &mut UiTransform),
         (With<GpsDirectionArrow>, Without<Player>),
     >,
     mut distance_query: Query<
@@ -169,7 +167,7 @@ pub fn update_gps_navigation(
         return;
     };
     let player_pos = player_transform.translation;
-    let player_forward = player_transform.forward().as_vec3();
+    let facing = Player::facing(player_transform);
 
     // 更新冷卻計時器
     if gps.route_recalc_cooldown > 0.0 {
@@ -179,7 +177,7 @@ pub fn update_gps_navigation(
     // 如果導航未啟用，隱藏 UI
     let should_hide = gps.destination.is_none() || !gps.active;
     if should_hide {
-        for (mut vis, _, _) in &mut arrow_query {
+        for (mut vis, _) in &mut arrow_query {
             *vis = Visibility::Hidden;
         }
         for (mut vis, _) in &mut distance_query {
@@ -204,10 +202,10 @@ pub fn update_gps_navigation(
     }
 
     // 計算方向角度並更新箭頭
-    let angle = calculate_gps_direction_angle(player_forward, to_dest);
-    for (mut vis, mut transform, _children) in &mut arrow_query {
+    let angle = calculate_gps_direction_angle(facing, to_dest);
+    for (mut vis, mut ui_transform) in &mut arrow_query {
         *vis = Visibility::Visible;
-        transform.rotation = Quat::from_rotation_z(angle);
+        ui_transform.rotation = Rot2::radians(angle);
     }
 
     // 計算轉彎方向
@@ -435,5 +433,105 @@ impl Plugin for GpsNavigationPlugin {
                 )
                     .in_set(super::UiActive),
             );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f32::consts::{FRAC_PI_2, PI};
+
+    use bevy::ui::UiTransform;
+
+    use super::*;
+
+    /// 玩家站在原點、旋轉 rotation，目的地在 destination；跑一次 update，
+    /// 回傳 (箭頭顯示與否, 箭頭的順時針角度, 轉彎提示)
+    fn gps_after_update(rotation: Quat, destination: Vec3) -> (Visibility, f32, GpsTurnDirection) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(GpsNavigationState {
+                active: true,
+                destination: Some(destination),
+                ..default()
+            })
+            .add_systems(Update, update_gps_navigation);
+        app.world_mut()
+            .spawn((Player::default(), Transform::from_rotation(rotation)));
+        let arrow = app
+            .world_mut()
+            .spawn((Node::default(), Visibility::Hidden, GpsDirectionArrow))
+            .id();
+        app.update();
+        let world = app.world();
+        (
+            *world.get::<Visibility>(arrow).unwrap(),
+            world
+                .get::<UiTransform>(arrow)
+                .unwrap()
+                .rotation
+                .as_radians(),
+            world.resource::<GpsNavigationState>().next_turn_direction,
+        )
+    }
+
+    /// 和正北（−Z）夾 offset 弧度的水平方向：offset 正的往東（順時針）
+    fn from_north(offset: f32) -> Vec3 {
+        Vec3::new(offset.sin(), 0.0, -offset.cos())
+    }
+
+    #[test]
+    fn direction_angle_takes_the_near_side() {
+        let west = Vec3::new(-100.0, 0.0, 0.0);
+        let east = Vec3::new(100.0, 0.0, 0.0);
+        // (面向, 目的地方向, 期望角度, 期望提示)；角度都要落在 (−π, π]，不能因為跨過某個方向就變成「迴轉」
+        let cases = [
+            // 面向北偏東 0.1、目的地在正西 → 左轉
+            (
+                from_north(0.1),
+                west,
+                -FRAC_PI_2 - 0.1,
+                GpsTurnDirection::Left,
+            ),
+            // 面向南偏西 0.1（跨過 ±π 那一側）、目的地在正東 → 面向南時東在左邊
+            (
+                from_north(PI + 0.1),
+                east,
+                -FRAC_PI_2 - 0.1,
+                GpsTurnDirection::Left,
+            ),
+            // 面向南偏東 0.1、目的地在正西 → 面向南時西在右邊
+            (
+                from_north(PI - 0.1),
+                west,
+                FRAC_PI_2 + 0.1,
+                GpsTurnDirection::Right,
+            ),
+        ];
+        for (facing, to_dest, expected, turn) in cases {
+            let angle = calculate_gps_direction_angle(facing, to_dest);
+            assert!(
+                (angle - expected).abs() < 1e-4,
+                "facing={facing} to_dest={to_dest} angle={angle}"
+            );
+            assert_eq!(GpsTurnDirection::from_angle(angle), turn);
+        }
+    }
+
+    #[test]
+    fn gps_arrow_and_turn_follow_player_facing() {
+        // 往北走時玩家的旋轉是 yaw 180°（角色模型正面是本地 +Z，見 update_character_rotation）
+        let facing_north = Quat::from_rotation_y(PI);
+        let (visibility, angle, turn) = gps_after_update(facing_north, Vec3::new(0.0, 0.0, -100.0));
+        assert_eq!(
+            (visibility, turn),
+            (Visibility::Visible, GpsTurnDirection::Straight)
+        );
+        assert!(angle.abs() < 1e-3, "目的地在正前方 angle={angle}");
+        let (_, angle, turn) = gps_after_update(facing_north, Vec3::new(100.0, 0.0, 0.0));
+        assert_eq!(turn, GpsTurnDirection::Right);
+        assert!(
+            (angle - FRAC_PI_2).abs() < 1e-3,
+            "目的地在右邊 angle={angle}"
+        );
     }
 }

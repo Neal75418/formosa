@@ -36,6 +36,11 @@ impl MapProjection {
     }
 }
 
+/// 世界的水平方向 → UI 上的順時針旋轉（`UiTransform` 的 rotation）：北（−Z）朝上為 0、東（+X）朝右為 90°
+pub(crate) fn heading(direction: Vec3) -> Rot2 {
+    Rot2::radians(direction.x.atan2(-direction.z))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,6 +56,21 @@ mod tests {
         // 漢口街（Z −80，北）要畫在成都路（Z 50，南）上方：UI 的 y 越小越上面
         assert!(MINIMAP.project(0.0, -80.0).y < MINIMAP.project(0.0, 50.0).y);
         assert!(FULLMAP.project(0.0, -80.0).y < FULLMAP.project(0.0, 50.0).y);
+    }
+
+    #[test]
+    fn heading_points_where_projection_moves() {
+        // 往 direction 走一步，標記在 UI 上的位移方向＝預設朝上的箭頭轉 heading 之後的方向
+        let from = Vec3::new(20.0, 0.0, -7.0);
+        for direction in [Vec3::NEG_Z, Vec3::X, Vec3::new(-3.0, 0.0, 4.0)] {
+            let to = from + direction;
+            let moved = (MINIMAP.project(to.x, to.z) - MINIMAP.project(from.x, from.z)).normalize();
+            let arrow = heading(direction) * Vec2::NEG_Y;
+            assert!(
+                arrow.distance(moved) < 1e-4,
+                "direction={direction} arrow={arrow} moved={moved}"
+            );
+        }
     }
 
     #[test]

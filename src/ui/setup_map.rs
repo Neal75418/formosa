@@ -20,13 +20,13 @@ fn marker_origin(proj: MapProjection, size: Vec2) -> Vec2 {
 
 /// 生成小地圖玩家標記（圓形+箭頭指針）
 fn spawn_minimap_player_marker(parent: &mut ChildSpawnerCommands) {
-    let origin = marker_origin(MINIMAP, Vec2::new(20.0, 34.0));
+    let origin = marker_origin(MINIMAP, MINIMAP_MARKER_SIZE);
     parent
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                width: Val::Px(20.0),
-                height: Val::Px(34.0),
+                width: Val::Px(MINIMAP_MARKER_SIZE.x),
+                height: Val::Px(MINIMAP_MARKER_SIZE.y),
                 left: Val::Px(origin.x),
                 top: Val::Px(origin.y),
                 justify_content: JustifyContent::Center,
@@ -110,12 +110,12 @@ fn spawn_minimap_player_marker(parent: &mut ChildSpawnerCommands) {
 
 /// 生成大地圖玩家標記（大尺寸圓形+箭頭指針）
 fn spawn_fullmap_player_marker(map: &mut ChildSpawnerCommands) {
-    let origin = marker_origin(FULLMAP, Vec2::new(30.0, 52.0));
+    let origin = marker_origin(FULLMAP, FULLMAP_MARKER_SIZE);
     map.spawn((
         Node {
             position_type: PositionType::Absolute,
-            width: Val::Px(30.0),
-            height: Val::Px(52.0),
+            width: Val::Px(FULLMAP_MARKER_SIZE.x),
+            height: Val::Px(FULLMAP_MARKER_SIZE.y),
             left: Val::Px(origin.x),
             top: Val::Px(origin.y),
             justify_content: JustifyContent::Center,
@@ -668,4 +668,58 @@ fn spawn_legend_item(
                 TextColor(Color::WHITE),
             ));
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn px(v: Val) -> f32 {
+        match v {
+            Val::Px(p) => p,
+            other => panic!("預期 px，實際 {other:?}"),
+        }
+    }
+
+    /// 生成標記，回傳 (容器的寬高, 白色主圓的中心)
+    fn marker_geometry(spawn: fn(&mut ChildSpawnerCommands)) -> (Vec2, Vec2) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_systems(Startup, move |mut commands: Commands| {
+                commands.spawn(Node::default()).with_children(spawn);
+            });
+        app.update();
+        let world = app.world_mut();
+        let container = world
+            .query_filtered::<&Node, Or<(With<MinimapPlayerMarker>, With<FullMapPlayerMarker>)>>()
+            .single(world)
+            .unwrap()
+            .clone();
+        // 白色主圓：白色、正方形的那個子節點（白色箭頭內部是長條）
+        let dot = world
+            .query::<(&Node, &BackgroundColor)>()
+            .iter(world)
+            .find(|(n, bg)| bg.0 == Color::WHITE && n.width == n.height)
+            .map(|(n, _)| n.clone())
+            .unwrap();
+        (
+            Vec2::new(px(container.width), px(container.height)),
+            Vec2::new(
+                px(dot.left) + px(dot.width) / 2.0,
+                px(dot.top) + px(dot.height) / 2.0,
+            ),
+        )
+    }
+
+    #[test]
+    fn marker_rotates_about_the_player_dot() {
+        // UiTransform 繞節點中心轉：白色主圓要在容器正中央，箭頭轉的時候圓點才會留在玩家位置
+        for spawn in [
+            spawn_minimap_player_marker as fn(&mut ChildSpawnerCommands),
+            spawn_fullmap_player_marker,
+        ] {
+            let (size, dot) = marker_geometry(spawn);
+            assert_eq!(dot, size / 2.0, "容器 {size}，主圓中心 {dot}");
+        }
+    }
 }

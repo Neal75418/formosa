@@ -1208,7 +1208,7 @@ ui|fullmap/1/0/0/46/1|l4.000px|t26.000px|w22.000px|h22.000px
 ui|fullmap/1/0/0/46/2|l7.000px|t29.000px|w16.000px|h16.000px
 ui|fullmap/1/0/0/46/3|l8.000px|t2.000px|w14.000px|h24.000px
 ui|fullmap/1/0/0/46/4|l10.000px|t4.000px|w10.000px|h22.000px
-ui|fullmap/1/0/0/46|l585.000px|t374.000px|w30.000px|h52.000px
+ui|fullmap/1/0/0/46|l585.000px|t363.000px|w30.000px|h74.000px
 ui|fullmap/1/0/0/47/0|lauto|tauto|wauto|hauto|text:N
 ui|fullmap/1/0/0/47|l582.000px|t15.000px|w36.000px|h36.000px
 ui|fullmap/1/0/0/48/0|lauto|tauto|wauto|hauto|text:S
@@ -1277,7 +1277,7 @@ ui|minimap/0/0/39/1|l3.000px|t17.000px|w14.000px|h14.000px
 ui|minimap/0/0/39/2|l5.000px|t19.000px|w10.000px|h10.000px
 ui|minimap/0/0/39/3|l5.000px|t2.000px|w10.000px|h16.000px
 ui|minimap/0/0/39/4|l7.000px|t4.000px|w6.000px|h14.000px
-ui|minimap/0/0/39|l140.000px|t133.000px|w20.000px|h34.000px
+ui|minimap/0/0/39|l140.000px|t126.000px|w20.000px|h48.000px
 ui|minimap/0/0/3|l209.400px|t55.500px|w25.200px|h162.000px
 ui|minimap/0/0/40/0|lauto|tauto|wauto|hauto|text:N
 ui|minimap/0/0/40|l140.000px|t6.000px|w20.000px|h20.000px

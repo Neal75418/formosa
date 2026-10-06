@@ -3,12 +3,13 @@
 //! 包含：小地圖更新、大地圖切換、縮放控制、世界名稱標籤
 
 use bevy::prelude::*;
+use bevy::ui::UiTransform;
 
 use super::components::{
     FullMapContainer, FullMapPlayerMarker, MinimapContainer, MinimapPlayerMarker, UiState,
 };
-use super::constants::ESLITE_GREEN;
-use super::map_projection::{MapProjection, FULLMAP, MINIMAP};
+use super::constants::{ESLITE_GREEN, FULLMAP_MARKER_SIZE, MINIMAP_MARKER_SIZE};
+use super::map_projection::{heading, MapProjection, FULLMAP, MINIMAP};
 use crate::camera::GameCamera;
 use crate::mission::MissionMarker;
 use crate::player::Player;
@@ -47,12 +48,15 @@ pub fn toggle_map(
     }
 }
 
+/// 玩家箭頭的旋轉插值速度（每秒）
+const MARKER_TURN_SPEED: f32 = 10.0;
+
 /// 更新小地圖（同步玩家真實位置和方向）
 pub fn update_minimap(
     time: Res<Time>,
     player_query: Query<&Transform, (With<Player>, Without<MinimapPlayerMarker>)>,
     mut player_marker_query: Query<
-        (&mut Node, &mut Transform),
+        (&mut Node, &mut UiTransform),
         (With<MinimapPlayerMarker>, Without<Player>),
     >,
 ) {
@@ -61,29 +65,21 @@ pub fn update_minimap(
         return;
     };
     let pos = player_transform.translation;
-    let forward = player_transform.forward();
+    let target_rotation = heading(Player::facing(player_transform));
 
     // 將 3D 世界座標轉換為小地圖 UI 座標（小地圖 300×300）
     let p = MINIMAP.project(pos.x, pos.z);
     let minimap_x = p.x.clamp(10.0, 290.0);
     let minimap_y = p.y.clamp(10.0, 290.0);
 
-    // 計算旋轉角度（基於玩家面向方向）
-    // ▲ 預設朝上（北），需要根據玩家朝向旋轉
-    // forward.x = 東西方向, forward.z = 南北方向
-    // 地圖上北方在上，所以 forward.z > 0 時箭頭朝上
-    let rotation_angle = forward.x.atan2(forward.z);
-    let target_rotation = Quat::from_rotation_z(-rotation_angle);
-
     // 更新玩家標記位置和旋轉
-    // 容器: 20x34, 圓心在 (10, 24)（從容器左上角算）
-    if let Ok((mut node, mut transform)) = player_marker_query.single_mut() {
-        node.left = Val::Px(minimap_x - 10.0); // 置中調整 (20/2)
-        node.top = Val::Px(minimap_y - 24.0); // 圓心偏移 (19 + 10/2)
-                                              // 平滑旋轉插值（每秒旋轉速度約 10 倍，讓旋轉看起來平滑）
-        let rotation_speed = 10.0;
-        let t = (rotation_speed * time.delta_secs()).min(1.0);
-        transform.rotation = transform.rotation.slerp(target_rotation, t);
+    // 標記容器的中心就是圓心
+    if let Ok((mut node, mut ui_transform)) = player_marker_query.single_mut() {
+        node.left = Val::Px(minimap_x - MINIMAP_MARKER_SIZE.x / 2.0);
+        node.top = Val::Px(minimap_y - MINIMAP_MARKER_SIZE.y / 2.0);
+        // UI 只讀 UiTransform（不讀 3D Transform）；平滑插值
+        let t = (MARKER_TURN_SPEED * time.delta_secs()).min(1.0);
+        ui_transform.rotation = ui_transform.rotation.slerp(target_rotation, t);
     }
 }
 
@@ -92,7 +88,7 @@ pub fn update_fullmap(
     time: Res<Time>,
     player_query: Query<&Transform, (With<Player>, Without<FullMapPlayerMarker>)>,
     mut fullmap_marker_query: Query<
-        (&mut Node, &mut Transform),
+        (&mut Node, &mut UiTransform),
         (With<FullMapPlayerMarker>, Without<Player>),
     >,
 ) {
@@ -101,26 +97,21 @@ pub fn update_fullmap(
         return;
     };
     let pos = player_transform.translation;
-    let forward = player_transform.forward();
+    let target_rotation = heading(Player::facing(player_transform));
 
     // 將 3D 世界座標轉換為大地圖 UI 座標（大地圖 1200×800）
     let p = FULLMAP.project(pos.x, pos.z);
     let map_x = p.x.clamp(20.0, 1180.0);
     let map_y = p.y.clamp(20.0, 780.0);
 
-    // 計算旋轉角度
-    let rotation_angle = forward.x.atan2(forward.z);
-    let target_rotation = Quat::from_rotation_z(-rotation_angle);
-
     // 更新玩家標記位置和旋轉
-    // 容器: 30x52, 圓心在 (15, 37)（從容器左上角算）
-    if let Ok((mut node, mut transform)) = fullmap_marker_query.single_mut() {
-        node.left = Val::Px(map_x - 15.0); // 置中調整 (30/2)
-        node.top = Val::Px(map_y - 37.0); // 圓心偏移 (29 + 16/2)
-                                          // 平滑旋轉插值
-        let rotation_speed = 10.0;
-        let t = (rotation_speed * time.delta_secs()).min(1.0);
-        transform.rotation = transform.rotation.slerp(target_rotation, t);
+    // 標記容器的中心就是圓心
+    if let Ok((mut node, mut ui_transform)) = fullmap_marker_query.single_mut() {
+        node.left = Val::Px(map_x - FULLMAP_MARKER_SIZE.x / 2.0);
+        node.top = Val::Px(map_y - FULLMAP_MARKER_SIZE.y / 2.0);
+        // UI 只讀 UiTransform（不讀 3D Transform）；平滑插值
+        let t = (MARKER_TURN_SPEED * time.delta_secs()).min(1.0);
+        ui_transform.rotation = ui_transform.rotation.slerp(target_rotation, t);
     }
 }
 

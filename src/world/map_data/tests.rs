@@ -6,7 +6,7 @@ use super::*;
 use crate::world::{MapBounds, WorldPlugin};
 
 /// 真實資料檔解析成 `MapFile`，給「改一個欄位看會不會報錯」的測試用
-fn real_file() -> MapFile {
+pub(super) fn real_file() -> MapFile {
     bevy::asset::ron::from_str(super::XIMENDING_RON).expect("資料檔要能解析")
 }
 
@@ -20,7 +20,7 @@ fn errors_of(file: &MapFile) -> Vec<String> {
         .collect()
 }
 
-fn assert_error(file: &MapFile, needle: &str) {
+pub(super) fn assert_error(file: &MapFile, needle: &str) {
     let errors = errors_of(file);
     assert!(
         errors.iter().any(|e| e.contains(needle)),

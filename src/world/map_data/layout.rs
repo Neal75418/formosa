@@ -426,8 +426,13 @@ impl MapLayout {
 /// 邊界要是正的矩形、出生點要在邊界內；回傳邊界本身是否有效
 fn check_bounds_and_spawn(file: &MapFile, errors: &mut Vec<MapError>) -> bool {
     let b = file.bounds;
-    if !(b.min_x < b.max_x && b.min_z < b.max_z) {
-        errors.push(MapError(format!("邊界：min 必須小於 max（{b:?}）")));
+    let finite = [b.min_x, b.max_x, b.min_z, b.max_z]
+        .iter()
+        .all(|v| v.is_finite());
+    if !(finite && b.min_x < b.max_x && b.min_z < b.max_z) {
+        errors.push(MapError(format!(
+            "邊界：min 必須小於 max，四個值都要是有限數（{b:?}）"
+        )));
         return false;
     }
     let (x, z) = file.spawn;
@@ -442,14 +447,18 @@ fn check_segments(file: &MapFile, bounds_ok: bool, errors: &mut Vec<MapError>) {
     let b = file.bounds;
     for (i, seg) in file.roads.iter().enumerate() {
         let tag = format!("路段 #{i}（{}）", seg.street);
-        if seg.from >= seg.to {
+        // 寫成「不是 A」而不是「是 B」：NaN 的比較都是 false，要落在報錯那一邊
+        if !(seg.from.is_finite() && seg.to.is_finite() && seg.from < seg.to) {
             errors.push(MapError(format!(
-                "{tag}：起點 {} 必須小於終點 {}",
+                "{tag}：起點 {} 必須小於終點 {}（都要是有限數）",
                 seg.from, seg.to
             )));
         }
-        if seg.width <= 0.0 {
-            errors.push(MapError(format!("{tag}：寬度必須大於 0")));
+        if !(seg.width.is_finite() && seg.width > 0.0) {
+            errors.push(MapError(format!(
+                "{tag}：寬度必須大於 0 且是有限數（{}）",
+                seg.width
+            )));
         }
         if seg.kind == RoadKind::Asphalt && seg.width <= SIDEWALK_WIDTH * 2.0 {
             errors.push(MapError(format!(
@@ -478,6 +487,12 @@ fn check_segments(file: &MapFile, bounds_ok: bool, errors: &mut Vec<MapError>) {
 /// A* 網格：格子大小是除數，要是有限的正數；格數要大於 0
 fn check_grid(file: &MapFile, errors: &mut Vec<MapError>) {
     let g = file.pathfinding_grid;
+    if !(g.origin.0.is_finite() && g.origin.1.is_finite()) {
+        errors.push(MapError(format!(
+            "A* 網格：原點要是有限數（{:?}）",
+            g.origin
+        )));
+    }
     if !g.cell_size.is_finite() || g.cell_size <= 0.0 {
         errors.push(MapError(format!(
             "A* 網格：格子大小要大於 0（{}）",

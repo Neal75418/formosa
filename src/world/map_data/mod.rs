@@ -9,6 +9,8 @@ mod geometry;
 mod layout;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_numbers;
 
 pub use file::*;
 pub use geometry::*;

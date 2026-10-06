@@ -480,3 +480,100 @@ fn rejects_signal_with_unknown_street() {
         .push(("中華路".to_string(), "峨眉街".to_string()));
     assert_error(&file, "號誌 #4（中華路×峨眉街）：沒有「峨眉街」這條路");
 }
+
+#[test]
+fn lane_offset_is_quarter_of_driving_width() {
+    assert_eq!(lane_offset(16.0), 2.0);
+    assert_eq!(lane_offset(12.0), 1.0);
+    assert_eq!(lane_offset(40.0), 8.0);
+    assert_eq!(lane_offset(6.0), 0.0); // 比兩側人行道還窄
+}
+
+#[test]
+fn routes_resolve_lane_points() {
+    let layout = ximending_layout();
+    assert_eq!(layout.routes.len(), 5);
+    assert_eq!(
+        layout.route("外圈").points,
+        [
+            Vec3::new(-56.0, 0.0, 48.0),
+            Vec3::new(88.0, 0.0, 48.0),
+            Vec3::new(88.0, 0.0, -79.0),
+            Vec3::new(-56.0, 0.0, -79.0),
+        ]
+    );
+    assert_eq!(layout.route("中華路").points[0], Vec3::new(84.0, 0.0, 52.0));
+    assert_eq!(
+        layout.route("成都路西段").points[1],
+        Vec3::new(-55.0, 0.0, 48.0)
+    );
+}
+
+#[test]
+fn rejects_route_corner_that_does_not_meet() {
+    let mut file = real_file();
+    file.npc_routes[0].corners[0].ns = "康定路".to_string();
+    file.npc_routes[0].corners[0].ew = "峨嵋街".to_string();
+    assert_error(
+        &file,
+        "NPC 路線 #0「外圈」轉角 #0（康定路×峨嵋街）：「康定路」和「峨嵋街」沒有交會",
+    );
+}
+
+#[test]
+fn rejects_route_with_single_corner() {
+    let mut file = real_file();
+    file.npc_routes[1].corners.truncate(1);
+    assert_error(&file, "NPC 路線 #1「內圈」：至少要兩個轉角");
+}
+
+#[test]
+fn rejects_route_corner_with_streets_swapped() {
+    // 車道係數依欄位套到 ns／ew：路名寫反時要報錯，不能默默套到另一條路
+    let mut file = real_file();
+    let corner = &mut file.npc_routes[0].corners[0];
+    std::mem::swap(&mut corner.ns, &mut corner.ew);
+    assert_error(
+        &file,
+        "NPC 路線 #0「外圈」轉角 #0（成都路×西寧南路）：「成都路」的方向不對",
+    );
+}
+
+#[test]
+fn rejects_route_corner_with_north_south_street_as_ew() {
+    let mut file = real_file();
+    file.npc_routes[0].corners[0].ew = "中華路".to_string();
+    assert_error(
+        &file,
+        "NPC 路線 #0「外圈」轉角 #0（西寧南路×中華路）：「中華路」的方向不對",
+    );
+}
+
+#[test]
+#[should_panic(expected = "地圖沒有「峨眉街」這條 NPC 路線")]
+fn route_lookup_panics_on_unknown_name() {
+    ximending_layout().route("峨眉街");
+}
+
+#[test]
+fn rejects_duplicate_route_name_pointing_at_the_first() {
+    // route() 只會回傳第一條，後面同名的路線永遠拿不到；每條都指向最早那條
+    let mut file = real_file();
+    file.npc_routes[1].name = "外圈".to_string();
+    file.npc_routes[2].name = "外圈".to_string();
+    assert_error(&file, "NPC 路線 #1「外圈」：和 #0 同名");
+    assert_error(&file, "NPC 路線 #2「外圈」：和 #0 同名");
+}
+
+#[test]
+fn duplicate_route_still_checks_its_corners() {
+    // 同名不中斷檢查：同一輪就把那條路線自己的錯誤一起報出來
+    let mut file = real_file();
+    file.npc_routes[1].name = "外圈".to_string();
+    file.npc_routes[1].corners[0].ns = "無名街".to_string();
+    assert_error(&file, "NPC 路線 #1「外圈」：和 #0 同名");
+    assert_error(
+        &file,
+        "NPC 路線 #1「外圈」轉角 #0（無名街×成都路）：沒有「無名街」這條路",
+    );
+}

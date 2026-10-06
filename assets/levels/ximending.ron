@@ -65,4 +65,38 @@
         ("西寧南路", "漢口街"),
         ("中華路", "漢口街"),
     ],
+    // NPC 車路線：依序經過的轉角。車道係數乘上車道偏移（扣掉兩側人行道後車行道寬的 1/4）：
+    // ±1 外側車道、±0.5 中間車道、0 道路中線；南北向路 −1 西／+1 東，東西向路 −1 北／+1 南
+    npc_routes: [
+        (name: "外圈", corners: [
+            (ns: "西寧南路", ns_lane: -1.0, ew: "成都路", ew_lane: -1.0),
+            (ns: "中華路", ns_lane: 1.0, ew: "成都路", ew_lane: -1.0),
+            (ns: "中華路", ns_lane: 1.0, ew: "漢口街", ew_lane: 1.0),
+            (ns: "西寧南路", ns_lane: -1.0, ew: "漢口街", ew_lane: 1.0),
+        ]),
+        (name: "內圈", corners: [
+            (ns: "中華路", ns_lane: -1.0, ew: "成都路", ew_lane: 1.0),
+            (ns: "西寧南路", ns_lane: 1.0, ew: "成都路", ew_lane: 1.0),
+            (ns: "西寧南路", ns_lane: 1.0, ew: "漢口街", ew_lane: -1.0),
+            (ns: "中華路", ns_lane: -1.0, ew: "漢口街", ew_lane: -1.0),
+        ]),
+        (name: "中華路", corners: [
+            (ns: "中華路", ns_lane: 0.5, ew: "成都路", ew_lane: 1.0),
+            (ns: "中華路", ns_lane: 0.5, ew: "漢口街", ew_lane: -1.0),
+            (ns: "中華路", ns_lane: -0.5, ew: "漢口街", ew_lane: -1.0),
+            (ns: "中華路", ns_lane: -0.5, ew: "成都路", ew_lane: 1.0),
+        ]),
+        (name: "成都路西段", corners: [
+            (ns: "康定路", ns_lane: 0.0, ew: "成都路", ew_lane: -1.0),
+            (ns: "西寧南路", ns_lane: 0.0, ew: "成都路", ew_lane: -1.0),
+            (ns: "西寧南路", ns_lane: 0.0, ew: "成都路", ew_lane: 1.0),
+            (ns: "康定路", ns_lane: 0.0, ew: "成都路", ew_lane: 1.0),
+        ]),
+        (name: "康定路", corners: [
+            (ns: "康定路", ns_lane: 1.0, ew: "成都路", ew_lane: 1.0),
+            (ns: "康定路", ns_lane: 1.0, ew: "漢口街", ew_lane: -1.0),
+            (ns: "康定路", ns_lane: -1.0, ew: "漢口街", ew_lane: -1.0),
+            (ns: "康定路", ns_lane: -1.0, ew: "成都路", ew_lane: 1.0),
+        ]),
+    ],
 )

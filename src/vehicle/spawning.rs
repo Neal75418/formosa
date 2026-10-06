@@ -5,10 +5,7 @@ use super::vehicle_damage::BodyPartDamage;
 use super::*;
 use crate::core::math::look_rotation_y_flat;
 use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
-use crate::world::{
-    SIDEWALK_WIDTH, W_MAIN, W_SECONDARY, W_ZHONGHUA, X_KANGDING, X_XINING, X_ZHONGHUA, Z_CHENGDU,
-    Z_HANKOU,
-};
+use crate::world::MapLayout;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -445,25 +442,17 @@ pub fn spawn_npc_vehicle(
         });
 }
 
-/// 計算雙向車道中心偏移（以道路總寬度為基準）
-fn lane_offset(total_width: f32) -> f32 {
-    let drive_width = (total_width - SIDEWALK_WIDTH * 2.0).max(0.0);
-    drive_width * 0.25
-}
-
 /// 系統：初始化交通 (在 Setup 階段運行)
 /// 使用共享材質資源以優化效能
 /// 生成 8-10 台 NPC 車輛和紅綠燈
-#[allow(clippy::too_many_lines)]
-#[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
 pub fn spawn_initial_traffic(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_mats: Res<VehicleMaterials>,
+    layout: Res<MapLayout>,
 ) {
     // NPC 車輛路線 - 只走柏油路，避開徒步區
-    // 可用道路：中華路 (X=75, 寬50m), 西寧南路 (X=-50), 成都路 (Z=50)
     // ★ 重要：
     //   1. 路線點必須在道路中心線左右偏移 (Lane Offset)
     //   2. 不同路線的車道必須錯開，避免重疊
@@ -471,64 +460,13 @@ pub fn spawn_initial_traffic(
 
     use std::sync::Arc;
 
-    // === 道路座標參考（與 world/setup.rs 同步）===
-    let lane_offset_main = lane_offset(W_MAIN);
-    let lane_offset_secondary = lane_offset(W_SECONDARY);
-    let lane_offset_zhonghua = lane_offset(W_ZHONGHUA);
-
-    let z_chengdu_north = Z_CHENGDU - lane_offset_main;
-    let z_chengdu_south = Z_CHENGDU + lane_offset_main;
-    let z_hankou_north = Z_HANKOU - lane_offset_secondary;
-    let z_hankou_south = Z_HANKOU + lane_offset_secondary;
-
-    let x_zhonghua_east = X_ZHONGHUA + lane_offset_zhonghua;
-    let x_zhonghua_west = X_ZHONGHUA - lane_offset_zhonghua;
-    let x_zhonghua_mid_east = X_ZHONGHUA + lane_offset_zhonghua * 0.5;
-    let x_zhonghua_mid_west = X_ZHONGHUA - lane_offset_zhonghua * 0.5;
-    let x_xining_east = X_XINING + lane_offset_secondary;
-    let x_xining_west = X_XINING - lane_offset_secondary;
-    let x_kangding_east = X_KANGDING + lane_offset_main;
-    let x_kangding_west = X_KANGDING - lane_offset_main;
-
-    // 路線 A：外圈 (逆時針) - 走主要幹道外側
-    let route_outer = Arc::new(vec![
-        Vec3::new(x_xining_west, 0.0, z_chengdu_north), // 西南角
-        Vec3::new(x_zhonghua_east, 0.0, z_chengdu_north), // 東南角
-        Vec3::new(x_zhonghua_east, 0.0, z_hankou_south), // 東北角
-        Vec3::new(x_xining_west, 0.0, z_hankou_south),  // 西北角
-    ]);
-
-    // 路線 B：內圈 (順時針) - 使用相反車道避免重疊
-    let route_inner = Arc::new(vec![
-        Vec3::new(x_zhonghua_west, 0.0, z_chengdu_south), // 東南角
-        Vec3::new(x_xining_east, 0.0, z_chengdu_south),   // 西南角
-        Vec3::new(x_xining_east, 0.0, z_hankou_north),    // 西北角
-        Vec3::new(x_zhonghua_west, 0.0, z_hankou_north),  // 東北角
-    ]);
-
-    // 路線 C：中華路直線 (南北向) - 使用中間車道避免與外圈衝突
-    let route_zhonghua = Arc::new(vec![
-        Vec3::new(x_zhonghua_mid_east, 0.0, z_chengdu_south), // 南端
-        Vec3::new(x_zhonghua_mid_east, 0.0, z_hankou_north),  // 北端
-        Vec3::new(x_zhonghua_mid_west, 0.0, z_hankou_north),  // U 型轉彎
-        Vec3::new(x_zhonghua_mid_west, 0.0, z_chengdu_south), // 南端
-    ]);
-
-    // 路線 D：成都路西段 (東西向) - 避開外圈主線
-    let route_chengdu = Arc::new(vec![
-        Vec3::new(X_KANGDING, 0.0, z_chengdu_north), // 西端
-        Vec3::new(X_XINING, 0.0, z_chengdu_north),   // 東端
-        Vec3::new(X_XINING, 0.0, z_chengdu_south),   // U 型轉彎
-        Vec3::new(X_KANGDING, 0.0, z_chengdu_south), // 西端
-    ]);
-
-    // 路線 E：康定路直線 (南北向) - 新增西邊界車流
-    let route_kangding = Arc::new(vec![
-        Vec3::new(x_kangding_east, 0.0, z_chengdu_south), // 南端
-        Vec3::new(x_kangding_east, 0.0, z_hankou_north),  // 北端
-        Vec3::new(x_kangding_west, 0.0, z_hankou_north),  // U 型轉彎
-        Vec3::new(x_kangding_west, 0.0, z_chengdu_south), // 南端
-    ]);
+    // 路線由地圖資料推算（路口加減車道偏移）
+    let route = |name: &str| Arc::new(layout.route(name).points.clone());
+    let route_outer = route("外圈");
+    let route_inner = route("內圈");
+    let route_zhonghua = route("中華路");
+    let route_chengdu = route("成都路西段");
+    let route_kangding = route("康定路");
 
     // 車輛顏色池
     let car_colors = [

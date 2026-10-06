@@ -2,8 +2,10 @@
 
 use bevy::prelude::*;
 
-use super::file::{GridSpec, MapFile, MinimapRoadSpec, RoadAxis, RoadKind, RoadSegmentSpec};
-use super::geometry::{segment_reaches, FLEE_INSET, SIDEWALK_WIDTH};
+use super::file::{
+    GridSpec, MapFile, MinimapRoadSpec, RoadAxis, RoadKind, RoadSegmentSpec, RouteSpec,
+};
+use super::geometry::{lane_offset, segment_reaches, FLEE_INSET, SIDEWALK_WIDTH};
 use crate::world::MapBounds;
 
 /// 資料檔的一筆錯誤（訊息指出是哪一筆）
@@ -40,6 +42,13 @@ pub struct Junction {
     pub ew_width: f32,
 }
 
+/// NPC 車路線：依序經過的點
+#[derive(Debug, Clone, PartialEq)]
+pub struct NpcRoute {
+    pub name: String,
+    pub points: Vec<Vec3>,
+}
+
 /// 解析後的地圖：路名都已換成座標，系統只負責生成
 #[derive(Resource, Debug, Clone)]
 pub struct MapLayout {
@@ -62,6 +71,8 @@ pub struct MapLayout {
     pub crosswalks: Vec<Junction>,
     /// 有號誌的路口
     pub signals: Vec<Junction>,
+    /// NPC 車路線
+    pub routes: Vec<NpcRoute>,
 }
 
 impl MapLayout {
@@ -79,6 +90,7 @@ impl MapLayout {
         layout.check_minimap_roads(&mut errors);
         layout.crosswalks = layout.resolve_junctions("斑馬線", &file.crosswalks, &mut errors);
         layout.signals = layout.resolve_junctions("號誌", &file.signals, &mut errors);
+        layout.routes = layout.resolve_routes(&file.npc_routes, &mut errors);
         if errors.is_empty() {
             Ok(layout)
         } else {
@@ -128,6 +140,7 @@ impl MapLayout {
             minimap_roads: file.minimap_roads.clone(),
             crosswalks: Vec::new(),
             signals: Vec::new(),
+            routes: Vec::new(),
         }
     }
 
@@ -253,6 +266,70 @@ impl MapLayout {
             }
         }
         junctions.into_iter().map(|(_, j)| j).collect()
+    }
+
+    /// 依名稱取 NPC 路線（名稱寫在程式裡，打錯字時快照測試會在這裡 panic）
+    pub fn route(&self, name: &str) -> &NpcRoute {
+        self.routes
+            .iter()
+            .find(|r| r.name == name)
+            .unwrap_or_else(|| panic!("地圖沒有「{name}」這條 NPC 路線"))
+    }
+
+    fn resolve_routes(&self, specs: &[RouteSpec], errors: &mut Vec<MapError>) -> Vec<NpcRoute> {
+        let mut routes = Vec::new();
+        for (i, spec) in specs.iter().enumerate() {
+            // route() 只回傳第一條同名路線，後面同名的永遠拿不到
+            if let Some(first) = specs[..i].iter().position(|s| s.name == spec.name) {
+                errors.push(MapError(format!(
+                    "NPC 路線 #{i}「{}」：和 #{first} 同名",
+                    spec.name
+                )));
+            }
+            if spec.corners.len() < 2 {
+                errors.push(MapError(format!(
+                    "NPC 路線 #{i}「{}」：至少要兩個轉角",
+                    spec.name
+                )));
+                continue;
+            }
+            let mut points = Vec::new();
+            for (k, corner) in spec.corners.iter().enumerate() {
+                // 先確認方向：車道係數依欄位套到南北向、東西向的路
+                let resolved = self
+                    .street_on(&corner.ns, RoadAxis::NorthSouth)
+                    .and_then(|_| self.street_on(&corner.ew, RoadAxis::EastWest))
+                    .and_then(|_| self.junction(&corner.ns, &corner.ew));
+                match resolved {
+                    Ok(j) => points.push(Vec3::new(
+                        j.center.x + corner.ns_lane * lane_offset(j.ns_width),
+                        0.0,
+                        j.center.z + corner.ew_lane * lane_offset(j.ew_width),
+                    )),
+                    Err(reason) => errors.push(MapError(format!(
+                        "NPC 路線 #{i}「{}」轉角 #{k}（{}×{}）：{reason}",
+                        spec.name, corner.ns, corner.ew
+                    ))),
+                }
+            }
+            routes.push(NpcRoute {
+                name: spec.name.clone(),
+                points,
+            });
+        }
+        routes
+    }
+
+    /// 取指定方向的路；名稱不存在或方向不對時回傳原因
+    fn street_on(&self, name: &str, axis: RoadAxis) -> Result<&Street, String> {
+        let street = self
+            .find_street(name)
+            .ok_or_else(|| format!("沒有「{name}」這條路"))?;
+        if street.axis == axis {
+            Ok(street)
+        } else {
+            Err(format!("「{name}」的方向不對"))
+        }
     }
 }
 

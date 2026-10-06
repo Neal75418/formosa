@@ -24,6 +24,8 @@ pub struct MapFile {
     pub crosswalks: Vec<(String, String)>,
     /// 有號誌的路口：兩條路名（一南北、一東西，順序不拘）
     pub signals: Vec<(String, String)>,
+    /// NPC 車路線
+    pub npc_routes: Vec<RouteSpec>,
 }
 
 /// 可活動範圍（XZ 平面）
@@ -106,4 +108,22 @@ pub struct MinimapRoadSpec {
     pub street: String,
     pub center: f32,
     pub length: f32,
+}
+
+/// 一條 NPC 車路線：依序經過的轉角
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct RouteSpec {
+    pub name: String,
+    pub corners: Vec<CornerSpec>,
+}
+
+/// 路線轉角：兩條路名，各帶一個車道係數
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CornerSpec {
+    pub ns: String,
+    pub ns_lane: f32,
+    pub ew: String,
+    pub ew_lane: f32,
 }

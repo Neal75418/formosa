@@ -49,3 +49,9 @@ pub fn zebra_crossings(junction: &Junction, y: f32) -> [(Vec3, f32, bool); 4] {
         ),
     ]
 }
+
+/// 雙向車道的中心離道路中線的距離：扣掉兩側人行道後車行道寬的 1/4
+pub fn lane_offset(total_width: f32) -> f32 {
+    let drive_width = (total_width - SIDEWALK_WIDTH * 2.0).max(0.0);
+    drive_width * 0.25
+}

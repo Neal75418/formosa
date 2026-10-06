@@ -33,6 +33,11 @@ impl Player {
     pub fn facing(transform: &Transform) -> Vec3 {
         transform.rotation * Vec3::Z
     }
+
+    /// `facing` 的逆運算：讓角色面向 direction 的水平分量的旋轉
+    pub fn rotation_facing(direction: Vec3) -> Quat {
+        Quat::from_rotation_y(direction.x.atan2(direction.z))
+    }
 }
 
 impl Default for Player {
@@ -488,6 +493,27 @@ impl VehicleTransitionState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rotation_facing_points_facing_at_the_direction() {
+        // 轉成這個旋轉後，Player::facing 要指向給的方向（只看水平分量）
+        for direction in [
+            Vec3::Z,
+            Vec3::NEG_Z,
+            Vec3::X,
+            Vec3::NEG_X,
+            Vec3::new(-0.6, 0.0, 0.8),
+            Vec3::new(3.0, -0.2, -4.0),
+        ] {
+            let transform = Transform::from_rotation(Player::rotation_facing(direction));
+            let expected = Vec3::new(direction.x, 0.0, direction.z).normalize();
+            let facing = Player::facing(&transform);
+            assert!(
+                facing.distance(expected) < 1e-5,
+                "direction={direction} facing={facing}"
+            );
+        }
+    }
 
     #[test]
     fn stamina_default() {

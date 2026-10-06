@@ -87,8 +87,7 @@ pub fn vehicle_transition_animation_system(
             // 面向車輛
             let to_vehicle_delta = vehicle_pos - player_transform.translation;
             if to_vehicle_delta.length_squared() > MIN_DIRECTION_SQ {
-                let to_vehicle = to_vehicle_delta.normalize();
-                let target_rotation = Quat::from_rotation_y((-to_vehicle.x).atan2(-to_vehicle.z));
+                let target_rotation = Player::rotation_facing(to_vehicle_delta);
                 player_transform.rotation = player_transform
                     .rotation
                     .slerp(target_rotation, ROTATION_SMOOTHNESS);
@@ -263,4 +262,54 @@ fn handle_exit_vehicle_complete(
     }
     game_state.player_in_vehicle = false;
     game_state.current_vehicle = None;
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::ecs::system::RunSystemOnce;
+
+    use super::*;
+
+    #[test]
+    fn walking_to_the_door_faces_the_vehicle() {
+        // 走向車門時角色要轉向車子；停在快走到門邊的地方（時間不前進），一直轉
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<CrimeEvent>()
+            .init_resource::<PlayerConfig>()
+            .init_resource::<GameState>();
+        let player = app
+            .world_mut()
+            .spawn((Player::default(), Transform::default(), Visibility::Visible))
+            .id();
+        let vehicle_pos = Vec3::new(3.0, 0.5, 1.0);
+        let vehicle = app
+            .world_mut()
+            .spawn((Vehicle::default(), Transform::from_translation(vehicle_pos)))
+            .id();
+        let mut transition = VehicleTransitionState::default();
+        // 門到車的方向不和世界軸平行，x 或 z 單獨寫反都看得出來
+        transition.start_enter(Vec3::ZERO, vehicle, Vec3::new(2.04, 0.0, 0.28), false);
+        transition.progress = 0.9;
+        app.insert_resource(transition);
+
+        for _ in 0..40 {
+            app.world_mut()
+                .run_system_once(vehicle_transition_animation_system)
+                .expect("跑得起來");
+        }
+
+        assert_eq!(
+            app.world().resource::<VehicleTransitionState>().phase,
+            VehicleTransitionPhase::WalkingToVehicle
+        );
+        let transform = app.world().get::<Transform>(player).expect("玩家還在");
+        let to_vehicle = vehicle_pos - transform.translation;
+        let to_vehicle = Vec3::new(to_vehicle.x, 0.0, to_vehicle.z).normalize();
+        let facing = Player::facing(transform);
+        assert!(
+            facing.dot(to_vehicle) > 0.99,
+            "facing={facing} to_vehicle={to_vehicle}"
+        );
+    }
 }

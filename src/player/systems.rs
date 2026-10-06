@@ -487,14 +487,15 @@ fn try_enter_vehicle(
         return;
     };
 
-    let to_vehicle_delta = vehicle_pos - player_pos;
-    let to_vehicle = if to_vehicle_delta.length_squared() > 1e-6 {
-        to_vehicle_delta.normalize()
+    // 玩家在車子哪一側就走那一側的門；和車子中心重疊時，當作是面向車子走過來的
+    let player_side_delta = player_pos - vehicle_pos;
+    let player_side = if player_side_delta.length_squared() > 1e-6 {
+        player_side_delta
     } else {
-        player_transform.forward().as_vec3()
+        -Player::facing(player_transform)
     };
     let vehicle_right = vehicle_transform.right();
-    let from_right = to_vehicle.dot(*vehicle_right) > 0.0;
+    let from_right = player_side.dot(*vehicle_right) > 0.0;
 
     let door_offset = if from_right {
         *vehicle_right

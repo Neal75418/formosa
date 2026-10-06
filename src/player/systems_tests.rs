@@ -16,9 +16,9 @@ fn facing_is_the_forward_walk_direction() {
     }
 }
 
-/// 真的跑 Rapier：玩家膠囊站在原點（和遊戲裡同尺寸），汽車在 X 3 m，可加一道牆；
-/// 按下 F 跑一次上下車系統，回傳開始走向車門時鎖定的車（上不了是 None）
-fn boarding_target(wall: bool) -> Option<Entity> {
+/// 真的跑 Rapier：玩家膠囊（和遊戲裡同尺寸）和汽車放在給的位置，可在 X 1.2 m 加一道牆；
+/// 按下 F 跑一次上下車系統，回傳鎖定的車（上不了是 None）和要走去的車門位置
+fn press_f(player: Transform, vehicle: Transform, wall: bool) -> (Option<Entity>, Vec3) {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,
@@ -28,19 +28,17 @@ fn boarding_target(wall: bool) -> Option<Entity> {
         RapierPhysicsPlugin::<NoUserData>::default(),
     ))
     .init_asset::<Mesh>();
-    let player_pos = Vec3::new(0.0, 0.7, 0.0);
     app.world_mut().spawn((
         Player::default(),
-        Transform::from_translation(player_pos),
+        player,
         RigidBody::KinematicPositionBased,
         Collider::capsule_y(0.45, 0.25),
     ));
-    let vehicle_pos = Vec3::new(3.0, 0.5, 0.0);
     let vehicle = app
         .world_mut()
         .spawn((
             Vehicle::default(),
-            Transform::from_translation(vehicle_pos),
+            vehicle,
             RigidBody::KinematicPositionBased,
             Collider::cuboid(1.0, 0.75, 2.0),
         ))
@@ -65,12 +63,20 @@ fn boarding_target(wall: bool) -> Option<Entity> {
     app.world_mut()
         .run_system_once(enter_exit_vehicle)
         .expect("跑得起來");
-    let target = app
-        .world()
-        .resource::<VehicleTransitionState>()
-        .target_vehicle;
+    let transition = app.world().resource::<VehicleTransitionState>();
+    let target = transition.target_vehicle;
     assert!(target.is_none() || target == Some(vehicle), "{target:?}");
-    target
+    (target, transition.target_position)
+}
+
+/// 玩家站在原點，汽車在 X 3 m
+fn boarding_target(wall: bool) -> Option<Entity> {
+    press_f(
+        Transform::from_xyz(0.0, 0.7, 0.0),
+        Transform::from_xyz(3.0, 0.5, 0.0),
+        wall,
+    )
+    .0
 }
 
 #[test]
@@ -79,4 +85,49 @@ fn boarding_ignores_the_player_itself() {
     assert!(boarding_target(false).is_some(), "沒有牆要上得了車");
     // 中間有牆時仍然要擋
     assert_eq!(boarding_target(true), None);
+}
+
+#[test]
+fn boarding_walks_to_the_door_on_the_players_side() {
+    // 門在車子的左右兩側，玩家在哪一側就走那一側，不能穿過車身走到另一邊
+    let player = Transform::from_xyz(0.0, 0.7, 0.0);
+    for vehicle in [
+        Transform::from_xyz(3.0, 0.5, 0.0),
+        Transform::from_xyz(-3.0, 0.5, 0.0),
+        // 車子轉 ±90°：車的左右變成世界的南北
+        Transform::from_xyz(0.0, 0.5, -3.0)
+            .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
+        Transform::from_xyz(0.0, 0.5, -3.0)
+            .with_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)),
+        // 玩家在車子左前方，不在車的左右軸上
+        Transform::from_xyz(2.0, 0.5, 2.5),
+    ] {
+        let (target, door) = press_f(player, vehicle, false);
+        assert!(target.is_some(), "{vehicle:?}");
+        let door_side = door - vehicle.translation;
+        let player_side = player.translation - vehicle.translation;
+        assert!(
+            door_side.cross(vehicle.right().as_vec3()).length() < 1e-4,
+            "車在 {} 門不在左右軸上 {door}",
+            vehicle.translation
+        );
+        assert!(
+            door_side.dot(player_side) > 0.0,
+            "車在 {} 門在 {door}",
+            vehicle.translation
+        );
+    }
+}
+
+#[test]
+fn boarding_at_the_vehicle_center_uses_the_side_the_player_came_from() {
+    // 和車子中心重疊、看不出在哪一側：當作是面向車子走過來的，走背後那一側的門
+    let vehicle = Transform::from_xyz(3.0, 0.5, 0.0);
+    for facing in [Vec3::X, Vec3::NEG_X] {
+        let player = vehicle.with_rotation(Player::rotation_facing(facing));
+        let (target, door) = press_f(player, vehicle, false);
+        assert!(target.is_some(), "facing={facing}");
+        let door_side = door - vehicle.translation;
+        assert!(door_side.dot(facing) < 0.0, "facing={facing} 門在 {door}");
+    }
 }

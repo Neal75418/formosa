@@ -367,7 +367,7 @@ pub fn enter_exit_vehicle(
     mut interaction: ResMut<InteractionState>,
     game_state: ResMut<GameState>,
     mut transition: ResMut<VehicleTransitionState>,
-    player_query: Query<&mut Transform, (With<Player>, Without<Vehicle>)>,
+    player_query: Query<(Entity, &mut Transform), (With<Player>, Without<Vehicle>)>,
     vehicle_query: Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
     _visibility_query: Query<&mut Visibility, With<Player>>,
     rapier_context: ReadRapierContext,
@@ -377,7 +377,7 @@ pub fn enter_exit_vehicle(
         return;
     }
 
-    let Ok(player_transform) = player_query.single() else {
+    let Ok((player_entity, player_transform)) = player_query.single() else {
         return;
     };
 
@@ -394,6 +394,7 @@ pub fn enter_exit_vehicle(
         try_enter_vehicle(
             &mut transition,
             &mut interaction,
+            player_entity,
             player_transform,
             &vehicle_query,
             &rapier_context,
@@ -450,6 +451,7 @@ fn try_exit_vehicle(
 fn try_enter_vehicle(
     transition: &mut VehicleTransitionState,
     interaction: &mut InteractionState,
+    player_entity: Entity,
     player_transform: &Transform,
     vehicle_query: &Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
     rapier_context: &ReadRapierContext,
@@ -465,6 +467,7 @@ fn try_enter_vehicle(
         .iter()
         .filter_map(|(entity, transform, vehicle)| {
             let distance = can_enter_vehicle(
+                player_entity,
                 entity,
                 vehicle,
                 transform.translation,
@@ -510,6 +513,7 @@ fn try_enter_vehicle(
 /// 檢查到車輛的路徑是否暢通（射線檢測）
 fn is_path_clear_to_vehicle(
     ray_origin: Vec3,
+    player_entity: Entity,
     vehicle_entity: Entity,
     vehicle_pos: Vec3,
     distance: f32,
@@ -523,7 +527,8 @@ fn is_path_clear_to_vehicle(
         return true;
     }
     let direction = direction_delta.normalize();
-    let filter = QueryFilter::new();
+    // 射線起點在玩家膠囊裡，要排除自己，不然第一個打到的永遠是玩家
+    let filter = QueryFilter::new().exclude_collider(player_entity);
 
     match rapier_context.cast_ray(ray_origin, direction, distance as RapierReal, true, filter) {
         Some((hit_entity, toi)) => {
@@ -536,6 +541,7 @@ fn is_path_clear_to_vehicle(
 
 /// 檢查車輛是否可以上車
 fn can_enter_vehicle(
+    player_entity: Entity,
     entity: Entity,
     vehicle: &Vehicle,
     vehicle_pos: Vec3,
@@ -553,7 +559,14 @@ fn can_enter_vehicle(
         return None;
     }
 
-    if !is_path_clear_to_vehicle(ray_origin, entity, vehicle_pos, distance, rapier_context) {
+    if !is_path_clear_to_vehicle(
+        ray_origin,
+        player_entity,
+        entity,
+        vehicle_pos,
+        distance,
+        rapier_context,
+    ) {
         return None;
     }
 
@@ -695,20 +708,5 @@ pub fn stealth_noise_system(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn facing_is_the_forward_walk_direction() {
-        // 往前走時角色轉向移動方向；小地圖箭頭、GPS 讀的 Player::facing 要和這裡一致
-        for direction in [Vec3::NEG_Z, Vec3::X, Vec3::new(-0.6, 0.0, 0.8)] {
-            let mut transform = Transform::default();
-            update_character_rotation(&mut transform, direction, 0.0, false, true, 1.0, 100.0);
-            let facing = Player::facing(&transform);
-            assert!(
-                facing.distance(direction) < 1e-4,
-                "direction={direction} facing={facing}"
-            );
-        }
-    }
-}
+#[path = "systems_tests.rs"]
+mod tests;

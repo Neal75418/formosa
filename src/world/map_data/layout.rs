@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use super::file::{GridSpec, MapFile, RoadAxis, RoadKind, RoadSegmentSpec};
+use super::file::{GridSpec, MapFile, MinimapRoadSpec, RoadAxis, RoadKind, RoadSegmentSpec};
 use super::geometry::{FLEE_INSET, SIDEWALK_WIDTH};
 use crate::world::MapBounds;
 
@@ -48,10 +48,13 @@ pub struct MapLayout {
     streets: Vec<Street>,
     /// 行人 A* 網格的範圍
     pub grid: GridSpec,
+    /// 小地圖的道路方塊
+    pub minimap_roads: Vec<MinimapRoadSpec>,
 }
 
 impl MapLayout {
-    /// 檢查並解析；有錯時回傳每一筆錯誤
+    /// 檢查並解析，分兩階段：先檢查不需要查路名的部分（邊界、路段、網格），
+    /// 都通過才解析路名（小地圖道路、路口……）；每一階段回傳該階段的每一筆錯誤
     pub fn from_file(file: &MapFile) -> Result<Self, Vec<MapError>> {
         let mut errors = Vec::new();
         let bounds_ok = check_bounds_and_spawn(file, &mut errors);
@@ -60,7 +63,13 @@ impl MapLayout {
         if !errors.is_empty() {
             return Err(errors);
         }
-        Ok(Self::base(file))
+        let layout = Self::base(file);
+        layout.check_minimap_roads(&mut errors);
+        if errors.is_empty() {
+            Ok(layout)
+        } else {
+            Err(errors)
+        }
     }
 
     /// 不需要查路名的部分
@@ -102,6 +111,7 @@ impl MapLayout {
             segments: file.roads.clone(),
             streets: build_streets(&file.roads),
             grid: file.pathfinding_grid,
+            minimap_roads: file.minimap_roads.clone(),
         }
     }
 
@@ -153,6 +163,23 @@ impl MapLayout {
     pub fn north_sidewalk_z(&self, name: &str) -> f32 {
         let s = self.street(name);
         s.at - (s.width / 2.0 - SIDEWALK_WIDTH / 2.0)
+    }
+
+    /// 路的中線位置（南北向是 X、東西向是 Z）
+    pub fn at(&self, name: &str) -> f32 {
+        self.street(name).at
+    }
+
+    /// 小地圖的路要對得到路網
+    fn check_minimap_roads(&self, errors: &mut Vec<MapError>) {
+        for (i, road) in self.minimap_roads.iter().enumerate() {
+            if self.find_street(&road.street).is_none() {
+                errors.push(MapError(format!(
+                    "小地圖道路 #{i}：沒有「{}」這條路",
+                    road.street
+                )));
+            }
+        }
     }
 }
 

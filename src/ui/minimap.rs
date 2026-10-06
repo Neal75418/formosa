@@ -8,11 +8,12 @@ use super::components::{
     FullMapContainer, FullMapPlayerMarker, MinimapContainer, MinimapPlayerMarker, UiState,
 };
 use super::constants::ESLITE_GREEN;
+use super::map_projection::{MapProjection, FULLMAP, MINIMAP};
 use crate::camera::GameCamera;
 use crate::mission::MissionMarker;
 use crate::player::Player;
 use crate::vehicle::{Vehicle, VehicleType};
-use crate::world::Building;
+use crate::world::{Building, MapLayout, RoadAxis};
 
 // ============================================================================
 // 世界名稱標籤組件
@@ -62,15 +63,10 @@ pub fn update_minimap(
     let pos = player_transform.translation;
     let forward = player_transform.forward();
 
-    // 將 3D 世界座標轉換為小地圖 UI 座標
-    // 小地圖尺寸: 300x300
-    let map_scale = 0.9;
-    let offset_x = 150.0;
-    let offset_y = 150.0;
-
-    let minimap_x = (pos.x * map_scale + offset_x).clamp(10.0, 290.0);
-    // Z 軸翻轉：讓北方（正 Z）在上方
-    let minimap_y = (-pos.z * map_scale + offset_y).clamp(10.0, 290.0);
+    // 將 3D 世界座標轉換為小地圖 UI 座標（小地圖 300×300）
+    let p = MINIMAP.project(pos.x, pos.z);
+    let minimap_x = p.x.clamp(10.0, 290.0);
+    let minimap_y = p.y.clamp(10.0, 290.0);
 
     // 計算旋轉角度（基於玩家面向方向）
     // ▲ 預設朝上（北），需要根據玩家朝向旋轉
@@ -107,15 +103,10 @@ pub fn update_fullmap(
     let pos = player_transform.translation;
     let forward = player_transform.forward();
 
-    // 將 3D 世界座標轉換為大地圖 UI 座標
-    // Full Map: 1200x800
-    let fm_scale = 2.0;
-    let fm_off_x = 600.0;
-    let fm_off_y = 400.0;
-
-    // Z 軸翻轉：讓北方在上方
-    let map_x = (pos.x * fm_scale + fm_off_x).clamp(20.0, 1180.0);
-    let map_y = (-pos.z * fm_scale + fm_off_y).clamp(20.0, 780.0);
+    // 將 3D 世界座標轉換為大地圖 UI 座標（大地圖 1200×800）
+    let p = FULLMAP.project(pos.x, pos.z);
+    let map_x = p.x.clamp(20.0, 1180.0);
+    let map_y = p.y.clamp(20.0, 780.0);
 
     // 計算旋轉角度
     let rotation_angle = forward.x.atan2(forward.z);
@@ -318,11 +309,9 @@ struct MapLandmark {
     color: Color,
 }
 
-/// 地圖繪製上下文：整合縮放、偏移、字型
+/// 地圖繪製上下文：投影與字型
 struct MapDrawCtx {
-    scale: f32,
-    off_x: f32,
-    off_y: f32,
+    proj: MapProjection,
     font: Handle<Font>,
 }
 
@@ -330,147 +319,77 @@ struct MapDrawCtx {
 #[allow(clippy::too_many_lines)]
 pub fn spawn_map_layer(
     parent: &mut ChildSpawnerCommands,
-    scale: f32,
-    off_x: f32,
-    off_y: f32,
+    proj: MapProjection,
     road_width_factor: f32, // 道路寬度縮放係數
     is_fullmap: bool,       // true: 大地圖(顯示路名、完整方塊), false: 小地圖(簡化)
     font: Handle<Font>,
+    layout: &MapLayout,
 ) {
-    // 引用世界常數 (更新為新的道路佈局)
-    use crate::world::{
-        W_ALLEY, W_MAIN, W_PEDESTRIAN, W_SECONDARY, W_ZHONGHUA, X_HAN, X_KANGDING, X_XINING,
-        X_ZHONGHUA, Z_CHENGDU, Z_EMEI, Z_HANKOU, Z_KUNMING, Z_WUCHANG,
-    };
+    let ctx = MapDrawCtx { proj, font };
 
-    let ctx = MapDrawCtx {
-        scale,
-        off_x,
-        off_y,
-        font,
-    };
-
-    // 1. 繪製道路 (Roads) - 完整西門町道路網格
-    let v_len_main = 180.0;
-    let h_center_x = -10.0; // 水平道路中心點
-
-    // 南北向道路 (Vertical)
-    draw_road_rect(
-        parent,
-        X_ZHONGHUA,
-        -15.0,
-        W_ZHONGHUA * road_width_factor,
-        v_len_main,
-        &ctx,
-        if is_fullmap { "中華路" } else { "" },
-    );
-    draw_road_rect(
-        parent,
-        X_XINING,
-        -15.0,
-        W_SECONDARY * road_width_factor,
-        v_len_main,
-        &ctx,
-        if is_fullmap { "西寧南路" } else { "" },
-    );
-    draw_road_rect(
-        parent,
-        X_KANGDING,
-        -15.0,
-        W_MAIN * road_width_factor,
-        v_len_main,
-        &ctx,
-        if is_fullmap { "康定路" } else { "" },
-    );
-    draw_road_rect(
-        parent,
-        X_HAN,
-        0.0,
-        W_PEDESTRIAN * road_width_factor,
-        100.0,
-        &ctx,
-        if is_fullmap { "漢中街" } else { "" },
-    );
-
-    // 東西向道路 (Horizontal)
-    let h_len = 200.0;
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_HANKOU,
-        h_len,
-        W_SECONDARY * road_width_factor,
-        &ctx,
-        if is_fullmap { "漢口街" } else { "" },
-    );
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_WUCHANG,
-        h_len,
-        W_PEDESTRIAN * road_width_factor,
-        &ctx,
-        if is_fullmap { "武昌街" } else { "" },
-    );
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_KUNMING,
-        h_len,
-        W_ALLEY * road_width_factor,
-        &ctx,
-        if is_fullmap { "昆明街" } else { "" },
-    );
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_EMEI,
-        h_len,
-        W_PEDESTRIAN * road_width_factor,
-        &ctx,
-        if is_fullmap { "峨嵋街" } else { "" },
-    );
-    draw_road_rect(
-        parent,
-        h_center_x,
-        Z_CHENGDU,
-        h_len,
-        W_MAIN * road_width_factor,
-        &ctx,
-        if is_fullmap { "成都路" } else { "" },
-    );
+    // 1. 繪製道路：小地圖自己的道路方塊，寬度與位置取自同名的路
+    for road in &layout.minimap_roads {
+        let street = layout.street(&road.street);
+        let label = if is_fullmap { street.name.as_str() } else { "" };
+        let width = street.width * road_width_factor;
+        match street.axis {
+            RoadAxis::NorthSouth => {
+                draw_road_rect(
+                    parent,
+                    street.at,
+                    road.center,
+                    width,
+                    road.length,
+                    &ctx,
+                    label,
+                );
+            }
+            RoadAxis::EastWest => {
+                draw_road_rect(
+                    parent,
+                    road.center,
+                    street.at,
+                    road.length,
+                    width,
+                    &ctx,
+                    label,
+                );
+            }
+        }
+    }
 
     // 2. 繪製地標 (Landmarks) - 根據新的建築位置更新
+    let at = |name: &str| layout.at(name);
     let landmarks = [
         // 西寧南路沿線
         MapLandmark {
             name: "萬年",
-            world_x: X_XINING - 16.0,
-            world_z: Z_EMEI - 17.5,
+            world_x: at("西寧南路") - 16.0,
+            world_z: at("峨嵋街") - 17.5,
             w: 20.0,
             d: 15.0,
             color: Color::srgb(0.5, 0.5, 0.7),
         },
         MapLandmark {
             name: "獅子林",
-            world_x: X_XINING - 17.0,
-            world_z: Z_WUCHANG - 18.5,
+            world_x: at("西寧南路") - 17.0,
+            world_z: at("武昌街") - 18.5,
             w: 22.0,
             d: 22.0,
             color: Color::srgb(0.5, 0.4, 0.3),
         },
         MapLandmark {
             name: "Donki",
-            world_x: X_XINING + 20.0,
-            world_z: Z_WUCHANG + 18.5,
+            world_x: at("西寧南路") + 20.0,
+            world_z: at("武昌街") + 18.5,
             w: 28.0,
             d: 22.0,
             color: Color::srgb(1.0, 0.85, 0.0),
         },
         MapLandmark {
             name: "電影公園",
-            world_x: X_XINING - 18.5,
-            world_z: Z_KUNMING - 14.0,
+            world_x: at("西寧南路") - 18.5,
+            world_z: at("昆明街") - 14.0,
             w: 25.0,
             d: 20.0,
             color: Color::srgb(0.25, 0.4, 0.25),
@@ -478,32 +397,32 @@ pub fn spawn_map_layer(
         // 漢中街沿線
         MapLandmark {
             name: "誠品西門",
-            world_x: X_HAN - 16.5,
-            world_z: Z_EMEI - 15.5,
+            world_x: at("漢中街") - 16.5,
+            world_z: at("峨嵋街") - 15.5,
             w: 18.0,
             d: 16.0,
             color: ESLITE_GREEN,
         },
         MapLandmark {
             name: "誠品武昌",
-            world_x: X_HAN - 14.5,
-            world_z: Z_WUCHANG + 14.5,
+            world_x: at("漢中街") - 14.5,
+            world_z: at("武昌街") + 14.5,
             w: 14.0,
             d: 14.0,
             color: ESLITE_GREEN,
         },
         MapLandmark {
             name: "UQ",
-            world_x: X_HAN + 13.5,
-            world_z: Z_EMEI - 15.0,
+            world_x: at("漢中街") + 13.5,
+            world_z: at("峨嵋街") - 15.0,
             w: 12.0,
             d: 12.0,
             color: Color::srgb(0.85, 0.15, 0.15),
         },
         MapLandmark {
             name: "H&M",
-            world_x: X_HAN + 14.5,
-            world_z: Z_CHENGDU - 15.0,
+            world_x: at("漢中街") + 14.5,
+            world_z: at("成都路") - 15.0,
             w: 14.0,
             d: 14.0,
             color: Color::srgb(0.85, 0.85, 0.85),
@@ -511,32 +430,32 @@ pub fn spawn_map_layer(
         // 中華路沿線
         MapLandmark {
             name: "捷運6號",
-            world_x: X_ZHONGHUA - 26.0,
-            world_z: Z_CHENGDU - 14.0,
+            world_x: at("中華路") - 26.0,
+            world_z: at("成都路") - 14.0,
             w: 12.0,
             d: 12.0,
             color: Color::srgb(0.2, 0.35, 0.65),
         },
         MapLandmark {
             name: "紅樓",
-            world_x: X_ZHONGHUA - 31.0,
-            world_z: Z_CHENGDU + 19.0,
+            world_x: at("中華路") - 31.0,
+            world_z: at("成都路") + 19.0,
             w: 22.0,
             d: 22.0,
             color: Color::srgb(0.7, 0.22, 0.18),
         },
         MapLandmark {
             name: "錢櫃",
-            world_x: X_ZHONGHUA + 28.0,
-            world_z: Z_CHENGDU - 16.0,
+            world_x: at("中華路") + 28.0,
+            world_z: at("成都路") - 16.0,
             w: 16.0,
             d: 16.0,
             color: Color::srgb(0.75, 0.45, 0.55),
         },
         MapLandmark {
             name: "鴨肉扁",
-            world_x: X_ZHONGHUA - 25.0,
-            world_z: Z_WUCHANG + 12.5,
+            world_x: at("中華路") - 25.0,
+            world_z: at("武昌街") + 12.5,
             w: 10.0,
             d: 10.0,
             color: Color::srgb(0.85, 0.65, 0.35),
@@ -544,8 +463,8 @@ pub fn spawn_map_layer(
         // 康定路沿線
         MapLandmark {
             name: "西門國小",
-            world_x: X_KANGDING + 23.0,
-            world_z: Z_WUCHANG - 20.0,
+            world_x: at("康定路") + 23.0,
+            world_z: at("武昌街") - 20.0,
             w: 30.0,
             d: 25.0,
             color: Color::srgb(0.7, 0.65, 0.55),
@@ -581,15 +500,14 @@ fn draw_road_rect(
 ) {
     // width = 世界 X 軸尺寸，length = 世界 Z 軸尺寸
     // 直接乘以縮放比例轉換為 UI 座標
-    let ui_w = width * ctx.scale;
-    let ui_h = length * ctx.scale;
-    let ui_x = x * ctx.scale + ctx.off_x;
-    let ui_y = -z * ctx.scale + ctx.off_y; // Z 軸翻轉
+    let ui_w = ctx.proj.length(width);
+    let ui_h = ctx.proj.length(length);
+    let center = ctx.proj.project(x, z);
 
     spawn_centered_rect(
         parent,
-        ui_x,
-        ui_y,
+        center.x,
+        center.y,
         ui_w,
         ui_h,
         Color::srgba(0.5, 0.5, 0.55, 0.6),
@@ -609,15 +527,14 @@ fn draw_building_rect(
     color: Color,
     name: &str,
 ) {
-    let ui_w = w * ctx.scale;
-    let ui_h = d * ctx.scale;
-    let ui_x = x * ctx.scale + ctx.off_x;
-    let ui_y = -z * ctx.scale + ctx.off_y; // Z 軸翻轉
+    let ui_w = ctx.proj.length(w);
+    let ui_h = ctx.proj.length(d);
+    let center = ctx.proj.project(x, z);
 
     spawn_centered_rect(
         parent,
-        ui_x,
-        ui_y,
+        center.x,
+        center.y,
         ui_w,
         ui_h,
         color,
@@ -677,8 +594,8 @@ fn draw_minimap_point(
     color: Color,
     name: &str,
 ) {
-    let ui_x = x * ctx.scale + ctx.off_x;
-    let ui_y = -z * ctx.scale + ctx.off_y; // Z 軸翻轉
+    let center = ctx.proj.project(x, z);
+    let (ui_x, ui_y) = (center.x, center.y);
     let size = 10.0; // Fixed point size for minimap
 
     // Point

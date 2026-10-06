@@ -8,6 +8,7 @@ use super::components::{
     ChineseFont, GpsDirectionArrow, GpsDistanceDisplay, GpsNavigationState, GpsTurnDirection,
     GpsTurnIndicator, MinimapContainer, MinimapGpsMarker,
 };
+use super::map_projection::MINIMAP;
 use crate::mission::{MissionManager, MissionType};
 use crate::player::Player;
 
@@ -253,12 +254,9 @@ pub fn update_minimap_gps_marker(
     };
 
     // 將世界座標轉換為小地圖座標
-    let map_scale = 0.9;
-    let offset_x = 150.0;
-    let offset_y = 150.0;
-
-    let minimap_x = (destination.x * map_scale + offset_x).clamp(5.0, 295.0);
-    let minimap_y = (-destination.z * map_scale + offset_y).clamp(5.0, 295.0);
+    let p = MINIMAP.project(destination.x, destination.z);
+    let minimap_x = p.x.clamp(5.0, 295.0);
+    let minimap_y = p.y.clamp(5.0, 295.0);
 
     // 收集現有標記
     let markers: Vec<_> = marker_query.iter_mut().collect();

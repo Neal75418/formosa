@@ -307,3 +307,41 @@ fn rejects_degenerate_pathfinding_grid() {
     file.pathfinding_grid.width = 0;
     assert_error(&file, "A* 網格：格數要大於 0");
 }
+
+#[test]
+fn minimap_roads_from_file() {
+    let roads = ximending_layout().minimap_roads;
+    assert_eq!(roads.len(), 9);
+    assert_eq!(
+        roads[3],
+        MinimapRoadSpec {
+            street: "漢中街".to_string(),
+            center: 0.0,
+            length: 100.0
+        }
+    );
+}
+
+#[test]
+fn rejects_minimap_road_on_unknown_street() {
+    let mut file = real_file();
+    file.minimap_roads[7].street = "峨眉街".to_string();
+    assert_error(&file, "小地圖道路 #7：沒有「峨眉街」這條路");
+}
+
+#[test]
+fn at_is_street_centerline() {
+    let layout = ximending_layout();
+    assert_eq!((layout.at("西寧南路"), layout.at("峨嵋街")), (-55.0, 0.0));
+}
+
+#[test]
+fn rejects_unknown_field_in_minimap_road() {
+    let text = super::XIMENDING_RON.replacen(
+        "(street: \"中華路\", center:",
+        "(street: \"中華路\", lenght: 1.0, center:",
+        1,
+    );
+    let errors = load_map(&text).unwrap_err();
+    assert!(errors[0].0.contains("lenght"), "{errors:?}");
+}

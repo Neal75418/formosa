@@ -29,10 +29,10 @@ const GOLDEN_DISPLAY: &str = "src/world/snapshots/ximending_world.txt";
 const TOLERANCE: f64 = 0.002;
 
 /// UI 用的一次性系統：直接呼叫小地圖、大地圖的建立函式（字型給預設 handle 就好）
-fn spawn_map_huds(mut commands: Commands) {
+fn spawn_map_huds(mut commands: Commands, layout: Res<crate::world::MapLayout>) {
     let font = Handle::<Font>::default();
-    super::setup_map::setup_minimap_hud(&mut commands, &font);
-    super::setup_map::setup_full_map(&mut commands, &font);
+    super::setup_map::setup_minimap_hud(&mut commands, &font, &layout);
+    super::setup_map::setup_full_map(&mut commands, &font, &layout);
 }
 
 /// 不開視窗的 App：照遊戲的順序跑地圖相關的啟動系統一次

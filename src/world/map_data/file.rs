@@ -18,6 +18,8 @@ pub struct MapFile {
     pub roads: Vec<RoadSegmentSpec>,
     /// 行人 A* 網格的範圍（找不到規則，照原樣存）
     pub pathfinding_grid: GridSpec,
+    /// 小地圖的道路方塊（自成一套，和世界的路段不同；照原樣存）
+    pub minimap_roads: Vec<MinimapRoadSpec>,
 }
 
 /// 可活動範圍（XZ 平面）
@@ -91,4 +93,13 @@ pub struct GridSpec {
     pub width: usize,
     pub height: usize,
     pub cell_size: f32,
+}
+
+/// 小地圖上的一條路：沿路方向的中心與長度；寬度、位置取自同名的路
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct MinimapRoadSpec {
+    pub street: String,
+    pub center: f32,
+    pub length: f32,
 }

@@ -212,15 +212,19 @@ pub(super) fn spawn_full_screen_overlay<'a>(
 // ============================================================================
 
 /// 設置 UI（使用中文字體）- 協調各分區設置函數
-pub fn setup_ui(mut commands: Commands, chinese_font: Res<ChineseFont>) {
+pub fn setup_ui(
+    mut commands: Commands,
+    chinese_font: Res<ChineseFont>,
+    layout: Res<crate::world::MapLayout>,
+) {
     let font = chinese_font.font.clone();
 
     super::setup_hud::setup_player_status_hud(&mut commands, &font);
-    super::setup_map::setup_minimap_hud(&mut commands, &font);
+    super::setup_map::setup_minimap_hud(&mut commands, &font, &layout);
     super::setup_hud::setup_info_displays(&mut commands, &font);
     super::setup_hud::setup_control_hints(&mut commands, &font);
     super::setup_hud::setup_radio_display(&mut commands, &font);
     super::setup_menu::setup_pause_menu(&mut commands, &font);
-    super::setup_map::setup_full_map(&mut commands, &font);
+    super::setup_map::setup_full_map(&mut commands, &font, &layout);
     super::save_slot_ui::setup_save_slot_ui_panel(&mut commands, &font);
 }

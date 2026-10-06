@@ -13,6 +13,7 @@ mod hud;
 mod init;
 mod interaction_prompt;
 mod loading_screen;
+mod map_projection;
 mod minimap;
 mod mod_shop;
 mod notification;

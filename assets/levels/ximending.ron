@@ -37,4 +37,16 @@
     ],
     // 行人 A* 網格：原點 (x, z)、格數、每格大小（找不到能剛好算出它的規則，照原樣存）
     pathfinding_grid: (origin: (-110.0, -90.0), width: 106, height: 75, cell_size: 2.0),
+    // 小地圖的道路方塊（自成一套，和世界的路段不同；照原樣存）：沿路方向的中心與長度，寬度與位置取自同名的路
+    minimap_roads: [
+        (street: "中華路", center: -15.0, length: 180.0),
+        (street: "西寧南路", center: -15.0, length: 180.0),
+        (street: "康定路", center: -15.0, length: 180.0),
+        (street: "漢中街", center: 0.0, length: 100.0),
+        (street: "漢口街", center: -10.0, length: 200.0),
+        (street: "武昌街", center: -10.0, length: 200.0),
+        (street: "昆明街", center: -10.0, length: 200.0),
+        (street: "峨嵋街", center: -10.0, length: 200.0),
+        (street: "成都路", center: -10.0, length: 200.0),
+    ],
 )

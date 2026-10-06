@@ -8,19 +8,27 @@ use super::components::{
 };
 #[allow(clippy::wildcard_imports)]
 use super::constants::*;
+use super::map_projection::{MapProjection, FULLMAP, MINIMAP};
 use super::minimap::spawn_map_layer;
 use super::systems::{spawn_compass_marker, spawn_full_screen_overlay};
+use crate::world::MapLayout;
+
+/// 玩家標記的初始位置：投影世界原點，再減標記的半寬、半高（對齊容器中心）
+fn marker_origin(proj: MapProjection, size: Vec2) -> Vec2 {
+    proj.project(0.0, 0.0) - size / 2.0
+}
 
 /// 生成小地圖玩家標記（圓形+箭頭指針）
 fn spawn_minimap_player_marker(parent: &mut ChildSpawnerCommands) {
+    let origin = marker_origin(MINIMAP, Vec2::new(20.0, 34.0));
     parent
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Px(20.0),
                 height: Val::Px(34.0),
-                left: Val::Px(140.0),
-                top: Val::Px(133.0),
+                left: Val::Px(origin.x),
+                top: Val::Px(origin.y),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 overflow: Overflow::visible(),
@@ -102,13 +110,14 @@ fn spawn_minimap_player_marker(parent: &mut ChildSpawnerCommands) {
 
 /// 生成大地圖玩家標記（大尺寸圓形+箭頭指針）
 fn spawn_fullmap_player_marker(map: &mut ChildSpawnerCommands) {
+    let origin = marker_origin(FULLMAP, Vec2::new(30.0, 52.0));
     map.spawn((
         Node {
             position_type: PositionType::Absolute,
             width: Val::Px(30.0),
             height: Val::Px(52.0),
-            left: Val::Px(585.0),
-            top: Val::Px(374.0),
+            left: Val::Px(origin.x),
+            top: Val::Px(origin.y),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             overflow: Overflow::visible(),
@@ -382,7 +391,7 @@ fn spawn_minimap_scan_effects(parent: &mut ChildSpawnerCommands) {
 // ============================================================================
 /// 設置右上角小地圖（GTA 風格多層邊框）
 #[allow(clippy::too_many_lines)]
-pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
+pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>, layout: &MapLayout) {
     // 外層發光框
     commands
         .spawn((
@@ -438,20 +447,9 @@ pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
                         spawn_minimap_decorations(parent, font);
 
                         // === 地圖內容層 ===
-                        let mm_scale = 0.9;
-                        let mm_off_x = 150.0;
-                        let mm_off_y = 150.0;
                         let mw_fac = 0.7;
 
-                        spawn_map_layer(
-                            parent,
-                            mm_scale,
-                            mm_off_x,
-                            mm_off_y,
-                            mw_fac,
-                            false,
-                            font.clone(),
-                        );
+                        spawn_map_layer(parent, MINIMAP, mw_fac, false, font.clone(), layout);
 
                         // === 雷達掃描線（GTA 風格）===
                         parent.spawn((
@@ -505,7 +503,7 @@ pub(super) fn setup_minimap_hud(commands: &mut Commands, font: &Handle<Font>) {
 
 /// 設置大地圖（GTA 風格，初始隱藏）
 #[allow(clippy::too_many_lines)]
-pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
+pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>, layout: &MapLayout) {
     spawn_full_screen_overlay(
         commands,
         FULLMAP_BG,
@@ -596,20 +594,9 @@ pub(super) fn setup_full_map(commands: &mut Commands, font: &Handle<Font>) {
                             spawn_fullmap_grid_lines(map);
 
                             // 地圖內容
-                            let fm_scale = 2.0;
-                            let fm_off_x = 600.0;
-                            let fm_off_y = 400.0;
                             let fw_fac = 1.0;
 
-                            spawn_map_layer(
-                                map,
-                                fm_scale,
-                                fm_off_x,
-                                fm_off_y,
-                                fw_fac,
-                                true,
-                                font.clone(),
-                            );
+                            spawn_map_layer(map, FULLMAP, fw_fac, true, font.clone(), layout);
 
                             // 玩家標記（圓形+箭頭指針）
                             spawn_fullmap_player_marker(map);

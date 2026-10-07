@@ -4,6 +4,7 @@
 
 use super::PlayerConfig;
 use super::{Player, VehicleTransitionPhase, VehicleTransitionState};
+use crate::combat::RespawnState;
 use crate::core::{ease_in_out_cubic, GameState};
 use crate::pedestrian::Pedestrian;
 use crate::vehicle::{apply_vehicle_physics_mode, NpcVehicle, Vehicle, VehiclePhysicsMode};
@@ -69,7 +70,9 @@ pub fn vehicle_transition_animation_system(
         .ok()
         .map(|(t, _)| t.translation);
     let Some(vehicle_pos) = vehicle_info else {
+        // 車不見了：動畫中止，上車途中已隱藏的玩家要重新出現
         transition.reset();
+        set_player_visibility(&mut visibility_query, true);
         return;
     };
 
@@ -306,225 +309,57 @@ pub fn player_follow_vehicle_system(
     player_transform.rotation = Player::rotation_facing(vehicle_transform.forward().as_vec3());
 }
 
-/// 上下車動畫和跟車，跟車排在動畫之後：上車完成那一幀動畫把車切成物理模式，
-/// 跟車要在同一幀關掉玩家碰撞體，不然車會被擠開
+/// 在車上但人死了、或車不見了（例如爆炸）：比照下車完成清掉在車上的狀態，玩家重新出現；
+/// 上車途中被打死則中止上車。不清的話，重生後會被跟車拉回車上；車不見了則一直隱形、操作全被當成在開車
+pub fn leave_vehicle_when_stranded_system(
+    mut commands: Commands,
+    respawn_state: Res<RespawnState>,
+    mut game_state: ResMut<GameState>,
+    mut transition: ResMut<VehicleTransitionState>,
+    mut vehicle_query: Query<(&Transform, &mut Vehicle), Without<Player>>,
+    mut visibility_query: Query<&mut Visibility, With<Player>>,
+) {
+    if !game_state.player_in_vehicle {
+        // 上車途中被打死：中止上車，不然重生後動畫跑完又把玩家拉進車裡
+        if respawn_state.is_dead && transition.is_animating() {
+            transition.reset();
+            set_player_visibility(&mut visibility_query, true);
+        }
+        return;
+    }
+    let vehicle_missing = game_state
+        .current_vehicle
+        .is_none_or(|vehicle| !vehicle_query.contains(vehicle));
+    if !respawn_state.is_dead && !vehicle_missing {
+        return;
+    }
+    match game_state.current_vehicle {
+        Some(vehicle) => {
+            handle_exit_vehicle_complete(
+                vehicle,
+                &mut commands,
+                &mut game_state,
+                &mut vehicle_query,
+            );
+        }
+        None => game_state.player_in_vehicle = false,
+    }
+    transition.reset();
+    set_player_visibility(&mut visibility_query, true);
+}
+
+/// 上下車系統依序執行：先處理死亡或車不見，再跑動畫，最後跟車。
+/// 跟車排在動畫之後：上車完成那一幀動畫把車切成物理模式，跟車要在同一幀關掉玩家碰撞體，不然車會被擠開
 pub(super) fn vehicle_transition_systems() -> ScheduleConfigs<ScheduleSystem> {
     (
+        leave_vehicle_when_stranded_system,
         vehicle_transition_animation_system,
-        player_follow_vehicle_system.after(vehicle_transition_animation_system),
+        player_follow_vehicle_system,
     )
+        .chain()
         .into_configs()
 }
 
 #[cfg(test)]
-mod tests {
-    use bevy::ecs::system::RunSystemOnce;
-
-    use super::*;
-
-    /// 車停在 (10, 0.5, −4)、車頭轉了一個角度；玩家在原點。
-    /// current_vehicle 一律指著這台車，在不在車上只看 player_in_vehicle
-    fn run_follow(
-        in_vehicle: bool,
-        phase: VehicleTransitionPhase,
-        collider_disabled: bool,
-    ) -> (App, Entity, Transform) {
-        let mut app = App::new();
-        let vehicle_transform =
-            Transform::from_xyz(10.0, 0.5, -4.0).with_rotation(Quat::from_rotation_y(0.5));
-        let vehicle = app
-            .world_mut()
-            .spawn((Vehicle::default(), vehicle_transform))
-            .id();
-        let player = app
-            .world_mut()
-            .spawn((Player::default(), Transform::from_xyz(0.0, 0.7, 0.0)))
-            .id();
-        if collider_disabled {
-            app.world_mut().entity_mut(player).insert(ColliderDisabled);
-        }
-        app.insert_resource(GameState {
-            player_in_vehicle: in_vehicle,
-            current_vehicle: Some(vehicle),
-        });
-        app.insert_resource(VehicleTransitionState { phase, ..default() });
-        app.world_mut()
-            .run_system_once(player_follow_vehicle_system)
-            .expect("跑得起來");
-        (app, player, vehicle_transform)
-    }
-
-    #[test]
-    fn driving_moves_the_player_with_the_vehicle() {
-        // 開車時玩家跟著車、面向車頭（車頭是 −Z），碰撞體關掉
-        let (app, player, vehicle) = run_follow(true, VehicleTransitionPhase::None, false);
-        let transform = app.world().get::<Transform>(player).expect("玩家還在");
-        assert_eq!(transform.translation, vehicle.translation);
-        let ahead = vehicle.forward().as_vec3();
-        let ahead = Vec3::new(ahead.x, 0.0, ahead.z).normalize();
-        let facing = Player::facing(transform);
-        assert!(
-            facing.distance(ahead) < 1e-5,
-            "facing={facing} ahead={ahead}"
-        );
-        assert!(app.world().entity(player).contains::<ColliderDisabled>());
-    }
-
-    #[test]
-    fn exiting_keeps_the_collider_off_and_leaves_the_position_to_the_animation() {
-        // 下車動畫的每個階段都還算在車上：位置由動畫決定，碰撞體維持關閉
-        for phase in [
-            VehicleTransitionPhase::OpeningDoorExit,
-            VehicleTransitionPhase::ExitingVehicle,
-            VehicleTransitionPhase::ClosingDoorExit,
-            VehicleTransitionPhase::WalkingAway,
-        ] {
-            let (app, player, _) = run_follow(true, phase, true);
-            let transform = app.world().get::<Transform>(player).expect("玩家還在");
-            assert_eq!(transform.translation, Vec3::new(0.0, 0.7, 0.0), "{phase:?}");
-            assert!(
-                app.world().entity(player).contains::<ColliderDisabled>(),
-                "{phase:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn on_foot_the_player_collider_comes_back() {
-        // 下車完成、不在車上：碰撞體打開，位置不動
-        let (app, player, _) = run_follow(false, VehicleTransitionPhase::None, true);
-        let transform = app.world().get::<Transform>(player).expect("玩家還在");
-        assert_eq!(transform.translation, Vec3::new(0.0, 0.7, 0.0));
-        assert!(!app.world().entity(player).contains::<ColliderDisabled>());
-    }
-
-    #[test]
-    fn finishing_boarding_does_not_push_the_vehicle() {
-        // 真的跑 Rapier 和上下車系統（排序同遊戲）：關門快結束、玩家膠囊在車中心而且碰撞體已建好；
-        // 下一幀上車完成、車切成物理模式，碰撞體沒在同一幀關掉的話車會被擠開
-        use crate::core::{
-            COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE,
-        };
-        let mut app = App::new();
-        app.add_plugins((
-            MinimalPlugins,
-            AssetPlugin::default(),
-            bevy::scene::ScenePlugin,
-            TransformPlugin,
-            RapierPhysicsPlugin::<NoUserData>::default(),
-        ))
-        .init_asset::<Mesh>()
-        .insert_resource(TimestepMode::Fixed {
-            dt: 1.0 / 60.0,
-            substeps: 1,
-        })
-        .add_message::<CrimeEvent>()
-        .init_resource::<PlayerConfig>()
-        .init_resource::<GameState>()
-        .init_resource::<VehicleTransitionState>()
-        .add_systems(Update, vehicle_transition_systems());
-        app.world_mut().spawn((
-            Transform::from_xyz(0.0, -0.75, 0.0),
-            RigidBody::Fixed,
-            Collider::cuboid(50.0, 0.5, 50.0),
-            CollisionGroups::new(COLLISION_GROUP_STATIC, Group::ALL),
-        ));
-        let groups = |own| {
-            CollisionGroups::new(
-                own,
-                COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
-            )
-        };
-        // 汽車和玩家的尺寸、碰撞群組同遊戲（vehicle/spawning.rs、world/characters.rs）
-        let start = Vec3::new(0.0, 0.5, 0.0);
-        let vehicle = app
-            .world_mut()
-            .spawn((
-                Vehicle::default(),
-                Transform::from_translation(start),
-                RigidBody::KinematicPositionBased,
-                Collider::cuboid(1.0, 0.75, 2.0),
-                groups(COLLISION_GROUP_VEHICLE),
-            ))
-            .id();
-        app.world_mut().spawn((
-            Player::default(),
-            Transform::from_translation(start),
-            Visibility::Hidden,
-            RigidBody::KinematicPositionBased,
-            Collider::capsule_y(0.45, 0.25),
-            KinematicCharacterController::default(),
-            groups(COLLISION_GROUP_CHARACTER),
-        ));
-        for _ in 0..5 {
-            app.update();
-        }
-        app.insert_resource(VehicleTransitionState {
-            phase: VehicleTransitionPhase::ClosingDoor,
-            progress: 1.0,
-            target_vehicle: Some(vehicle),
-            ..default()
-        });
-
-        for _ in 0..180 {
-            app.update();
-        }
-
-        assert!(app.world().resource::<GameState>().player_in_vehicle);
-        assert_eq!(
-            app.world().get::<RigidBody>(vehicle),
-            Some(&RigidBody::Dynamic),
-            "上車完成後車要是物理模式，才推得動"
-        );
-        let end = app
-            .world()
-            .get::<Transform>(vehicle)
-            .expect("車還在")
-            .translation;
-        let drift = Vec3::new(end.x - start.x, 0.0, end.z - start.z).length();
-        assert!(drift < 0.01, "車被擠開 {drift} m");
-    }
-
-    #[test]
-    fn walking_to_the_door_faces_the_vehicle() {
-        // 走向車門時角色要轉向車子；停在快走到門邊的地方（時間不前進），一直轉
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .add_message::<CrimeEvent>()
-            .init_resource::<PlayerConfig>()
-            .init_resource::<GameState>();
-        let player = app
-            .world_mut()
-            .spawn((Player::default(), Transform::default(), Visibility::Visible))
-            .id();
-        let vehicle_pos = Vec3::new(3.0, 0.5, 1.0);
-        let vehicle = app
-            .world_mut()
-            .spawn((Vehicle::default(), Transform::from_translation(vehicle_pos)))
-            .id();
-        let mut transition = VehicleTransitionState::default();
-        // 門到車的方向不和世界軸平行，x 或 z 單獨寫反都看得出來
-        transition.start_enter(Vec3::ZERO, vehicle, Vec3::new(2.04, 0.0, 0.28), false);
-        transition.progress = 0.9;
-        app.insert_resource(transition);
-
-        for _ in 0..40 {
-            app.world_mut()
-                .run_system_once(vehicle_transition_animation_system)
-                .expect("跑得起來");
-        }
-
-        assert_eq!(
-            app.world().resource::<VehicleTransitionState>().phase,
-            VehicleTransitionPhase::WalkingToVehicle
-        );
-        let transform = app.world().get::<Transform>(player).expect("玩家還在");
-        let to_vehicle = vehicle_pos - transform.translation;
-        let to_vehicle = Vec3::new(to_vehicle.x, 0.0, to_vehicle.z).normalize();
-        let facing = Player::facing(transform);
-        assert!(
-            facing.dot(to_vehicle) > 0.99,
-            "facing={facing} to_vehicle={to_vehicle}"
-        );
-    }
-}
+#[path = "vehicle_transition_tests.rs"]
+mod tests;

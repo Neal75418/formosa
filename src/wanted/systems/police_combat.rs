@@ -14,6 +14,7 @@ use crate::player::Player;
 use super::super::components::*;
 #[allow(clippy::wildcard_imports)]
 use super::super::config::*;
+use super::super::PlayerSurrenderState;
 
 // ============================================================================
 // 戰鬥輔助函數
@@ -76,16 +77,24 @@ fn calc_tracer_end(player_pos: Vec3, is_hit: bool) -> Vec3 {
 pub fn police_combat_system(
     mut commands: Commands,
     mut police_query: Query<(Entity, &Transform, &mut PoliceOfficer)>,
-    player_query: Query<(Entity, &Transform), (With<Player>, Without<PoliceOfficer>)>,
+    player_query: Query<
+        (Entity, &Transform, Option<&PlayerSurrenderState>),
+        (With<Player>, Without<PoliceOfficer>),
+    >,
     mut damage_events: MessageWriter<DamageEvent>,
     time: Res<Time>,
     config: Res<PoliceConfig>,
+    wanted: Res<WantedLevel>,
     rapier_context: ReadRapierContext,
     combat_visuals: Option<Res<CombatVisuals>>,
 ) {
-    let Ok((player_entity, player_transform)) = player_query.single() else {
+    let Ok((player_entity, player_transform, surrender)) = player_query.single() else {
         return;
     };
+    // 通緝清掉或玩家已投降：不開槍
+    if wanted.stars == 0 || surrender.is_some_and(|state| state.has_surrendered) {
+        return;
+    }
     let player_pos = player_transform.translation;
     let Ok(rapier) = rapier_context.single() else {
         return;

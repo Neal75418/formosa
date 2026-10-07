@@ -8,6 +8,7 @@ use bevy_rapier3d::prelude::*;
 use super::*;
 use crate::core::CameraSettings;
 use crate::player::Player;
+use crate::wanted::PlayerSurrenderState;
 
 // ============================================================================
 // 輸入與投擲系統
@@ -18,11 +19,20 @@ pub fn explosive_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     camera_settings: Res<CameraSettings>,
-    mut player_query: Query<(Entity, &Transform, &mut ExplosiveInventory), With<Player>>,
+    mut player_query: Query<
+        (
+            Entity,
+            &Transform,
+            &mut ExplosiveInventory,
+            Option<&PlayerSurrenderState>,
+        ),
+        With<Player>,
+    >,
     mut throw_state: ResMut<ThrowPreviewState>,
     mut throw_events: MessageWriter<ThrowExplosiveEvent>,
 ) {
-    let Ok((player_entity, player_transform, mut inventory)) = player_query.single_mut() else {
+    let Ok((player_entity, player_transform, mut inventory, surrender)) = player_query.single_mut()
+    else {
         return;
     };
 
@@ -39,8 +49,9 @@ pub fn explosive_input_system(
         inventory.throw_cooldown -= time.delta_secs();
     }
 
-    // 沒有選擇爆炸物或冷卻中則不處理投擲
-    if !inventory.has_selected() || inventory.throw_cooldown > 0.0 {
+    // 沒有選擇爆炸物、冷卻中或舉手投降時不處理投擲
+    let hands_up = surrender.is_some_and(|state| state.has_surrendered);
+    if !inventory.has_selected() || inventory.throw_cooldown > 0.0 || hands_up {
         throw_state.is_previewing = false;
         return;
     }
@@ -297,8 +308,17 @@ pub fn detonate_sticky_bomb_system(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     sticky_query: Query<(Entity, &Transform, &Explosive)>,
+    player_query: Query<&PlayerSurrenderState, With<Player>>,
     mut explosion_events: MessageWriter<ExplosionEvent>,
 ) {
+    // 舉手投降時不能引爆
+    if player_query
+        .single()
+        .is_ok_and(|state| state.has_surrendered)
+    {
+        return;
+    }
+
     // H 鍵：引爆所有已附著的黏性炸彈
     if keyboard.just_pressed(KeyCode::KeyH) {
         for (entity, transform, explosive) in &sticky_query {
@@ -314,5 +334,99 @@ pub fn detonate_sticky_bomb_system(
                 info!("引爆黏性炸彈!");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::ecs::system::RunSystemOnce;
+
+    use super::*;
+    use crate::wanted::PlayerSurrenderState;
+
+    /// 有手榴彈、按住投擲鍵（G）跑一次投擲輸入，回傳有沒有開始蓄力
+    fn throw_started(hands_up: bool) -> bool {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<CameraSettings>()
+            .init_resource::<ThrowPreviewState>()
+            .add_message::<ThrowExplosiveEvent>();
+        app.world_mut().spawn((
+            Player::default(),
+            Transform::default(),
+            ExplosiveInventory {
+                grenades: 1,
+                selected: Some(ExplosiveType::Grenade),
+                ..default()
+            },
+            PlayerSurrenderState {
+                has_surrendered: hands_up,
+                ..default()
+            },
+        ));
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyG);
+        app.world_mut()
+            .run_system_once(explosive_input_system)
+            .expect("跑得起來");
+        app.world().resource::<ThrowPreviewState>().is_previewing
+    }
+
+    /// 一顆已附著的黏性炸彈，按 H 跑一次引爆，回傳有沒有爆炸
+    fn sticky_bomb_detonated(hands_up: bool) -> bool {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<ButtonInput<KeyCode>>()
+            .add_message::<ExplosionEvent>();
+        let player = app
+            .world_mut()
+            .spawn((
+                Player::default(),
+                PlayerSurrenderState {
+                    has_surrendered: hands_up,
+                    ..default()
+                },
+            ))
+            .id();
+        app.world_mut().spawn((
+            Transform::from_xyz(10.0, 0.0, 0.0),
+            Explosive {
+                attached: true,
+                ..Explosive::sticky_bomb(player)
+            },
+        ));
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyH);
+        app.world_mut()
+            .run_system_once(detonate_sticky_bomb_system)
+            .expect("跑得起來");
+        app.world_mut()
+            .resource_mut::<Messages<ExplosionEvent>>()
+            .drain()
+            .count()
+            > 0
+    }
+
+    #[test]
+    fn the_detonate_key_sets_off_a_sticky_bomb() {
+        assert!(sticky_bomb_detonated(false));
+    }
+
+    #[test]
+    fn the_detonate_key_does_nothing_with_hands_up() {
+        assert!(!sticky_bomb_detonated(true));
+    }
+
+    #[test]
+    fn the_throw_key_starts_a_throw() {
+        assert!(throw_started(false));
+    }
+
+    #[test]
+    fn the_throw_key_does_nothing_with_hands_up() {
+        assert!(!throw_started(true));
     }
 }

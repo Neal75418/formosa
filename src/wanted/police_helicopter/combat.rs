@@ -1,6 +1,6 @@
 //! 直升機戰鬥、旋翼動畫、探照燈、傷害、清理系統
 
-use super::super::WantedLevel;
+use super::super::{PlayerSurrenderState, WantedLevel};
 #[allow(clippy::wildcard_imports)]
 use super::components::*;
 use crate::combat::{
@@ -34,15 +34,20 @@ pub fn helicopter_combat_system(
     time: Res<Time>,
     visuals: Res<CombatVisuals>,
     mut damage_events: MessageWriter<DamageEvent>,
-    player_query: Query<(Entity, &Transform), With<Player>>,
+    player_query: Query<(Entity, &Transform, Option<&PlayerSurrenderState>), With<Player>>,
+    wanted: Res<WantedLevel>,
     mut helicopter_query: Query<(Entity, &mut PoliceHelicopter, &Transform)>,
     rapier_context: ReadRapierContext,
 ) {
     let dt = time.delta_secs();
 
-    let Ok((player_entity, player_transform)) = player_query.single() else {
+    let Ok((player_entity, player_transform, surrender)) = player_query.single() else {
         return;
     };
+    // 通緝清掉或玩家已投降：不開火
+    if wanted.stars == 0 || surrender.is_some_and(|state| state.has_surrendered) {
+        return;
+    }
     let player_pos = player_transform.translation;
     let Ok(rapier) = rapier_context.single() else {
         return;

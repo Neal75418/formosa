@@ -20,6 +20,12 @@ mod systems;
 mod debug_viz; // Gizmos 除錯可視化（僅 Debug 模式）
 
 #[cfg(test)]
+mod police_response_tests;
+#[cfg(test)]
+mod surrender_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod tests;
 
 pub use arrest::*;

@@ -11,6 +11,7 @@ use crate::combat::RespawnState;
 use crate::core::GameState;
 use crate::player::{Player, PlayerSkills};
 use crate::ui::NotificationQueue;
+use crate::wanted::PlayerSurrenderState;
 
 /// 射擊輸入收集系統
 pub fn shooting_input_system(
@@ -20,10 +21,15 @@ pub fn shooting_input_system(
     mut input: ResMut<ShootingInput>,
     game_state: Res<GameState>,
     respawn_state: Res<RespawnState>,
-    player_query: Query<&WeaponInventory, With<Player>>,
+    player_query: Query<(&WeaponInventory, Option<&PlayerSurrenderState>), With<Player>>,
 ) {
-    // 死亡時或在車上時不處理射擊輸入
-    if respawn_state.is_dead || game_state.player_in_vehicle {
+    let hands_up = player_query
+        .single()
+        .ok()
+        .and_then(|(_, surrender)| surrender)
+        .is_some_and(|state| state.has_surrendered);
+    // 死亡、在車上或舉手投降時不處理射擊輸入
+    if respawn_state.is_dead || game_state.player_in_vehicle || hands_up {
         input.is_fire_pressed = false;
         input.is_fire_held = false;
         input.is_aim_pressed = false;
@@ -38,7 +44,7 @@ pub fn shooting_input_system(
     let is_melee = player_query
         .single()
         .ok()
-        .and_then(|inv| inv.current_weapon())
+        .and_then(|(inv, _)| inv.current_weapon())
         .is_some_and(|w| w.stats.weapon_type.is_melee());
 
     // 射擊：R 鍵（與 UI 提示一致）
@@ -283,4 +289,49 @@ pub fn block_update_system(
     }
 
     block_state.update_counter_timeout(current_time);
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::ecs::system::RunSystemOnce;
+
+    use super::*;
+    use crate::wanted::PlayerSurrenderState;
+
+    /// 按住射擊鍵（R）跑一次射擊輸入，回傳有沒有收到開槍
+    fn fire_registered(hands_up: bool) -> bool {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<ButtonInput<MouseButton>>()
+            .init_resource::<ButtonInput<KeyCode>>()
+            .add_message::<bevy::input::mouse::MouseWheel>()
+            .init_resource::<ShootingInput>()
+            .init_resource::<GameState>()
+            .init_resource::<RespawnState>();
+        app.world_mut().spawn((
+            Player::default(),
+            WeaponInventory::default(),
+            PlayerSurrenderState {
+                has_surrendered: hands_up,
+                ..default()
+            },
+        ));
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyR);
+        app.world_mut()
+            .run_system_once(shooting_input_system)
+            .expect("跑得起來");
+        app.world().resource::<ShootingInput>().is_fire_pressed
+    }
+
+    #[test]
+    fn the_fire_key_fires() {
+        assert!(fire_registered(false));
+    }
+
+    #[test]
+    fn the_fire_key_does_nothing_with_hands_up() {
+        assert!(!fire_registered(true));
+    }
 }

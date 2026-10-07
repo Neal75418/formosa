@@ -10,6 +10,7 @@ use crate::player::Player;
 use super::super::components::*;
 #[allow(clippy::wildcard_imports)]
 use super::super::config::*;
+use super::super::PlayerSurrenderState;
 
 // ============================================================================
 // 輔助函數
@@ -111,10 +112,22 @@ fn handle_pursuing_state(
     distance: f32,
     movement: &AiMovement,
     player_visible: bool,
+    player_surrendered: bool,
     attack_range: f32,
     dt: f32,
 ) {
-    if distance > attack_range {
+    if player_surrendered {
+        // 不進入交戰：走到逮捕距離內停下，等逮捕系統接手
+        let step = if distance > ARREST_APPROACH_DISTANCE {
+            calc_movement_velocity(direction, movement.walk_speed, dt)
+        } else {
+            Vec3::new(0.0, -9.81 * dt, 0.0)
+        };
+        controller.translation = Some(step);
+        transform.rotation = transform
+            .rotation
+            .slerp(calc_facing_rotation(direction), 8.0 * dt);
+    } else if distance > attack_range {
         controller.translation = Some(calc_movement_velocity(direction, movement.run_speed, dt));
         transform.rotation = transform
             .rotation
@@ -166,6 +179,7 @@ fn handle_engaging_state(
     direction: Vec3,
     distance: f32,
     movement: &AiMovement,
+    player_visible: bool,
     attack_range: f32,
     elapsed_secs: f32,
     dt: f32,
@@ -176,6 +190,11 @@ fn handle_engaging_state(
 
     if distance > attack_range * 1.5 {
         officer.state = PoliceState::Pursuing;
+    }
+
+    if !player_visible {
+        officer.state = PoliceState::Searching;
+        officer.search_timer = 0.0;
     }
 
     let strafe_dir = Vec3::new(-direction.z, 0.0, direction.x);
@@ -207,15 +226,19 @@ pub fn police_ai_system(
         &AiMovement,
         &mut KinematicCharacterController,
     )>,
-    player_query: Query<&Transform, (With<Player>, Without<PoliceOfficer>)>,
+    player_query: Query<
+        (&Transform, Option<&PlayerSurrenderState>),
+        (With<Player>, Without<PoliceOfficer>),
+    >,
     wanted: Res<WantedLevel>,
     time: Res<Time>,
     config: Res<PoliceConfig>,
 ) {
-    let Ok(player_transform) = player_query.single() else {
+    let Ok((player_transform, surrender)) = player_query.single() else {
         return;
     };
     let player_pos = player_transform.translation;
+    let player_surrendered = surrender.is_some_and(|state| state.has_surrendered);
     let dt = time.delta_secs();
     let elapsed = time.elapsed_secs();
 
@@ -229,6 +252,20 @@ pub fn police_ai_system(
             Vec3::ZERO
         };
         let can_see = officer.can_see_player;
+
+        // 通緝清掉：警戒、追捕、交戰中的警察收隊（搜索中的照搜索計時收隊）
+        if wanted.stars == 0
+            && matches!(
+                officer.state,
+                PoliceState::Alerted | PoliceState::Pursuing | PoliceState::Engaging
+            )
+        {
+            officer.state = PoliceState::Returning;
+        }
+        // 玩家投降：交戰中的警察停火，改成走過去逮捕
+        if player_surrendered && officer.state == PoliceState::Engaging {
+            officer.state = PoliceState::Pursuing;
+        }
 
         match officer.state {
             PoliceState::Patrolling => {
@@ -263,6 +300,7 @@ pub fn police_ai_system(
                     distance,
                     movement,
                     can_see,
+                    player_surrendered,
                     config.attack_range,
                     dt,
                 );
@@ -285,6 +323,7 @@ pub fn police_ai_system(
                     direction,
                     distance,
                     movement,
+                    can_see,
                     config.attack_range,
                     elapsed,
                     dt,

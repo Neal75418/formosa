@@ -12,13 +12,14 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
-use crate::combat::{Health, WeaponInventory};
+use crate::combat::{Health, RespawnState, WeaponInventory};
 use crate::core::{rapier_real_to_f32, GameState};
 use crate::economy::PlayerWallet;
 use crate::player::Player;
 
 #[allow(clippy::wildcard_imports)]
 use super::components::*;
+use super::config::ARREST_DISTANCE;
 
 // ============================================================================
 // 常數
@@ -26,14 +27,14 @@ use super::components::*;
 
 /// 投降所需時間（秒）
 const SURRENDER_HOLD_TIME: f32 = 2.0;
+/// 舉手後離開原地超過這個距離（公尺）就算放棄投降
+const SURRENDER_MOVE_TOLERANCE: f32 = 0.5;
 /// 逮捕所需時間（秒）
 const ARREST_TIME: f32 = 3.0;
 /// 罰款基礎值（每星 $500）
 const FINE_PER_STAR: f32 = 500.0;
 /// 武器沒收比例（被逮捕時損失的武器比例）
 const WEAPON_CONFISCATION_RATE: f32 = 0.5;
-/// 警察逮捕距離
-const ARREST_DISTANCE: f32 = 2.0;
 /// 投降後免疫時間（秒）
 const POST_ARREST_IMMUNITY: f32 = 10.0;
 /// 敵人投降血量閾值（百分比）
@@ -56,6 +57,8 @@ pub struct PlayerSurrenderState {
     pub surrender_hold_timer: f32,
     /// 是否已完全投降（手舉起）
     pub has_surrendered: bool,
+    /// 舉手時的位置：離開超過 `SURRENDER_MOVE_TOLERANCE` 就算放棄投降
+    pub surrender_position: Vec3,
     /// 是否正在被逮捕
     pub being_arrested: bool,
     /// 逮捕進度（0.0 - 1.0）
@@ -66,6 +69,18 @@ pub struct PlayerSurrenderState {
     pub post_arrest_immunity: f32,
     /// 載具內投降提示計時器（顯示「先下車」訊息）
     pub vehicle_warning_timer: f32,
+}
+
+impl PlayerSurrenderState {
+    /// 放下手：結束投降和進行中的逮捕
+    fn put_hands_down(&mut self) {
+        self.has_surrendered = false;
+        self.is_surrendering = false;
+        self.surrender_hold_timer = 0.0;
+        self.being_arrested = false;
+        self.arrest_progress = 0.0;
+        self.arresting_officer = None;
+    }
 }
 
 /// 敵人投降狀態
@@ -175,10 +190,10 @@ pub fn player_surrender_input_system(
     game_state: Res<GameState>,
     wanted: Res<WantedLevel>,
     config: Res<ArrestConfig>,
-    mut player_query: Query<&mut PlayerSurrenderState, With<Player>>,
+    mut player_query: Query<(&Transform, &mut PlayerSurrenderState), With<Player>>,
     time: Res<Time>,
 ) {
-    let Ok(mut surrender_state) = player_query.single_mut() else {
+    let Ok((transform, mut surrender_state)) = player_query.single_mut() else {
         return;
     };
 
@@ -190,6 +205,19 @@ pub fn player_surrender_input_system(
     }
     if surrender_state.post_arrest_immunity > 0.0 {
         surrender_state.post_arrest_immunity -= dt;
+    }
+
+    // 舉手後離開原地（走開、上車）就算放棄投降，逮捕途中移動算拒捕；
+    // 逮捕已完成、等處理（BUSTED 畫面）時不算
+    if surrender_state.has_surrendered
+        && surrender_state.arrest_progress < 1.0
+        && transform
+            .translation
+            .distance(surrender_state.surrender_position)
+            > SURRENDER_MOVE_TOLERANCE
+    {
+        surrender_state.put_hands_down();
+        info!("🏃 玩家放棄投降");
     }
 
     // 在車上按 Y 顯示警告
@@ -215,6 +243,7 @@ pub fn player_surrender_input_system(
             && !surrender_state.has_surrendered
         {
             surrender_state.has_surrendered = true;
+            surrender_state.surrender_position = transform.translation;
             info!("🏳️ 玩家投降！通緝等級: {} 星", wanted.stars);
         }
     } else if !surrender_state.has_surrendered {
@@ -230,6 +259,7 @@ pub fn police_arrest_system(
     police_query: Query<(Entity, &Transform, &PoliceOfficer), Without<Player>>,
     mut arrest_events: MessageWriter<ArrestEvent>,
     rapier_context: ReadRapierContext,
+    respawn_state: Res<RespawnState>,
     time: Res<Time>,
 ) {
     let Ok((player_entity, player_transform, mut surrender_state)) = player_query.single_mut()
@@ -242,30 +272,36 @@ pub fn police_arrest_system(
         return;
     }
 
+    // 死了就放下手：WASTED 播著時不會觸發 BUSTED，還沒觸發 BUSTED 的逮捕就不會被處理（作廢），
+    // 不放下手會一直舉著；BUSTED 已經開始才死，播完照樣會處理逮捕
+    if respawn_state.is_dead {
+        surrender_state.put_hands_down();
+        return;
+    }
+
     let player_pos = player_transform.translation;
     let dt = time.delta_secs();
 
     // 如果已經在被逮捕
     if surrender_state.being_arrested {
+        // 逮捕已完成：等逮捕被處理（BUSTED 畫面播完）才放下手，期間警察維持停火
+        if surrender_state.arrest_progress >= 1.0 {
+            return;
+        }
         surrender_state.arrest_progress += dt / ARREST_TIME;
 
         if surrender_state.arrest_progress >= 1.0 {
-            // 逮捕完成
-            if let Some(officer) = surrender_state.arresting_officer {
-                arrest_events.write(ArrestEvent {
-                    target: player_entity,
-                    officer,
-                    arrest_type: ArrestType::PlayerSurrender,
-                });
+            match surrender_state.arresting_officer {
+                Some(officer) => {
+                    arrest_events.write(ArrestEvent {
+                        target: player_entity,
+                        officer,
+                        arrest_type: ArrestType::PlayerSurrender,
+                    });
+                }
+                // 沒有逮捕的警察就沒有逮捕要處理，直接放下手
+                None => surrender_state.put_hands_down(),
             }
-
-            // 重置狀態
-            surrender_state.has_surrendered = false;
-            surrender_state.is_surrendering = false;
-            surrender_state.being_arrested = false;
-            surrender_state.arrest_progress = 0.0;
-            surrender_state.arresting_officer = None;
-            surrender_state.surrender_hold_timer = 0.0;
         }
 
         return;
@@ -390,7 +426,8 @@ pub fn handle_arrest_event_system(
                 wanted.search_center = None;
                 wanted.player_last_seen_pos = None;
 
-                // 設置免疫時間
+                // 放下手、設置免疫時間
+                surrender_state.put_hands_down();
                 surrender_state.post_arrest_immunity = POST_ARREST_IMMUNITY;
 
                 // 發送完成事件

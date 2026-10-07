@@ -7,6 +7,9 @@ mod combat;
 mod components;
 mod spawning;
 
+#[cfg(test)]
+mod tests;
+
 pub use ai::*;
 pub use combat::*;
 pub use spawning::*;

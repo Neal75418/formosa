@@ -9,6 +9,8 @@
 // 功能模組已實現但尚未完全整合到遊戲玩法中
 #![allow(dead_code)]
 
+use bevy::ecs::schedule::ScheduleConfigs;
+use bevy::ecs::system::ScheduleSystem;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
@@ -166,6 +168,19 @@ impl Default for ArrestConfig {
 // ============================================================================
 // 系統
 // ============================================================================
+
+/// 投降、逮捕的系統，照順序串起來
+pub(crate) fn arrest_systems() -> ScheduleConfigs<ScheduleSystem> {
+    (
+        player_surrender_input_system,
+        police_arrest_system,
+        handle_arrest_event_system,
+        enemy_surrender_check_system,
+        surrender_visual_system,
+    )
+        .chain()
+        .into_configs()
+}
 
 /// 初始化逮捕系統
 pub fn setup_arrest_system(mut commands: Commands) {

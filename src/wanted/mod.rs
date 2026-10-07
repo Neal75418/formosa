@@ -149,18 +149,7 @@ impl Plugin for WantedPlugin {
                     .run_if(in_state(AppState::InGame)),
             )
             // 更新系統 - 投降/逮捕（暫停時跳過）
-            .add_systems(
-                Update,
-                (
-                    player_surrender_input_system,
-                    police_arrest_system,
-                    handle_arrest_event_system,
-                    enemy_surrender_check_system,
-                    surrender_visual_system,
-                )
-                    .chain()
-                    .run_if(in_state(AppState::InGame)),
-            )
+            .add_systems(Update, arrest_systems().run_if(in_state(AppState::InGame)))
             // 更新系統 - UI（不受暫停影響，保持顯示）
             .add_systems(
                 Update,

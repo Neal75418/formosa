@@ -10,7 +10,7 @@ use bevy::time::{Real, Virtual};
 
 use crate::combat::{killcam_update_system, KillCamState, RespawnState};
 use crate::core::{ease_in_quad, ease_out_quad, AppState};
-use crate::wanted::{handle_arrest_event_system, ArrestEvent, ArrestType};
+use crate::wanted::{handle_arrest_event_system, police_arrest_system, ArrestEvent, ArrestType};
 
 use super::components::ChineseFont;
 #[allow(clippy::wildcard_imports)]
@@ -418,7 +418,10 @@ impl Plugin for ScreenEffectPlugin {
 /// kill cam 沒在播時每幀設回 1，WASTED 的慢動作要後設才算數
 fn screen_effect_systems() -> ScheduleConfigs<ScheduleSystem> {
     (
-        detect_busted_trigger.before(handle_arrest_event_system),
+        // 逮捕完成那一幀就要開始 BUSTED，處理逮捕才會等 BUSTED 播完（排在逮捕前面會處理兩次）
+        detect_busted_trigger
+            .after(police_arrest_system)
+            .before(handle_arrest_event_system),
         detect_wasted_trigger,
         screen_effect_phase_machine
             .after(detect_wasted_trigger)
@@ -436,6 +439,44 @@ mod tests {
     use bevy::time::{TimeUpdateStrategy, Virtual};
 
     use super::*;
+
+    #[test]
+    fn busted_detection_runs_between_the_arrest_and_its_processing() {
+        // 逮捕完成那一幀送出逮捕事件：偵測 BUSTED 要排在逮捕之後、處理逮捕之前，同一幀就開始 BUSTED，
+        // 處理逮捕才會等 BUSTED 播完；不然逮捕當幀就被處理，BUSTED 播完又處理一次
+        let mut world = World::new();
+        let mut schedule = Schedule::default();
+        schedule.add_systems((crate::wanted::arrest_systems(), screen_effect_systems()));
+        schedule.initialize(&mut world).expect("排得出來");
+        let order: Vec<(bevy::ecs::schedule::SystemKey, String)> = schedule
+            .systems()
+            .expect("已經初始化")
+            .map(|(key, system)| (key, system.name().to_string()))
+            .collect();
+        let find = |name: &str| {
+            order
+                .iter()
+                .position(|(_, system)| system.ends_with(name))
+                .unwrap_or_else(|| panic!("排程裡沒有 {name}"))
+        };
+        // 兩個系統之間有排序（不在「會互相影響卻沒排序」的清單裡），而且 first 排在前面
+        let assert_runs_before = |first: usize, second: usize| {
+            let unordered = schedule
+                .graph()
+                .conflicting_systems()
+                .iter()
+                .any(|(a, b, _)| {
+                    let pair = [*a, *b];
+                    pair.contains(&order[first].0) && pair.contains(&order[second].0)
+                });
+            let (first_name, second_name) = (&order[first].1, &order[second].1);
+            assert!(!unordered, "{first_name} 和 {second_name} 之間沒有排序");
+            assert!(first < second, "{second_name} 排在 {first_name} 之前");
+        };
+        let detect = find("detect_busted_trigger");
+        assert_runs_before(find("police_arrest_system"), detect);
+        assert_runs_before(detect, find("handle_arrest_event_system"));
+    }
 
     #[test]
     fn wasted_finishes_and_triggers_respawn() {

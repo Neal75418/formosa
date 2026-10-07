@@ -277,7 +277,13 @@ pub fn detect_climbable_obstacle(
     player_entity: Entity,
     rapier: &RapierContext,
 ) -> ClimbDetectionResult {
-    let filter = QueryFilter::default().exclude_collider(player_entity);
+    // 行人、敵人（角色碰撞群組）不是可攀爬的障礙物
+    let filter = QueryFilter::default()
+        .exclude_collider(player_entity)
+        .groups(CollisionGroups::new(
+            Group::ALL,
+            Group::ALL & !crate::core::COLLISION_GROUP_CHARACTER,
+        ));
     let forward = player_forward.normalize_or_zero();
     if forward == Vec3::ZERO {
         return ClimbDetectionResult::default();
@@ -347,7 +353,10 @@ pub fn detect_climbable_obstacle(
     );
 
     let landing_position = match landing_hit {
-        Some((_, toi)) => landing_check_origin - Vec3::Y * rapier_real_to_f32(toi) + Vec3::Y * 0.1,
+        // 玩家位置是身體中心：落點是落腳面加站立高度
+        Some((_, toi)) => {
+            landing_check_origin - Vec3::Y * rapier_real_to_f32(toi) + Vec3::Y * STANDING_OFFSET
+        }
         None => edge_position + forward * LANDING_CHECK_DEPTH, // 沒有地面就站在邊緣上
     };
 
@@ -441,6 +450,8 @@ pub fn climb_detection_system(
     rapier_context: ReadRapierContext,
     keyboard: Res<ButtonInput<KeyCode>>,
     vehicle_transition: Res<super::VehicleTransitionState>,
+    game_state: Res<crate::core::GameState>,
+    respawn_state: Res<crate::combat::RespawnState>,
     mut query: Query<(
         Entity,
         &Transform,
@@ -454,8 +465,8 @@ pub fn climb_detection_system(
         return;
     };
 
-    // 上下車動畫中禁止攀爬
-    if vehicle_transition.is_animating() {
+    // 上下車動畫中、在車上（Space 是手煞車）、死亡時禁止攀爬
+    if vehicle_transition.is_animating() || game_state.player_in_vehicle || respawn_state.is_dead {
         return;
     }
 
@@ -465,8 +476,8 @@ pub fn climb_detection_system(
             continue;
         }
 
-        // 取得玩家前方方向
-        let forward = transform.forward().as_vec3();
+        // 玩家正面（角色模型的正面是 +Z；`forward()` 是 -Z，指向背後）
+        let forward = super::Player::facing(transform);
 
         // 檢測障礙物
         let detection = detect_climbable_obstacle(transform.translation, forward, entity, &rapier);
@@ -476,19 +487,15 @@ pub fn climb_detection_system(
         }
 
         // 觸發條件（需要站在地面上）：
-        // 1. 高速移動 + 前進輸入 → 自動觸發（跑酷風格）
-        //    - 衝刺時自動觸發
-        //    - 或速度超過 8.0 m/s 時（接近衝刺門檻）
+        // 1. 衝刺 + 前進輸入 → 自動觸發（跑酷風格）；一般走路撞到不會意外爬上去
         // 2. 按下 Space 鍵 → 手動觸發（靠近障礙物時）
         if !player.is_grounded {
             continue;
         }
 
-        // 放寬自動觸發條件：不只衝刺，高速走路也能觸發
-        let is_moving_fast = player.is_sprinting || player.current_speed > 8.0;
         let is_moving_forward =
             keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp);
-        let auto_trigger = is_moving_fast && is_moving_forward;
+        let auto_trigger = player.is_sprinting && is_moving_forward;
         let manual_trigger = keyboard.just_pressed(KeyCode::Space);
 
         if auto_trigger || manual_trigger {
@@ -549,10 +556,7 @@ pub fn climb_animation_system(
 
         // 更新朝向（面向攀爬方向）
         if climb_state.climb_direction.length_squared() > 0.01 {
-            let target_rotation = Quat::from_rotation_y(
-                (-climb_state.climb_direction.z).atan2(-climb_state.climb_direction.x)
-                    + std::f32::consts::FRAC_PI_2,
-            );
+            let target_rotation = super::Player::rotation_facing(climb_state.climb_direction);
             transform.rotation = transform.rotation.slerp(target_rotation, dt * 10.0);
         }
 
@@ -579,84 +583,5 @@ pub fn climb_animation_system(
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_climb_type_from_height() {
-        assert_eq!(ClimbType::from_height(0.2), ClimbType::None);
-        assert_eq!(ClimbType::from_height(0.5), ClimbType::Vault);
-        assert_eq!(ClimbType::from_height(1.2), ClimbType::Climb);
-        assert_eq!(ClimbType::from_height(2.0), ClimbType::HighClimb);
-        assert_eq!(ClimbType::from_height(3.0), ClimbType::None);
-    }
-
-    #[test]
-    fn test_climb_state_phases_vault() {
-        let mut state = ClimbState::default();
-        state.start(
-            ClimbType::Vault,
-            Vec3::ZERO,
-            Vec3::Y,
-            Vec3::new(0.0, 0.0, 1.0),
-            0.8,
-            Vec3::Z,
-        );
-
-        assert_eq!(state.phase, ClimbPhase::Approaching);
-        state.advance_phase();
-        assert_eq!(state.phase, ClimbPhase::Ascending); // Vault 跳過 GrabbingEdge
-        state.advance_phase();
-        assert_eq!(state.phase, ClimbPhase::Landing);
-        state.advance_phase();
-        assert_eq!(state.phase, ClimbPhase::None);
-    }
-
-    #[test]
-    fn test_climb_state_phases_climb() {
-        let mut state = ClimbState::default();
-        state.start(
-            ClimbType::Climb,
-            Vec3::ZERO,
-            Vec3::Y * 1.5,
-            Vec3::new(0.0, 1.5, 1.0),
-            1.5,
-            Vec3::Z,
-        );
-
-        assert_eq!(state.phase, ClimbPhase::Approaching);
-        state.advance_phase();
-        assert_eq!(state.phase, ClimbPhase::GrabbingEdge); // Climb 需要抓邊緣
-        state.advance_phase();
-        assert_eq!(state.phase, ClimbPhase::Ascending);
-        state.advance_phase();
-        assert_eq!(state.phase, ClimbPhase::Landing);
-        state.advance_phase();
-        assert_eq!(state.phase, ClimbPhase::None);
-    }
-
-    #[test]
-    fn test_total_duration() {
-        let mut state = ClimbState {
-            climb_type: ClimbType::Vault,
-            ..ClimbState::default()
-        };
-        let vault_duration = state.total_duration();
-        assert!(vault_duration < 1.0);
-        assert!(vault_duration > 0.0);
-
-        state.climb_type = ClimbType::HighClimb;
-        let high_climb_duration = state.total_duration();
-        assert!(high_climb_duration > vault_duration); // HighClimb 應比 Vault 更長
-    }
-
-    #[test]
-    fn test_easing_functions() {
-        assert!((ease_out_cubic(0.0) - 0.0).abs() < 0.001);
-        assert!((ease_out_cubic(1.0) - 1.0).abs() < 0.001);
-
-        assert!((ease_in_out_quad(0.0) - 0.0).abs() < 0.001);
-        assert!((ease_in_out_quad(0.5) - 0.5).abs() < 0.001);
-        assert!((ease_in_out_quad(1.0) - 1.0).abs() < 0.001);
-    }
-}
+#[path = "climb_tests.rs"]
+mod tests;

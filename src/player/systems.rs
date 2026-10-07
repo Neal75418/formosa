@@ -386,6 +386,7 @@ pub fn enter_exit_vehicle(
             &game_state,
             &mut transition,
             &mut interaction,
+            player_entity,
             &vehicle_query,
             &rapier_context,
             &config,
@@ -407,6 +408,7 @@ fn try_exit_vehicle(
     game_state: &GameState,
     transition: &mut VehicleTransitionState,
     interaction: &mut InteractionState,
+    player_entity: Entity,
     vehicle_query: &Query<(Entity, &mut Transform, &mut Vehicle), Without<Player>>,
     rapier_context: &ReadRapierContext,
     config: &PlayerConfig,
@@ -425,7 +427,10 @@ fn try_exit_vehicle(
     let left = -right;
     let origin =
         vehicle_transform.translation + Vec3::new(0.0, config.interaction.ray_origin_height, 0.0);
-    let filter = QueryFilter::new().exclude_rigid_body(vehicle_entity);
+    // 玩家跟著車在車中心，射線起點在玩家膠囊裡
+    let filter = QueryFilter::new()
+        .exclude_rigid_body(vehicle_entity)
+        .exclude_collider(player_entity);
 
     let (exit_dir, from_right) = if rapier_ctx
         .cast_ray(origin, *right, EXIT_RAY_DISTANCE, true, filter)

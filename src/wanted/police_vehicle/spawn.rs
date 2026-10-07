@@ -75,11 +75,11 @@ pub fn spawn_police_car_system(
 
     // 計算生成位置（玩家後方或側面）
     let player_pos = player_transform.translation;
-    let player_forward = player_transform.forward().as_vec3();
+    let player_facing = Player::facing(player_transform);
 
     // 隨機選擇生成方向（後方或側面）
     let spawn_angle = rand::random::<f32>() * std::f32::consts::PI + std::f32::consts::FRAC_PI_2;
-    let spawn_dir = Quat::from_rotation_y(spawn_angle) * player_forward;
+    let spawn_dir = Quat::from_rotation_y(spawn_angle) * player_facing;
 
     let distance = POLICE_CAR_SPAWN_DISTANCE_MIN
         + rand::random::<f32>() * (POLICE_CAR_SPAWN_DISTANCE_MAX - POLICE_CAR_SPAWN_DISTANCE_MIN);
@@ -232,6 +232,57 @@ pub fn despawn_police_car_system(
         if should_despawn {
             commands.entity(entity).despawn();
             debug!("警車消失: {:?}", entity);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::ecs::system::RunSystemOnce;
+
+    use super::*;
+
+    #[test]
+    fn police_cars_spawn_behind_or_beside_the_player() {
+        // 開車時玩家面向車頭；警車要生在後方或側面，不能生在車頭前面（方向隨機，多生幾台）
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        let mut meshes = Assets::<Mesh>::default();
+        let mut materials = Assets::<StandardMaterial>::default();
+        app.insert_resource(PoliceCarVisuals::new(&mut meshes, &mut materials))
+            .insert_resource(WantedLevel {
+                stars: 2,
+                ..default()
+            })
+            .insert_resource(GameState {
+                player_in_vehicle: true,
+                current_vehicle: None,
+            });
+        let ahead = Vec3::new(0.6, 0.0, 0.8);
+        app.world_mut().spawn((
+            Player::default(),
+            Transform::from_rotation(Player::rotation_facing(ahead)),
+        ));
+
+        for _ in 0..8 {
+            app.insert_resource(PoliceCarConfig {
+                last_spawn_time: f32::NEG_INFINITY,
+                ..default()
+            });
+            app.world_mut()
+                .run_system_once(spawn_police_car_system)
+                .expect("跑得起來");
+            let mut cars = app
+                .world_mut()
+                .query_filtered::<(Entity, &Transform), With<PoliceCar>>();
+            let spawned: Vec<(Entity, Vec3)> = cars
+                .iter(app.world())
+                .map(|(entity, transform)| (entity, transform.translation))
+                .collect();
+            assert_eq!(spawned.len(), 1);
+            let (car, pos) = spawned[0];
+            assert!(pos.with_y(0.0).dot(ahead) <= 1e-3, "警車生在 {pos}");
+            app.world_mut().entity_mut(car).despawn();
         }
     }
 }

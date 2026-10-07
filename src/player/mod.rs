@@ -20,7 +20,6 @@ pub use config::*;
 pub use skills::*;
 pub use swimming::*;
 pub use systems::*;
-pub use vehicle_transition::*;
 
 use crate::core::{AppState, GameSet, InteractionSet};
 use bevy::prelude::*;
@@ -53,7 +52,8 @@ impl Plugin for PlayerPlugin {
                         .after(climb_animation_system)
                         .after(dodge_movement_system),
                     enter_exit_vehicle.in_set(InteractionSet::Vehicle),
-                    vehicle_transition_animation_system.after(enter_exit_vehicle),
+                    // 上下車動畫＋跟車；玩家系統組排在車輛、世界、UI 之前，它們讀到的是跟過車的位置
+                    vehicle_transition::vehicle_transition_systems().after(enter_exit_vehicle),
                     stealth_noise_system.after(player_input),
                     // 游泳系統
                     player_water_detection_system,

@@ -352,8 +352,8 @@ pub fn leave_vehicle_when_stranded_system(
     release_player(&mut player_query, &mut visibility_query, ground_y);
 }
 
-/// 比照下車完成讓玩家出現、回到地面高度：進座位和坐在車上時玩家高度等於車，
-/// 停著的機車車心只有 0.4，留在那裡會被游泳偵測當成入水
+/// 比照下車完成讓玩家出現、回到地面高度：進座位和坐在車上時玩家高度等於車
+/// （停著的機車車心只有 0.4，比站立高度低 0.3 m），在水域裡還會被當成入水
 fn release_player(
     player_query: &mut Query<&mut Transform, (With<Player>, Without<Vehicle>)>,
     visibility_query: &mut Query<&mut Visibility, With<Player>>,

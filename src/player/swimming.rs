@@ -73,15 +73,30 @@ impl Default for PlayerSwimming {
     }
 }
 
+/// 水域：XZ 範圍（`Rect` 的 y 是世界的 Z）。西門町目前沒有水域。
+/// 範圍要和實際的水一致：太大，岸邊壓低身體會被當成入水；太小，在水裡會被解除游泳
+#[derive(Resource, Default)]
+pub struct WaterAreas(pub Vec<Rect>);
+
+impl WaterAreas {
+    /// 位置的水平投影在不在任何一塊水域裡
+    pub fn contains(&self, position: Vec3) -> bool {
+        let point = Vec2::new(position.x, position.z);
+        self.0.iter().any(|area| area.contains(point))
+    }
+}
+
 // ============================================================================
 // 系統
 // ============================================================================
 
-/// 偵測玩家是否入水/出水，插入或移除 `PlayerSwimming` 組件
+/// 偵測玩家是否入水/出水，插入或移除 `PlayerSwimming` 組件。
+/// 只看高度會把陸地上壓低身體（上車、攀爬）當成入水，所以要在水域裡才算
 pub fn player_water_detection_system(
     mut commands: Commands,
     game_state: Res<GameState>,
     transition: Res<VehicleTransitionState>,
+    water_areas: Res<WaterAreas>,
     query: Query<(Entity, &Transform), With<Player>>,
     swimming_query: Query<&PlayerSwimming>,
 ) {
@@ -93,13 +108,14 @@ pub fn player_water_detection_system(
         return;
     };
     let y = transform.translation.y;
+    let in_water_area = water_areas.contains(transform.translation);
     let has_swimming = swimming_query.get(entity).is_ok();
 
-    if y < WATER_LEVEL + WATER_ENTER_THRESHOLD && !has_swimming {
+    if in_water_area && y < WATER_LEVEL + WATER_ENTER_THRESHOLD && !has_swimming {
         // 入水：插入游泳組件
         commands.entity(entity).insert(PlayerSwimming::default());
-    } else if y > WATER_LEVEL + WATER_EXIT_THRESHOLD && has_swimming {
-        // 出水：移除游泳組件
+    } else if has_swimming && (!in_water_area || y > WATER_LEVEL + WATER_EXIT_THRESHOLD) {
+        // 出水（離開水域或浮出水面）：移除游泳組件
         commands.entity(entity).remove::<PlayerSwimming>();
     }
 }
@@ -300,7 +316,8 @@ mod tests {
     }
 
     /// 跑遊戲裡的上下車系統（含跟車）、游泳偵測和死亡重生，時間每幀走 0.1 秒（第一幀 0）；
-    /// 機車停在車心 0.4（比入水門檻低），玩家站在原點；回傳 (app, 玩家, 機車, 座位)
+    /// 機車停在車心 0.4（比入水門檻低），玩家站在原點；回傳 (app, 玩家, 機車, 座位)。
+    /// 整個場景放在一塊水域裡：陸地本來就不會游泳，要在水域裡才驗得到上下車時的高度判斷
     fn scooter_app() -> (App, Entity, Entity, Vec3) {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
@@ -308,6 +325,7 @@ mod tests {
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_millis(100),
         ))
+        .insert_resource(WaterAreas(vec![Rect::new(-50.0, -50.0, 50.0, 50.0)]))
         .add_message::<crate::wanted::CrimeEvent>()
         .init_resource::<crate::player::PlayerConfig>()
         .init_resource::<GameState>()
@@ -343,10 +361,15 @@ mod tests {
         (app, player, scooter, seat)
     }
 
-    /// 跑 frames 幀，每一幀都不能被當成在游泳
+    /// 跑 frames 幀，每一幀玩家都要在水域裡（不然沒游泳可能只是因為在陸地上），而且不能被當成在游泳
     fn assert_never_swims(app: &mut App, player: Entity, frames: usize, stage: &str) {
         for frame in 0..frames {
             app.update();
+            let at = app.world().get::<Transform>(player).unwrap().translation;
+            assert!(
+                app.world().resource::<WaterAreas>().contains(at),
+                "{stage} 第 {frame} 幀不在水域裡"
+            );
             assert!(
                 !app.world().entity(player).contains::<PlayerSwimming>(),
                 "{stage} 第 {frame} 幀被當成在游泳，玩家 y={}",
@@ -357,7 +380,7 @@ mod tests {
 
     #[test]
     fn riding_a_scooter_is_not_swimming() {
-        // 上車、騎車、下車的每一幀都不能被當成在游泳；下車後偵測照常（低於門檻會入水、高過出水門檻會解除）
+        // 上車、騎車、下車的每一幀都不能被當成在游泳
         let (mut app, player, scooter, seat) = scooter_app();
         app.world_mut()
             .resource_mut::<VehicleTransitionState>()
@@ -375,21 +398,115 @@ mod tests {
             .start_exit(seat, scooter, seat + Vec3::X * 2.5, true);
         assert_never_swims(&mut app, player, 15, "下車");
         assert!(!app.world().resource::<GameState>().player_in_vehicle);
+        // 對照：場景真的在水域裡，下車後壓低就會入水；上面沒游泳不是因為在陸地上，
+        // 壓低到入水門檻以下的那些幀是閘門擋的
+        let at = app.world().get::<Transform>(player).unwrap().translation;
+        assert!(move_player(&mut app, player, Vec3::new(at.x, 0.3, at.z)));
+    }
 
+    /// 只跑游泳偵測：玩家站在 at，水域照給的範圍
+    fn detection_app(water: Vec<Rect>, at: Vec3) -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<GameState>()
+            .init_resource::<VehicleTransitionState>()
+            .insert_resource(WaterAreas(water))
+            .add_systems(Update, player_water_detection_system);
+        let player = app
+            .world_mut()
+            .spawn((Player::default(), Transform::from_translation(at)))
+            .id();
+        (app, player)
+    }
+
+    fn move_player(app: &mut App, player: Entity, to: Vec3) -> bool {
         app.world_mut()
             .get_mut::<Transform>(player)
             .unwrap()
-            .translation
-            .y = 0.3;
+            .translation = to;
         app.update();
-        assert!(app.world().entity(player).contains::<PlayerSwimming>());
-        app.world_mut()
-            .get_mut::<Transform>(player)
-            .unwrap()
-            .translation
-            .y = 1.2;
+        app.world().entity(player).contains::<PlayerSwimming>()
+    }
+
+    #[test]
+    fn low_on_land_is_not_swimming() {
+        // 地圖上沒有水域：身體壓低（上車、攀爬時會壓低）也不是在游泳
+        let (mut app, player) = detection_app(Vec::new(), Vec3::new(0.0, 0.3, 0.0));
         app.update();
         assert!(!app.world().entity(player).contains::<PlayerSwimming>());
+    }
+
+    #[test]
+    fn swimming_happens_only_in_a_water_area() {
+        // 兩塊不相交、不在原點的水域（Rect 的 y 是世界 Z）：在水域裡夠低就入水、換到另一塊也一直算；
+        // 浮出出水門檻、或往 X／Z 方向離開水域就解除
+        let pools = vec![
+            Rect::new(10.0, 20.0, 20.0, 30.0),
+            Rect::new(30.0, 20.0, 40.0, 30.0),
+        ];
+        let (mut app, player) = detection_app(pools, Vec3::new(15.0, 0.3, 25.0));
+        app.update();
+        assert!(
+            app.world().entity(player).contains::<PlayerSwimming>(),
+            "水域裡要入水"
+        );
+        assert!(
+            move_player(&mut app, player, Vec3::new(35.0, 0.3, 25.0)),
+            "在第二塊水域裡也要算在游泳"
+        );
+        assert!(
+            !move_player(&mut app, player, Vec3::new(35.0, 1.2, 25.0)),
+            "浮出出水門檻要解除"
+        );
+        assert!(
+            move_player(&mut app, player, Vec3::new(15.0, 0.3, 25.0)),
+            "回到水裡要再入水"
+        );
+        assert!(
+            !move_player(&mut app, player, Vec3::new(25.0, 0.3, 25.0)),
+            "往 X 方向離開水域要解除"
+        );
+        assert!(
+            move_player(&mut app, player, Vec3::new(15.0, 0.3, 25.0)),
+            "回到水裡要再入水"
+        );
+        assert!(
+            !move_player(&mut app, player, Vec3::new(15.0, 0.3, 35.0)),
+            "往 Z 方向離開水域要解除"
+        );
+    }
+
+    #[test]
+    fn between_the_thresholds_keeps_the_current_state() {
+        // 在水域裡、高度介於入水門檻 0.5 和出水門檻 1.0 之間：沒在游泳就不入水、已在游泳就繼續游；
+        // 已在游泳時不能重插游泳組件（會把憋氣時間重置）
+        let (mut app, player) = detection_app(
+            vec![Rect::new(10.0, 20.0, 20.0, 30.0)],
+            Vec3::new(15.0, 0.7, 25.0),
+        );
+        app.update();
+        assert!(
+            !app.world().entity(player).contains::<PlayerSwimming>(),
+            "0.7 還不夠低，不能入水"
+        );
+        assert!(move_player(&mut app, player, Vec3::new(15.0, 0.3, 25.0)));
+        app.world_mut()
+            .get_mut::<PlayerSwimming>(player)
+            .unwrap()
+            .breath_timer = 1.0;
+        app.update();
+        assert_eq!(
+            app.world()
+                .get::<PlayerSwimming>(player)
+                .unwrap()
+                .breath_timer,
+            1.0,
+            "已在游泳時重插了游泳組件"
+        );
+        assert!(
+            move_player(&mut app, player, Vec3::new(15.0, 0.7, 25.0)),
+            "已在游泳，0.7 還沒浮出出水門檻"
+        );
     }
 
     #[test]

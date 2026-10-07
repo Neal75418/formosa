@@ -37,6 +37,7 @@ impl Plugin for PlayerPlugin {
             .init_resource::<StealthState>()
             .init_resource::<PlayerSkills>()
             .init_resource::<CharacterManager>()
+            .init_resource::<WaterAreas>()
             .add_systems(
                 Update,
                 (

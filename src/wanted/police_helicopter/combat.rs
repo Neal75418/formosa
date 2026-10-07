@@ -64,9 +64,11 @@ pub fn helicopter_combat_system(
             continue;
         }
 
-        let distance = distance_sq.sqrt();
-        let direction = to_player.normalize();
+        // 子彈從槍口出發，方向和長度要從槍口算（從機身中心算會偏掉、打不到人）
         let muzzle_pos = calc_muzzle_position(heli_pos, transform.forward());
+        let to_target = player_pos - muzzle_pos;
+        let distance = to_target.length();
+        let direction = to_target / distance;
 
         spawn_muzzle_flash(&mut commands, &visuals, muzzle_pos);
 

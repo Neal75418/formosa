@@ -134,6 +134,7 @@ pub fn process_witness_reports(
 
 /// 更新每個警察的視線狀態
 fn update_police_vision(
+    player_entity: Entity,
     player_pos: Vec3,
     police_hash: &PoliceSpatialHash,
     police_query: &mut Query<(&Transform, &mut PoliceOfficer)>,
@@ -156,7 +157,6 @@ fn update_police_vision(
         }
 
         let to_player = player_pos - police_transform.translation;
-        let distance = to_player.length();
 
         let police_forward = police_transform.forward().as_vec3();
         let angle = police_forward
@@ -167,18 +167,27 @@ fn update_police_vision(
             continue;
         }
 
+        // 方向和長度要從抬高後的起點算，不然射線平行往上偏、從玩家頭頂飛過
         let ray_origin = police_pos + Vec3::Y * RAYCAST_ORIGIN_HEIGHT;
-        if let Some((_, toi)) = rapier.cast_ray(
-            ray_origin,
-            to_player.normalize(),
-            distance as RapierReal,
-            true,
-            QueryFilter::default().exclude_rigid_body(police_entity),
-        ) {
-            if rapier_real_to_f32(toi) >= distance - RAYCAST_HIT_TOLERANCE {
-                officer.can_see_player = true;
-                any_visible = true;
-            }
+        let to_target = player_pos - ray_origin;
+        let ray_distance = to_target.length();
+        // 打到玩家本人、或打到的東西就在玩家身上，才算看得到；什麼都沒打到也算
+        // （射線只到玩家中心，沒打到就是中間沒有遮擋；膠囊射線偶爾會漏打）
+        let visible = rapier
+            .cast_ray(
+                ray_origin,
+                to_target / ray_distance,
+                ray_distance as RapierReal,
+                true,
+                QueryFilter::default().exclude_rigid_body(police_entity),
+            )
+            .is_none_or(|(hit_entity, toi)| {
+                hit_entity == player_entity
+                    || rapier_real_to_f32(toi) >= ray_distance - RAYCAST_HIT_TOLERANCE
+            });
+        if visible {
+            officer.can_see_player = true;
+            any_visible = true;
         }
     }
     any_visible
@@ -218,7 +227,7 @@ pub fn wanted_cooldown_system(
     mut wanted: ResMut<WantedLevel>,
     mut level_changed: MessageWriter<WantedLevelChanged>,
     time: Res<Time>,
-    player_query: Query<&Transform, With<Player>>,
+    player_query: Query<(Entity, &Transform), With<Player>>,
     police_hash: Res<PoliceSpatialHash>,
     mut police_query: Query<(&Transform, &mut PoliceOfficer)>,
     rapier_context: ReadRapierContext,
@@ -228,13 +237,14 @@ pub fn wanted_cooldown_system(
         return;
     }
 
-    let Ok(player_transform) = player_query.single() else {
+    let Ok((player_entity, player_transform)) = player_query.single() else {
         return;
     };
     let player_pos = player_transform.translation;
 
     let player_visible = rapier_context.single().is_ok_and(|rapier| {
         update_police_vision(
+            player_entity,
             player_pos,
             &police_hash,
             &mut police_query,

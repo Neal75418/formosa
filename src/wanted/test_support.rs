@@ -1,14 +1,15 @@
-//! 通緝系統的真 Rapier 測試場景：地面、走路的玩家、警察
+//! 通緝系統的真 Rapier 測試場景：地面、走路的玩家、警察、擋牆
 
 use std::time::Duration;
 
+use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use bevy::time::TimeUpdateStrategy;
 use bevy_rapier3d::prelude::*;
 
 use super::config::{
     OFFICER_CAPSULE_HALF_HEIGHT, OFFICER_CAPSULE_RADIUS, OFFICER_CONTROLLER_OFFSET,
-    OFFICER_RUN_SPEED, OFFICER_WALK_SPEED,
+    OFFICER_RUN_SPEED, OFFICER_SPAWN_HEIGHT, OFFICER_WALK_SPEED,
 };
 use super::*;
 use crate::ai::AiMovement;
@@ -62,7 +63,7 @@ pub fn spawn_player_on_foot(app: &mut App, position: Vec3) -> Entity {
         .id()
 }
 
-/// 警察站在 at（xz）的地上、面向玩家，元件比照遊戲生成的步警
+/// 警察站在 at（xz）、面向玩家，生成高度和元件比照遊戲生成的步警
 pub fn spawn_officer(app: &mut App, at: Vec3, state: PoliceState) -> Entity {
     let player_pos = app
         .world_mut()
@@ -70,7 +71,7 @@ pub fn spawn_officer(app: &mut App, at: Vec3, state: PoliceState) -> Entity {
         .single(app.world())
         .expect("有玩家")
         .translation;
-    let position = at.with_y(0.1 + OFFICER_CAPSULE_HALF_HEIGHT + OFFICER_CAPSULE_RADIUS);
+    let position = at.with_y(OFFICER_SPAWN_HEIGHT);
     app.world_mut()
         .spawn((
             Transform::from_translation(position)
@@ -105,6 +106,28 @@ pub fn surrender(app: &mut App, player: Entity) {
             surrender_position: position,
             ..default()
         });
+}
+
+/// 固定不動的方塊（牆、圍籬、頂棚）
+pub fn spawn_block(app: &mut App, center: Vec3, half_extents: Vec3) {
+    app.world_mut().spawn((
+        Transform::from_translation(center),
+        RigidBody::Fixed,
+        Collider::cuboid(half_extents.x, half_extents.y, half_extents.z),
+    ));
+}
+
+/// 跑警察開槍系統，回傳警察有沒有開槍（開槍才會重設攻擊冷卻；有沒有命中是隨機的）
+pub fn officer_fires(app: &mut App, officer: Entity) -> bool {
+    settle(app);
+    app.world_mut()
+        .run_system_once(police_combat_system)
+        .expect("跑得起來");
+    app.world()
+        .get::<PoliceOfficer>(officer)
+        .expect("警察還在")
+        .attack_cooldown
+        > 0.0
 }
 
 /// 讓 Rapier 把新生的碰撞體放進射線查詢

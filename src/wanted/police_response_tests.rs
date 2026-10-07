@@ -8,19 +8,6 @@ use super::config::OFFICER_WALK_SPEED;
 use super::test_support::*;
 use super::*;
 
-/// 跑警察開槍系統，回傳警察有沒有開槍（開槍才會重設攻擊冷卻；有沒有命中是隨機的）
-fn officer_fires(app: &mut App, officer: Entity) -> bool {
-    settle(app);
-    app.world_mut()
-        .run_system_once(police_combat_system)
-        .expect("跑得起來");
-    app.world()
-        .get::<PoliceOfficer>(officer)
-        .expect("警察還在")
-        .attack_cooldown
-        > 0.0
-}
-
 /// 警察看得到玩家時跑一次警察 AI，回傳 (狀態, 這一幀的水平移動)
 fn officer_step(app: &mut App, officer: Entity) -> (PoliceState, Vec3) {
     officer_step_seeing(app, officer, true)

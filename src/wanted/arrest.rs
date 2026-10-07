@@ -328,17 +328,19 @@ pub fn police_arrest_system(
             let Ok(rapier) = rapier_context.single() else {
                 continue;
             };
+            // 方向和長度從抬高後的起點算（瞄準玩家，不是平行往上偏）
             let ray_origin = police_transform.translation + Vec3::Y * 1.5;
-            let ray_dir = to_player.normalize();
-            let distance = distance_sq.sqrt();
-            let has_los = if let Some((_, toi)) = rapier.cast_ray(
+            let to_target = player_pos - ray_origin;
+            let distance = to_target.length();
+            // 打到玩家本人就算看得到：貼得很近時射線很陡，從膠囊頂端打進去，命中點離中心會超過容許範圍
+            let has_los = if let Some((hit_entity, toi)) = rapier.cast_ray(
                 ray_origin,
-                ray_dir,
+                to_target / distance,
                 distance as RapierReal,
                 true,
                 QueryFilter::default().exclude_rigid_body(police_entity),
             ) {
-                rapier_real_to_f32(toi) >= distance - 0.5
+                hit_entity == player_entity || rapier_real_to_f32(toi) >= distance - 0.5
             } else {
                 true
             };

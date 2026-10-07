@@ -20,25 +20,28 @@ use super::super::PlayerSurrenderState;
 // 戰鬥輔助函數
 // ============================================================================
 
+/// 從 ray_origin 瞄準 target 打射線（方向和長度從起點算）
 fn check_line_of_sight(
     rapier: &RapierContext,
     ray_origin: Vec3,
-    ray_direction: Vec3,
-    distance: f32,
+    target: Vec3,
     exclude_entity: Entity,
     player_entity: Entity,
 ) -> bool {
     let filter = QueryFilter::default().exclude_rigid_body(exclude_entity);
+    let to_target = target - ray_origin;
+    let distance = to_target.length();
 
     match rapier.cast_ray(
         ray_origin,
-        ray_direction,
+        to_target / distance,
         distance as RapierReal,
         true,
         filter,
     ) {
         Some((hit_entity, toi)) => {
-            hit_entity == player_entity || rapier_real_to_f32(toi) >= distance - 1.0
+            hit_entity == player_entity
+                || rapier_real_to_f32(toi) >= distance - RAYCAST_HIT_TOLERANCE
         }
         None => true,
     }
@@ -123,8 +126,7 @@ pub fn police_combat_system(
         if !check_line_of_sight(
             &rapier,
             ray_origin,
-            ray_direction,
-            distance,
+            player_pos,
             police_entity,
             player_entity,
         ) {

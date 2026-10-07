@@ -12,8 +12,9 @@ pub const VISION_RANGE: f32 = 40.0;
 /// 射線原點高度偏移（避免地面干擾）
 pub const RAYCAST_ORIGIN_HEIGHT: f32 = 1.5;
 
-/// 射線命中容許距離
-pub const RAYCAST_HIT_TOLERANCE: f32 = 1.0;
+/// 射線瞄準玩家中心，命中點離終點這麼近也算打到玩家（玩家膠囊半徑 0.25；
+/// 太大的話，玩家貼著的牆會被當成玩家）
+pub const RAYCAST_HIT_TOLERANCE: f32 = 0.3;
 
 // ============================================================================
 // 無線電與搜索

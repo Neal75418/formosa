@@ -3,8 +3,10 @@
 //! 玩家死亡時顯示紅色色調 + "WASTED" 文字 + 慢動作 + 淡出黑幕，
 //! 被捕時顯示藍色色調 + "逮捕" 文字（Phase 2 實現）。
 
+use bevy::ecs::schedule::ScheduleConfigs;
+use bevy::ecs::system::ScheduleSystem;
 use bevy::prelude::*;
-use bevy::time::Real;
+use bevy::time::{Real, Virtual};
 
 use crate::combat::{killcam_update_system, KillCamState, RespawnState};
 use crate::core::{ease_in_quad, ease_out_quad, AppState};
@@ -230,7 +232,7 @@ fn screen_effect_phase_machine(
     real_time: Res<Time<Real>>,
     mut state: ResMut<ScreenEffectState>,
     mut killcam: ResMut<KillCamState>,
-    mut time_strategy: ResMut<bevy::time::TimeUpdateStrategy>,
+    mut virtual_time: ResMut<Time<Virtual>>,
     mut respawn_state: ResMut<RespawnState>,
     mut arrest_events: MessageWriter<ArrestEvent>,
 ) {
@@ -244,7 +246,7 @@ fn screen_effect_phase_machine(
         killcam.time_scale = 1.0;
     }
 
-    // 使用真實時間（不受 ManualDuration 影響）避免時間縮放漂移
+    // 用真實時間計時：慢動作只改遊戲時間（Time<Virtual>）的速度，真實時間不受影響
     let real_dt = real_time.delta_secs();
     state.elapsed += real_dt;
 
@@ -293,15 +295,14 @@ fn screen_effect_phase_machine(
         ScreenEffectPhase::Inactive => {}
     }
 
-    // 設定全局時間縮放（使用真實 dt 乘以縮放比例）
-    if state.phase == ScreenEffectPhase::Inactive {
-        *time_strategy = bevy::time::TimeUpdateStrategy::Automatic;
+    // 慢動作：調整遊戲時間的速度。不能改用 TimeUpdateStrategy::ManualDuration，
+    // 它連真實時間也一起換成那段時長，每幀的時間越縮越短、計時幾乎停住
+    let speed = if state.phase == ScreenEffectPhase::Inactive {
+        1.0
     } else {
-        let scaled_dt = (real_dt * state.time_scale).max(0.0001);
-        *time_strategy = bevy::time::TimeUpdateStrategy::ManualDuration(
-            std::time::Duration::from_secs_f32(scaled_dt),
-        );
-    }
+        state.time_scale
+    };
+    virtual_time.set_relative_speed(speed);
 }
 
 /// 更新 UI 視覺效果（色調、文字、黑幕）
@@ -408,16 +409,89 @@ impl Plugin for ScreenEffectPlugin {
             .add_systems(Startup, setup_screen_effect_ui.in_set(super::UiSetup))
             .add_systems(
                 Update,
-                (
-                    detect_busted_trigger.before(handle_arrest_event_system),
-                    detect_wasted_trigger,
-                    screen_effect_phase_machine
-                        .after(detect_wasted_trigger)
-                        .after(detect_busted_trigger)
-                        .after(killcam_update_system),
-                    screen_effect_visual_update.after(screen_effect_phase_machine),
-                )
-                    .run_if(in_state(AppState::InGame)),
+                screen_effect_systems().run_if(in_state(AppState::InGame)),
             );
+    }
+}
+
+/// WASTED／BUSTED 的系統。狀態機排在 kill cam 之後：兩者都會設遊戲時間的速度，
+/// kill cam 沒在播時每幀設回 1，WASTED 的慢動作要後設才算數
+fn screen_effect_systems() -> ScheduleConfigs<ScheduleSystem> {
+    (
+        detect_busted_trigger.before(handle_arrest_event_system),
+        detect_wasted_trigger,
+        screen_effect_phase_machine
+            .after(detect_wasted_trigger)
+            .after(detect_busted_trigger)
+            .after(killcam_update_system),
+        screen_effect_visual_update.after(screen_effect_phase_machine),
+    )
+        .into_configs()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use bevy::time::{TimeUpdateStrategy, Virtual};
+
+    use super::*;
+
+    #[test]
+    fn wasted_finishes_and_triggers_respawn() {
+        // 真實時間每幀走 0.1 秒（第一幀 0）：WASTED 要在效果總長 4.5 秒後播完、觸發重生；
+        // 播放中遊戲時間變慢（kill cam 系統同時在跑、沒在播時每幀把速度設回 1），播完恢復正常速度
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+                100,
+            )))
+            .init_resource::<ScreenEffectState>()
+            .init_resource::<KillCamState>()
+            .insert_resource(RespawnState {
+                is_dead: true,
+                respawn_timer: 3.0,
+                death_position: Vec3::ZERO,
+            })
+            .add_message::<ArrestEvent>()
+            .add_systems(Update, (killcam_update_system, screen_effect_systems()));
+
+        // 約 1.9 秒：在慢動作維持階段（0.5～3.5 秒）
+        for _ in 0..20 {
+            app.update();
+        }
+        let speed_while_wasted = app.world().resource::<Time<Virtual>>().relative_speed();
+        assert!(
+            app.world()
+                .resource::<ScreenEffectState>()
+                .respawn_timer_frozen
+        );
+        // 約 4.4 秒：還沒到 4.5 秒，還在播
+        for _ in 0..25 {
+            app.update();
+        }
+        assert!(
+            app.world()
+                .resource::<ScreenEffectState>()
+                .respawn_timer_frozen,
+            "WASTED 提早播完"
+        );
+        // 約 5.9 秒
+        for _ in 0..15 {
+            app.update();
+        }
+
+        let state = app.world().resource::<ScreenEffectState>();
+        assert!(!state.is_active(), "WASTED 沒播完");
+        assert!(!state.respawn_timer_frozen);
+        assert!(app.world().resource::<RespawnState>().respawn_timer <= 0.0);
+        assert!(
+            (speed_while_wasted - SLOW_MOTION_SCALE).abs() < 1e-4,
+            "播放中要慢動作，遊戲時間速度 {speed_while_wasted}"
+        );
+        assert_eq!(
+            app.world().resource::<Time<Virtual>>().relative_speed(),
+            1.0
+        );
     }
 }

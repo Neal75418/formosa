@@ -14,7 +14,7 @@ use bevy::prelude::*;
 
 /// 最小持續時間（秒）- 防止除以零
 const MIN_DURATION: f32 = 0.1;
-/// 最小時間縮放 - 防止除以零
+/// 最小時間縮放：慢動作再慢，遊戲時間的速度也不能變成 0（會凍住）
 const MIN_TIME_SCALE: f32 = 0.01;
 
 // --- 階段轉換點 ---
@@ -147,7 +147,7 @@ impl KillCamState {
             }
         };
 
-        // 確保持續時間和時間縮放不為零（防止除以零）
+        // 持續時間不為零（進度要除以它）；時間縮放不為零（遊戲時間速度為 0 會凍住）
         let safe_duration = duration.max(MIN_DURATION);
         let safe_time_scale = time_scale.max(MIN_TIME_SCALE);
 
@@ -187,18 +187,14 @@ impl KillCamState {
         self.kill_streak >= 3
     }
 
-    /// 更新 Kill Cam 狀態
+    /// 更新 Kill Cam 狀態；dt 是真實時間（不受慢動作影響）
     pub fn update(&mut self, dt: f32) {
         if !self.active {
             self.time_scale = 1.0;
             return;
         }
 
-        // 安全檢查：確保 time_scale 不為零
-        let safe_time_scale = self.time_scale.max(MIN_TIME_SCALE);
-
-        // 更新已經過時間（使用真實時間，不受慢動作影響）
-        self.elapsed += dt / safe_time_scale;
+        self.elapsed += dt;
 
         // 安全檢查：確保 duration 不為零
         let safe_duration = self.duration.max(MIN_DURATION);
@@ -263,25 +259,17 @@ impl KillCamState {
 // 系統
 // ============================================================================
 
-/// Kill Cam 更新系統
+/// Kill Cam 更新系統：用真實時間計時，慢動作只調整遊戲時間（Time<Virtual>）的速度。
+/// 不能改用 TimeUpdateStrategy::ManualDuration：它連真實時間也一起換成那段時長，
+/// 每幀的時間越縮越短，遊戲時間停住、kill cam 永遠不結束
 pub fn killcam_update_system(
-    time: Res<Time>,
+    real_time: Res<Time<Real>>,
     mut killcam: ResMut<KillCamState>,
-    mut time_scale_writer: ResMut<bevy::time::TimeUpdateStrategy>,
+    mut virtual_time: ResMut<Time<Virtual>>,
 ) {
-    let dt = time.delta_secs();
-    killcam.update(dt);
-
-    // 更新全局時間縮放
-    if killcam.active {
-        // 使用虛擬時間縮放（不直接修改 TimeScale，而是讓遊戲邏輯參考這個值）
-        // Bevy 的 Time 不支持直接修改時間縮放，需要在遊戲邏輯中手動處理
-        *time_scale_writer = bevy::time::TimeUpdateStrategy::ManualDuration(
-            std::time::Duration::from_secs_f32(dt * killcam.time_scale),
-        );
-    } else {
-        *time_scale_writer = bevy::time::TimeUpdateStrategy::Automatic;
-    }
+    killcam.update(real_time.delta_secs());
+    // 沒在播時 update 已把 time_scale 設回 1
+    virtual_time.set_relative_speed(killcam.time_scale);
 }
 
 /// Kill Cam 視覺效果系統
@@ -306,5 +294,68 @@ pub fn killcam_visual_system(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use bevy::time::{TimeUpdateStrategy, Virtual};
+
+    use super::*;
+
+    #[test]
+    fn headshot_kill_cam_slows_time_then_ends() {
+        // 真實時間每幀走 0.1 秒：爆頭 kill cam（1.5 秒、0.2 倍）期間遊戲時間變慢但仍在走，
+        // 時間到就結束、恢復正常速度，不能把遊戲時間凍住
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+                100,
+            )))
+            .init_resource::<KillCamState>()
+            .add_systems(Update, killcam_update_system);
+        app.update();
+        let target = app.world_mut().spawn_empty().id();
+        app.world_mut().resource_mut::<KillCamState>().trigger(
+            KillCamTrigger::Headshot,
+            target,
+            Vec3::ZERO,
+            0.0,
+        );
+
+        // 0.8 秒：在慢動作中段
+        for _ in 0..8 {
+            app.update();
+        }
+        let time = app.world().resource::<Time<Virtual>>();
+        let (speed, game_dt) = (time.relative_speed(), time.delta_secs());
+        // 1.4 秒：還沒到 1.5 秒，還在播
+        for _ in 0..6 {
+            app.update();
+        }
+        assert!(
+            app.world().resource::<KillCamState>().active,
+            "kill cam 提早結束"
+        );
+        // 2.0 秒
+        for _ in 0..6 {
+            app.update();
+        }
+
+        assert!(
+            !app.world().resource::<KillCamState>().active,
+            "kill cam 沒結束"
+        );
+        assert!(
+            game_dt > 0.01,
+            "慢動作中遊戲時間要繼續走，這一幀只走了 {game_dt} 秒"
+        );
+        assert!(speed < 0.5, "慢動作中遊戲時間速度 {speed}");
+        assert_eq!(
+            app.world().resource::<Time<Virtual>>().relative_speed(),
+            1.0
+        );
     }
 }

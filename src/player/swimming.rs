@@ -6,8 +6,9 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::KinematicCharacterController;
 
-use super::components::{Player, Stamina};
+use super::components::{Player, Stamina, VehicleTransitionState};
 use crate::combat::{DamageEvent, DamageSource};
+use crate::core::GameState;
 use crate::vehicle::watercraft::WATER_LEVEL;
 
 // ============================================================================
@@ -79,9 +80,15 @@ impl Default for PlayerSwimming {
 /// 偵測玩家是否入水/出水，插入或移除 `PlayerSwimming` 組件
 pub fn player_water_detection_system(
     mut commands: Commands,
+    game_state: Res<GameState>,
+    transition: Res<VehicleTransitionState>,
     query: Query<(Entity, &Transform), With<Player>>,
     swimming_query: Query<&PlayerSwimming>,
 ) {
+    // 上下車途中和在車上，玩家高度會被設成車的高度（停著的機車車心只有 0.4），不是在水裡
+    if game_state.player_in_vehicle || transition.is_animating() {
+        return;
+    }
     let Ok((entity, transform)) = query.single() else {
         return;
     };
@@ -290,5 +297,141 @@ mod tests {
     #[test]
     fn test_vertical_swim_speed() {
         const { assert!(VERTICAL_SWIM_SPEED > 0.0) };
+    }
+
+    /// 跑遊戲裡的上下車系統（含跟車）、游泳偵測和死亡重生，時間每幀走 0.1 秒（第一幀 0）；
+    /// 機車停在車心 0.4（比入水門檻低），玩家站在原點；回傳 (app, 玩家, 機車, 座位)
+    fn scooter_app() -> (App, Entity, Entity, Vec3) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        crate::world::install_map(&mut app);
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_millis(100),
+        ))
+        .add_message::<crate::wanted::CrimeEvent>()
+        .init_resource::<crate::player::PlayerConfig>()
+        .init_resource::<GameState>()
+        .init_resource::<VehicleTransitionState>()
+        .init_resource::<crate::combat::RespawnState>()
+        .init_resource::<crate::ui::ScreenEffectState>()
+        .init_resource::<crate::ui::NotificationQueue>()
+        .add_systems(
+            Update,
+            (
+                super::super::vehicle_transition::vehicle_transition_systems(),
+                player_water_detection_system,
+                crate::combat::player_respawn_system,
+            ),
+        );
+        let seat = Vec3::new(2.5, 0.4, 0.0);
+        let scooter = app
+            .world_mut()
+            .spawn((
+                crate::vehicle::Vehicle::default(),
+                Transform::from_translation(seat),
+            ))
+            .id();
+        let player = app
+            .world_mut()
+            .spawn((
+                Player::default(),
+                Transform::from_xyz(0.0, 0.7, 0.0),
+                Visibility::Visible,
+                crate::combat::Health::new(100.0),
+            ))
+            .id();
+        (app, player, scooter, seat)
+    }
+
+    /// 跑 frames 幀，每一幀都不能被當成在游泳
+    fn assert_never_swims(app: &mut App, player: Entity, frames: usize, stage: &str) {
+        for frame in 0..frames {
+            app.update();
+            assert!(
+                !app.world().entity(player).contains::<PlayerSwimming>(),
+                "{stage} 第 {frame} 幀被當成在游泳，玩家 y={}",
+                app.world().get::<Transform>(player).unwrap().translation.y
+            );
+        }
+    }
+
+    #[test]
+    fn riding_a_scooter_is_not_swimming() {
+        // 上車、騎車、下車的每一幀都不能被當成在游泳；下車後偵測照常（低於門檻會入水、高過出水門檻會解除）
+        let (mut app, player, scooter, seat) = scooter_app();
+        app.world_mut()
+            .resource_mut::<VehicleTransitionState>()
+            .start_enter(
+                Vec3::new(0.0, 0.7, 0.0),
+                scooter,
+                seat - Vec3::X * 1.2,
+                false,
+            );
+        assert_never_swims(&mut app, player, 15, "上車");
+        assert!(app.world().resource::<GameState>().player_in_vehicle);
+        assert_never_swims(&mut app, player, 15, "騎車");
+        app.world_mut()
+            .resource_mut::<VehicleTransitionState>()
+            .start_exit(seat, scooter, seat + Vec3::X * 2.5, true);
+        assert_never_swims(&mut app, player, 15, "下車");
+        assert!(!app.world().resource::<GameState>().player_in_vehicle);
+
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation
+            .y = 0.3;
+        app.update();
+        assert!(app.world().entity(player).contains::<PlayerSwimming>());
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation
+            .y = 1.2;
+        app.update();
+        assert!(!app.world().entity(player).contains::<PlayerSwimming>());
+    }
+
+    #[test]
+    fn leaving_a_parked_scooter_abruptly_is_not_swimming() {
+        // 進座位時被打死、進座位時機車不見、剛坐上停著的機車就被打死：
+        // 中止或清掉在車上的狀態後，玩家不能停在機車的高度被當成入水（重生後也一樣）
+        for case in ["進座位時被打死", "進座位時機車不見", "坐著被打死"] {
+            let (mut app, player, scooter, seat) = scooter_app();
+            if case == "坐著被打死" {
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation = seat;
+                *app.world_mut().resource_mut::<GameState>() = GameState {
+                    player_in_vehicle: true,
+                    current_vehicle: Some(scooter),
+                };
+            } else {
+                let mut transition = app.world_mut().resource_mut::<VehicleTransitionState>();
+                transition.start_enter(
+                    Vec3::new(0.0, 0.7, 0.0),
+                    scooter,
+                    seat - Vec3::X * 1.2,
+                    false,
+                );
+                transition.phase = crate::player::VehicleTransitionPhase::EnteringVehicle;
+                transition.progress = 0.6;
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation = seat;
+            }
+            if case == "進座位時機車不見" {
+                app.world_mut().entity_mut(scooter).despawn();
+            } else {
+                let mut respawn = app
+                    .world_mut()
+                    .resource_mut::<crate::combat::RespawnState>();
+                respawn.is_dead = true;
+                respawn.respawn_timer = 0.5;
+            }
+            assert_never_swims(&mut app, player, 30, case);
+        }
     }
 }

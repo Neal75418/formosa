@@ -70,9 +70,10 @@ pub fn vehicle_transition_animation_system(
         .ok()
         .map(|(t, _)| t.translation);
     let Some(vehicle_pos) = vehicle_info else {
-        // 車不見了：動畫中止，上車途中已隱藏的玩家要重新出現
+        // 車不見了：動畫中止，上車途中已隱藏的玩家要重新出現、回到地面高度
         transition.reset();
         set_player_visibility(&mut visibility_query, true);
+        player_transform.translation.y = config.interaction.exit_ground_offset;
         return;
     };
 
@@ -317,13 +318,16 @@ pub fn leave_vehicle_when_stranded_system(
     mut game_state: ResMut<GameState>,
     mut transition: ResMut<VehicleTransitionState>,
     mut vehicle_query: Query<(&Transform, &mut Vehicle), Without<Player>>,
+    mut player_query: Query<&mut Transform, (With<Player>, Without<Vehicle>)>,
     mut visibility_query: Query<&mut Visibility, With<Player>>,
+    config: Res<PlayerConfig>,
 ) {
+    let ground_y = config.interaction.exit_ground_offset;
     if !game_state.player_in_vehicle {
         // 上車途中被打死：中止上車，不然重生後動畫跑完又把玩家拉進車裡
         if respawn_state.is_dead && transition.is_animating() {
             transition.reset();
-            set_player_visibility(&mut visibility_query, true);
+            release_player(&mut player_query, &mut visibility_query, ground_y);
         }
         return;
     }
@@ -345,7 +349,20 @@ pub fn leave_vehicle_when_stranded_system(
         None => game_state.player_in_vehicle = false,
     }
     transition.reset();
-    set_player_visibility(&mut visibility_query, true);
+    release_player(&mut player_query, &mut visibility_query, ground_y);
+}
+
+/// 比照下車完成讓玩家出現、回到地面高度：進座位和坐在車上時玩家高度等於車，
+/// 停著的機車車心只有 0.4，留在那裡會被游泳偵測當成入水
+fn release_player(
+    player_query: &mut Query<&mut Transform, (With<Player>, Without<Vehicle>)>,
+    visibility_query: &mut Query<&mut Visibility, With<Player>>,
+    ground_y: f32,
+) {
+    if let Ok(mut transform) = player_query.single_mut() {
+        transform.translation.y = ground_y;
+    }
+    set_player_visibility(visibility_query, true);
 }
 
 /// 上下車系統依序執行：先處理死亡或車不見，再跑動畫，最後跟車。

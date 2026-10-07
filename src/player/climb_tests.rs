@@ -85,6 +85,8 @@ enum Obstacle {
     Block { depth: f32 },
     /// 行人大小的角色膠囊（掛角色碰撞群組，頂端約 2.0）
     Person,
+    /// 同樣大小、剛倒下還直立的敵人屍體（死亡後換成屍體碰撞群組）
+    Corpse,
 }
 
 /// 怎麼觸發攀爬
@@ -107,6 +109,7 @@ struct ClimbSetup {
     trigger: Trigger,
     in_vehicle: bool,
     dead: bool,
+    switching_character: bool,
 }
 
 impl ClimbSetup {
@@ -118,6 +121,7 @@ impl ClimbSetup {
             trigger: Trigger::Space,
             in_vehicle: false,
             dead: false,
+            switching_character: false,
         }
     }
 }
@@ -135,16 +139,51 @@ fn spawn_obstacle(app: &mut App, dir: Vec3, obstacle: Obstacle) {
                 Collider::cuboid(0.4, 0.9, depth / 2.0),
             ));
         }
-        // 尺寸和碰撞群組同行人（pedestrian/systems/lifecycle.rs）
+        // 尺寸同行人（pedestrian/systems/lifecycle.rs），碰撞群組用同一個常數
         Obstacle::Person => {
             app.world_mut().spawn((
                 Transform::from_translation(dir * 1.25 + Vec3::Y * 1.1),
                 RigidBody::KinematicPositionBased,
                 Collider::capsule_y(0.65, 0.25),
-                CollisionGroups::new(crate::core::COLLISION_GROUP_CHARACTER, Group::ALL),
+                crate::core::PEDESTRIAN_COLLISION_GROUPS,
+            ));
+        }
+        // 碰撞群組和死亡的敵人用同一個常數（combat/damage/death.rs）
+        Obstacle::Corpse => {
+            app.world_mut().spawn((
+                Transform::from_translation(dir * 1.25 + Vec3::Y * 1.1),
+                RigidBody::Dynamic,
+                Collider::capsule_y(0.65, 0.25),
+                crate::core::ENEMY_CORPSE_COLLISION_GROUPS,
             ));
         }
     }
+}
+
+/// 走公開 API 讓角色切換動畫開始：解鎖小美、按 6 跑輸入系統
+fn start_character_switch(app: &mut App) {
+    use bevy::ecs::system::RunSystemOnce;
+
+    let mut manager = super::super::CharacterManager::default();
+    manager.unlock(super::super::CharacterId::XiaoMei);
+    app.insert_resource(manager)
+        .init_resource::<crate::core::CameraSettings>()
+        .init_resource::<crate::ui::ScreenEffectState>();
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Digit6);
+    app.world_mut()
+        .run_system_once(super::super::character_switch_animation::character_switch_input_system)
+        .expect("跑得起來");
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .clear();
+    assert!(
+        app.world()
+            .resource::<super::super::CharacterSwitchAnimation>()
+            .is_active(),
+        "角色切換動畫沒有開始"
+    );
 }
 
 /// 真的跑 Rapier 和攀爬偵測、動畫（時間每幀走 0.05 秒）：地面頂在 0.1（同遊戲），
@@ -169,6 +208,7 @@ fn climb_run(setup: ClimbSetup) -> (Vec3, Transform, bool) {
     .init_resource::<ButtonInput<KeyCode>>()
     .init_resource::<super::super::VehicleTransitionState>()
     .init_resource::<super::super::PlayerSkills>()
+    .init_resource::<super::super::CharacterSwitchAnimation>()
     .insert_resource(crate::core::GameState {
         player_in_vehicle: setup.in_vehicle,
         current_vehicle: None,
@@ -208,6 +248,9 @@ fn climb_run(setup: ClimbSetup) -> (Vec3, Transform, bool) {
         .id();
     for _ in 0..3 {
         app.update();
+    }
+    if setup.switching_character {
+        start_character_switch(&mut app);
     }
 
     let key = match setup.trigger {
@@ -324,5 +367,25 @@ fn does_not_climb_while_dead() {
     };
     let (start, end, started) = climb_run(setup);
     assert!(!started, "死掉了還開始攀爬");
+    assert_eq!(end.translation, start);
+}
+
+#[test]
+fn does_not_climb_over_corpses() {
+    // 剛倒下還直立的敵人屍體不是障礙物
+    let (start, end, started) = climb_run(ClimbSetup::new(Vec3::X, Vec3::X, Obstacle::Corpse));
+    assert!(!started, "把屍體當成障礙物爬");
+    assert_eq!(end.translation, start);
+}
+
+#[test]
+fn does_not_climb_while_switching_characters() {
+    // 角色切換動畫期間按 Space 不能攀爬（切換會把玩家傳送走）
+    let setup = ClimbSetup {
+        switching_character: true,
+        ..ClimbSetup::new(Vec3::X, Vec3::X, thin_wall())
+    };
+    let (start, end, started) = climb_run(setup);
+    assert!(!started, "角色切換中開始攀爬");
     assert_eq!(end.translation, start);
 }

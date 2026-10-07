@@ -92,9 +92,9 @@ pub struct DebugSettings {
 // 使用 bevy_rapier3d 的 Group 類型
 // 統一定義以確保所有實體使用一致的碰撞規則
 
-use bevy_rapier3d::prelude::Group;
+use bevy_rapier3d::prelude::{CollisionGroups, Group};
 
-/// 碰撞群組：角色（玩家、敵人）
+/// 碰撞群組：角色（玩家、敵人、行人）
 pub const COLLISION_GROUP_CHARACTER: Group = Group::GROUP_1;
 
 /// 碰撞群組：載具（機車、汽車、公車）
@@ -102,6 +102,18 @@ pub const COLLISION_GROUP_VEHICLE: Group = Group::GROUP_2;
 
 /// 碰撞群組：靜態物體（建築、街道傢俱）
 pub const COLLISION_GROUP_STATIC: Group = Group::GROUP_3;
+
+/// 碰撞群組：屍體（死亡的敵人、布娃娃部位）
+pub const COLLISION_GROUP_RAGDOLL: Group = Group::GROUP_10;
+
+/// 行人的碰撞設定：屬於角色群組、和所有東西碰撞
+pub const PEDESTRIAN_COLLISION_GROUPS: CollisionGroups =
+    CollisionGroups::new(COLLISION_GROUP_CHARACTER, Group::ALL);
+
+/// 敵人死後屍體的碰撞設定：屬於屍體群組，只和角色群組的成員碰撞
+/// （沒設群組的碰撞體預設屬於所有群組，地面也算；會穿過靜態物體和車輛群組）
+pub const ENEMY_CORPSE_COLLISION_GROUPS: CollisionGroups =
+    CollisionGroups::new(COLLISION_GROUP_RAGDOLL, COLLISION_GROUP_CHARACTER);
 
 // ============================================================================
 // 通用工具函數

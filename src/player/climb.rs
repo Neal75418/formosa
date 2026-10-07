@@ -277,12 +277,13 @@ pub fn detect_climbable_obstacle(
     player_entity: Entity,
     rapier: &RapierContext,
 ) -> ClimbDetectionResult {
-    // 行人、敵人（角色碰撞群組）不是可攀爬的障礙物
+    // 行人、敵人（角色碰撞群組）和屍體不是可攀爬的障礙物
     let filter = QueryFilter::default()
         .exclude_collider(player_entity)
         .groups(CollisionGroups::new(
             Group::ALL,
-            Group::ALL & !crate::core::COLLISION_GROUP_CHARACTER,
+            Group::ALL
+                & !(crate::core::COLLISION_GROUP_CHARACTER | crate::core::COLLISION_GROUP_RAGDOLL),
         ));
     let forward = player_forward.normalize_or_zero();
     if forward == Vec3::ZERO {
@@ -452,6 +453,7 @@ pub fn climb_detection_system(
     vehicle_transition: Res<super::VehicleTransitionState>,
     game_state: Res<crate::core::GameState>,
     respawn_state: Res<crate::combat::RespawnState>,
+    switch_anim: Res<super::CharacterSwitchAnimation>,
     mut query: Query<(
         Entity,
         &Transform,
@@ -465,8 +467,12 @@ pub fn climb_detection_system(
         return;
     };
 
-    // 上下車動畫中、在車上（Space 是手煞車）、死亡時禁止攀爬
-    if vehicle_transition.is_animating() || game_state.player_in_vehicle || respawn_state.is_dead {
+    // 上下車動畫中、在車上（Space 是手煞車）、死亡、角色切換中禁止攀爬
+    if vehicle_transition.is_animating()
+        || game_state.player_in_vehicle
+        || respawn_state.is_dead
+        || switch_anim.is_active()
+    {
         return;
     }
 

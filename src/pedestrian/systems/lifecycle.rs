@@ -13,7 +13,7 @@ use rand::Rng;
 use crate::ai::{AiMovement, PatrolPath};
 use crate::combat::{BodyPart, Damageable, Health, HitReaction};
 use crate::core::math::look_rotation_y_flat;
-use crate::core::COLLISION_GROUP_CHARACTER;
+use crate::core::PEDESTRIAN_COLLISION_GROUPS;
 use crate::pedestrian::behavior::{DailyBehavior, ShelterSeeker};
 use crate::pedestrian::components::{
     GunshotTracker, PedState, Pedestrian, PedestrianArm, PedestrianConfig, PedestrianLeg,
@@ -290,7 +290,7 @@ fn spawn_pedestrian(
             // 物理組件（分開 insert 以符合 Bundle 大小限制）
             RigidBody::KinematicPositionBased,
             Collider::capsule_y(body_height / 2.0 - 0.2, 0.25),
-            CollisionGroups::new(COLLISION_GROUP_CHARACTER, Group::ALL),
+            PEDESTRIAN_COLLISION_GROUPS,
             KinematicCharacterController {
                 offset: CharacterLength::Absolute(0.01),
                 ..default()

@@ -305,7 +305,10 @@ pub fn convert_to_skeletal_ragdoll(
                     linear_damping: 0.5,
                     angular_damping: 1.0,
                 },
-                CollisionGroups::new(Group::GROUP_10, Group::GROUP_1 | Group::GROUP_10),
+                CollisionGroups::new(
+                    crate::core::COLLISION_GROUP_RAGDOLL,
+                    crate::core::COLLISION_GROUP_CHARACTER | crate::core::COLLISION_GROUP_RAGDOLL,
+                ),
                 Friction::coefficient(0.7),
                 Restitution::coefficient(0.1),
             ))

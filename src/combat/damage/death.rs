@@ -285,7 +285,7 @@ fn setup_ragdoll_physics(
             linear_damping: RAGDOLL_LINEAR_DAMPING,
             angular_damping: RAGDOLL_ANGULAR_DAMPING,
         })
-        .insert(CollisionGroups::new(Group::GROUP_10, Group::GROUP_1));
+        .insert(crate::core::ENEMY_CORPSE_COLLISION_GROUPS);
 }
 
 /// 處理敵人死亡效果

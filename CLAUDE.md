@@ -55,7 +55,7 @@ cargo fmt                    # 格式化
 - **距離計算**：永遠用 `distance_squared` + 預計算常數（`const RANGE_SQ: f32 = 1600.0; // 40m`）
 - **Query 衝突**：多 Query 存取相同組件時用 `Without<T>` 消除歧義
 - **測試**：新功能必須有單元測試。核心系統 > 80%、UI > 60%、整體 > 75%
-- **Commit**：`<type>(<scope>): <subject>` + `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
+- **Commit**：`<type>(<scope>): <subject>`，空一行接內文（改了什麼、為什麼）；不加 Co-Authored-By
 
 ## 關鍵檔案速查
 

@@ -9,10 +9,13 @@
 /// 視野檢測距離（公尺）
 pub const VISION_RANGE: f32 = 40.0;
 
-/// 射線原點高度偏移（避免地面干擾）
-pub const RAYCAST_ORIGIN_HEIGHT: f32 = 1.5;
+/// 警察的眼睛在身體中心上方的高度（和頭部模型同高）；看、開槍、逮捕的射線都從這裡出發
+pub const OFFICER_EYE_HEIGHT: f32 = 0.45;
 
-/// 射線瞄準玩家中心，命中點離終點這麼近也算打到玩家（玩家膠囊半徑 0.25；
+/// 玩家頸部在身體中心上方的高度（模型脖子在 0.42）；站著時警察瞄這裡，頭和脖子露出來就看得到（肩膀被擋住也一樣）
+pub const PLAYER_NECK_HEIGHT: f32 = 0.4;
+
+/// 射線瞄準玩家，命中點離終點這麼近也算打到玩家（玩家膠囊半徑 0.25；
 /// 太大的話，玩家貼著的牆會被當成玩家）
 pub const RAYCAST_HIT_TOLERANCE: f32 = 0.3;
 
@@ -119,9 +122,6 @@ pub const MISS_OFFSET_Y_RANGE: f32 = 1.5;
 
 /// 目標高度偏移
 pub const TARGET_HEIGHT_OFFSET: f32 = 1.0;
-
-/// 槍口閃光高度偏移
-pub const MUZZLE_FLASH_HEIGHT: f32 = 1.5;
 
 /// 槍口前方偏移
 pub const MUZZLE_FORWARD_OFFSET: f32 = 0.5;

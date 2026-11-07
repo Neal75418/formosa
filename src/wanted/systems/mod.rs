@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
 use crate::ai::AiMovement;
-use crate::combat::{Health, HitReaction};
+use crate::combat::{Health, HitReaction, PlayerCoverState};
 use crate::core::PoliceSpatialHash;
 use crate::player::Player;
 
@@ -24,6 +24,7 @@ use super::components::*;
 use super::config::*;
 #[allow(clippy::wildcard_imports)]
 use super::events::*;
+use super::sight::player_sight_point;
 
 pub use police_ai::police_ai_system;
 pub use police_combat::{police_combat_system, police_radio_call_system};
@@ -136,6 +137,7 @@ pub fn process_witness_reports(
 fn update_police_vision(
     player_entity: Entity,
     player_pos: Vec3,
+    sight_point: Vec3,
     police_hash: &PoliceSpatialHash,
     police_query: &mut Query<(&Transform, &mut PoliceOfficer)>,
     rapier: &RapierContext,
@@ -167,12 +169,12 @@ fn update_police_vision(
             continue;
         }
 
-        // 方向和長度要從抬高後的起點算，不然射線平行往上偏、從玩家頭頂飛過
-        let ray_origin = police_pos + Vec3::Y * RAYCAST_ORIGIN_HEIGHT;
-        let to_target = player_pos - ray_origin;
+        // 從警察眼睛瞄準玩家；方向和長度都從眼睛算，不然射線會平行偏移、飛過玩家
+        let ray_origin = police_pos + Vec3::Y * OFFICER_EYE_HEIGHT;
+        let to_target = sight_point - ray_origin;
         let ray_distance = to_target.length();
         // 打到玩家本人、或打到的東西就在玩家身上，才算看得到；什麼都沒打到也算
-        // （射線只到玩家中心，沒打到就是中間沒有遮擋；膠囊射線偶爾會漏打）
+        // （射線只到瞄準點，沒打到就是中間沒有遮擋；膠囊射線偶爾會漏打）
         let visible = rapier
             .cast_ray(
                 ray_origin,
@@ -227,7 +229,7 @@ pub fn wanted_cooldown_system(
     mut wanted: ResMut<WantedLevel>,
     mut level_changed: MessageWriter<WantedLevelChanged>,
     time: Res<Time>,
-    player_query: Query<(Entity, &Transform), With<Player>>,
+    player_query: Query<(Entity, &Transform, &Player, Option<&PlayerCoverState>)>,
     police_hash: Res<PoliceSpatialHash>,
     mut police_query: Query<(&Transform, &mut PoliceOfficer)>,
     rapier_context: ReadRapierContext,
@@ -237,15 +239,17 @@ pub fn wanted_cooldown_system(
         return;
     }
 
-    let Ok((player_entity, player_transform)) = player_query.single() else {
+    let Ok((player_entity, player_transform, player, cover)) = player_query.single() else {
         return;
     };
     let player_pos = player_transform.translation;
+    let sight_point = player_sight_point(player_transform, player, cover);
 
     let player_visible = rapier_context.single().is_ok_and(|rapier| {
         update_police_vision(
             player_entity,
             player_pos,
+            sight_point,
             &police_hash,
             &mut police_query,
             &rapier,

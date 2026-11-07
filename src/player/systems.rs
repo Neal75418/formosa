@@ -10,6 +10,7 @@ use super::{
 use crate::combat::{CombatState, PlayerCoverState, RespawnState};
 use crate::core::{rapier_real_to_f32, GameState, InteractionState};
 use crate::vehicle::Vehicle;
+use crate::wanted::PlayerSurrenderState;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *}; // 引入 Rapier 物理引擎類型 (RapierContext, QueryFilter 等)
@@ -47,7 +48,7 @@ pub fn player_input(
     game_state: Res<GameState>,
     respawn_state: Res<RespawnState>,
     switch_anim: Res<CharacterSwitchAnimation>,
-    mut query: Query<&mut Player>,
+    mut query: Query<(&mut Player, Option<&PlayerSurrenderState>)>,
 ) {
     // 角色切換動畫期間禁止玩家輸入
     if switch_anim.is_active() {
@@ -58,10 +59,12 @@ pub fn player_input(
         return;
     }
 
-    if let Ok(mut player) = query.single_mut() {
-        // Ctrl 切換蹲伏
-        if keyboard.just_pressed(KeyCode::ControlLeft)
-            || keyboard.just_pressed(KeyCode::ControlRight)
+    if let Ok((mut player, surrender)) = query.single_mut() {
+        // Ctrl 切換蹲伏；舉手投降時不能蹲（警察瞄蹲著的人的身體中心，隔著齊腰欄杆會擋住逮捕）
+        let hands_up = surrender.is_some_and(|state| state.has_surrendered);
+        if !hands_up
+            && (keyboard.just_pressed(KeyCode::ControlLeft)
+                || keyboard.just_pressed(KeyCode::ControlRight))
         {
             player.is_crouching = !player.is_crouching;
         }

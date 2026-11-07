@@ -14,6 +14,7 @@ mod events;
 mod police_helicopter;
 mod police_vehicle;
 mod roadblock;
+mod sight;
 mod systems;
 
 #[cfg(all(debug_assertions, feature = "dev_tools"))]

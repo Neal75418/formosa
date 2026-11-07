@@ -14,14 +14,15 @@ use bevy::ecs::system::ScheduleSystem;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
-use crate::combat::{Health, RespawnState, WeaponInventory};
+use crate::combat::{Health, PlayerCoverState, RespawnState, WeaponInventory};
 use crate::core::{rapier_real_to_f32, GameState};
 use crate::economy::PlayerWallet;
 use crate::player::Player;
 
 #[allow(clippy::wildcard_imports)]
 use super::components::*;
-use super::config::ARREST_DISTANCE;
+use super::config::{ARREST_DISTANCE, OFFICER_EYE_HEIGHT};
+use super::sight::player_sight_point;
 
 // ============================================================================
 // 常數
@@ -205,10 +206,10 @@ pub fn player_surrender_input_system(
     game_state: Res<GameState>,
     wanted: Res<WantedLevel>,
     config: Res<ArrestConfig>,
-    mut player_query: Query<(&Transform, &mut PlayerSurrenderState), With<Player>>,
+    mut player_query: Query<(&Transform, &mut Player, &mut PlayerSurrenderState)>,
     time: Res<Time>,
 ) {
-    let Ok((transform, mut surrender_state)) = player_query.single_mut() else {
+    let Ok((transform, mut player, mut surrender_state)) = player_query.single_mut() else {
         return;
     };
 
@@ -259,6 +260,8 @@ pub fn player_surrender_input_system(
         {
             surrender_state.has_surrendered = true;
             surrender_state.surrender_position = transform.translation;
+            // 舉手時站起來：警察瞄蹲著的人的身體中心，隔著齊腰欄杆會擋住逮捕
+            player.is_crouching = false;
             info!("🏳️ 玩家投降！通緝等級: {} 星", wanted.stars);
         }
     } else if !surrender_state.has_surrendered {
@@ -270,14 +273,21 @@ pub fn player_surrender_input_system(
 
 /// 警察逮捕系統
 pub fn police_arrest_system(
-    mut player_query: Query<(Entity, &Transform, &mut PlayerSurrenderState), With<Player>>,
+    mut player_query: Query<(
+        Entity,
+        &Transform,
+        &Player,
+        Option<&PlayerCoverState>,
+        &mut PlayerSurrenderState,
+    )>,
     police_query: Query<(Entity, &Transform, &PoliceOfficer), Without<Player>>,
     mut arrest_events: MessageWriter<ArrestEvent>,
     rapier_context: ReadRapierContext,
     respawn_state: Res<RespawnState>,
     time: Res<Time>,
 ) {
-    let Ok((player_entity, player_transform, mut surrender_state)) = player_query.single_mut()
+    let Ok((player_entity, player_transform, player, cover, mut surrender_state)) =
+        player_query.single_mut()
     else {
         return;
     };
@@ -343,11 +353,11 @@ pub fn police_arrest_system(
             let Ok(rapier) = rapier_context.single() else {
                 continue;
             };
-            // 方向和長度從抬高後的起點算（瞄準玩家，不是平行往上偏）
-            let ray_origin = police_transform.translation + Vec3::Y * 1.5;
-            let to_target = player_pos - ray_origin;
+            // 從警察眼睛瞄準玩家；方向和長度都從眼睛算
+            let ray_origin = police_transform.translation + Vec3::Y * OFFICER_EYE_HEIGHT;
+            let to_target = player_sight_point(player_transform, player, cover) - ray_origin;
             let distance = to_target.length();
-            // 打到玩家本人就算看得到：貼得很近時射線很陡，從膠囊頂端打進去，命中點離中心會超過容許範圍
+            // 打到玩家本人就算看得到，不論命中點離瞄準點多遠
             let has_los = if let Some((hit_entity, toi)) = rapier.cast_ray(
                 ray_origin,
                 to_target / distance,

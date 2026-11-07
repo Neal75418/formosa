@@ -22,6 +22,7 @@ fn surrender_app() -> (App, Entity) {
         .init_resource::<PlayerWallet>()
         .init_resource::<crate::ui::ScreenEffectState>()
         .init_resource::<crate::combat::RespawnState>()
+        .init_resource::<crate::player::CharacterSwitchAnimation>()
         .insert_resource(WantedLevel {
             stars: 2,
             ..default()
@@ -210,4 +211,53 @@ fn dying_right_as_the_arrest_completes_puts_the_hands_down() {
         .run_system_once(police_arrest_system)
         .expect("跑得起來");
     assert!(!surrender_state(&app, player).has_surrendered);
+}
+
+#[test]
+fn raising_hands_stands_the_player_up() {
+    // 蹲著舉手投降會站起來：警察瞄蹲著的人的身體中心，隔著齊腰欄杆會擋住逮捕
+    let (mut app, player) = surrender_app();
+    app.world_mut()
+        .get_mut::<Player>(player)
+        .expect("有玩家")
+        .is_crouching = true;
+    raise_hands(&mut app, player);
+    assert!(
+        !app.world()
+            .get::<Player>(player)
+            .expect("有玩家")
+            .is_crouching
+    );
+}
+
+/// 按一下 Ctrl 跑一次玩家輸入，回傳玩家是不是蹲著
+fn press_ctrl(app: &mut App, player: Entity) -> bool {
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::ControlLeft);
+    app.world_mut()
+        .run_system_once(crate::player::player_input)
+        .expect("跑得起來");
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .release(KeyCode::ControlLeft);
+    app.world()
+        .get::<Player>(player)
+        .expect("有玩家")
+        .is_crouching
+}
+
+#[test]
+fn ctrl_crouches_normally() {
+    // 對照：沒投降時按 Ctrl 會蹲下
+    let (mut app, player) = surrender_app();
+    assert!(press_ctrl(&mut app, player));
+}
+
+#[test]
+fn ctrl_does_not_crouch_while_hands_are_up() {
+    // 舉手期間不能蹲下：蹲著時警察瞄身體中心，隔著齊腰欄杆會擋住逮捕
+    let (mut app, player) = surrender_app();
+    raise_hands(&mut app, player);
+    assert!(!press_ctrl(&mut app, player));
 }

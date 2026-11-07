@@ -14,7 +14,7 @@ use bevy::ecs::system::ScheduleSystem;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{Real as RapierReal, *};
 
-use crate::combat::{Health, PlayerCoverState, RespawnState, WeaponInventory};
+use crate::combat::{Health, HitReaction, PlayerCoverState, RespawnState, WeaponInventory};
 use crate::core::{rapier_real_to_f32, GameState};
 use crate::economy::PlayerWallet;
 use crate::player::Player;
@@ -32,6 +32,8 @@ use super::sight::player_sight_point;
 const SURRENDER_HOLD_TIME: f32 = 2.0;
 /// 舉手後離開原地超過這個距離（公尺）就算放棄投降
 const SURRENDER_MOVE_TOLERANCE: f32 = 0.5;
+/// 推完之後，舉手位置還要跟著玩家移動幾個著地的幀
+const KNOCKBACK_SETTLE_FRAMES: u8 = 3;
 /// 逮捕所需時間（秒）
 const ARREST_TIME: f32 = 3.0;
 /// 罰款基礎值（每星 $500）
@@ -62,6 +64,9 @@ pub struct PlayerSurrenderState {
     pub has_surrendered: bool,
     /// 舉手時的位置：離開超過 `SURRENDER_MOVE_TOLERANCE` 就算放棄投降
     pub surrender_position: Vec3,
+    /// 被推開後，舉手位置還要跟著移動的幀數：推完那一兩幀的位移晚一幀才看得到、
+    /// 被推下高處要等落地，所以只在著地時倒數
+    pub knockback_settle_frames: u8,
     /// 是否正在被逮捕
     pub being_arrested: bool,
     /// 逮捕進度（0.0 - 1.0）
@@ -206,10 +211,18 @@ pub fn player_surrender_input_system(
     game_state: Res<GameState>,
     wanted: Res<WantedLevel>,
     config: Res<ArrestConfig>,
-    mut player_query: Query<(&Transform, &mut Player, &mut PlayerSurrenderState)>,
+    mut player_query: Query<(
+        &Transform,
+        &mut Player,
+        &mut PlayerSurrenderState,
+        Option<&HitReaction>,
+        Option<&KinematicCharacterControllerOutput>,
+    )>,
     time: Res<Time>,
 ) {
-    let Ok((transform, mut player, mut surrender_state)) = player_query.single_mut() else {
+    let Ok((transform, mut player, mut surrender_state, hit_reaction, controller_output)) =
+        player_query.single_mut()
+    else {
         return;
     };
 
@@ -221,6 +234,24 @@ pub fn player_surrender_input_system(
     }
     if surrender_state.post_arrest_immunity > 0.0 {
         surrender_state.post_arrest_immunity -= dt;
+    }
+
+    // 被打退（踉蹌、擊退）的位移不是自己走開：被推開的期間和推完站穩之前，舉手位置跟著移動
+    // （還沒舉手時跟著移動也無妨，舉手那一刻會重設）
+    let being_pushed = hit_reaction.is_some_and(HitReaction::is_being_pushed);
+    if being_pushed {
+        surrender_state.knockback_settle_frames = KNOCKBACK_SETTLE_FRAMES;
+    }
+    // 自己跳起來不算被推（推開中也一樣），不然離地期間一直跟著移動，能舉著手跳很遠
+    if player.vertical_velocity > 0.0 {
+        surrender_state.knockback_settle_frames = 0;
+    }
+    if surrender_state.knockback_settle_frames > 0 {
+        surrender_state.surrender_position = transform.translation;
+        let grounded = controller_output.is_none_or(|output| output.grounded);
+        if !being_pushed && grounded {
+            surrender_state.knockback_settle_frames -= 1;
+        }
     }
 
     // 舉手後離開原地（走開、上車）就算放棄投降，逮捕途中移動算拒捕；

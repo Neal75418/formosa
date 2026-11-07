@@ -1,4 +1,4 @@
-//! 投降規則：按住 Y 舉手，離開原地就算放棄（逮捕途中移動算拒捕），逮捕處理完才放下手
+//! 投降規則：按住 Y 舉手，自己離開原地就算放棄（逮捕途中移動算拒捕；被打退不算），逮捕處理完才放下手
 
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
@@ -36,6 +36,7 @@ fn surrender_app() -> (App, Entity) {
             Transform::from_xyz(3.0, 0.8, -4.0),
             PlayerSurrenderState::default(),
             WeaponInventory::default(),
+            crate::combat::HitReaction::default(),
         ))
         .id();
     app.update();
@@ -260,4 +261,267 @@ fn ctrl_does_not_crouch_while_hands_are_up() {
     let (mut app, player) = surrender_app();
     raise_hands(&mut app, player);
     assert!(!press_ctrl(&mut app, player));
+}
+
+/// 玩家被打中、正在被推開（傷害 50 觸發擊退，往 +X 推）
+fn knock_back(app: &mut App, player: Entity) {
+    let mut reaction = crate::combat::HitReaction::default();
+    reaction.trigger(50.0, Vec3::X, false);
+    app.world_mut().entity_mut(player).insert(reaction);
+}
+
+#[test]
+fn being_knocked_back_keeps_the_hands_up() {
+    // 被打退不是自己走開：推開 2 m 還是維持投降
+    let (mut app, player) = surrender_app();
+    raise_hands(&mut app, player);
+    knock_back(&mut app, player);
+    move_player(&mut app, player, Vec3::new(2.0, 0.0, 0.0));
+    surrender_input(&mut app);
+    assert!(surrender_state(&app, player).has_surrendered);
+}
+
+#[test]
+fn the_hands_up_spot_follows_a_knockback() {
+    // 被推開後，舉手位置跟到新的地方：推完站穩仍維持投降，從新位置再自己走開 0.6 m 就算放棄
+    let (mut app, player) = surrender_app();
+    raise_hands(&mut app, player);
+    knock_back(&mut app, player);
+    move_player(&mut app, player, Vec3::new(2.0, 0.0, 0.0));
+    surrender_input(&mut app);
+    end_knockback(&mut app, player);
+    for _ in 0..3 {
+        surrender_input(&mut app);
+    }
+    assert!(surrender_state(&app, player).has_surrendered, "推完站穩");
+    move_player(&mut app, player, Vec3::new(0.0, 0.0, 0.6));
+    surrender_input(&mut app);
+    assert!(!surrender_state(&app, player).has_surrendered, "推完再走開");
+}
+
+/// 推開結束（受傷反應回到沒反應）
+fn end_knockback(app: &mut App, player: Entity) {
+    app.world_mut()
+        .entity_mut(player)
+        .insert(crate::combat::HitReaction::default());
+}
+
+/// 玩家在不在地上（角色控制器的輸出）
+fn set_grounded(app: &mut App, player: Entity, grounded: bool) {
+    app.world_mut().entity_mut(player).insert(
+        bevy_rapier3d::prelude::KinematicCharacterControllerOutput {
+            grounded,
+            ..default()
+        },
+    );
+}
+
+#[test]
+fn the_last_knockback_frame_seen_late_keeps_the_hands_up() {
+    // 推開的最後一段位移最晚要隔兩幀才看得到（低幀率時一幀推得遠）：推完第二幀才出現的 0.6 m 也不算自己走開
+    let (mut app, player) = surrender_app();
+    raise_hands(&mut app, player);
+    knock_back(&mut app, player);
+    move_player(&mut app, player, Vec3::new(2.0, 0.0, 0.0));
+    surrender_input(&mut app);
+    end_knockback(&mut app, player);
+    surrender_input(&mut app);
+    move_player(&mut app, player, Vec3::new(0.6, 0.0, 0.0));
+    surrender_input(&mut app);
+    assert!(surrender_state(&app, player).has_surrendered);
+}
+
+#[test]
+fn falling_after_a_knockback_keeps_the_hands_up() {
+    // 被推下高處：推完還在空中往下掉，落地前的位移都不算；落地站穩後再走開才算放棄
+    let (mut app, player) = surrender_app();
+    raise_hands(&mut app, player);
+    knock_back(&mut app, player);
+    move_player(&mut app, player, Vec3::new(1.0, 0.0, 0.0));
+    surrender_input(&mut app);
+    end_knockback(&mut app, player);
+    set_grounded(&mut app, player, false);
+    for _ in 0..10 {
+        move_player(&mut app, player, Vec3::new(0.05, -0.1, 0.0));
+        surrender_input(&mut app);
+    }
+    assert!(surrender_state(&app, player).has_surrendered, "掉落中");
+    set_grounded(&mut app, player, true);
+    for _ in 0..3 {
+        surrender_input(&mut app);
+    }
+    assert!(surrender_state(&app, player).has_surrendered, "落地站穩");
+    move_player(&mut app, player, Vec3::new(0.0, 0.0, 0.6));
+    surrender_input(&mut app);
+    assert!(!surrender_state(&app, player).has_surrendered, "落地後走開");
+}
+
+#[test]
+fn a_flinch_does_not_move_the_hands_up_spot() {
+    // 輕傷畏縮（10～24 傷害）不會把人推開，也不算被推：舉手後走開 0.6 m 照樣算放棄
+    let (mut app, player) = surrender_app();
+    raise_hands(&mut app, player);
+    let mut reaction = crate::combat::HitReaction::default();
+    reaction.trigger(15.0, Vec3::X, false);
+    app.world_mut().entity_mut(player).insert(reaction);
+    move_player(&mut app, player, Vec3::new(0.6, 0.0, 0.0));
+    surrender_input(&mut app);
+    assert!(!surrender_state(&app, player).has_surrendered);
+}
+
+#[test]
+fn jumping_during_a_knockback_calls_off_the_surrender() {
+    // 挨打後自己跳起來不算被推：跳躍的位移照樣算自己走開（不然離地期間一直跟著移動，能舉著手跳很遠）
+    let (mut app, player) = surrender_app();
+    raise_hands(&mut app, player);
+    knock_back(&mut app, player);
+    set_grounded(&mut app, player, false);
+    app.world_mut()
+        .get_mut::<Player>(player)
+        .expect("有玩家")
+        .vertical_velocity = 5.0;
+    move_player(&mut app, player, Vec3::new(0.0, 0.6, 0.0));
+    surrender_input(&mut app);
+    assert!(!surrender_state(&app, player).has_surrendered);
+}
+
+/// 真的 Rapier 角色控制器：玩家站在地上，系統照「玩家移動 → 受傷反應 → 擊退 → 投降輸入」的順序跑
+/// （時間每幀走 0.05 秒），回傳 (App, 玩家)
+fn physics_app() -> (App, Entity) {
+    use bevy_rapier3d::prelude::*;
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        AssetPlugin::default(),
+        bevy::scene::ScenePlugin,
+        TransformPlugin,
+        RapierPhysicsPlugin::<NoUserData>::default(),
+    ))
+    .init_asset::<Mesh>()
+    .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+        std::time::Duration::from_millis(50),
+    ))
+    .init_resource::<ButtonInput<KeyCode>>()
+    .init_resource::<ButtonInput<MouseButton>>()
+    .init_resource::<GameState>()
+    .init_resource::<ArrestConfig>()
+    .init_resource::<crate::combat::RespawnState>()
+    .init_resource::<crate::combat::CombatState>()
+    .init_resource::<crate::core::CameraSettings>()
+    .init_resource::<crate::player::CharacterSwitchAnimation>()
+    .init_resource::<crate::player::PlayerConfig>()
+    .insert_resource(WantedLevel {
+        stars: 2,
+        ..default()
+    })
+    .add_systems(
+        Update,
+        (
+            (
+                crate::player::player_input,
+                crate::player::player_movement,
+                crate::player::player_jump,
+            )
+                .chain(),
+            crate::combat::hit_reaction_update_system,
+            crate::combat::hit_reaction_knockback_system,
+            player_surrender_input_system,
+        )
+            .chain(),
+    );
+    app.world_mut().spawn((
+        Transform::default(),
+        RigidBody::Fixed,
+        Collider::cuboid(100.0, 0.1, 100.0),
+    ));
+    let player = app
+        .world_mut()
+        .spawn((
+            Transform::from_xyz(3.0, 0.85, -4.0),
+            RigidBody::KinematicPositionBased,
+            Collider::capsule_y(0.45, 0.25),
+            KinematicCharacterController {
+                slide: true,
+                ..default()
+            },
+            Player::default(),
+            crate::combat::HitReaction::default(),
+            PlayerSurrenderState::default(),
+            crate::combat::PlayerCoverState::default(),
+            crate::player::DodgeState::default(),
+            crate::player::ClimbState::default(),
+            crate::player::PlayerSprintState::default(),
+        ))
+        .id();
+    for _ in 0..20 {
+        app.update();
+    }
+    (app, player)
+}
+
+/// 玩家在目前位置舉手、挨一下 damage 的傷害（往 +X 推）
+fn surrender_and_get_hit(app: &mut App, player: Entity, damage: f32) {
+    let position = app
+        .world()
+        .get::<Transform>(player)
+        .expect("有玩家")
+        .translation;
+    let mut state = app
+        .world_mut()
+        .get_mut::<PlayerSurrenderState>(player)
+        .expect("有投降狀態");
+    state.has_surrendered = true;
+    state.surrender_position = position;
+    app.world_mut()
+        .get_mut::<crate::combat::HitReaction>(player)
+        .expect("有受傷反應")
+        .trigger(damage, Vec3::X, false);
+}
+
+#[test]
+fn a_real_knockback_settles_then_walking_away_counts() {
+    // 真的角色控制器：挨 25 傷害被推開仍舉著手；挨打一秒後倒數歸零（站著不動時要回報著地），
+    // 之後按 W 走開就算放棄
+    let (mut app, player) = physics_app();
+    surrender_and_get_hit(&mut app, player, 25.0);
+    for _ in 0..20 {
+        app.update();
+    }
+    let state = surrender_state(&app, player);
+    let pushed = app
+        .world()
+        .get::<Transform>(player)
+        .expect("有玩家")
+        .translation
+        .x
+        - 3.0;
+    assert!(pushed > 0.5, "真的被推開（推了 {pushed} m）");
+    assert!(state.has_surrendered, "被推開");
+    assert_eq!(state.knockback_settle_frames, 0, "站穩後倒數歸零");
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::KeyW);
+    for _ in 0..10 {
+        app.update();
+    }
+    assert!(!surrender_state(&app, player).has_surrendered, "走開");
+}
+
+#[test]
+fn jumping_during_a_real_knockback_calls_off_the_surrender() {
+    // 挨 40 傷害（擊退 0.5 秒）期間自己跳起來：跳躍不算被推，舉著手跳就算放棄
+    let (mut app, player) = physics_app();
+    surrender_and_get_hit(&mut app, player, 40.0);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Space);
+    app.update();
+    let mut keyboard = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+    keyboard.release(KeyCode::Space);
+    keyboard.clear();
+    for _ in 0..20 {
+        app.update();
+    }
+    assert!(!surrender_state(&app, player).has_surrendered);
 }

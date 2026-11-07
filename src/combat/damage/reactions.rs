@@ -58,11 +58,11 @@ pub fn hit_reaction_knockback_system(
     let delta = time.delta_secs();
 
     for (reaction, mut controller) in &mut query {
-        let knockback = reaction.get_knockback_velocity();
-        if knockback.length_squared() > 0.001 {
+        if reaction.is_being_pushed() {
             // 將擊退速度加到控制器的位移上
             let current_translation = controller.translation.unwrap_or(Vec3::ZERO);
-            controller.translation = Some(current_translation + knockback * delta);
+            controller.translation =
+                Some(current_translation + reaction.get_knockback_velocity() * delta);
         }
     }
 }
@@ -70,12 +70,11 @@ pub fn hit_reaction_knockback_system(
 /// 應用擊退效果到 Transform（共用邏輯）
 #[inline]
 fn apply_knockback_to_transform(reaction: &HitReaction, transform: &mut Transform, delta: f32) {
-    let knockback = reaction.get_knockback_velocity();
-    if knockback.length_squared() <= 0.001 {
+    if !reaction.is_being_pushed() {
         return;
     }
 
-    transform.translation += knockback * delta;
+    transform.translation += reaction.get_knockback_velocity() * delta;
     // 確保不會掉到地面以下
     if transform.translation.y < 0.0 {
         transform.translation.y = 0.0;

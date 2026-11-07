@@ -711,6 +711,11 @@ impl HitReaction {
             Vec3::ZERO
         }
     }
+
+    /// 是否正在被推開（踉蹌、擊退時角色會被往後推）
+    pub fn is_being_pushed(&self) -> bool {
+        self.get_knockback_velocity().length_squared() > 0.001
+    }
 }
 
 // ============================================================================

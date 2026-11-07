@@ -206,3 +206,49 @@ fn police_walk_up_and_arrest_a_surrendered_player_without_firing() {
         "逮捕還沒處理就放下手"
     );
 }
+
+/// 站著不動的警察挨一下 40 的傷害（擊退）要真的被推開：擊退照遊戲用 character_knockback_plugin 註冊，
+/// 警察 AI 刻意排在擊退系統之後（沒通緝、沒巡邏路線時，警察 AI 每幀把角色控制器的位移覆寫成零）。
+/// 擊退在 PostUpdate 時這條排序不起作用；擊退被改回 Update 時，它保證警察 AI 排在後面、蓋掉擊退
+#[test]
+fn a_standing_officer_is_knocked_back() {
+    let mut app = police_app(0);
+    app.add_plugins((
+        bevy::state::app::StatesPlugin,
+        crate::combat::character_knockback_plugin,
+    ))
+    .insert_state(crate::core::AppState::InGame)
+    .add_systems(
+        Update,
+        (
+            crate::combat::hit_reaction_update_system,
+            police_ai_system.after(crate::combat::hit_reaction_knockback_system),
+        ),
+    );
+    spawn_player_on_foot(&mut app, Vec3::new(0.0, 0.0, -20.0));
+    let officer = spawn_officer(&mut app, Vec3::ZERO, PoliceState::Patrolling);
+    app.world_mut()
+        .entity_mut(officer)
+        .insert(crate::combat::HitReaction::default());
+    settle(&mut app);
+    let start = app
+        .world()
+        .get::<Transform>(officer)
+        .expect("警察還在")
+        .translation;
+    app.world_mut()
+        .get_mut::<crate::combat::HitReaction>(officer)
+        .expect("有受傷反應")
+        .trigger(40.0, Vec3::X, false);
+    for _ in 0..20 {
+        app.update();
+    }
+    let pushed = app
+        .world()
+        .get::<Transform>(officer)
+        .expect("警察還在")
+        .translation
+        .x
+        - start.x;
+    assert!(pushed > 1.0, "只被推開 {pushed} m");
+}

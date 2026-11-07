@@ -72,7 +72,8 @@ flowchart LR
         PreUpdate["PreUpdate<br><small>update_interaction_state</small>"]
         Update["Update<br><small>GameSet + InteractionSet</small>"]
         Camera_S["Camera<br><small>input → auto_follow → follow → shake</small>"]
-        PreUpdate --> Update --> Camera_S
+        PostUpdate_S["PostUpdate<br><small>玩家、警察擊退 → Rapier 物理</small>"]
+        PreUpdate --> Update --> Camera_S --> PostUpdate_S
     end
 ```
 

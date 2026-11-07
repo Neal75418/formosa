@@ -13,6 +13,9 @@ mod death;
 mod effects;
 mod reactions;
 
+#[cfg(test)]
+mod reactions_tests;
+
 // Re-exports — 保持對外 API 不變
 pub use calculation::damage_system;
 pub use death::{
@@ -23,9 +26,12 @@ pub use effects::{
     blood_particle_update_system, floating_damage_number_update_system,
 };
 pub use reactions::{
-    enemy_hit_reaction_knockback_system, hit_reaction_knockback_system, hit_reaction_update_system,
+    character_knockback_plugin, enemy_hit_reaction_knockback_system, hit_reaction_update_system,
     hit_reaction_visual_system, pedestrian_hit_reaction_knockback_system,
 };
+// 擊退系統由 character_knockback_plugin 註冊；測試要把移動系統刻意排在它之後
+#[cfg(test)]
+pub use reactions::hit_reaction_knockback_system;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;

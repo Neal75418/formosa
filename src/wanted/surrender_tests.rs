@@ -385,8 +385,8 @@ fn jumping_during_a_knockback_calls_off_the_surrender() {
     assert!(!surrender_state(&app, player).has_surrendered);
 }
 
-/// 真的 Rapier 角色控制器：玩家站在地上，系統照「玩家移動 → 受傷反應 → 擊退 → 投降輸入」的順序跑
-/// （時間每幀走 0.05 秒），回傳 (App, 玩家)
+/// 真的 Rapier 角色控制器：玩家站在地上，系統照「玩家移動 → 受傷反應 → 投降輸入」的順序跑，
+/// 擊退照遊戲排在 PostUpdate（時間每幀走 0.05 秒），回傳 (App, 玩家)
 fn physics_app() -> (App, Entity) {
     use bevy_rapier3d::prelude::*;
     let mut app = App::new();
@@ -395,9 +395,12 @@ fn physics_app() -> (App, Entity) {
         AssetPlugin::default(),
         bevy::scene::ScenePlugin,
         TransformPlugin,
+        bevy::state::app::StatesPlugin,
         RapierPhysicsPlugin::<NoUserData>::default(),
+        crate::combat::character_knockback_plugin,
     ))
     .init_asset::<Mesh>()
+    .insert_state(crate::core::AppState::InGame)
     .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
         std::time::Duration::from_millis(50),
     ))
@@ -424,7 +427,6 @@ fn physics_app() -> (App, Entity) {
             )
                 .chain(),
             crate::combat::hit_reaction_update_system,
-            crate::combat::hit_reaction_knockback_system,
             player_surrender_input_system,
         )
             .chain(),

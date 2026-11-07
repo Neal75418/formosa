@@ -8,7 +8,21 @@ use bevy_rapier3d::prelude::*;
 
 use crate::combat::components::{Enemy, HitReaction, HitReactionPhase};
 use crate::combat::visuals::Ragdoll;
+use crate::core::AppState;
 use crate::pedestrian::Pedestrian;
+
+/// 玩家、警察的擊退：加在角色控制器的位移上
+///
+/// 玩家、警察的移動系統在 Update 多數狀態下會覆寫這個位移（例如玩家站著不動時寫零），
+/// 擊退排在它們前面就會被蓋掉，所以排在 PostUpdate、Rapier 套用位移之前，一定在所有移動系統之後
+pub fn character_knockback_plugin(app: &mut App) {
+    app.add_systems(
+        PostUpdate,
+        hit_reaction_knockback_system
+            .run_if(in_state(AppState::InGame))
+            .before(PhysicsSet::SyncBackend),
+    );
+}
 
 /// 受傷反應更新系統
 /// 每幀更新所有 HitReaction 組件的狀態
@@ -50,10 +64,13 @@ pub fn hit_reaction_visual_system(
 }
 
 /// 受傷反應擊退系統
-/// 將擊退速度應用到角色控制器
+/// 將擊退速度應用到角色控制器；敵人、行人由下面兩個系統直接推 Transform，這裡不重複推
 pub fn hit_reaction_knockback_system(
     time: Res<Time>,
-    mut query: Query<(&HitReaction, &mut KinematicCharacterController)>,
+    mut query: Query<
+        (&HitReaction, &mut KinematicCharacterController),
+        (Without<Enemy>, Without<Pedestrian>),
+    >,
 ) {
     let delta = time.delta_secs();
 

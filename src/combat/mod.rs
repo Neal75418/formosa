@@ -57,6 +57,8 @@ impl Plugin for CombatPlugin {
             .init_resource::<KillCamState>()
             .init_resource::<BlockState>()
             .init_resource::<StealthTakedownState>()
+            // 玩家、警察的擊退
+            .add_plugins(character_knockback_plugin)
             // 設置系統
             .add_systems(Startup, setup_combat_visuals)
             .add_systems(Startup, setup_explosive_visuals)
@@ -112,7 +114,6 @@ impl Plugin for CombatPlugin {
                 Update,
                 (
                     hit_reaction_update_system,          // 受傷反應狀態更新
-                    hit_reaction_knockback_system,       // 玩家擊退
                     enemy_hit_reaction_knockback_system, // 敵人擊退
                     hit_reaction_visual_system,          // 受傷視覺效果
                 )

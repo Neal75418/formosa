@@ -1,12 +1,14 @@
 //! 直升機 AI 狀態機與移動系統
 
+use super::super::sight::{can_see_player, player_sight_point, SeatedVehicle, SightTarget};
 use super::super::WantedLevel;
 #[allow(clippy::wildcard_imports)]
 use super::components::*;
-use crate::core::{rapier_real_to_f32, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
+use crate::combat::PlayerCoverState;
+use crate::core::{COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
 use crate::player::Player;
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::{Real as RapierReal, *};
+use bevy_rapier3d::prelude::*;
 
 // ============================================================================
 // AI 系統
@@ -118,43 +120,45 @@ fn should_trigger_evade(helicopter: &PoliceHelicopter, current_time: f32) -> boo
         && helicopter.state != HelicopterState::Evading
 }
 
-/// 檢查直升機是否能看到玩家（獨立 LOS 檢測）
-fn check_helicopter_los(heli_pos: Vec3, player_pos: Vec3, rapier: &RapierContext) -> bool {
-    let ray_origin = heli_pos + Vec3::new(0.0, -1.0, 0.0); // 從機腹往下看
-    let to_player = player_pos - ray_origin;
-    let distance = to_player.length();
-    if distance < 0.1 {
-        return true;
-    }
-
-    let ray_dir = to_player.normalize();
-
+/// 檢查直升機是否能看到玩家（從機腹往下看）：只算靜態物體和車輛群組，
+/// 角色群組（玩家、行人、敵人）不擋；沒掛碰撞群組的步警屬於所有群組，會擋
+fn check_helicopter_los(
+    heli_pos: Vec3,
+    sight_point: Vec3,
+    target: SightTarget,
+    rapier: &RapierContext,
+) -> bool {
     let filter = QueryFilter::default().groups(CollisionGroups::new(
         Group::ALL,
         COLLISION_GROUP_STATIC | COLLISION_GROUP_VEHICLE,
     ));
-
-    match rapier.cast_ray(ray_origin, ray_dir, distance as RapierReal, true, filter) {
-        Some((_, toi)) => rapier_real_to_f32(toi) >= distance - 1.0,
-        None => true,
-    }
+    can_see_player(
+        rapier,
+        heli_pos + Vec3::new(0.0, -1.0, 0.0),
+        sight_point,
+        filter,
+        target,
+    )
 }
 
 /// 直升機 AI 系統
 pub fn helicopter_ai_system(
     time: Res<Time>,
     _wanted: Res<WantedLevel>,
-    player_query: Query<&Transform, With<Player>>,
+    player_query: Query<(Entity, &Transform, &Player, Option<&PlayerCoverState>)>,
     mut helicopter_query: Query<(&mut PoliceHelicopter, &Transform)>,
     rapier_context: ReadRapierContext,
+    seated: SeatedVehicle,
 ) {
     let dt = time.delta_secs();
     let current_time = time.elapsed_secs();
 
-    let Ok(player_transform) = player_query.single() else {
+    let Ok((player_entity, player_transform, player, cover)) = player_query.single() else {
         return;
     };
     let player_pos = player_transform.translation;
+    let sight_point = player_sight_point(player_transform, player, cover);
+    let target = SightTarget::new(player_entity, &seated);
 
     let Ok(rapier) = rapier_context.single() else {
         return;
@@ -169,7 +173,8 @@ pub fn helicopter_ai_system(
         helicopter.target_position = Some(player_pos);
 
         // 直升機獨立視線檢測
-        let heli_can_see_player = check_helicopter_los(transform.translation, player_pos, &rapier);
+        let heli_can_see_player =
+            check_helicopter_los(transform.translation, sight_point, target, &rapier);
 
         match helicopter.state {
             HelicopterState::Approaching => {

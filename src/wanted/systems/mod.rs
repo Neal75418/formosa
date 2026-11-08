@@ -9,9 +9,8 @@ mod police_ai;
 mod police_combat;
 mod wanted_hud;
 
-use crate::core::rapier_real_to_f32;
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::{Real as RapierReal, *};
+use bevy_rapier3d::prelude::*;
 
 use crate::ai::AiMovement;
 use crate::combat::{Health, HitReaction, PlayerCoverState};
@@ -24,7 +23,7 @@ use super::components::*;
 use super::config::*;
 #[allow(clippy::wildcard_imports)]
 use super::events::*;
-use super::sight::player_sight_point;
+use super::sight::{can_see_player, player_sight_point, SeatedVehicle, SightTarget};
 
 pub use police_ai::police_ai_system;
 pub use police_combat::{police_combat_system, police_radio_call_system};
@@ -135,7 +134,7 @@ pub fn process_witness_reports(
 
 /// 更新每個警察的視線狀態
 fn update_police_vision(
-    player_entity: Entity,
+    target: SightTarget,
     player_pos: Vec3,
     sight_point: Vec3,
     police_hash: &PoliceSpatialHash,
@@ -169,24 +168,14 @@ fn update_police_vision(
             continue;
         }
 
-        // 從警察眼睛瞄準玩家；方向和長度都從眼睛算，不然射線會平行偏移、飛過玩家
-        let ray_origin = police_pos + Vec3::Y * OFFICER_EYE_HEIGHT;
-        let to_target = sight_point - ray_origin;
-        let ray_distance = to_target.length();
-        // 打到玩家本人、或打到的東西就在玩家身上，才算看得到；什麼都沒打到也算
-        // （射線只到瞄準點，沒打到就是中間沒有遮擋；膠囊射線偶爾會漏打）
-        let visible = rapier
-            .cast_ray(
-                ray_origin,
-                to_target / ray_distance,
-                ray_distance as RapierReal,
-                true,
-                QueryFilter::default().exclude_rigid_body(police_entity),
-            )
-            .is_none_or(|(hit_entity, toi)| {
-                hit_entity == player_entity
-                    || rapier_real_to_f32(toi) >= ray_distance - RAYCAST_HIT_TOLERANCE
-            });
+        // 從警察眼睛瞄準玩家
+        let visible = can_see_player(
+            rapier,
+            police_pos + Vec3::Y * OFFICER_EYE_HEIGHT,
+            sight_point,
+            QueryFilter::default().exclude_rigid_body(police_entity),
+            target,
+        );
         if visible {
             officer.can_see_player = true;
             any_visible = true;
@@ -251,6 +240,7 @@ pub fn wanted_cooldown_system(
     mut police_query: Query<(&Transform, &mut PoliceOfficer)>,
     rapier_context: ReadRapierContext,
     config: Res<PoliceConfig>,
+    seated: SeatedVehicle,
 ) {
     if wanted.stars == 0 {
         return;
@@ -264,7 +254,7 @@ pub fn wanted_cooldown_system(
 
     let player_visible = rapier_context.single().is_ok_and(|rapier| {
         update_police_vision(
-            player_entity,
+            SightTarget::new(player_entity, &seated),
             player_pos,
             sight_point,
             &police_hash,

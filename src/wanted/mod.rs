@@ -23,6 +23,8 @@ mod debug_viz; // Gizmos 除錯可視化（僅 Debug 模式）
 #[cfg(test)]
 mod death_tests;
 #[cfg(test)]
+mod in_vehicle_tests;
+#[cfg(test)]
 mod police_response_tests;
 #[cfg(test)]
 mod police_sight_tests;

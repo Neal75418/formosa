@@ -110,6 +110,22 @@ pub const COLLISION_GROUP_RAGDOLL: Group = Group::GROUP_10;
 pub const PEDESTRIAN_COLLISION_GROUPS: CollisionGroups =
     CollisionGroups::new(COLLISION_GROUP_CHARACTER, Group::ALL);
 
+/// 玩家的碰撞設定：屬於角色群組，和角色、車輛、靜態物體碰撞
+pub const PLAYER_COLLISION_GROUPS: CollisionGroups = CollisionGroups::new(
+    COLLISION_GROUP_CHARACTER,
+    COLLISION_GROUP_CHARACTER
+        .union(COLLISION_GROUP_VEHICLE)
+        .union(COLLISION_GROUP_STATIC),
+);
+
+/// 車輛（汽車、機車）的碰撞設定：屬於車輛群組，和角色、車輛、靜態物體碰撞
+pub const VEHICLE_COLLISION_GROUPS: CollisionGroups = CollisionGroups::new(
+    COLLISION_GROUP_VEHICLE,
+    COLLISION_GROUP_CHARACTER
+        .union(COLLISION_GROUP_VEHICLE)
+        .union(COLLISION_GROUP_STATIC),
+);
+
 /// 敵人死後屍體的碰撞設定：屬於屍體群組，只和角色群組的成員碰撞
 /// （沒設群組的碰撞體預設屬於所有群組，地面也算；會穿過靜態物體和車輛群組）
 pub const ENEMY_CORPSE_COLLISION_GROUPS: CollisionGroups =

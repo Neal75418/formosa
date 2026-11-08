@@ -1,8 +1,7 @@
 //! 警察戰鬥與無線電通訊
 
-use crate::core::rapier_real_to_f32;
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::{Real as RapierReal, *};
+use bevy_rapier3d::prelude::*;
 
 use crate::combat::{
     spawn_bullet_tracer, spawn_muzzle_flash, CombatVisuals, DamageEvent, DamageSource,
@@ -15,39 +14,12 @@ use crate::player::Player;
 use super::super::components::*;
 #[allow(clippy::wildcard_imports)]
 use super::super::config::*;
-use super::super::sight::player_sight_point;
+use super::super::sight::{can_see_player, player_sight_point, SeatedVehicle, SightTarget};
 use super::super::PlayerSurrenderState;
 
 // ============================================================================
 // 戰鬥輔助函數
 // ============================================================================
-
-/// 從 ray_origin 瞄準 target 打射線（方向和長度從起點算）
-fn check_line_of_sight(
-    rapier: &RapierContext,
-    ray_origin: Vec3,
-    target: Vec3,
-    exclude_entity: Entity,
-    player_entity: Entity,
-) -> bool {
-    let filter = QueryFilter::default().exclude_rigid_body(exclude_entity);
-    let to_target = target - ray_origin;
-    let distance = to_target.length();
-
-    match rapier.cast_ray(
-        ray_origin,
-        to_target / distance,
-        distance as RapierReal,
-        true,
-        filter,
-    ) {
-        Some((hit_entity, toi)) => {
-            hit_entity == player_entity
-                || rapier_real_to_f32(toi) >= distance - RAYCAST_HIT_TOLERANCE
-        }
-        None => true,
-    }
-}
 
 fn calc_hit_chance(distance: f32, config: &PoliceConfig, officer_type: PoliceType) -> f32 {
     let base = if officer_type == PoliceType::Military {
@@ -98,6 +70,7 @@ pub fn police_combat_system(
     wanted: Res<WantedLevel>,
     rapier_context: ReadRapierContext,
     combat_visuals: Option<Res<CombatVisuals>>,
+    seated: SeatedVehicle,
 ) {
     let Ok((player_entity, player_transform, player, cover, surrender)) = player_query.single()
     else {
@@ -109,6 +82,7 @@ pub fn police_combat_system(
     }
     let player_pos = player_transform.translation;
     let sight_point = player_sight_point(player_transform, player, cover);
+    let target = SightTarget::new(player_entity, &seated);
     let Ok(rapier) = rapier_context.single() else {
         return;
     };
@@ -130,15 +104,14 @@ pub fn police_combat_system(
             continue;
         }
 
-        let ray_origin = police_pos + Vec3::Y * OFFICER_EYE_HEIGHT;
         let ray_direction = to_player.normalize();
 
-        if !check_line_of_sight(
+        if !can_see_player(
             &rapier,
-            ray_origin,
+            police_pos + Vec3::Y * OFFICER_EYE_HEIGHT,
             sight_point,
-            police_entity,
-            player_entity,
+            QueryFilter::default().exclude_rigid_body(police_entity),
+            target,
         ) {
             continue;
         }

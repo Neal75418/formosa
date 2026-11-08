@@ -9,18 +9,6 @@ use super::*;
 /// 玩家在原點，警察站在北邊（−Z）這個距離
 const OFFICER_DISTANCE: f32 = 10.0;
 
-/// 跑通緝消退系統（裡面判斷警察看不看得到玩家），回傳有沒有被看到
-fn police_see_player(app: &mut App) -> bool {
-    settle(app);
-    app.world_mut()
-        .run_system_once(update_police_spatial_hash_system)
-        .expect("跑得起來");
-    app.world_mut()
-        .run_system_once(wanted_cooldown_system)
-        .expect("跑得起來");
-    app.world().resource::<WantedLevel>().player_visible
-}
-
 /// 玩家已經舉手投降，跑逮捕系統，回傳警察有沒有開始逮捕
 fn arrest_starts(app: &mut App, player: Entity) -> bool {
     surrender(app, player);

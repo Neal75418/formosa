@@ -4,7 +4,7 @@ use super::vehicle_damage::BodyPartDamage;
 #[allow(clippy::wildcard_imports)]
 use super::*;
 use crate::core::math::look_rotation_y_flat;
-use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
+use crate::core::VEHICLE_COLLISION_GROUPS;
 use crate::world::MapLayout;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -382,10 +382,7 @@ pub fn spawn_npc_vehicle(
             Collider::cuboid(chassis_size.x / 2.0, 0.75, chassis_size.z / 2.0),
             RigidBody::KinematicPositionBased,
             VehiclePhysicsMode::Kinematic,
-            CollisionGroups::new(
-                COLLISION_GROUP_VEHICLE,
-                COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
-            ), // NPC 載具與角色、載具、靜態物碰撞
+            VEHICLE_COLLISION_GROUPS, // NPC 載具與角色、載具、靜態物碰撞
             // 遊戲邏輯組件
             preset.into_components(),
             VehicleHealth::for_vehicle_type(vehicle_type), // 車輛血量
@@ -589,10 +586,7 @@ pub fn spawn_scooter(
             Collider::cuboid(body_width / 2.0, 0.5, body_length / 2.0),
             RigidBody::KinematicPositionBased,
             VehiclePhysicsMode::Kinematic,
-            CollisionGroups::new(
-                COLLISION_GROUP_VEHICLE,
-                COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
-            ), // 機車與角色、載具、靜態物碰撞
+            VEHICLE_COLLISION_GROUPS, // 機車與角色、載具、靜態物碰撞
             VehiclePreset::scooter().into_components(),
             VehicleHealth::for_vehicle_type(VehicleType::Scooter), // 車輛血量
             TireDamage::default(),                                 // 輪胎損壞狀態

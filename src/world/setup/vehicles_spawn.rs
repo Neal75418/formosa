@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
+use crate::core::VEHICLE_COLLISION_GROUPS;
 use crate::player::Player;
 use crate::vehicle::{spawn_scooter, VehicleModifications, VehiclePreset};
 use crate::world::characters::spawn_player_character;
@@ -105,10 +105,7 @@ fn spawn_vehicle(
             preset.into_components(),
             RigidBody::KinematicPositionBased,
             VehiclePhysicsMode::Kinematic,
-            CollisionGroups::new(
-                COLLISION_GROUP_VEHICLE,
-                COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
-            ),
+            VEHICLE_COLLISION_GROUPS,
         ))
         .with_children(|parent| {
             parent

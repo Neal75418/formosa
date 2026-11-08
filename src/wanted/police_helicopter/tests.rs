@@ -291,3 +291,125 @@ fn helicopter_setup_provides_the_accuracy() {
     world.flush();
     assert!(world.contains_resource::<HelicopterAccuracy>());
 }
+
+#[test]
+fn helicopter_sees_the_player_in_the_open() {
+    let mut app = helicopter_app(5);
+    spawn_player_on_foot(&mut app, Vec3::ZERO);
+    let helicopter = spawn_attacking_helicopter(&mut app, hovering_north(20.0), Vec3::ZERO);
+    assert!(helicopter_sees_player(&mut app, helicopter));
+}
+
+/// 貼著牆躲（直升機那一側的牆面離玩家中心 0.35 m）：射線打到牆的地方離瞄準點約 0.75 m，
+/// 容許範圍要小於這個距離才擋得住（原本的 1.0 會當成看得到）
+#[test]
+fn a_wall_the_player_hugs_hides_them_from_the_helicopter() {
+    let mut app = helicopter_app(5);
+    spawn_player_on_foot(&mut app, Vec3::ZERO);
+    spawn_block(
+        &mut app,
+        Vec3::new(0.0, 1.85, -0.3),
+        Vec3::new(3.0, 1.75, 0.05),
+    );
+    let helicopter = spawn_attacking_helicopter(&mut app, hovering_north(20.0), Vec3::ZERO);
+    assert!(!helicopter_sees_player(&mut app, helicopter));
+}
+
+/// 開車時射線先打到車頂：打到玩家坐的車就算看到
+#[test]
+fn helicopter_sees_a_player_driving_a_car() {
+    let mut app = helicopter_app(5);
+    spawn_player_in_vehicle(&mut app, Vec3::ZERO, TestVehicle::Car);
+    let helicopter = spawn_attacking_helicopter(&mut app, hovering_north(20.0), Vec3::ZERO);
+    assert!(helicopter_sees_player(&mut app, helicopter));
+}
+
+/// 開車時玩家的碰撞體關著，子彈打到的是車：打到玩家坐的車就算打中玩家
+#[test]
+fn helicopter_hits_a_player_driving_a_car() {
+    for vehicle in [TestVehicle::Car, TestVehicle::Scooter] {
+        let mut app = helicopter_app(5);
+        let (player, _) = spawn_player_in_vehicle(&mut app, Vec3::ZERO, vehicle);
+        let helicopter = spawn_attacking_helicopter(&mut app, hovering_north(20.0), Vec3::ZERO);
+        assert_eq!(helicopter_shoots(&mut app, helicopter, player), (true, 1));
+    }
+}
+
+/// 直升機和步警一樣：站著瞄頸部；蹲下、或躲在矮掩體後沒探出時瞄身體中心。在 45 m 外（射線比較平），
+/// 玩家前方 0.6 m 有頂端離地 1.4 m 的牆：站著頭和脖子露出來看得到，蹲下、躲矮掩體就看不到
+#[test]
+fn helicopter_aims_at_the_neck_unless_the_player_keeps_low() {
+    for (stance, keeps_low) in [("站著", false), ("蹲下", true), ("躲矮掩體", true)] {
+        let mut app = helicopter_app(5);
+        let player = spawn_player_on_foot(&mut app, Vec3::ZERO);
+        app.world_mut()
+            .get_mut::<crate::player::Player>(player)
+            .expect("有玩家")
+            .is_crouching = stance == "蹲下";
+        if stance == "躲矮掩體" {
+            app.world_mut()
+                .entity_mut(player)
+                .insert(crate::combat::PlayerCoverState {
+                    is_in_cover: true,
+                    cover_type: crate::combat::PlayerCoverType::Low,
+                    peek_state: crate::combat::PeekState::Hidden,
+                    ..default()
+                });
+        }
+        spawn_block(
+            &mut app,
+            Vec3::new(0.0, 0.8, -0.6),
+            Vec3::new(3.0, 0.7, 0.05),
+        );
+        let helicopter = spawn_attacking_helicopter(&mut app, hovering_north(45.0), Vec3::ZERO);
+        assert_eq!(
+            helicopter_sees_player(&mut app, helicopter),
+            !keeps_low,
+            "{stance}"
+        );
+    }
+}
+
+/// 直升機的視線只算靜態物體和車輛，行人擋在中間不算（直升機高 10 m 低於遊戲最低高度 25 m，
+/// 只是為了讓射線平到穿過行人）
+#[test]
+fn a_pedestrian_in_between_does_not_hide_the_player_from_the_helicopter() {
+    let mut app = helicopter_app(5);
+    spawn_player_on_foot(&mut app, Vec3::ZERO);
+    app.world_mut().spawn((
+        Transform::from_xyz(0.0, 0.8, -1.0),
+        bevy_rapier3d::prelude::RigidBody::KinematicPositionBased,
+        bevy_rapier3d::prelude::Collider::capsule_y(0.45, 0.25),
+        crate::core::PEDESTRIAN_COLLISION_GROUPS,
+    ));
+    let helicopter = spawn_attacking_helicopter(&mut app, Vec3::new(0.0, 10.0, -45.0), Vec3::ZERO);
+    assert!(helicopter_sees_player(&mut app, helicopter));
+}
+
+/// 坐在車上時，沒擲中的子彈即使落在車身上也不算打中玩家（偏移 1.5～3 m，汽車半長 2 m，
+/// 有些偏移點還在車身範圍內）
+#[test]
+fn a_missed_shot_that_lands_on_the_players_car_does_not_hit_them() {
+    let mut app = helicopter_app(5);
+    app.insert_resource(NEVER_HITS);
+    let (player, _) = spawn_player_in_vehicle(&mut app, Vec3::ZERO, TestVehicle::Car);
+    let helicopter = spawn_attacking_helicopter(&mut app, OVERHEAD, Vec3::ZERO);
+    settle(&mut app);
+    let mut hits = 0;
+    for _ in 0..200 {
+        app.world_mut()
+            .get_mut::<PoliceHelicopter>(helicopter)
+            .expect("直升機還在")
+            .fire_cooldown = 0.0;
+        app.world_mut()
+            .run_system_once(helicopter_combat_system)
+            .expect("跑得起來");
+        hits += app
+            .world_mut()
+            .resource_mut::<Messages<DamageEvent>>()
+            .drain()
+            .filter(|event| event.target == player)
+            .count();
+    }
+    assert_eq!(hits, 0);
+}

@@ -7,7 +7,7 @@ use crate::combat::{
     Armor, Damageable, Health, HitReaction, PlayerArm, PlayerHand, Weapon, WeaponInventory,
     WeaponStats,
 };
-use crate::core::{COLLISION_GROUP_CHARACTER, COLLISION_GROUP_STATIC, COLLISION_GROUP_VEHICLE};
+use crate::core::PLAYER_COLLISION_GROUPS;
 use crate::player::{DodgeState, Player};
 use crate::world::{MapLayout, PlayerInteriorState};
 use bevy::prelude::*;
@@ -129,10 +129,7 @@ pub fn spawn_player_character(
         .insert(crate::vehicle::PlayerTheftState::default())
         .insert(crate::player::PlayerSprintState::default())
         .insert(crate::player::Stamina::default())
-        .insert(CollisionGroups::new(
-            COLLISION_GROUP_CHARACTER,
-            COLLISION_GROUP_CHARACTER | COLLISION_GROUP_VEHICLE | COLLISION_GROUP_STATIC,
-        ))
+        .insert(PLAYER_COLLISION_GROUPS)
         .with_children(|parent| {
             // === 頭部 ===
             let head_radius = 0.12;

@@ -1,5 +1,6 @@
 //! 直升機戰鬥、旋翼動畫、探照燈、傷害、清理系統
 
+use super::super::sight::{SeatedVehicle, SightTarget};
 use super::super::{PlayerSurrenderState, WantedLevel};
 #[allow(clippy::wildcard_imports)]
 use super::components::*;
@@ -51,6 +52,7 @@ pub fn helicopter_combat_system(
     mut helicopter_query: Query<(Entity, &mut PoliceHelicopter, &Transform)>,
     rapier_context: ReadRapierContext,
     accuracy: Res<HelicopterAccuracy>,
+    seated: SeatedVehicle,
 ) {
     let dt = time.delta_secs();
 
@@ -62,6 +64,7 @@ pub fn helicopter_combat_system(
         return;
     }
     let player_pos = player_transform.translation;
+    let target = SightTarget::new(player_entity, &seated);
     let Ok(rapier) = rapier_context.single() else {
         return;
     };
@@ -113,7 +116,8 @@ pub fn helicopter_combat_system(
             TracerStyle::SMG,
         );
 
-        // 傷害判定：沒擲中就不判斷。偏移後的射線在低仰角時、或之後改成打到玩家坐的車也算打中時，仍可能擦到人
+        // 傷害判定：打到玩家、或打到玩家坐的車都算打中（開車時玩家的碰撞體關著）。
+        // 沒擲中就不判斷：偏移後的射線低仰角時可能擦到人；開車時約一成多會落在玩家坐的車上，判斷了就會算成打中
         let hit_entity = rolled_hit
             .then(|| {
                 rapier.cast_ray(
@@ -126,7 +130,7 @@ pub fn helicopter_combat_system(
             })
             .flatten();
         if let Some((hit_entity, _)) = hit_entity {
-            if hit_entity == player_entity {
+            if target.is_hit_by(hit_entity) {
                 damage_events.write(DamageEvent {
                     target: player_entity,
                     amount: HELICOPTER_BULLET_DAMAGE,

@@ -24,8 +24,20 @@ fn can_helicopter_fire(helicopter: &PoliceHelicopter, distance_sq: f32) -> bool 
 }
 
 /// 計算槍口位置
-fn calc_muzzle_position(heli_pos: Vec3, forward: Dir3) -> Vec3 {
+pub(super) fn calc_muzzle_position(heli_pos: Vec3, forward: Dir3) -> Vec3 {
     heli_pos + forward * 2.0 + Vec3::new(0.0, -1.0, 0.0)
+}
+
+/// 沒擲中的子彈瞄玩家旁邊這個水平距離範圍內的點（公尺）：打在身邊、看得出打偏
+const MISS_MIN_OFFSET: f32 = 1.5;
+const MISS_MAX_OFFSET: f32 = 3.0;
+
+/// 玩家旁邊的偏移點：angle_roll、offset_roll 是 [0, 1) 的亂數，
+/// 決定水平方向，以及 MISS_MIN_OFFSET～MISS_MAX_OFFSET 之間的距離
+pub(super) fn calc_miss_point(player_pos: Vec3, angle_roll: f32, offset_roll: f32) -> Vec3 {
+    let angle = angle_roll * std::f32::consts::TAU;
+    let offset = MISS_MIN_OFFSET + offset_roll * (MISS_MAX_OFFSET - MISS_MIN_OFFSET);
+    player_pos + Vec3::new(angle.cos(), 0.0, angle.sin()) * offset
 }
 
 /// 直升機射擊系統
@@ -38,6 +50,7 @@ pub fn helicopter_combat_system(
     wanted: Res<WantedLevel>,
     mut helicopter_query: Query<(Entity, &mut PoliceHelicopter, &Transform)>,
     rapier_context: ReadRapierContext,
+    accuracy: Res<HelicopterAccuracy>,
 ) {
     let dt = time.delta_secs();
 
@@ -66,9 +79,15 @@ pub fn helicopter_combat_system(
 
         // 子彈從槍口出發，方向和長度要從槍口算（從機身中心算會偏掉、打不到人）
         let muzzle_pos = calc_muzzle_position(heli_pos, transform.forward());
-        let to_target = player_pos - muzzle_pos;
-        let distance = to_target.length();
-        let direction = to_target / distance;
+        let distance = (player_pos - muzzle_pos).length();
+        // 先擲骰：沒中就瞄玩家旁邊，子彈打偏、不扣血；中了才看射線有沒有打到人（牆照樣擋得住）
+        let rolled_hit = rand::random::<f32>() < accuracy.hit_chance(distance);
+        let aim_point = if rolled_hit {
+            player_pos
+        } else {
+            calc_miss_point(player_pos, rand::random(), rand::random())
+        };
+        let direction = (aim_point - muzzle_pos).normalize();
 
         spawn_muzzle_flash(&mut commands, &visuals, muzzle_pos);
 
@@ -94,14 +113,19 @@ pub fn helicopter_combat_system(
             TracerStyle::SMG,
         );
 
-        // 傷害判定
-        if let Some((hit_entity, _)) = rapier.cast_ray(
-            muzzle_pos,
-            direction,
-            distance as RapierReal,
-            true,
-            QueryFilter::default(),
-        ) {
+        // 傷害判定：沒擲中就不判斷。偏移後的射線在低仰角時、或之後改成打到玩家坐的車也算打中時，仍可能擦到人
+        let hit_entity = rolled_hit
+            .then(|| {
+                rapier.cast_ray(
+                    muzzle_pos,
+                    direction,
+                    distance as RapierReal,
+                    true,
+                    QueryFilter::default(),
+                )
+            })
+            .flatten();
+        if let Some((hit_entity, _)) = hit_entity {
             if hit_entity == player_entity {
                 damage_events.write(DamageEvent {
                     target: player_entity,

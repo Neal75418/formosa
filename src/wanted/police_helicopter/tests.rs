@@ -9,12 +9,28 @@ use crate::combat::{CombatVisuals, DamageEvent};
 use crate::wanted::test_support::*;
 use crate::wanted::WantedLevel;
 
+/// 每一槍都擲中的命中率（打不打得到人只看射線）
+const ALWAYS_HITS: HelicopterAccuracy = HelicopterAccuracy {
+    base_hit_chance: 1.0,
+    distance_hit_penalty: 0.0,
+    min_hit_chance: 1.0,
+};
+
+/// 每一槍都擲不中的命中率
+const NEVER_HITS: HelicopterAccuracy = HelicopterAccuracy {
+    base_hit_chance: 0.0,
+    distance_hit_penalty: 0.0,
+    min_hit_chance: 0.0,
+};
+
+/// stars 星、直升機每一槍都擲中的場景（打不打得到人只看射線）
 fn helicopter_app(stars: u8) -> App {
     let mut app = rapier_app();
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<StandardMaterial>::default();
     app.insert_resource(CombatVisuals::new(&mut meshes, &mut materials))
         .insert_resource(WantedLevel { stars, ..default() })
+        .insert_resource(ALWAYS_HITS)
         .add_message::<DamageEvent>();
     app
 }
@@ -126,4 +142,152 @@ fn helicopter_holds_fire_once_the_wanted_level_clears() {
     let player = spawn_player_on_foot(&mut app, Vec3::ZERO);
     let helicopter = spawn_attacking_helicopter(&mut app, hovering_north(20.0), Vec3::ZERO);
     assert_eq!(helicopter_shoots(&mut app, helicopter, player), (false, 0));
+}
+
+/// 擲骰沒中的子彈打在玩家旁邊，就算看得到玩家也不扣血
+#[test]
+fn a_shot_that_misses_the_roll_deals_no_damage() {
+    let mut app = helicopter_app(5);
+    app.insert_resource(NEVER_HITS);
+    let player = spawn_player_on_foot(&mut app, Vec3::ZERO);
+    let helicopter = spawn_attacking_helicopter(&mut app, hovering_north(20.0), Vec3::ZERO);
+    assert_eq!(helicopter_shoots(&mut app, helicopter, player), (true, 0));
+}
+
+/// 命中率貼身 25%，越遠越低，最低 8%
+#[test]
+fn helicopter_hit_chance_drops_with_distance() {
+    let accuracy = HelicopterAccuracy::default();
+    assert!((accuracy.hit_chance(0.0) - 0.25).abs() < 1e-6);
+    assert!((accuracy.hit_chance(50.0) - 0.13).abs() < 1e-6);
+    assert!(accuracy.hit_chance(30.0) > accuracy.hit_chance(45.0));
+    assert!((accuracy.hit_chance(500.0) - 0.08).abs() < 1e-6);
+}
+
+/// 攻擊中的直升機會一路靠到玩家頭頂附近才停（水平約 10 m、高約 41 m）
+const OVERHEAD: Vec3 = Vec3::new(0.0, 41.0, -10.0);
+
+/// 從頭頂附近（機頭朝玩家）開槍時，槍口到站著的玩家的距離
+fn overhead_muzzle_distance() -> f32 {
+    (calc_muzzle_position(OVERHEAD, Dir3::Z) - Vec3::new(0.0, 0.8, 0.0)).length()
+}
+
+/// 照預設命中率、每秒 8 發、每發 8，一架停在頭頂附近的直升機平均約 10 秒打死滿血、站在空曠處的玩家
+/// （60 fps 實際每秒 7.5 發，約 11 秒，見 known-issues；每次的實際時間看運氣）。沒有命中率時不到 2 秒
+#[test]
+fn one_helicopter_overhead_takes_about_ten_seconds_on_average() {
+    let damage_per_second = HELICOPTER_FIRE_RATE
+        * HELICOPTER_BULLET_DAMAGE
+        * HelicopterAccuracy::default().hit_chance(overhead_muzzle_distance());
+    let seconds_to_kill = 100.0 / damage_per_second;
+    assert!(
+        (8.0..16.0).contains(&seconds_to_kill),
+        "平均 {seconds_to_kill} 秒"
+    );
+    let without_misses = 100.0 / (HELICOPTER_FIRE_RATE * HELICOPTER_BULLET_DAMAGE);
+    assert!(without_misses < 2.0, "沒有命中率時 {without_misses} 秒");
+}
+
+/// 從 at 開 shots 槍（機頭朝玩家、每一槍前把冷卻歸零），回傳打中玩家的比例和槍口到玩家的距離
+fn hit_rate_from(at: Vec3, shots: usize) -> (f32, f32) {
+    let mut app = helicopter_app(5);
+    app.insert_resource(HelicopterAccuracy::default());
+    let player = spawn_player_on_foot(&mut app, Vec3::ZERO);
+    let helicopter = spawn_attacking_helicopter(&mut app, at, Vec3::ZERO);
+    settle(&mut app);
+    let mut hits = 0;
+    for _ in 0..shots {
+        app.world_mut()
+            .get_mut::<PoliceHelicopter>(helicopter)
+            .expect("直升機還在")
+            .fire_cooldown = 0.0;
+        app.world_mut()
+            .run_system_once(helicopter_combat_system)
+            .expect("跑得起來");
+        hits += app
+            .world_mut()
+            .resource_mut::<Messages<DamageEvent>>()
+            .drain()
+            .filter(|event| event.target == player)
+            .count();
+    }
+    let forward = Dir3::new((Vec3::ZERO - at).with_y(0.0)).expect("不在玩家正上方");
+    let distance = (calc_muzzle_position(at, forward) - Vec3::new(0.0, 0.8, 0.0)).length();
+    (hits as f32 / shots as f32, distance)
+}
+
+/// 射擊系統照距離擲骰：從頭頂附近（約 15%）和很近的地方（約 23%；高 10 m 低於遊戲最低高度，
+/// 只是為了拉開距離差）各開 4000 槍，打中的比例要接近那個距離的命中率（容許 ±3 個百分點，約 5 個標準差）。
+/// 分不出距離是從槍口還是機身中心算（兩者差不到 0.5 個百分點）
+#[test]
+fn shots_hit_at_the_hit_chance_for_the_distance() {
+    for at in [OVERHEAD, Vec3::new(0.0, 10.0, -5.0)] {
+        let (rate, distance) = hit_rate_from(at, 4000);
+        let expected = HelicopterAccuracy::default().hit_chance(distance);
+        assert!(
+            (rate - expected).abs() < 0.03,
+            "在 {at}：打中 {rate}，{distance} m 的命中率 {expected}"
+        );
+    }
+}
+
+/// 沒擲中的子彈瞄玩家旁邊 1.5～3 m（水平、高度不變）的點
+#[test]
+fn a_missed_shot_aims_one_and_a_half_to_three_meters_beside_the_player() {
+    let player = Vec3::new(2.0, 0.8, -3.0);
+    let horizontal = |point: Vec3| (point - player).with_y(0.0).length();
+    assert!((horizontal(calc_miss_point(player, 0.3, 0.0)) - 1.5).abs() < 1e-5);
+    assert!((horizontal(calc_miss_point(player, 0.3, 0.999_999)) - 3.0).abs() < 1e-4);
+    assert_eq!(calc_miss_point(player, 0.3, 0.5).y, player.y);
+    assert!(calc_miss_point(player, 0.0, 0.5).distance(calc_miss_point(player, 0.5, 0.5)) > 4.0);
+}
+
+/// 彈道（起點、終點）：彈道畫成中心在中點、沿 Y 軸拉長的方塊
+fn tracer_segments(app: &mut App) -> Vec<(Vec3, Vec3)> {
+    app.world_mut()
+        .query_filtered::<&Transform, With<crate::combat::BulletTracer>>()
+        .iter(app.world())
+        .map(|tracer| {
+            let half = tracer.rotation * Vec3::Y * (tracer.scale.y / 2.0);
+            (tracer.translation - half, tracer.translation + half)
+        })
+        .collect()
+}
+
+/// 點到線段的最短距離
+fn distance_to_segment(point: Vec3, (start, end): (Vec3, Vec3)) -> f32 {
+    let along = end - start;
+    let t = ((point - start).dot(along) / along.length_squared()).clamp(0.0, 1.0);
+    (start + along * t).distance(point)
+}
+
+/// 沒擲中的子彈從玩家身邊飛過（看得出打偏），擲中的子彈畫到玩家身上
+#[test]
+fn a_missed_shot_visibly_flies_past_the_player() {
+    for (accuracy, misses) in [(NEVER_HITS, true), (ALWAYS_HITS, false)] {
+        let mut app = helicopter_app(5);
+        app.insert_resource(accuracy);
+        let player = spawn_player_on_foot(&mut app, Vec3::ZERO);
+        let helicopter = spawn_attacking_helicopter(&mut app, hovering_north(20.0), Vec3::ZERO);
+        helicopter_shoots(&mut app, helicopter, player);
+        app.update();
+        let player_center = Vec3::new(0.0, 0.8, 0.0);
+        let tracers = tracer_segments(&mut app);
+        assert_eq!(tracers.len(), 1, "彈道數");
+        let closest = distance_to_segment(player_center, tracers[0]);
+        assert_eq!(closest > 1.0, misses, "彈道離玩家 {closest} m");
+    }
+}
+
+/// 遊戲啟動時要有命中率資源，直升機射擊系統才跑得起來
+#[test]
+fn helicopter_setup_provides_the_accuracy() {
+    let mut world = World::new();
+    world.init_resource::<Assets<Mesh>>();
+    world.init_resource::<Assets<StandardMaterial>>();
+    world
+        .run_system_once(setup_helicopter_visuals)
+        .expect("跑得起來");
+    world.flush();
+    assert!(world.contains_resource::<HelicopterAccuracy>());
 }

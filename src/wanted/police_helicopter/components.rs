@@ -170,6 +170,35 @@ pub struct HelicopterSpawnState {
     pub cooldown: f32,
 }
 
+/// 直升機機槍的命中率（每一槍先擲骰，中了才看射線有沒有打到人）
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct HelicopterAccuracy {
+    /// 貼身時的命中率
+    pub base_hit_chance: f32,
+    /// 每拉開 HELICOPTER_ATTACK_RANGE 這麼遠，命中率少掉多少
+    pub distance_hit_penalty: f32,
+    /// 最低命中率
+    pub min_hit_chance: f32,
+}
+
+impl Default for HelicopterAccuracy {
+    fn default() -> Self {
+        Self {
+            base_hit_chance: 0.25,
+            distance_hit_penalty: 0.12,
+            min_hit_chance: 0.08,
+        }
+    }
+}
+
+impl HelicopterAccuracy {
+    /// 槍口離玩家 distance 公尺時的命中率
+    pub fn hit_chance(&self, distance: f32) -> f32 {
+        (self.base_hit_chance - distance / HELICOPTER_ATTACK_RANGE * self.distance_hit_penalty)
+            .max(self.min_hit_chance)
+    }
+}
+
 /// 直升機視覺資源
 #[derive(Resource)]
 pub struct HelicopterVisuals {

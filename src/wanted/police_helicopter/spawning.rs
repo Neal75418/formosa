@@ -51,6 +51,7 @@ pub fn setup_helicopter_visuals(
     });
 
     commands.init_resource::<HelicopterSpawnState>();
+    commands.init_resource::<HelicopterAccuracy>();
 }
 
 // ============================================================================

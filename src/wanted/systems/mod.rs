@@ -224,6 +224,23 @@ fn process_cooldown(
     }
 }
 
+/// 玩家死亡期間清掉通緝：不然重生後還是同樣星數，被同一批警察、直升機追著打；
+/// 死亡期間才處理到的犯罪、報警也一起清掉
+pub fn clear_wanted_on_death_system(
+    respawn_state: Res<crate::combat::RespawnState>,
+    mut wanted: ResMut<WantedLevel>,
+    mut level_changed: MessageWriter<WantedLevelChanged>,
+) {
+    if !respawn_state.is_dead {
+        return;
+    }
+    let old_stars = wanted.stars;
+    wanted.clear();
+    if old_stars > 0 {
+        level_changed.write(WantedLevelChanged::new(old_stars, 0));
+    }
+}
+
 /// 通緝等級消退系統
 pub fn wanted_cooldown_system(
     mut wanted: ResMut<WantedLevel>,

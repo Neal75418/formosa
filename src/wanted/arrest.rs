@@ -479,10 +479,7 @@ pub fn handle_arrest_event_system(
                 transform.translation = POLICE_STATION_POSITION + Vec3::Y * 1.0;
 
                 // 重置通緝等級
-                wanted.stars = 0;
-                wanted.heat = 0.0;
-                wanted.search_center = None;
-                wanted.player_last_seen_pos = None;
+                wanted.clear();
 
                 // 放下手、設置免疫時間
                 surrender_state.put_hands_down();

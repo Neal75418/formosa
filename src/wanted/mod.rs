@@ -21,6 +21,8 @@ mod systems;
 mod debug_viz; // Gizmos 除錯可視化（僅 Debug 模式）
 
 #[cfg(test)]
+mod death_tests;
+#[cfg(test)]
 mod police_response_tests;
 #[cfg(test)]
 mod police_sight_tests;
@@ -95,6 +97,7 @@ impl Plugin for WantedPlugin {
                     process_crime_events,
                     process_witness_reports,
                     wanted_cooldown_system,
+                    clear_wanted_on_death_system, // 同一幀處理到的犯罪也清掉
                 )
                     .chain()
                     .run_if(in_state(AppState::InGame)),

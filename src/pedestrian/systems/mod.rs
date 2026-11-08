@@ -9,6 +9,8 @@ mod panic_propagation;
 mod pathfinding_grid;
 mod reactions;
 mod witnesses;
+#[cfg(test)]
+mod witnesses_tests;
 
 pub use animation::*;
 pub use daily_behavior::*;

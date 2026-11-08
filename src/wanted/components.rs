@@ -31,6 +31,17 @@ pub struct WantedLevel {
 }
 
 impl WantedLevel {
+    /// 清掉通緝（被逮捕、死亡）：星數、熱度、消退與搜索計時、最後目擊位置、「看得到玩家」、搜索中心都歸零
+    pub fn clear(&mut self) {
+        self.stars = 0;
+        self.heat = 0.0;
+        self.cooldown_timer = 0.0;
+        self.player_last_seen_pos = None;
+        self.player_visible = false;
+        self.search_center = None;
+        self.search_timer = 0.0;
+    }
+
     /// 根據熱度計算星級
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn calculate_stars(&self) -> u8 {

@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::combat::{WeaponInventory, WeaponType};
+use crate::combat::{RespawnState, WeaponInventory, WeaponType};
 use crate::economy::PlayerWallet;
 use crate::pedestrian::components::{
     PedState, Pedestrian, PedestrianState, WitnessState, WitnessedCrime, BRIBE_COST,
@@ -200,8 +200,20 @@ pub fn witness_phone_call_system(
         With<Pedestrian>,
     >,
     mut witness_reports: MessageWriter<WitnessReport>,
+    respawn_state: Res<RespawnState>,
 ) {
     use witness_constants::{ARMED_INTIMIDATION_DISTANCE, INTIMIDATION_DISTANCE};
+
+    // 玩家死了，正在打電話的目擊者掛斷：死亡時通緝已經清掉，重生後才報到會把通緝加回來
+    if respawn_state.is_dead {
+        for (_, _, mut state, mut witness) in &mut ped_query {
+            if state.state == PedState::CallingPolice {
+                witness.reset();
+                state.state = PedState::Walking;
+            }
+        }
+        return;
+    }
 
     let dt = time.delta_secs();
 
